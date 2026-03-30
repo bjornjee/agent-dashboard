@@ -324,13 +324,32 @@ func sendReply(target, text string) tea.Cmd {
 
 // findWindowForRepo finds an existing tmux session:window for a given folder
 // by scanning existing agents' working directories.
+// It first tries an exact path match, then falls back to repo-name matching
+// only when at least one side is a worktree path (to avoid false collisions
+// between unrelated repos that share the same basename).
 func findWindowForRepo(agents []Agent, folder, selfTarget string) (string, bool) {
+	// Pass 1: exact path match
+	for _, agent := range agents {
+		if agent.Target == selfTarget {
+			continue
+		}
+		if agent.Cwd == folder {
+			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
+		}
+	}
+
+	// Pass 2: repo-name match, only when at least one side is a worktree
 	folderRepo := repoFromCwd(folder)
 	if folderRepo == "" {
 		return "", false
 	}
+	folderIsWorktree := strings.Contains(folder, "/worktrees/")
 	for _, agent := range agents {
 		if agent.Target == selfTarget {
+			continue
+		}
+		agentIsWorktree := strings.Contains(agent.Cwd, "/worktrees/")
+		if !folderIsWorktree && !agentIsWorktree {
 			continue
 		}
 		if repoFromCwd(agent.Cwd) == folderRepo {
@@ -354,21 +373,28 @@ func expandPath(path string) (string, error) {
 
 const maxPanesPerWindow = 4
 
+// validateFolder expands and validates a folder path, returning the absolute path.
+func validateFolder(path string) (string, error) {
+	absFolder, err := expandPath(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	info, err := os.Stat(absFolder)
+	if err != nil {
+		return "", fmt.Errorf("folder not found: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("not a directory: %s", absFolder)
+	}
+	return absFolder, nil
+}
+
 // createSession creates a new Claude Code session in a tmux pane.
 func createSession(folder string, agents []Agent, selfTarget string) tea.Cmd {
 	return func() tea.Msg {
-		// Expand and validate path
-		absFolder, err := expandPath(folder)
+		absFolder, err := validateFolder(folder)
 		if err != nil {
-			return createSessionMsg{err: fmt.Errorf("invalid path: %w", err)}
-		}
-
-		info, err := os.Stat(absFolder)
-		if err != nil {
-			return createSessionMsg{err: fmt.Errorf("folder not found: %s", absFolder)}
-		}
-		if !info.IsDir() {
-			return createSessionMsg{err: fmt.Errorf("not a directory: %s", absFolder)}
+			return createSessionMsg{err: err}
 		}
 
 		session := extractSession(selfTarget)

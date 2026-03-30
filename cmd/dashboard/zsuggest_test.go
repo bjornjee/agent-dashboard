@@ -68,7 +68,7 @@ func TestFilterZSuggestions_PrefixMatch(t *testing.T) {
 		{Path: "/tmp/scratch", Rank: 10, Timestamp: 1770000000},
 	}
 
-	results := filterZSuggestions("skills", entries)
+	results := filterZSuggestions("skills", entries, nil)
 	if len(results) == 0 {
 		t.Fatal("expected results matching 'skills'")
 	}
@@ -83,7 +83,7 @@ func TestFilterZSuggestions_EmptyQuery(t *testing.T) {
 		{Path: "/Users/me/code/other", Rank: 50, Timestamp: 1773000000},
 	}
 
-	results := filterZSuggestions("", entries)
+	results := filterZSuggestions("", entries, nil)
 	// Empty query should return top entries by frecency
 	if len(results) < 2 {
 		t.Fatalf("expected at least 2 results for empty query, got %d", len(results))
@@ -96,7 +96,7 @@ func TestFilterZSuggestions_RankedByFrecency(t *testing.T) {
 		{Path: "/Users/me/code/high", Rank: 200, Timestamp: 1774000000},
 	}
 
-	results := filterZSuggestions("code", entries)
+	results := filterZSuggestions("code", entries, nil)
 	if len(results) < 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
@@ -116,7 +116,7 @@ func TestFilterZSuggestions_MaxFive(t *testing.T) {
 		})
 	}
 
-	results := filterZSuggestions("code", entries)
+	results := filterZSuggestions("code", entries, nil)
 	if len(results) > 5 {
 		t.Errorf("expected max 5 suggestions, got %d", len(results))
 	}
@@ -127,7 +127,7 @@ func TestFilterZSuggestions_CaseInsensitive(t *testing.T) {
 		{Path: "/Users/me/Code/Skills", Rank: 100, Timestamp: 1774000000},
 	}
 
-	results := filterZSuggestions("skills", entries)
+	results := filterZSuggestions("skills", entries, nil)
 	if len(results) == 0 {
 		t.Fatal("expected case-insensitive match")
 	}
@@ -138,8 +138,68 @@ func TestFilterZSuggestions_NoMatch(t *testing.T) {
 		{Path: "/Users/me/code/skills", Rank: 100, Timestamp: 1774000000},
 	}
 
-	results := filterZSuggestions("zzzzz", entries)
+	results := filterZSuggestions("zzzzz", entries, nil)
 	if len(results) != 0 {
 		t.Errorf("expected no results, got %d", len(results))
+	}
+}
+
+func TestFilterZSuggestions_ExcludesNonexistent(t *testing.T) {
+	realDir := t.TempDir()
+	entries := []zEntry{
+		{Path: realDir, Rank: 100, Timestamp: 1774000000},
+		{Path: "/nonexistent/fake/path", Rank: 200, Timestamp: 1774000000},
+	}
+
+	results := filterZSuggestions("", entries, dirExists)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d: %v", len(results), results)
+	}
+	if results[0] != realDir {
+		t.Errorf("expected %q, got %q", realDir, results[0])
+	}
+}
+
+func TestFilterZSuggestions_ExcludesFiles(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "not-a-dir.txt")
+	if err := os.WriteFile(file, []byte("hi"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entries := []zEntry{
+		{Path: dir, Rank: 100, Timestamp: 1774000000},
+		{Path: file, Rank: 200, Timestamp: 1774000000},
+	}
+
+	results := filterZSuggestions("", entries, dirExists)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (dir only), got %d: %v", len(results), results)
+	}
+	if results[0] != dir {
+		t.Errorf("expected %q, got %q", dir, results[0])
+	}
+}
+
+func TestFilterZSuggestions_AllStale(t *testing.T) {
+	entries := []zEntry{
+		{Path: "/nonexistent/path/a", Rank: 100, Timestamp: 1774000000},
+		{Path: "/nonexistent/path/b", Rank: 200, Timestamp: 1774000000},
+	}
+
+	results := filterZSuggestions("", entries, dirExists)
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d: %v", len(results), results)
+	}
+}
+
+func TestFilterZSuggestions_NilPathExistsAcceptsAll(t *testing.T) {
+	entries := []zEntry{
+		{Path: "/nonexistent/but/accepted", Rank: 100, Timestamp: 1774000000},
+	}
+
+	// nil pathExists should accept all paths (backwards compat)
+	results := filterZSuggestions("", entries, nil)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result with nil pathExists, got %d", len(results))
 	}
 }
