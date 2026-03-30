@@ -61,7 +61,7 @@ func (m model) loadSelectionData() tea.Cmd {
 	if m.selectedSubagent() != nil {
 		return m.loadSubagentActivity()
 	}
-	return tea.Batch(m.captureSelected(), m.loadConversation())
+	return tea.Batch(m.captureSelected(), m.loadConversation(), m.loadPlan())
 }
 
 // loadSubagentActivity loads activity log for the selected subagent.
@@ -445,6 +445,41 @@ func createSession(folder string, agents []Agent, selfTarget string) tea.Cmd {
 		}
 
 		return createSessionMsg{target: newTarget}
+	}
+}
+
+// PlansDir returns the Claude plans directory (~/.claude/plans).
+func PlansDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp"
+	}
+	return filepath.Join(home, ".claude", "plans")
+}
+
+func (m model) loadPlan() tea.Cmd {
+	agent := m.selectedAgent()
+	if agent == nil || agent.Cwd == "" {
+		return nil
+	}
+	slug := ProjectSlug(agent.Cwd)
+	projDir := filepath.Join(ConversationsDir(), slug)
+	sessionID := agent.SessionID
+	cwd := agent.Cwd
+
+	return func() tea.Msg {
+		if sessionID == "" {
+			sessionID = FindSessionID(cwd)
+		}
+		if sessionID == "" {
+			return planMsg{content: ""}
+		}
+		planSlug := ReadPlanSlug(projDir, sessionID)
+		if planSlug == "" {
+			return planMsg{content: ""}
+		}
+		content := ReadPlanContent(PlansDir(), planSlug)
+		return planMsg{content: content}
 	}
 }
 

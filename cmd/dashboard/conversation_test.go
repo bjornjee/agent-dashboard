@@ -449,6 +449,77 @@ func TestReadConversation_LargeAssistantMessageNotTruncated(t *testing.T) {
 	}
 }
 
+func TestReadPlanSlug_ExtractsSlug(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"fix it"},"timestamp":"2026-03-28T10:00:00Z","slug":"my-cool-plan"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-03-28T10:00:01Z","slug":"my-cool-plan"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	slug := ReadPlanSlug(projDir, sessionID)
+	if slug != "my-cool-plan" {
+		t.Errorf("expected slug 'my-cool-plan', got %q", slug)
+	}
+}
+
+func TestReadPlanSlug_NoSlug(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	slug := ReadPlanSlug(projDir, sessionID)
+	if slug != "" {
+		t.Errorf("expected empty slug, got %q", slug)
+	}
+}
+
+func TestReadPlanSlug_MissingFile(t *testing.T) {
+	slug := ReadPlanSlug("/nonexistent", "no-such")
+	if slug != "" {
+		t.Errorf("expected empty slug for missing file, got %q", slug)
+	}
+}
+
+func TestReadPlanContent_ReadsFile(t *testing.T) {
+	dir := t.TempDir()
+	planContent := "# My Plan\n\n## Steps\n1. Do the thing\n2. Test the thing"
+	os.MkdirAll(filepath.Join(dir, "plans"), 0755)
+	os.WriteFile(filepath.Join(dir, "plans", "my-plan.md"), []byte(planContent), 0644)
+
+	content := ReadPlanContent(filepath.Join(dir, "plans"), "my-plan")
+	if content != planContent {
+		t.Errorf("expected plan content, got %q", content)
+	}
+}
+
+func TestReadPlanContent_MissingFile(t *testing.T) {
+	content := ReadPlanContent("/nonexistent", "no-plan")
+	if content != "" {
+		t.Errorf("expected empty for missing file, got %q", content)
+	}
+}
+
+func TestReadPlanContent_TruncatesLarge(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "plans"), 0755)
+	large := strings.Repeat("x", 10000)
+	os.WriteFile(filepath.Join(dir, "plans", "big.md"), []byte(large), 0644)
+
+	content := ReadPlanContent(filepath.Join(dir, "plans"), "big")
+	if len(content) > 8003 { // truncate adds "…" (3 bytes UTF-8)
+		t.Errorf("expected truncated content, got length %d", len(content))
+	}
+}
+
 func TestIsSubagentCompleted_LargeFinalEntry(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "agent.jsonl")

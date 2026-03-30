@@ -58,6 +58,9 @@ type model struct {
 	dismissed      map[string]bool           // "parentTarget:agentID" → dismissed
 	subActivity    []ActivityEntry           // activity log for selected subagent
 
+	// Plan content for selected agent
+	planContent string
+
 	// Previous effective state per agent — used to detect transitions
 	// and fire desktop notifications on needs-attention.
 	prevEffState map[string]string // agentTarget → last effectiveState result
@@ -217,7 +220,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateLeftContent()
 		m.updateRightContent()
-		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents)}
+		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan()}
 		cmds = append(cmds, m.loadAllSubagents()...)
 		if cmd := m.checkNeedsAttentionTransition(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -234,6 +237,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case planMsg:
+		if msg.content != "" {
+			m.planContent = msg.content
+			m.updateRightContent()
+		}
+		return m, nil
+
 	case tickMsg:
 		m.tickCount++
 		// Auto-clear status message after 3 seconds
@@ -246,6 +256,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.tickCount%5 == 0 {
 			cmds = append(cmds, m.loadAllSubagents()...)
+			cmds = append(cmds, m.loadPlan())
 		}
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents))

@@ -88,7 +88,11 @@ func (m *model) updateRightContent() {
 
 	// Parent agent right panel
 	m.filesVP.SetContent(m.filesContent(*agent))
-	m.historyVP.SetContent(m.historyContent())
+	if m.planContent != "" {
+		m.historyVP.SetContent(m.planContentWrapped())
+	} else {
+		m.historyVP.SetContent(m.historyContent())
+	}
 
 	effState := m.effectiveState(*agent)
 	needsAttention := effState == "input" || effState == "error"
@@ -326,6 +330,15 @@ func (m model) finalMessageContent() string {
 	wrapped := wrapText(lastAssistant.Content, m.rightWidth-3)
 	for _, wl := range wrapped {
 		lines = append(lines, "  "+wl)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m model) planContentWrapped() string {
+	var lines []string
+	wrapped := wrapText(m.planContent, m.rightWidth-3)
+	for _, wl := range wrapped {
+		lines = append(lines, " "+wl)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -660,8 +673,13 @@ func (m model) renderRightPanel() string {
 		isDone := rpEffState == "done" || rpEffState == "idle"
 
 		filesLabel = " " + boldStyle.Render("Files:") + focusMarker(focusFiles) + scrollHint(m.filesVP)
-		historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
-			" " + helpStyle.Render(strings.Repeat("─", 18))
+		if m.planContent != "" {
+			historyLabel = " " + planLabelStyle.Render("── Plan") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 21))
+		} else {
+			historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 18))
+		}
 
 		if needsAttention {
 			messageLabel = " " + lipgloss.NewStyle().Foreground(inputColor).Bold(true).

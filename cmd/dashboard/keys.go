@@ -147,6 +147,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = ""
 			m.mode = modeNormal
 			m.conversation = nil
+			m.planContent = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -158,6 +159,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = ""
 			m.mode = modeNormal
 			m.conversation = nil
+			m.planContent = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -205,6 +207,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = ""
 			m.mode = modeNormal
 			m.conversation = nil
+			m.planContent = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -218,6 +221,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = ""
 			m.mode = modeNormal
 			m.conversation = nil
+			m.planContent = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
