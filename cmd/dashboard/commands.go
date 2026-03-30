@@ -359,6 +359,19 @@ func findWindowForRepo(agents []Agent, folder, selfTarget string) (string, bool)
 	return "", false
 }
 
+// findWindowByName returns the first window whose Name equals repoName,
+// excluding the window that contains the dashboard pane (selfTarget).
+func findWindowByName(windows []TmuxWindowInfo, repoName, session, selfTarget string) (string, bool) {
+	dashboardSW := extractSessionWindow(selfTarget)
+	for _, w := range windows {
+		candidate := fmt.Sprintf("%s:%d", session, w.Index)
+		if w.Name == repoName && candidate != dashboardSW {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
 // expandPath expands ~ and resolves to an absolute path.
 func expandPath(path string) (string, error) {
 	if strings.HasPrefix(path, "~/") || path == "~" {
@@ -411,13 +424,7 @@ func createSession(folder string, agents []Agent, selfTarget string) tea.Cmd {
 			// Fallback: check window names
 			windows, wErr := TmuxListWindows(session)
 			if wErr == nil {
-				for _, w := range windows {
-					if w.Name == repoName {
-						sw = fmt.Sprintf("%s:%d", session, w.Index)
-						found = true
-						break
-					}
-				}
+				sw, found = findWindowByName(windows, repoName, session, selfTarget)
 			}
 		}
 
