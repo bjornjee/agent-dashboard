@@ -139,6 +139,13 @@ func (db *DB) RandomQuote(maxLen int) (quote, author string) {
 	return row.Quote, row.Author
 }
 
+// QuoteExists returns true if a quote with the same text already exists.
+func (db *DB) QuoteExists(quote string) bool {
+	var count int
+	_ = db.conn.Get(&count, "SELECT COUNT(*) FROM quotes WHERE quote = ?", quote)
+	return count > 0
+}
+
 // QuoteCount returns the number of cached quotes.
 func (db *DB) QuoteCount() int {
 	var count int
