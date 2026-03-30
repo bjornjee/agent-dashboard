@@ -42,11 +42,13 @@ func fetchAndCacheQuotes(db *DB) {
 	if key == "" {
 		return
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	baseURL := "https://api.api-ninjas.com/v2/quotes"
+	client := &http.Client{Timeout: 10 * time.Second}
+	baseURL := "https://api.api-ninjas.com/v2/randomquotes"
 
 	params := url.Values{}
-	params.Add("categories", "wisdom,philosophy,life,humor,inspirational")
+	for _, cat := range []string{"wisdom", "philosophy", "life", "humor", "inspirational"} {
+		params.Add("categories", cat)
+	}
 
 	fullURL := baseURL + "?" + params.Encode()
 
@@ -86,11 +88,15 @@ func refreshQuotesIfNeeded(db *DB) {
 	fetchAndCacheQuotes(db)
 }
 
+// maxQuoteLen is the hard character limit for the full "quote — author" string.
+// Based on ~1/3 terminal width (40 chars) * 2 lines = 80 chars.
+const maxQuoteLen = 80
+
 // pickQuote returns a random quote from the DB cache, falling back to hardcoded.
 func pickQuote(db *DB) string {
 	if db != nil {
 		refreshQuotesIfNeeded(db)
-		q, a := db.RandomQuote()
+		q, a := db.RandomQuote(maxQuoteLen)
 		if q != "" {
 			return fmt.Sprintf("%s — %s", q, a)
 		}
@@ -99,10 +105,16 @@ func pickQuote(db *DB) string {
 }
 
 func fallbackQuote() string {
-	if len(quotes) == 0 {
+	var eligible []string
+	for _, q := range quotes {
+		if len(q) <= maxQuoteLen {
+			eligible = append(eligible, q)
+		}
+	}
+	if len(eligible) == 0 {
 		return ""
 	}
-	return quotes[rand.Intn(len(quotes))]
+	return eligible[rand.Intn(len(eligible))]
 }
 
 func greeting(now time.Time) string {
@@ -208,13 +220,17 @@ func (m model) renderBanner() string {
 	left := lipgloss.JoinHorizontal(lipgloss.Center, "  ", icon, "  ", greet)
 
 	leftWidth := lipgloss.Width(left)
+	maxQuoteWidth := m.width / 3
 	rightWidth := m.width - leftWidth - 2
 	if rightWidth < 0 {
 		rightWidth = 0
 	}
+	if maxQuoteWidth > rightWidth {
+		maxQuoteWidth = rightWidth
+	}
 
 	right := lipgloss.NewStyle().
-		Width(rightWidth).
+		Width(maxQuoteWidth).
 		Align(lipgloss.Right).
 		Render(q)
 

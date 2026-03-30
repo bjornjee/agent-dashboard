@@ -122,13 +122,17 @@ func (db *DB) CostForDate(date string) float64 {
 	return total
 }
 
-// RandomQuote returns a random quote from the cache, or empty strings if none cached.
-func (db *DB) RandomQuote() (quote, author string) {
+// RandomQuote returns a random quote that fits within maxLen characters
+// (quote + " — " + author), or empty strings if none fit.
+func (db *DB) RandomQuote(maxLen int) (quote, author string) {
 	var row struct {
 		Quote  string `db:"quote"`
 		Author string `db:"author"`
 	}
-	err := db.conn.Get(&row, "SELECT quote, author FROM quotes ORDER BY RANDOM() LIMIT 1")
+	err := db.conn.Get(&row, `
+		SELECT quote, author FROM quotes
+		WHERE LENGTH(quote) + LENGTH(author) + 3 <= ?
+		ORDER BY RANDOM() LIMIT 1`, maxLen)
 	if err != nil {
 		return "", ""
 	}
