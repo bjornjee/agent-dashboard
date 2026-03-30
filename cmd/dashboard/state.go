@@ -152,12 +152,28 @@ func PruneDead(path string, livePanes map[string]bool, renames map[string]string
 		changed = true
 	}
 
-	// Second pass: remove truly dead agents
+	// Second pass: count truly dead agents
+	totalAgents := len(sf.Agents)
+	var deadIDs []string
 	for id := range sf.Agents {
 		if !livePanes[id] {
-			delete(sf.Agents, id)
-			removed++
+			deadIDs = append(deadIDs, id)
 		}
+	}
+
+	// Safety net: refuse to wipe all agents at once — almost certainly
+	// a transient tmux issue. CleanStale handles truly dead agents.
+	if len(deadIDs) == totalAgents && totalAgents > 0 {
+		if changed {
+			data, _ := json.Marshal(sf)
+			_ = os.WriteFile(path, data, 0644)
+		}
+		return 0
+	}
+
+	for _, id := range deadIDs {
+		delete(sf.Agents, id)
+		removed++
 	}
 
 	if removed > 0 || changed {

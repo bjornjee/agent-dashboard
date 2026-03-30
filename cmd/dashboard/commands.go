@@ -122,7 +122,7 @@ func pruneDead(statePath string) tea.Cmd {
 func pruneDeadWithRenames(statePath string, renames map[string]string) tea.Cmd {
 	return func() tea.Msg {
 		livePanes := TmuxListPanes()
-		if livePanes == nil {
+		if len(livePanes) == 0 {
 			return pruneDeadMsg{removed: 0}
 		}
 		removed := PruneDead(statePath, livePanes, renames)
