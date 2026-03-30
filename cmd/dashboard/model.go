@@ -406,6 +406,8 @@ func (m *model) resizeViewports() {
 	m.messageVP.Width = m.rightWidth
 	m.messageVP.Height = msgHeight
 
+	m.textInput.Width = m.rightWidth - 12 // account for "Reply: " prefix + padding
+
 	if m.planContent != "" && m.planVisible {
 		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
 	}
