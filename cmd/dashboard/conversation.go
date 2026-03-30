@@ -664,6 +664,62 @@ func ReadRateLimitStatus(projDir, sessionID string) RateLimitStatus {
 	return last
 }
 
+// ReadPlanSlug reads the last JSONL entry's slug field for a session.
+// Returns empty string if no slug is found or file doesn't exist.
+func ReadPlanSlug(projDir, sessionID string) string {
+	path := filepath.Join(projDir, sessionID+".jsonl")
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	// Read tail of file to find last line with a slug
+	const tailSize = 32 * 1024
+	stat, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	if stat.Size() > tailSize {
+		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
+			return ""
+		}
+		// Discard the partial first line after seek
+		bufio.NewReader(f).ReadString('\n')
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, tailSize), tailSize)
+
+	var slug string
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var entry struct {
+			Slug string `json:"slug"`
+		}
+		if json.Unmarshal(line, &entry) == nil && entry.Slug != "" {
+			slug = entry.Slug
+		}
+	}
+	return slug
+}
+
+// ReadPlanContent reads a plan markdown file from the plans directory.
+// Returns empty string if the file doesn't exist.
+func ReadPlanContent(plansDir, slug string) string {
+	if slug == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(plansDir, slug+".md"))
+	if err != nil {
+		return ""
+	}
+	return truncate(string(data), 8000)
+}
+
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

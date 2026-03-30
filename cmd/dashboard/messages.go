@@ -25,6 +25,7 @@ type subagentsMsg struct {
 	parentTarget string
 	agents       []SubagentInfo
 }
+type planMsg struct{ content string }
 type notifyResultMsg struct{}
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {

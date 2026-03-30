@@ -24,9 +24,10 @@ var (
 	idleColor    = lipgloss.Color("242")
 	doneColor    = lipgloss.Color("82")
 
-	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
-	boldStyle = lipgloss.NewStyle().Bold(true)
-	costStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	helpStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
+	boldStyle      = lipgloss.NewStyle().Bold(true)
+	costStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	planLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("105")).Bold(true)
 )
 
 type stateIcon struct {
