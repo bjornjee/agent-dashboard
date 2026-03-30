@@ -204,6 +204,130 @@ func TestPruneDead_NoRenames(t *testing.T) {
 	}
 }
 
+func TestPruneDead_EmptyLivePanes(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "state.json")
+	os.WriteFile(path, []byte(`{
+		"agents": {
+			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
+			"main:2.0": {"target":"main:2.0","state":"running","session":"main"}
+		}
+	}`), 0644)
+
+	// Empty non-nil map simulates tmux returning success with empty output.
+	// PruneDead should refuse to delete all agents in this case.
+	livePanes := map[string]bool{}
+	removed := PruneDead(path, livePanes, nil)
+	if removed != 0 {
+		t.Errorf("expected 0 removed with empty livePanes, got %d", removed)
+	}
+
+	sf := ReadState(path)
+	if len(sf.Agents) != 2 {
+		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
+	}
+}
+
+func TestPruneDead_AllAgentsDead(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "state.json")
+	os.WriteFile(path, []byte(`{
+		"agents": {
+			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
+			"main:2.0": {"target":"main:2.0","state":"running","session":"main"}
+		}
+	}`), 0644)
+
+	// livePanes has panes but none match any agent — all would be deleted.
+	// Safety net should refuse to wipe all agents at once.
+	livePanes := map[string]bool{
+		"main:0.0": true, // dashboard pane only
+	}
+	removed := PruneDead(path, livePanes, nil)
+	if removed != 0 {
+		t.Errorf("expected 0 removed when all agents would be wiped, got %d", removed)
+	}
+
+	sf := ReadState(path)
+	if len(sf.Agents) != 2 {
+		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
+	}
+}
+
+func TestPruneDead_AllDeadWithRenames(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "state.json")
+	os.WriteFile(path, []byte(`{
+		"agents": {
+			"main:2.0": {"target":"main:2.0","state":"running","session":"main","cwd":"/code/a"},
+			"main:3.0": {"target":"main:3.0","state":"running","session":"main","cwd":"/code/b"}
+		}
+	}`), 0644)
+
+	// Window renumbering: main:2.0 → main:1.0, main:3.0 → main:2.0
+	// But no agents match livePanes after rename, so safety net should fire.
+	// Renames should still be persisted.
+	livePanes := map[string]bool{
+		"main:0.0": true,
+		"main:1.0": true,
+		"main:2.0": true,
+	}
+	renames := map[string]string{
+		"main:2.0": "main:1.0",
+		"main:3.0": "main:2.0",
+	}
+
+	removed := PruneDead(path, livePanes, renames)
+	if removed != 0 {
+		t.Errorf("expected 0 removed (safety net), got %d", removed)
+	}
+
+	sf := ReadState(path)
+	if len(sf.Agents) != 2 {
+		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
+	}
+
+	// Renames should have been persisted even though safety net fired
+	if a, ok := sf.Agents["main:1.0"]; !ok || a.Cwd != "/code/a" {
+		t.Error("main:2.0 should have been renamed to main:1.0")
+	}
+	if a, ok := sf.Agents["main:2.0"]; !ok || a.Cwd != "/code/b" {
+		t.Error("main:3.0 should have been renamed to main:2.0")
+	}
+}
+
+func TestPruneDead_PartialDead(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "state.json")
+	os.WriteFile(path, []byte(`{
+		"agents": {
+			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
+			"main:1.1": {"target":"main:1.1","state":"running","session":"main"},
+			"main:2.0": {"target":"main:2.0","state":"done","session":"main"}
+		}
+	}`), 0644)
+
+	livePanes := map[string]bool{
+		"main:0.0": true,
+		"main:1.0": true,
+		"main:1.1": true,
+		// main:2.0 is dead
+	}
+
+	removed := PruneDead(path, livePanes, nil)
+	if removed != 1 {
+		t.Errorf("expected 1 removed, got %d", removed)
+	}
+
+	sf := ReadState(path)
+	if len(sf.Agents) != 2 {
+		t.Fatalf("expected 2 agents after partial prune, got %d", len(sf.Agents))
+	}
+	if _, ok := sf.Agents["main:2.0"]; ok {
+		t.Error("main:2.0 should have been pruned")
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration("") != "" {
 		t.Error("expected empty for empty input")
