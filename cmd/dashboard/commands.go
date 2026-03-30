@@ -510,14 +510,25 @@ func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
 	}
 
 	go func() {
+		var debounce *time.Timer
 		for {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
+					if debounce != nil {
+						debounce.Stop()
+					}
 					return
 				}
 				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
-					p.Send(stateUpdatedMsg{state: ReadState(path)})
+					// Debounce rapid writes from concurrent hooks to read
+					// the settled state rather than intermediate values.
+					if debounce != nil {
+						debounce.Stop()
+					}
+					debounce = time.AfterFunc(50*time.Millisecond, func() {
+						p.Send(stateUpdatedMsg{state: ReadState(path)})
+					})
 				}
 			case _, ok := <-watcher.Errors:
 				if !ok {
