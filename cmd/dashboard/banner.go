@@ -117,14 +117,14 @@ func greeting(now time.Time) string {
 	}
 }
 
-// Pixel art colors — soft kawaii palette (no black outlines)
+// Pixel art colors — Catppuccin Frappé palette
 var (
-	pxHotPink    = lipgloss.Color("#D946A8")
-	pxMedPink    = lipgloss.Color("#F472B6")
-	pxLightPink  = lipgloss.Color("#FBCFE8")
-	pxPalePink   = lipgloss.Color("#FDF2F8")
-	pxDarkPurple = lipgloss.Color("#312E81")
-	pxLavender   = lipgloss.Color("#D8B4FE")
+	pxHotPink    = catPink
+	pxMedPink    = catFlamingo
+	pxLightPink  = catRosewater
+	pxPalePink   = catLavender
+	pxDarkPurple = catCrust
+	pxLavender   = catMauve
 )
 
 // Color Palette based on image:
@@ -148,10 +148,10 @@ var axolotlPixels = [][]int{
 }
 
 var pxColors = map[int]lipgloss.Color{
-	1: lipgloss.Color("#E882B4"), // Dark Pink
-	2: lipgloss.Color("#F8C8E8"), // Light Pink
-	3: lipgloss.Color("#3D0E61"), // Dark Purple (Eyes)
-	4: lipgloss.Color("#D1A1C4"), // Muted Pink (Nose)
+	1: catPink,      // Gills/outline
+	2: catRosewater, // Face/body
+	3: catCrust,     // Eyes
+	4: catFlamingo,  // Nose/blush
 }
 
 // renderAxolotl renders the pixel art using half-block characters with true colors.
@@ -194,10 +194,10 @@ func renderAxolotl() string {
 
 var greetingStyle = lipgloss.NewStyle().
 	Bold(true).
-	Foreground(lipgloss.Color("230"))
+	Foreground(catRosewater)
 
 var quoteStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("242")).
+	Foreground(catOverlay1).
 	Italic(true)
 
 func (m model) renderBanner() string {

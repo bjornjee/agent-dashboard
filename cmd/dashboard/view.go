@@ -467,7 +467,7 @@ func (m model) subagentActivityContent() string {
 		case "tool":
 			lines = append(lines, fmt.Sprintf(" %s %s",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(e.Content)))
+				lipgloss.NewStyle().Foreground(catOverlay0).Render(e.Content)))
 		case "human":
 			lines = append(lines, fmt.Sprintf(" %s %s %s",
 				helpStyle.Render("["+ts+"]"),
@@ -524,7 +524,7 @@ func (m model) renderLeftPanel() string {
 	panelHeight := m.height - 5 - bannerHeight
 	style := borderStyle
 	if m.focusedVP == focusAgentList {
-		style = style.BorderForeground(lipgloss.Color("86"))
+		style = style.BorderForeground(catSapphire)
 	}
 	return style.
 		Width(m.leftWidth).
@@ -622,7 +622,7 @@ func (m model) renderRightPanel() string {
 	// Section labels + viewports
 	focusMarker := func(vp int) string {
 		if m.focusedVP == vp {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render(" ◆")
+			return lipgloss.NewStyle().Foreground(catSapphire).Render(" ◆")
 		}
 		return ""
 	}
@@ -646,7 +646,7 @@ func (m model) renderRightPanel() string {
 	if m.mode == modeUsage {
 		filesLabel = ""
 		historyLabel = ""
-		messageLabel = " " + lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
+		messageLabel = " " + lipgloss.NewStyle().Foreground(catPeach).Bold(true).
 			Render("── Usage") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 			" " + helpStyle.Render(strings.Repeat("─", 20))
 	} else if sub != nil {
@@ -727,7 +727,7 @@ func (m model) renderHelpBar() string {
 	// Today's accumulated cost
 	todayCost := m.dbTodayCost
 	if todayCost > 0 {
-		todayStr := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
+		todayStr := lipgloss.NewStyle().Foreground(catPeach).Bold(true).
 			Render(FormatCost(todayCost))
 		parts = append(parts, fmt.Sprintf("Today: %s", todayStr))
 		parts = append(parts, "│")
@@ -739,7 +739,7 @@ func (m model) renderHelpBar() string {
 		totalCost = m.totalUsage.CostUSD
 	}
 	if totalCost > 0 {
-		costStr := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
+		costStr := lipgloss.NewStyle().Foreground(catPeach).Bold(true).
 			Render(FormatCost(totalCost))
 		parts = append(parts, fmt.Sprintf("All-time: %s", costStr))
 		parts = append(parts, "│")
