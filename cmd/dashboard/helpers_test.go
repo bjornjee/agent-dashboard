@@ -300,6 +300,39 @@ func TestFindWindowForRepo_NoMatchDifferentRepo(t *testing.T) {
 	}
 }
 
+func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
+	windows := []TmuxWindowInfo{
+		{Index: 1, Name: "other-project"},
+		{Index: 2, Name: "agent-dashboard"}, // dashboard's own window
+	}
+	// selfTarget is in window 2 — the fallback should NOT match window 2
+	sw, found := findWindowByName(windows, "agent-dashboard", "main", "main:2.0")
+	if found {
+		t.Errorf("findWindowByName should skip dashboard's own window, but matched %s", sw)
+	}
+
+	// But it SHOULD match a different window with the same name
+	sw, found = findWindowByName(windows, "other-project", "main", "main:2.0")
+	if !found {
+		t.Error("findWindowByName should match non-dashboard window")
+	}
+	if sw != "main:1" {
+		t.Errorf("expected main:1, got %s", sw)
+	}
+
+	// selfTarget without pane suffix should still skip correctly
+	_, found = findWindowByName(windows, "agent-dashboard", "main", "main:2")
+	if found {
+		t.Error("findWindowByName should skip dashboard window even without pane suffix")
+	}
+
+	// Empty window list should return not-found
+	_, found = findWindowByName(nil, "agent-dashboard", "main", "main:2.0")
+	if found {
+		t.Error("findWindowByName should return false for empty window list")
+	}
+}
+
 func TestPermissionModeStyle(t *testing.T) {
 	// permissionModeStyle should preserve the original mode text in its output
 	modes := []string{"plan", "auto-edit", "full-auto", "custom"}
