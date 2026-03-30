@@ -277,18 +277,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.selectedSugg = 0
 		m.updateRightContent()
 		return m, textinput.Blink
-	case "i":
-		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot focus: tmux not detected"
-			m.statusMsgTick = m.tickCount
-			return m, nil
-		}
-		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
-			return m, selectPane(agent.Target)
-		}
-		m.statusMsg = "Select an agent to focus"
-		m.statusMsgTick = m.tickCount
-		return m, nil
 	case "y", "n":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := m.effectiveState(*agent)

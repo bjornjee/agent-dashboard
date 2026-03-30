@@ -768,7 +768,6 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, helpStyle.Render("r")+" "+helpStyle.Render("reply"))
 	}
 	parts = append(parts, boldStyle.Render("a")+" new")
-	parts = append(parts, boldStyle.Render("i")+" focus")
 	parts = append(parts, boldStyle.Render("u")+" usage")
 	parts = append(parts, boldStyle.Render("c")+" collapse")
 	parts = append(parts, boldStyle.Render("x")+" close/dismiss")
