@@ -647,3 +647,69 @@ func TestIsSubagentCompleted_LargeFinalEntry(t *testing.T) {
 		t.Error("expected completed: large final entry with stop_reason=end_turn should be detected even when entry exceeds 4KB tail buffer")
 	}
 }
+
+func TestCleanSlashCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+	}{
+		{
+			name:  "slash command with args",
+			input: "<command-message>skills:feature</command-message>\n<command-name>/skills:feature</command-name>\n<command-args>fix the login bug</command-args>",
+			want:  "/skills:feature fix the login bug",
+		},
+		{
+			name:  "slash command without args",
+			input: "<command-message>skills:feature</command-message>\n<command-name>/skills:feature</command-name>\n<command-args></command-args>",
+			want:  "/skills:feature",
+		},
+		{
+			name:  "regular user message unchanged",
+			input: "fix the bug",
+			want:  "fix the bug",
+		},
+		{
+			name:  "multiline args preserved",
+			input: "<command-message>skills:plan</command-message>\n<command-name>/skills:plan</command-name>\n<command-args>refactor auth\nand add tests</command-args>",
+			want:  "/skills:plan refactor auth\nand add tests",
+		},
+		{
+			name:  "no command-name tag returns original",
+			input: "<command-message>something</command-message>\nbut no command-name",
+			want:  "<command-message>something</command-message>\nbut no command-name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cleanSlashCommand(tt.input)
+			if got != tt.want {
+				t.Errorf("cleanSlashCommand(%q)\n  got:  %q\n  want: %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseUserEntry_SlashCommand(t *testing.T) {
+	content := "<command-message>skills:refactor</command-message>\n<command-name>/skills:refactor</command-name>\n<command-args>clean up the auth module</command-args>"
+	contentJSON, _ := json.Marshal(content)
+	msgJSON, _ := json.Marshal(map[string]json.RawMessage{
+		"role":    json.RawMessage(`"user"`),
+		"content": json.RawMessage(contentJSON),
+	})
+	entry := jsonlEntry{
+		Type:      "user",
+		Message:   json.RawMessage(msgJSON),
+		Timestamp: "2026-03-28T10:00:00Z",
+	}
+
+	result := parseUserEntry(entry)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	want := "/skills:refactor clean up the auth module"
+	if result.Content != want {
+		t.Errorf("got %q, want %q", result.Content, want)
+	}
+}
