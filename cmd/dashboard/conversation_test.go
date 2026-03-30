@@ -17,6 +17,9 @@ func TestProjectSlug(t *testing.T) {
 		{"/Users/bjornjee/Code/bjornjee/skills", "-Users-bjornjee-Code-bjornjee-skills"},
 		{"/Users/bjornjee/Code/newb/ctf", "-Users-bjornjee-Code-newb-ctf"},
 		{"/tmp/test", "-tmp-test"},
+		{"/Users/bjornjee/.dotfiles/dotfiles", "-Users-bjornjee--dotfiles-dotfiles"},
+		{"/Users/bjornjee/.claude", "-Users-bjornjee--claude"},
+		{"/Users/bjornjee/.tmux/plugins/agent-dashboard", "-Users-bjornjee--tmux-plugins-agent-dashboard"},
 	}
 	for _, tt := range tests {
 		got := ProjectSlug(tt.cwd)
