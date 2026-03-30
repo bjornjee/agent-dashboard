@@ -20,8 +20,10 @@ type ConversationEntry struct {
 
 // ProjectSlug derives the Claude Code project slug from a cwd path.
 // e.g., "/Users/bjornjee/Code/skills" → "-Users-bjornjee-Code-skills"
+// Replaces both path separators and dots to match Claude Code's slug convention.
 func ProjectSlug(cwd string) string {
-	return strings.ReplaceAll(cwd, string(os.PathSeparator), "-")
+	s := strings.ReplaceAll(cwd, string(os.PathSeparator), "-")
+	return strings.ReplaceAll(s, ".", "-")
 }
 
 // jsonlEntry is the raw structure of a Claude Code session JSONL line.
