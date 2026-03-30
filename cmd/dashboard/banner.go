@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -42,7 +43,14 @@ func fetchAndCacheQuotes(db *DB) {
 		return
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest("GET", "https://api.api-ninjas.com/v1/quotes?limit=30", nil)
+	baseURL := "https://api.api-ninjas.com/v2/quotes"
+
+	params := url.Values{}
+	params.Add("categories", "wisdom,philosophy,life,humor,inspirational")
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, fullURL, nil)
 	if err != nil {
 		return
 	}
