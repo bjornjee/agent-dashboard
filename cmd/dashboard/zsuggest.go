@@ -83,9 +83,16 @@ func frecency(entry zEntry) float64 {
 	}
 }
 
+// dirExists returns true if the path exists and is a directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
 // filterZSuggestions returns up to 5 paths matching the query, ranked by frecency.
 // Matching is case-insensitive substring of the path.
-func filterZSuggestions(query string, entries []zEntry) []string {
+// If pathExists is non-nil, entries whose paths fail the check are excluded.
+func filterZSuggestions(query string, entries []zEntry, pathExists func(string) bool) []string {
 	queryLower := strings.ToLower(query)
 
 	type scored struct {
@@ -96,6 +103,9 @@ func filterZSuggestions(query string, entries []zEntry) []string {
 
 	for _, e := range entries {
 		if query == "" || strings.Contains(strings.ToLower(e.Path), queryLower) {
+			if pathExists != nil && !pathExists(e.Path) {
+				continue
+			}
 			matches = append(matches, scored{path: e.Path, score: frecency(e)})
 		}
 	}

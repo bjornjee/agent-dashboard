@@ -213,6 +213,78 @@ func TestFindWindowForRepo_MatchesWorktrees(t *testing.T) {
 	}
 }
 
+func TestFindWindowForRepo_ExactPathMatch(t *testing.T) {
+	agents := []Agent{
+		{
+			Target:  "main:1.0",
+			Session: "main",
+			Window:  1,
+			Cwd:     "/Users/test/Code/bjornjee/agent-dashboard",
+		},
+	}
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/bjornjee/agent-dashboard", "main:0.0")
+	if !found {
+		t.Error("findWindowForRepo should match exact path")
+	}
+	if sw != "main:1" {
+		t.Errorf("expected main:1, got %s", sw)
+	}
+}
+
+func TestFindWindowForRepo_DifferentReposSameBasename(t *testing.T) {
+	agents := []Agent{
+		{
+			Target:  "main:1.0",
+			Session: "main",
+			Window:  1,
+			Cwd:     "/Users/test/Code/project-a/app",
+		},
+	}
+	// Different parent, same basename "app" — should NOT match
+	_, found := findWindowForRepo(agents, "/Users/test/Code/project-b/app", "main:0.0")
+	if found {
+		t.Error("findWindowForRepo should not match different repos with same basename")
+	}
+}
+
+func TestFindWindowForRepo_WorktreeToPlain(t *testing.T) {
+	agents := []Agent{
+		{
+			Target:  "main:1.0",
+			Session: "main",
+			Window:  1,
+			Cwd:     "/Users/test/Code/skills",
+		},
+	}
+	// Worktree folder should match agent at plain repo path
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feature-x", "main:0.0")
+	if !found {
+		t.Error("findWindowForRepo should match worktree folder to plain agent cwd")
+	}
+	if sw != "main:1" {
+		t.Errorf("expected main:1, got %s", sw)
+	}
+}
+
+func TestFindWindowForRepo_WorktreeToWorktree(t *testing.T) {
+	agents := []Agent{
+		{
+			Target:  "main:1.0",
+			Session: "main",
+			Window:  1,
+			Cwd:     "/Users/test/Code/worktrees/skills/branch-a",
+		},
+	}
+	// Both sides are worktrees for the same repo
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/branch-b", "main:0.0")
+	if !found {
+		t.Error("findWindowForRepo should match two worktrees of the same repo")
+	}
+	if sw != "main:1" {
+		t.Errorf("expected main:1, got %s", sw)
+	}
+}
+
 func TestFindWindowForRepo_NoMatchDifferentRepo(t *testing.T) {
 	agents := []Agent{
 		{

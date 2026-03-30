@@ -73,6 +73,9 @@ type model struct {
 	// Banner
 	quote   string           // random quote selected at startup
 	nowFunc func() time.Time // injectable clock for testability
+
+	// Path validation for z suggestions (injectable for testing)
+	pathExists func(string) bool
 }
 
 // buildTree rebuilds the flat tree node list from agents and their subagents.
@@ -148,6 +151,7 @@ func newModel(statePath, selfTarget string, db *DB) model {
 		prevEffState:   make(map[string]string),
 		quote:          pickQuote(db),
 		nowFunc:        time.Now,
+		pathExists:     dirExists,
 	}
 }
 

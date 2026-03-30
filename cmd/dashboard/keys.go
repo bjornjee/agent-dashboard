@@ -86,7 +86,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		default:
 			var cmd tea.Cmd
 			m.textInput, cmd = m.textInput.Update(msg)
-			m.suggestions = filterZSuggestions(m.textInput.Value(), m.zEntries)
+			m.suggestions = filterZSuggestions(m.textInput.Value(), m.zEntries, m.pathExists)
 			m.selectedSugg = 0
 			m.updateRightContent()
 			return m, cmd
@@ -273,7 +273,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.zEntries == nil {
 			m.zEntries = loadZEntries()
 		}
-		m.suggestions = filterZSuggestions("", m.zEntries)
+		m.suggestions = filterZSuggestions("", m.zEntries, m.pathExists)
 		m.selectedSugg = 0
 		m.updateRightContent()
 		return m, textinput.Blink

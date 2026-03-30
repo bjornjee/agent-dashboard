@@ -352,6 +352,7 @@ func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.tmuxAvailable = true
+	m.pathExists = func(string) bool { return true } // accept all fake paths in test
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}
@@ -402,7 +403,7 @@ func TestCreateFolderMode_TabAcceptsSuggestion(t *testing.T) {
 	m.mode = modeCreateFolder
 	m.textInput.Focus()
 	m.textInput.SetValue("ski")
-	m.suggestions = filterZSuggestions("ski", m.zEntries)
+	m.suggestions = filterZSuggestions("ski", m.zEntries, nil)
 
 	// Press tab to accept
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
@@ -436,7 +437,7 @@ func TestCreateFolderMode_SuggestionsInView(t *testing.T) {
 	m.mode = modeCreateFolder
 	m.textInput.Focus()
 	m.textInput.SetValue("Code")
-	m.suggestions = filterZSuggestions("Code", m.zEntries)
+	m.suggestions = filterZSuggestions("Code", m.zEntries, nil)
 	m.updateRightContent()
 
 	content := m.messageVP.View()
