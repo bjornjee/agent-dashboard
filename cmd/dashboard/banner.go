@@ -98,7 +98,7 @@ func pickQuote(db *DB) string {
 		refreshQuotesIfNeeded(db)
 		q, a := db.RandomQuote(maxQuoteLen)
 		if q != "" {
-			return fmt.Sprintf("%s — %s", q, a)
+			return fmt.Sprintf("\" %s — %s \"", q, a)
 		}
 	}
 	return fallbackQuote()
@@ -114,7 +114,7 @@ func fallbackQuote() string {
 	if len(eligible) == 0 {
 		return ""
 	}
-	return eligible[rand.Intn(len(eligible))]
+	return "\" " + eligible[rand.Intn(len(eligible))] + " \" "
 }
 
 func greeting(now time.Time) string {
@@ -215,24 +215,33 @@ var quoteStyle = lipgloss.NewStyle().
 func (m model) renderBanner() string {
 	icon := renderAxolotl()
 	greet := greetingStyle.Render(greeting(m.nowFunc()))
-	q := quoteStyle.Render(m.quote)
 
+	// 1. Build the left side first to calculate its footprint
 	left := lipgloss.JoinHorizontal(lipgloss.Center, "  ", icon, "  ", greet)
-
 	leftWidth := lipgloss.Width(left)
-	maxQuoteWidth := m.width / 3
-	rightWidth := m.width - leftWidth - 2
+
+	// 2. Calculate remaining space.
+	// We want the right side to take up every single pixel left.
+	rightWidth := m.width - leftWidth
 	if rightWidth < 0 {
 		rightWidth = 0
 	}
-	if maxQuoteWidth > rightWidth {
-		maxQuoteWidth = rightWidth
-	}
 
+	// 3. Define a max width for the quote text itself so it doesn't
+	// wrap awkwardly if the terminal is huge.
+	maxQuoteWidth := m.width / 3
+
+	// 4. Render the quote with its own style first
+	q := quoteStyle.Width(maxQuoteWidth).Render(m.quote)
+
+	// 5. Wrap that quote in a container that fills the remaining width
+	// and pushes the content to the Right.
 	right := lipgloss.NewStyle().
-		Width(maxQuoteWidth).
+		Width(rightWidth).
 		Align(lipgloss.Right).
 		Render(q)
 
-	return lipgloss.JoinHorizontal(lipgloss.Center, left, "  ", right)
+	// 6. Join them. No extra spacers needed here because 'right'
+	// already fills the gap.
+	return lipgloss.JoinHorizontal(lipgloss.Center, left, right)
 }
