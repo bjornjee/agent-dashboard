@@ -120,12 +120,50 @@ func parseUserEntry(entry jsonlEntry) *ConversationEntry {
 	if strContent == "" {
 		return nil
 	}
+	strContent = cleanSlashCommand(strContent)
 
 	return &ConversationEntry{
 		Role:      "human",
 		Content:   truncate(strContent, 2000),
 		Timestamp: entry.Timestamp,
 	}
+}
+
+// cleanSlashCommand converts XML-tagged slash command content into a clean
+// display format. e.g. "<command-name>/refactor</command-name>\n<command-args>clean up</command-args>"
+// becomes "/refactor clean up". Non-slash-command content passes through unchanged.
+func cleanSlashCommand(s string) string {
+	const nameOpen = "<command-name>"
+	const nameClose = "</command-name>"
+	const argsOpen = "<command-args>"
+	const argsClose = "</command-args>"
+
+	nameStart := strings.Index(s, nameOpen)
+	if nameStart < 0 {
+		return s
+	}
+	nameEnd := strings.Index(s, nameClose)
+	if nameEnd < 0 {
+		return s
+	}
+	if nameEnd <= nameStart+len(nameOpen) {
+		return s
+	}
+	cmdName := strings.TrimSpace(s[nameStart+len(nameOpen) : nameEnd])
+
+	argsStart := strings.Index(s, argsOpen)
+	if argsStart < 0 {
+		return cmdName
+	}
+	argsEnd := strings.Index(s, argsClose)
+	if argsEnd < 0 || argsEnd <= argsStart+len(argsOpen) {
+		return cmdName
+	}
+	args := strings.TrimSpace(s[argsStart+len(argsOpen) : argsEnd])
+	if args == "" {
+		return cmdName
+	}
+	return cmdName + " " + args
 }
 
 func parseAssistantEntry(entry jsonlEntry) *ConversationEntry {
