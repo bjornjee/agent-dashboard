@@ -122,14 +122,14 @@ func TestPermissionModeColor(t *testing.T) {
 		mode string
 		want lipgloss.Color
 	}{
-		{"plan mode gets mauve", "plan", catMauve},
-		{"auto-edit gets yellow", "auto-edit", catYellow},
-		{"autoEdit gets yellow", "autoEdit", catYellow},
-		{"full-auto gets green", "full-auto", catGreen},
-		{"fullAuto gets green", "fullAuto", catGreen},
-		{"unknown mode gets overlay1", "custom", catOverlay1},
-		{"case insensitive Plan", "Plan", catMauve},
-		{"default fallback", "default", catOverlay1},
+		{"plan mode gets mauve", "plan", themeMauve},
+		{"auto-edit gets yellow", "auto-edit", themeYellow},
+		{"autoEdit gets yellow", "autoEdit", themeYellow},
+		{"full-auto gets green", "full-auto", themeGreen},
+		{"fullAuto gets green", "fullAuto", themeGreen},
+		{"unknown mode gets overlay1", "custom", themeOverlay1},
+		{"case insensitive Plan", "Plan", themeMauve},
+		{"default fallback", "default", themeOverlay1},
 	}
 
 	for _, tt := range tests {
@@ -171,7 +171,7 @@ func TestSanitizeWindowName(t *testing.T) {
 
 func TestPermissionModeColor_Bypass(t *testing.T) {
 	got := permissionModeColor("bypassPermissions")
-	want := catRed
+	want := themeRed
 	if got != want {
 		t.Errorf("permissionModeColor(bypassPermissions) = %q, want %q", got, want)
 	}

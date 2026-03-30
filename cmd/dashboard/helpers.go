@@ -77,11 +77,11 @@ func modelShort(model string) string {
 	m := strings.ToLower(model)
 	switch {
 	case strings.Contains(m, "opus"):
-		return lipgloss.NewStyle().Foreground(catPink).Render("O")
+		return lipgloss.NewStyle().Foreground(themePink).Render("O")
 	case strings.Contains(m, "sonnet"):
-		return lipgloss.NewStyle().Foreground(catSapphire).Render("S")
+		return lipgloss.NewStyle().Foreground(themeSapphire).Render("S")
 	case strings.Contains(m, "haiku"):
-		return lipgloss.NewStyle().Foreground(catTeal).Render("H")
+		return lipgloss.NewStyle().Foreground(themeTeal).Render("H")
 	}
 	return ""
 }
@@ -92,15 +92,15 @@ func permissionModeColor(mode string) lipgloss.Color {
 	m := strings.ToLower(mode)
 	switch {
 	case strings.Contains(m, "plan"):
-		return catMauve
+		return themeMauve
 	case strings.Contains(m, "auto") && strings.Contains(m, "edit"):
-		return catYellow
+		return themeYellow
 	case strings.Contains(m, "full") && strings.Contains(m, "auto"):
-		return catGreen
+		return themeGreen
 	case strings.Contains(m, "bypass"):
-		return catRed
+		return themeRed
 	default:
-		return catOverlay1
+		return themeOverlay1
 	}
 }
 
@@ -117,7 +117,7 @@ func agentBadges(agent Agent) string {
 		parts = append(parts, permissionModeStyle(agent.PermissionMode))
 	}
 	if agent.CurrentTool != "" {
-		parts = append(parts, lipgloss.NewStyle().Foreground(catSubtext0).
+		parts = append(parts, lipgloss.NewStyle().Foreground(themeSubtext0).
 			Render(agent.CurrentTool))
 	}
 	if agent.SubagentCount > 0 {

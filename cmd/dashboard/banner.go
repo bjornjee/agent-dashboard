@@ -119,12 +119,12 @@ func greeting(now time.Time) string {
 
 // Pixel art colors — Catppuccin Frappé palette
 var (
-	pxHotPink    = catPink
-	pxMedPink    = catFlamingo
-	pxLightPink  = catRosewater
-	pxPalePink   = catLavender
-	pxDarkPurple = catCrust
-	pxLavender   = catMauve
+	pxHotPink    = themePink
+	pxMedPink    = themeFlamingo
+	pxLightPink  = themeRosewater
+	pxPalePink   = themeLavender
+	pxDarkPurple = themeCrust
+	pxLavender   = themeMauve
 )
 
 // Color Palette based on image:
@@ -148,10 +148,10 @@ var axolotlPixels = [][]int{
 }
 
 var pxColors = map[int]lipgloss.Color{
-	1: catPink,      // Gills/outline
-	2: catRosewater, // Face/body
-	3: catCrust,     // Eyes
-	4: catFlamingo,  // Nose/blush
+	1: themePink,      // Gills/outline
+	2: themeRosewater, // Face/body
+	3: themeCrust,     // Eyes
+	4: themeFlamingo,  // Nose/blush
 }
 
 // renderAxolotl renders the pixel art using half-block characters with true colors.
@@ -194,10 +194,10 @@ func renderAxolotl() string {
 
 var greetingStyle = lipgloss.NewStyle().
 	Bold(true).
-	Foreground(catRosewater)
+	Foreground(themeRosewater)
 
 var quoteStyle = lipgloss.NewStyle().
-	Foreground(catOverlay1).
+	Foreground(themeOverlay1).
 	Italic(true)
 
 func (m model) renderBanner() string {
