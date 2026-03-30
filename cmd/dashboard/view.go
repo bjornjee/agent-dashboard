@@ -101,9 +101,12 @@ func (m *model) updateRightContent() {
 	} else if isDone {
 		m.messageVP.SetContent(m.finalMessageContent())
 	} else if m.tmuxAvailable && hasContent(m.capturedLines) {
+		w := m.rightWidth - 4
 		var lines []string
 		for _, l := range m.capturedLines {
-			lines = append(lines, " "+l)
+			for _, wl := range wrapText(l, w) {
+				lines = append(lines, " "+wl)
+			}
 		}
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
 	} else {
@@ -231,6 +234,7 @@ func (m model) filesContent(agent Agent) string {
 	if len(agent.FilesChanged) == 0 {
 		return helpStyle.Render("  No files changed")
 	}
+	w := m.rightWidth - 4
 	var lines []string
 	for _, f := range agent.FilesChanged {
 		var color lipgloss.Color
@@ -242,7 +246,10 @@ func (m model) filesContent(agent Agent) string {
 		default:
 			color = inputColor
 		}
-		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(color).Render(f))
+		style := lipgloss.NewStyle().Foreground(color)
+		for _, wl := range wrapText(f, w) {
+			lines = append(lines, "  "+style.Render(wl))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -252,6 +259,7 @@ func (m model) historyContent() string {
 		return helpStyle.Render("  No conversation history")
 	}
 
+	w := m.rightWidth - 4
 	var lines []string
 	for _, entry := range m.conversation {
 		ts := ""
@@ -260,23 +268,27 @@ func (m model) historyContent() string {
 		}
 
 		role := entry.Role
-		roleStyle := lipgloss.NewStyle().Foreground(runningColor).Bold(true)
+		rStyle := lipgloss.NewStyle().Foreground(runningColor).Bold(true)
 		if entry.IsNotification {
 			role = "sub-agent"
-			roleStyle = lipgloss.NewStyle().Foreground(doneColor)
+			rStyle = lipgloss.NewStyle().Foreground(doneColor)
 		} else if entry.Role == "human" {
-			roleStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
+			rStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
 		}
 
 		preview := strings.Split(entry.Content, "\n")[0]
-		if len(preview) > 120 {
-			preview = preview[:119] + "…"
-		}
-
-		lines = append(lines, fmt.Sprintf(" %s %s %s",
+		header := fmt.Sprintf(" %s %s ",
 			helpStyle.Render("["+ts+"]"),
-			roleStyle.Render(role+":"),
-			preview))
+			rStyle.Render(role+":"))
+		// Wrap the preview text, indenting continuation lines
+		wrapped := wrapText(preview, w-len(ts)-len(role)-6)
+		for i, wl := range wrapped {
+			if i == 0 {
+				lines = append(lines, header+wl)
+			} else {
+				lines = append(lines, strings.Repeat(" ", len(ts)+len(role)+6)+wl)
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -446,9 +458,13 @@ func (m model) subagentFilesContent() string {
 	if len(files) == 0 {
 		return helpStyle.Render("  No files touched")
 	}
+	w := m.rightWidth - 4
 	var lines []string
+	style := lipgloss.NewStyle().Foreground(inputColor)
 	for _, f := range files {
-		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(inputColor).Render(f))
+		for _, wl := range wrapText(f, w) {
+			lines = append(lines, "  "+style.Render(wl))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -457,28 +473,51 @@ func (m model) subagentActivityContent() string {
 	if len(m.subActivity) == 0 {
 		return helpStyle.Render("  No activity yet")
 	}
+	w := m.rightWidth - 4
 	var lines []string
 	for _, e := range m.subActivity {
 		ts := ""
 		if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
 			ts = t.Local().Format("15:04")
 		}
+		indent := len(ts) + 10 // approximate prefix width for continuation
 		switch e.Kind {
 		case "tool":
-			lines = append(lines, fmt.Sprintf(" %s %s",
-				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(themeOverlay0).Render(e.Content)))
+			header := fmt.Sprintf(" %s ", helpStyle.Render("["+ts+"]"))
+			toolStyle := lipgloss.NewStyle().Foreground(themeOverlay0)
+			wrapped := wrapText(e.Content, w-indent)
+			for i, wl := range wrapped {
+				if i == 0 {
+					lines = append(lines, header+toolStyle.Render(wl))
+				} else {
+					lines = append(lines, strings.Repeat(" ", indent)+toolStyle.Render(wl))
+				}
+			}
 		case "human":
-			lines = append(lines, fmt.Sprintf(" %s %s %s",
+			header := fmt.Sprintf(" %s %s ",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(inputColor).Bold(true).Render("prompt:"),
-				truncateLineStr(e.Content, m.rightWidth-20)))
+				lipgloss.NewStyle().Foreground(inputColor).Bold(true).Render("prompt:"))
+			wrapped := wrapText(e.Content, w-indent-8)
+			for i, wl := range wrapped {
+				if i == 0 {
+					lines = append(lines, header+wl)
+				} else {
+					lines = append(lines, strings.Repeat(" ", indent+8)+wl)
+				}
+			}
 		case "assistant":
-			preview := strings.Split(e.Content, "\n")[0]
-			lines = append(lines, fmt.Sprintf(" %s %s %s",
+			header := fmt.Sprintf(" %s %s ",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(runningColor).Bold(true).Render("text:"),
-				truncateLineStr(preview, m.rightWidth-20)))
+				lipgloss.NewStyle().Foreground(runningColor).Bold(true).Render("text:"))
+			preview := strings.Split(e.Content, "\n")[0]
+			wrapped := wrapText(preview, w-indent-6)
+			for i, wl := range wrapped {
+				if i == 0 {
+					lines = append(lines, header+wl)
+				} else {
+					lines = append(lines, strings.Repeat(" ", indent+6)+wl)
+				}
+			}
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -600,15 +639,21 @@ func (m model) renderRightPanel() string {
 			header = append(header, fmt.Sprintf(" Branch: %s", boldStyle.Render(agent.Branch)))
 		}
 		if agent.Cwd != "" {
-			header = append(header, fmt.Sprintf(" Dir: %s", agent.Cwd))
+			dirLine := fmt.Sprintf(" Dir: %s", agent.Cwd)
+			for _, wl := range wrapText(dirLine, m.rightWidth-4) {
+				header = append(header, wl)
+			}
 		}
 
 		if u, ok := m.agentUsage[agent.Target]; ok && u.OutputTokens > 0 {
-			header = append(header, fmt.Sprintf(" Cost: %s  (in: %s  out: %s  cache: %s)",
+			costLine := fmt.Sprintf(" Cost: %s  (in: %s  out: %s  cache: %s)",
 				boldStyle.Render(FormatCost(u.CostUSD)),
 				FormatTokens(u.InputTokens),
 				FormatTokens(u.OutputTokens),
-				FormatTokens(u.CacheReadTokens+u.CacheWriteTokens)))
+				FormatTokens(u.CacheReadTokens+u.CacheWriteTokens))
+			for _, wl := range wrapText(costLine, m.rightWidth-4) {
+				header = append(header, wl)
+			}
 		}
 
 		if agent.SubagentCount > 0 {

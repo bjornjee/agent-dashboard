@@ -65,13 +65,6 @@ func agentLabel(agent Agent) string {
 	return agent.Session
 }
 
-func truncateLineStr(s string, maxLen int) string {
-	if maxLen > 0 && len(s) > maxLen {
-		return s[:maxLen-1] + "…"
-	}
-	return s
-}
-
 // modelShort returns a single-letter model indicator with color.
 func modelShort(model string) string {
 	m := strings.ToLower(model)
