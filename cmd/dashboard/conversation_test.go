@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -486,6 +487,106 @@ func TestReadPlanSlug_MissingFile(t *testing.T) {
 	slug := ReadPlanSlug("/nonexistent", "no-such")
 	if slug != "" {
 		t.Errorf("expected empty slug for missing file, got %q", slug)
+	}
+}
+
+func TestReadPlanSlug_LargeFile(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// Create a JSONL file larger than 32KB to trigger tail-seek logic
+	var builder strings.Builder
+	// Write many entries without slug to pad the file past 32KB
+	for i := 0; i < 300; i++ {
+		builder.WriteString(fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"padding message %d with extra content to make it longer"},"timestamp":"2026-03-28T10:00:00Z"}`, i))
+		builder.WriteByte('\n')
+	}
+	// Write the slug entries near the end
+	builder.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"plan time"}]},"timestamp":"2026-03-28T10:00:01Z","slug":"the-plan-slug"}`)
+	builder.WriteByte('\n')
+
+	data := builder.String()
+	if len(data) < 32*1024 {
+		t.Fatalf("test file too small: %d bytes, need >32KB", len(data))
+	}
+	t.Logf("JSONL file size: %d bytes", len(data))
+
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	slug := ReadPlanSlug(projDir, sessionID)
+	if slug != "the-plan-slug" {
+		t.Errorf("expected slug 'the-plan-slug' for large file, got %q", slug)
+	}
+}
+
+func TestReadPlanSlug_LargeFileAllEntriesHaveSlug(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// Create a JSONL file larger than 32KB where ALL entries have slug
+	var builder strings.Builder
+	for i := 0; i < 300; i++ {
+		builder.WriteString(fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"message %d with extra content for padding purposes"},"timestamp":"2026-03-28T10:00:00Z","slug":"my-session-slug"}`, i))
+		builder.WriteByte('\n')
+	}
+
+	data := builder.String()
+	if len(data) < 32*1024 {
+		t.Fatalf("test file too small: %d bytes, need >32KB", len(data))
+	}
+
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	slug := ReadPlanSlug(projDir, sessionID)
+	if slug != "my-session-slug" {
+		t.Errorf("expected 'my-session-slug', got %q", slug)
+	}
+}
+
+func TestReadPlanSlug_LargeFileSparseSlug(t *testing.T) {
+	// Regression test: large file (>32KB) with a single slug entry after
+	// the tail seek point. Verifies that the partial-line skip doesn't
+	// consume data needed by the scanner.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	const tailSize = 32 * 1024
+	var builder strings.Builder
+
+	// Pad with no-slug entries to push past 32KB total
+	padLine := `{"type":"user","message":{"role":"user","content":"` +
+		strings.Repeat("x", 200) + `"},"timestamp":"2026-03-28T10:00:00Z"}` + "\n"
+	for builder.Len() < tailSize+100 {
+		builder.WriteString(padLine)
+	}
+
+	// Single slug entry in the tail window
+	builder.WriteString(`{"type":"assistant","timestamp":"2026-03-28T10:00:01Z","slug":"sparse-slug"}` + "\n")
+
+	for i := 0; i < 5; i++ {
+		builder.WriteString(padLine)
+	}
+
+	data := builder.String()
+	t.Logf("JSONL file size: %d bytes", len(data))
+
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	slug := ReadPlanSlug(projDir, sessionID)
+	if slug != "sparse-slug" {
+		t.Errorf("expected 'sparse-slug', got %q", slug)
 	}
 }
 

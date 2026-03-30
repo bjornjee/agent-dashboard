@@ -684,8 +684,16 @@ func ReadPlanSlug(projDir, sessionID string) string {
 		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
 			return ""
 		}
-		// Discard the partial first line after seek
-		bufio.NewReader(f).ReadString('\n')
+		// Skip the partial first line without buffering ahead.
+		// Using bufio.NewReader would read-ahead into its internal buffer,
+		// advancing the file offset past data the scanner needs.
+		var oneByte [1]byte
+		for {
+			_, err := f.Read(oneByte[:])
+			if err != nil || oneByte[0] == '\n' {
+				break
+			}
+		}
 	}
 
 	scanner := bufio.NewScanner(f)

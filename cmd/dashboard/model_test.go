@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -500,6 +501,128 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 	}
 }
 
+func TestPlanToggle(t *testing.T) {
+	setup := func() model {
+		m := newModel("", "", nil)
+		m.width = 120
+		m.height = 40
+		m.resizeViewports()
+		m.agents = []Agent{
+			{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+		}
+		m.buildTree()
+		m.tmuxAvailable = true
+		m.planContent = "# Test Plan\n\n## Steps\n1. Do A"
+		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
+		m.planVisible = true
+		m.updateRightContent()
+		return m
+	}
+
+	t.Run("p toggles plan off", func(t *testing.T) {
+		m := setup()
+		if !m.planVisible {
+			t.Fatal("planVisible should start true")
+		}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("p should toggle planVisible off")
+		}
+	})
+
+	t.Run("p toggles plan back on", func(t *testing.T) {
+		m := setup()
+		m.planVisible = false
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if !rm.planVisible {
+			t.Error("p should toggle planVisible on when plan content exists")
+		}
+	})
+
+	t.Run("p ignored when no plan", func(t *testing.T) {
+		m := setup()
+		m.planContent = ""
+		m.renderedPlan = ""
+		m.planVisible = false
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("p should not enable planVisible when there is no plan content")
+		}
+	})
+
+	t.Run("navigation clears planVisible", func(t *testing.T) {
+		m := setup()
+		// Add second agent for navigation
+		m.agents = append(m.agents, Agent{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp"})
+		m.buildTree()
+		if !m.planVisible {
+			t.Fatal("planVisible should be true before navigation")
+		}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("navigation should reset planVisible")
+		}
+	})
+
+	t.Run("p ignored on subagent", func(t *testing.T) {
+		m := setup()
+		m.planVisible = false // start off
+		m.agentSubagents["main:1.0"] = []SubagentInfo{
+			{AgentID: "sub1", AgentType: "Explore", Description: "test"},
+		}
+		m.buildTree()
+		m.selected = 1 // select subagent
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("p should not toggle plan when subagent is selected")
+		}
+	})
+}
+
+func TestPlanMsg_NoAutoShow(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+
+	// planMsg with content should NOT auto-show (live/output is default)
+	result, _ := m.Update(planMsg{content: "# Plan\n\n## Steps"})
+	rm := result.(model)
+	if rm.planVisible {
+		t.Error("planMsg should not auto-show plan — live/output is default")
+	}
+	if rm.renderedPlan == "" {
+		t.Error("planMsg should populate renderedPlan for when user presses p")
+	}
+
+	// User toggles on manually, then planMsg update should preserve that
+	rm.planVisible = true
+	result2, _ := rm.Update(planMsg{content: "# Updated Plan"})
+	rm2 := result2.(model)
+	if !rm2.planVisible {
+		t.Error("planMsg should preserve planVisible when already true")
+	}
+
+	// Empty planMsg should clear everything
+	result3, _ := rm2.Update(planMsg{content: ""})
+	rm3 := result3.(model)
+	if rm3.planVisible {
+		t.Error("empty planMsg should clear planVisible")
+	}
+	if rm3.renderedPlan != "" {
+		t.Error("empty planMsg should clear renderedPlan")
+	}
+}
+
 // executeBatch runs a tea.Cmd (expected to be a Batch) and collects messages.
 func executeBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
@@ -518,4 +641,92 @@ func executeBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
 		return msgs
 	}
 	return []tea.Msg{msg}
+}
+
+func TestPlanFlow_EndToEnd(t *testing.T) {
+	// Setup: create temp dirs with JSONL and plan file
+	dir := t.TempDir()
+	slug := "-test-project"
+	projDir := fmt.Sprintf("%s/projects/%s", dir, slug)
+	plansDir := fmt.Sprintf("%s/plans", dir)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(plansDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionID := "test-session-id"
+	planSlugName := "my-test-plan"
+	planContent := "# Test Plan\n\n## Steps\n1. Do thing A\n2. Do thing B"
+
+	// Write JSONL with slug field
+	jsonl := fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-28T10:00:00Z","slug":"%s"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"timestamp":"2026-03-28T10:00:01Z","slug":"%s"}
+`, planSlugName, planSlugName)
+	if err := os.WriteFile(fmt.Sprintf("%s/%s.jsonl", projDir, sessionID), []byte(jsonl), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write plan file
+	if err := os.WriteFile(fmt.Sprintf("%s/%s.md", plansDir, planSlugName), []byte(planContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify ReadPlanSlug finds the slug
+	gotSlug := ReadPlanSlug(projDir, sessionID)
+	if gotSlug != planSlugName {
+		t.Fatalf("ReadPlanSlug: expected %q, got %q", planSlugName, gotSlug)
+	}
+
+	// Verify ReadPlanContent reads the file
+	gotContent := ReadPlanContent(plansDir, planSlugName)
+	if gotContent != planContent {
+		t.Fatalf("ReadPlanContent: expected %q, got %q", planContent, gotContent)
+	}
+
+	// Now test the model flow
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	// Simulate state update with an agent
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/test/project", SessionID: sessionID},
+	}
+	m.buildTree()
+
+	// Simulate planMsg with content
+	result, _ := m.Update(planMsg{content: planContent})
+	rm := result.(model)
+
+	if rm.planContent != planContent {
+		t.Errorf("planContent: expected %q, got %q", planContent, rm.planContent)
+	}
+	if rm.planVisible {
+		t.Error("planMsg should not auto-show — live/output is default")
+	}
+	if rm.renderedPlan == "" {
+		t.Error("planMsg should populate renderedPlan with glamour output")
+	}
+
+	// The plan content should contain parts of the plan
+	if !strings.Contains(rm.planContent, "Test Plan") {
+		t.Error("planContent should contain 'Test Plan'")
+	}
+
+	// Test that planMsg with empty content CLEARS planContent
+	// (Bug fix: previously empty planMsg was silently ignored, causing stale plans)
+	result2, _ := rm.Update(planMsg{content: ""})
+	rm2 := result2.(model)
+	if rm2.planContent != "" {
+		t.Errorf("empty planMsg should clear planContent, but got %q", rm2.planContent)
+	}
+	if rm2.planVisible {
+		t.Error("empty planMsg should clear planVisible")
+	}
+	if rm2.renderedPlan != "" {
+		t.Error("empty planMsg should clear renderedPlan")
+	}
 }

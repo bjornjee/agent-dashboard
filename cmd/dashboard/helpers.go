@@ -1,14 +1,19 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
+
+//go:embed catppuccin-frappe.json
+var catppuccinFrappeStyle []byte
 
 // safeWindowNameRe matches characters safe for tmux window names.
 var safeWindowNameRe = regexp.MustCompile(`[^a-zA-Z0-9_.\-]`)
@@ -60,23 +65,16 @@ func agentLabel(agent Agent) string {
 	return agent.Session
 }
 
-func truncateLineStr(s string, maxLen int) string {
-	if maxLen > 0 && len(s) > maxLen {
-		return s[:maxLen-1] + "…"
-	}
-	return s
-}
-
 // modelShort returns a single-letter model indicator with color.
 func modelShort(model string) string {
 	m := strings.ToLower(model)
 	switch {
 	case strings.Contains(m, "opus"):
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Render("O")
+		return lipgloss.NewStyle().Foreground(themePink).Render("O")
 	case strings.Contains(m, "sonnet"):
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Render("S")
+		return lipgloss.NewStyle().Foreground(themeSapphire).Render("S")
 	case strings.Contains(m, "haiku"):
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render("H")
+		return lipgloss.NewStyle().Foreground(themeTeal).Render("H")
 	}
 	return ""
 }
@@ -87,15 +85,15 @@ func permissionModeColor(mode string) lipgloss.Color {
 	m := strings.ToLower(mode)
 	switch {
 	case strings.Contains(m, "plan"):
-		return lipgloss.Color("105") // blue/purple
+		return themeMauve
 	case strings.Contains(m, "auto") && strings.Contains(m, "edit"):
-		return lipgloss.Color("220") // yellow/amber
+		return themeYellow
 	case strings.Contains(m, "full") && strings.Contains(m, "auto"):
-		return lipgloss.Color("82") // green
+		return themeGreen
 	case strings.Contains(m, "bypass"):
-		return lipgloss.Color("196") // red — most permissive mode
+		return themeRed
 	default:
-		return lipgloss.Color("242") // gray
+		return themeOverlay1
 	}
 }
 
@@ -112,7 +110,7 @@ func agentBadges(agent Agent) string {
 		parts = append(parts, permissionModeStyle(agent.PermissionMode))
 	}
 	if agent.CurrentTool != "" {
-		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("248")).
+		parts = append(parts, lipgloss.NewStyle().Foreground(themeSubtext0).
 			Render(agent.CurrentTool))
 	}
 	if agent.SubagentCount > 0 {
@@ -165,6 +163,29 @@ func hasContent(lines []string) bool {
 		}
 	}
 	return false
+}
+
+// renderPlanMarkdown renders markdown content using glamour with syntax highlighting.
+// Falls back to plain wrapText on error. Returns empty string for empty input.
+func renderPlanMarkdown(content string, width int) string {
+	if content == "" {
+		return ""
+	}
+	if width < 10 {
+		width = 10
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStylesFromJSONBytes(catppuccinFrappeStyle),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return strings.Join(wrapText(content, width), "\n")
+	}
+	out, err := r.Render(content)
+	if err != nil {
+		return strings.Join(wrapText(content, width), "\n")
+	}
+	return strings.TrimRight(out, "\n")
 }
 
 func wrapText(s string, width int) []string {

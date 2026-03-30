@@ -19,8 +19,8 @@ func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
-	if m.mode == modeCreateFolder {
-		fullHeight := panelHeight - 2 // minus panel border
+	if m.mode == modeCreateFolder || (m.planVisible && m.renderedPlan != "") {
+		fullHeight := panelHeight - headerLines - 2
 		if fullHeight < 3 {
 			fullHeight = 3
 		}
@@ -88,24 +88,25 @@ func (m *model) updateRightContent() {
 
 	// Parent agent right panel
 	m.filesVP.SetContent(m.filesContent(*agent))
-	if m.planContent != "" {
-		m.historyVP.SetContent(m.planContentWrapped())
-	} else {
-		m.historyVP.SetContent(m.historyContent())
-	}
+	m.historyVP.SetContent(m.historyContent())
 
 	effState := m.effectiveState(*agent)
 	needsAttention := effState == "input" || effState == "error"
 	isDone := effState == "done" || effState == "idle"
 
-	if needsAttention {
+	if m.planVisible && m.renderedPlan != "" {
+		m.messageVP.SetContent(m.renderedPlan)
+	} else if needsAttention {
 		m.messageVP.SetContent(m.waitingMessageContent())
 	} else if isDone {
 		m.messageVP.SetContent(m.finalMessageContent())
 	} else if m.tmuxAvailable && hasContent(m.capturedLines) {
+		w := m.rightWidth - 4
 		var lines []string
 		for _, l := range m.capturedLines {
-			lines = append(lines, " "+l)
+			for _, wl := range wrapText(l, w) {
+				lines = append(lines, " "+wl)
+			}
 		}
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
 	} else {
@@ -233,6 +234,7 @@ func (m model) filesContent(agent Agent) string {
 	if len(agent.FilesChanged) == 0 {
 		return helpStyle.Render("  No files changed")
 	}
+	w := m.rightWidth - 4
 	var lines []string
 	for _, f := range agent.FilesChanged {
 		var color lipgloss.Color
@@ -244,7 +246,10 @@ func (m model) filesContent(agent Agent) string {
 		default:
 			color = inputColor
 		}
-		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(color).Render(f))
+		style := lipgloss.NewStyle().Foreground(color)
+		for _, wl := range wrapText(f, w) {
+			lines = append(lines, "  "+style.Render(wl))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -254,6 +259,7 @@ func (m model) historyContent() string {
 		return helpStyle.Render("  No conversation history")
 	}
 
+	w := m.rightWidth - 4
 	var lines []string
 	for _, entry := range m.conversation {
 		ts := ""
@@ -262,23 +268,27 @@ func (m model) historyContent() string {
 		}
 
 		role := entry.Role
-		roleStyle := lipgloss.NewStyle().Foreground(runningColor).Bold(true)
+		rStyle := lipgloss.NewStyle().Foreground(runningColor).Bold(true)
 		if entry.IsNotification {
 			role = "sub-agent"
-			roleStyle = lipgloss.NewStyle().Foreground(doneColor)
+			rStyle = lipgloss.NewStyle().Foreground(doneColor)
 		} else if entry.Role == "human" {
-			roleStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
+			rStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
 		}
 
 		preview := strings.Split(entry.Content, "\n")[0]
-		if len(preview) > 120 {
-			preview = preview[:119] + "…"
-		}
-
-		lines = append(lines, fmt.Sprintf(" %s %s %s",
+		header := fmt.Sprintf(" %s %s ",
 			helpStyle.Render("["+ts+"]"),
-			roleStyle.Render(role+":"),
-			preview))
+			rStyle.Render(role+":"))
+		// Wrap the preview text, indenting continuation lines
+		wrapped := wrapText(preview, w-len(ts)-len(role)-6)
+		for i, wl := range wrapped {
+			if i == 0 {
+				lines = append(lines, header+wl)
+			} else {
+				lines = append(lines, strings.Repeat(" ", len(ts)+len(role)+6)+wl)
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -330,15 +340,6 @@ func (m model) finalMessageContent() string {
 	wrapped := wrapText(lastAssistant.Content, m.rightWidth-3)
 	for _, wl := range wrapped {
 		lines = append(lines, "  "+wl)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (m model) planContentWrapped() string {
-	var lines []string
-	wrapped := wrapText(m.planContent, m.rightWidth-3)
-	for _, wl := range wrapped {
-		lines = append(lines, " "+wl)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -457,9 +458,13 @@ func (m model) subagentFilesContent() string {
 	if len(files) == 0 {
 		return helpStyle.Render("  No files touched")
 	}
+	w := m.rightWidth - 4
 	var lines []string
+	style := lipgloss.NewStyle().Foreground(inputColor)
 	for _, f := range files {
-		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(inputColor).Render(f))
+		for _, wl := range wrapText(f, w) {
+			lines = append(lines, "  "+style.Render(wl))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -468,28 +473,51 @@ func (m model) subagentActivityContent() string {
 	if len(m.subActivity) == 0 {
 		return helpStyle.Render("  No activity yet")
 	}
+	w := m.rightWidth - 4
 	var lines []string
 	for _, e := range m.subActivity {
 		ts := ""
 		if t, err := time.Parse(time.RFC3339, e.Timestamp); err == nil {
 			ts = t.Local().Format("15:04")
 		}
+		indent := len(ts) + 10 // approximate prefix width for continuation
 		switch e.Kind {
 		case "tool":
-			lines = append(lines, fmt.Sprintf(" %s %s",
-				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render(e.Content)))
+			header := fmt.Sprintf(" %s ", helpStyle.Render("["+ts+"]"))
+			toolStyle := lipgloss.NewStyle().Foreground(themeOverlay0)
+			wrapped := wrapText(e.Content, w-indent)
+			for i, wl := range wrapped {
+				if i == 0 {
+					lines = append(lines, header+toolStyle.Render(wl))
+				} else {
+					lines = append(lines, strings.Repeat(" ", indent)+toolStyle.Render(wl))
+				}
+			}
 		case "human":
-			lines = append(lines, fmt.Sprintf(" %s %s %s",
+			header := fmt.Sprintf(" %s %s ",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(inputColor).Bold(true).Render("prompt:"),
-				truncateLineStr(e.Content, m.rightWidth-20)))
+				lipgloss.NewStyle().Foreground(inputColor).Bold(true).Render("prompt:"))
+			wrapped := wrapText(e.Content, w-indent-8)
+			for i, wl := range wrapped {
+				if i == 0 {
+					lines = append(lines, header+wl)
+				} else {
+					lines = append(lines, strings.Repeat(" ", indent+8)+wl)
+				}
+			}
 		case "assistant":
-			preview := strings.Split(e.Content, "\n")[0]
-			lines = append(lines, fmt.Sprintf(" %s %s %s",
+			header := fmt.Sprintf(" %s %s ",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(runningColor).Bold(true).Render("text:"),
-				truncateLineStr(preview, m.rightWidth-20)))
+				lipgloss.NewStyle().Foreground(runningColor).Bold(true).Render("text:"))
+			preview := strings.Split(e.Content, "\n")[0]
+			wrapped := wrapText(preview, w-indent-6)
+			for i, wl := range wrapped {
+				if i == 0 {
+					lines = append(lines, header+wl)
+				} else {
+					lines = append(lines, strings.Repeat(" ", indent+6)+wl)
+				}
+			}
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -535,7 +563,7 @@ func (m model) renderLeftPanel() string {
 	panelHeight := m.height - 5 - bannerHeight
 	style := borderStyle
 	if m.focusedVP == focusAgentList {
-		style = style.BorderForeground(lipgloss.Color("86"))
+		style = style.BorderForeground(themeSapphire)
 	}
 	return style.
 		Width(m.leftWidth).
@@ -611,15 +639,21 @@ func (m model) renderRightPanel() string {
 			header = append(header, fmt.Sprintf(" Branch: %s", boldStyle.Render(agent.Branch)))
 		}
 		if agent.Cwd != "" {
-			header = append(header, fmt.Sprintf(" Dir: %s", agent.Cwd))
+			dirLine := fmt.Sprintf(" Dir: %s", agent.Cwd)
+			for _, wl := range wrapText(dirLine, m.rightWidth-4) {
+				header = append(header, wl)
+			}
 		}
 
 		if u, ok := m.agentUsage[agent.Target]; ok && u.OutputTokens > 0 {
-			header = append(header, fmt.Sprintf(" Cost: %s  (in: %s  out: %s  cache: %s)",
+			costLine := fmt.Sprintf(" Cost: %s  (in: %s  out: %s  cache: %s)",
 				boldStyle.Render(FormatCost(u.CostUSD)),
 				FormatTokens(u.InputTokens),
 				FormatTokens(u.OutputTokens),
-				FormatTokens(u.CacheReadTokens+u.CacheWriteTokens)))
+				FormatTokens(u.CacheReadTokens+u.CacheWriteTokens))
+			for _, wl := range wrapText(costLine, m.rightWidth-4) {
+				header = append(header, wl)
+			}
 		}
 
 		if agent.SubagentCount > 0 {
@@ -633,7 +667,7 @@ func (m model) renderRightPanel() string {
 	// Section labels + viewports
 	focusMarker := func(vp int) string {
 		if m.focusedVP == vp {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render(" ◆")
+			return lipgloss.NewStyle().Foreground(themeSapphire).Render(" ◆")
 		}
 		return ""
 	}
@@ -657,7 +691,7 @@ func (m model) renderRightPanel() string {
 	if m.mode == modeUsage {
 		filesLabel = ""
 		historyLabel = ""
-		messageLabel = " " + lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
+		messageLabel = " " + lipgloss.NewStyle().Foreground(themePeach).Bold(true).
 			Render("── Usage") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 			" " + helpStyle.Render(strings.Repeat("─", 20))
 	} else if sub != nil {
@@ -673,15 +707,13 @@ func (m model) renderRightPanel() string {
 		isDone := rpEffState == "done" || rpEffState == "idle"
 
 		filesLabel = " " + boldStyle.Render("Files:") + focusMarker(focusFiles) + scrollHint(m.filesVP)
-		if m.planContent != "" {
-			historyLabel = " " + planLabelStyle.Render("── Plan") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 21))
-		} else {
-			historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 18))
-		}
+		historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
+			" " + helpStyle.Render(strings.Repeat("─", 18))
 
-		if needsAttention {
+		if m.planVisible && m.renderedPlan != "" {
+			messageLabel = " " + planLabelStyle.Render("── Plan (p to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 8))
+		} else if needsAttention {
 			messageLabel = " " + lipgloss.NewStyle().Foreground(inputColor).Bold(true).
 				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
@@ -704,6 +736,12 @@ func (m model) renderRightPanel() string {
 	// Compose right panel (with blank-line buffers between sections)
 	var parts []string
 	if m.mode == modeUsage {
+		parts = []string{
+			strings.Join(header, "\n"),
+			messageLabel,
+			m.messageVP.View(),
+		}
+	} else if m.planVisible && m.renderedPlan != "" {
 		parts = []string{
 			strings.Join(header, "\n"),
 			messageLabel,
@@ -740,7 +778,7 @@ func (m model) renderHelpBar() string {
 	// Today's accumulated cost
 	todayCost := m.dbTodayCost
 	if todayCost > 0 {
-		todayStr := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
+		todayStr := lipgloss.NewStyle().Foreground(themePeach).Bold(true).
 			Render(FormatCost(todayCost))
 		parts = append(parts, fmt.Sprintf("Today: %s", todayStr))
 		parts = append(parts, "│")
@@ -752,7 +790,7 @@ func (m model) renderHelpBar() string {
 		totalCost = m.totalUsage.CostUSD
 	}
 	if totalCost > 0 {
-		costStr := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true).
+		costStr := lipgloss.NewStyle().Foreground(themePeach).Bold(true).
 			Render(FormatCost(totalCost))
 		parts = append(parts, fmt.Sprintf("All-time: %s", costStr))
 		parts = append(parts, "│")
@@ -784,6 +822,9 @@ func (m model) renderHelpBar() string {
 	} else {
 		parts = append(parts, helpStyle.Render("enter")+" "+helpStyle.Render("jump"))
 		parts = append(parts, helpStyle.Render("r")+" "+helpStyle.Render("reply"))
+	}
+	if m.planContent != "" && m.selectedSubagent() == nil {
+		parts = append(parts, boldStyle.Render("p")+" plan")
 	}
 	parts = append(parts, boldStyle.Render("a")+" new")
 	parts = append(parts, boldStyle.Render("u")+" usage")

@@ -59,7 +59,9 @@ type model struct {
 	subActivity    []ActivityEntry           // activity log for selected subagent
 
 	// Plan content for selected agent
-	planContent string
+	planContent  string
+	planVisible  bool   // true when plan is shown in message VP
+	renderedPlan string // glamour-rendered plan markdown
 
 	// Previous effective state per agent — used to detect transitions
 	// and fire desktop notifications on needs-attention.
@@ -238,10 +240,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case planMsg:
+		m.planContent = msg.content
 		if msg.content != "" {
-			m.planContent = msg.content
-			m.updateRightContent()
+			m.renderedPlan = renderPlanMarkdown(msg.content, m.rightWidth-4)
+		} else {
+			m.renderedPlan = ""
+			m.planVisible = false
 		}
+		m.updateRightContent()
 		return m, nil
 
 	case tickMsg:
@@ -400,6 +406,11 @@ func (m *model) resizeViewports() {
 	m.messageVP.Width = m.rightWidth
 	m.messageVP.Height = msgHeight
 
+	m.textInput.Width = m.rightWidth - 12 // account for "Reply: " prefix + padding
+
+	if m.planContent != "" && m.planVisible {
+		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
+	}
 	m.updateLeftContent()
 	m.updateRightContent()
 }

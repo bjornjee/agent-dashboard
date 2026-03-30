@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -99,7 +100,7 @@ func TestAgentLabel(t *testing.T) {
 			want: "dev",
 		},
 		{
-			name: "empty agent",
+			name:  "empty agent",
 			agent: Agent{},
 			want:  "",
 		},
@@ -121,14 +122,14 @@ func TestPermissionModeColor(t *testing.T) {
 		mode string
 		want lipgloss.Color
 	}{
-		{"plan mode gets blue/purple", "plan", lipgloss.Color("105")},
-		{"auto-edit gets yellow", "auto-edit", lipgloss.Color("220")},
-		{"autoEdit gets yellow", "autoEdit", lipgloss.Color("220")},
-		{"full-auto gets green", "full-auto", lipgloss.Color("82")},
-		{"fullAuto gets green", "fullAuto", lipgloss.Color("82")},
-		{"unknown mode gets gray", "custom", lipgloss.Color("242")},
-		{"case insensitive Plan", "Plan", lipgloss.Color("105")},
-		{"default fallback", "default", lipgloss.Color("242")},
+		{"plan mode gets mauve", "plan", themeMauve},
+		{"auto-edit gets yellow", "auto-edit", themeYellow},
+		{"autoEdit gets yellow", "autoEdit", themeYellow},
+		{"full-auto gets green", "full-auto", themeGreen},
+		{"fullAuto gets green", "fullAuto", themeGreen},
+		{"unknown mode gets overlay1", "custom", themeOverlay1},
+		{"case insensitive Plan", "Plan", themeMauve},
+		{"default fallback", "default", themeOverlay1},
 	}
 
 	for _, tt := range tests {
@@ -170,7 +171,7 @@ func TestSanitizeWindowName(t *testing.T) {
 
 func TestPermissionModeColor_Bypass(t *testing.T) {
 	got := permissionModeColor("bypassPermissions")
-	want := lipgloss.Color("196")
+	want := themeRed
 	if got != want {
 		t.Errorf("permissionModeColor(bypassPermissions) = %q, want %q", got, want)
 	}
@@ -331,6 +332,48 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 	if found {
 		t.Error("findWindowByName should return false for empty window list")
 	}
+}
+
+// stripANSI removes ANSI escape sequences from a string for test assertions.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
+
+func TestRenderPlanMarkdown(t *testing.T) {
+	t.Run("renders markdown with code block", func(t *testing.T) {
+		content := "# My Plan\n\n## Steps\n\n```go\nfunc main() {}\n```\n"
+		result := renderPlanMarkdown(content, 80)
+		if result == "" {
+			t.Fatal("renderPlanMarkdown returned empty string for non-empty input")
+		}
+		plain := stripANSI(result)
+		// Should contain the heading text
+		if !strings.Contains(plain, "My Plan") {
+			t.Errorf("rendered output should contain heading text, got:\n%s", plain)
+		}
+		// Should contain code content
+		if !strings.Contains(plain, "func main()") {
+			t.Errorf("rendered output should contain code block content, got:\n%s", plain)
+		}
+	})
+
+	t.Run("empty input returns empty", func(t *testing.T) {
+		result := renderPlanMarkdown("", 80)
+		if result != "" {
+			t.Errorf("expected empty output for empty input, got %q", result)
+		}
+	})
+
+	t.Run("respects width", func(t *testing.T) {
+		content := "# Plan\n\nThis is a very long line that should be wrapped when the width is small enough to require wrapping of the content."
+		narrow := renderPlanMarkdown(content, 40)
+		if narrow == "" {
+			t.Fatal("renderPlanMarkdown returned empty for non-empty input")
+		}
+		// Just verify it produces output — glamour handles wrapping internally
+	})
 }
 
 func TestPermissionModeStyle(t *testing.T) {

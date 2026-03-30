@@ -148,6 +148,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.conversation = nil
 			m.planContent = ""
+			m.planVisible = false
+			m.renderedPlan = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -160,6 +162,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.conversation = nil
 			m.planContent = ""
+			m.planVisible = false
+			m.renderedPlan = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -208,6 +212,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.conversation = nil
 			m.planContent = ""
+			m.planVisible = false
+			m.renderedPlan = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -222,6 +228,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.conversation = nil
 			m.planContent = ""
+			m.planVisible = false
+			m.renderedPlan = ""
 			m.subActivity = nil
 			m.updateLeftContent()
 			m.updateRightContent()
@@ -256,6 +264,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			return m, textinput.Blink
 		}
+	case "p":
+		if m.selectedAgent() != nil && m.selectedSubagent() == nil && m.planContent != "" {
+			m.planVisible = !m.planVisible
+			m.updateRightContent()
+		}
+		return m, nil
 	case "u":
 		if m.mode == modeUsage {
 			m.mode = modeNormal
