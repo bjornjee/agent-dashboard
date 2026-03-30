@@ -294,22 +294,34 @@ func (m model) historyContent() string {
 }
 
 func (m model) waitingMessageContent() string {
-	var lastAssistant *ConversationEntry
-	for i := len(m.conversation) - 1; i >= 0; i-- {
-		if m.conversation[i].Role == "assistant" && !m.conversation[i].IsNotification {
-			lastAssistant = &m.conversation[i]
-			break
-		}
-	}
-
-	if lastAssistant == nil {
-		return helpStyle.Render("  Waiting for agent message...")
-	}
-
 	var lines []string
-	wrapped := wrapText(lastAssistant.Content, m.rightWidth-3)
-	for _, wl := range wrapped {
-		lines = append(lines, "  "+wl)
+	w := m.rightWidth - 4
+
+	if m.tmuxAvailable && hasContent(m.capturedLines) {
+		// Show the actual terminal content (permission prompt).
+		// Preserve leading whitespace (indentation matters for option lists).
+		for _, l := range m.capturedLines {
+			if len(l) > w {
+				l = l[:w]
+			}
+			lines = append(lines, " "+l)
+		}
+	} else {
+		// Fallback: show last assistant message from conversation
+		var lastAssistant *ConversationEntry
+		for i := len(m.conversation) - 1; i >= 0; i-- {
+			if m.conversation[i].Role == "assistant" && !m.conversation[i].IsNotification {
+				lastAssistant = &m.conversation[i]
+				break
+			}
+		}
+		if lastAssistant == nil {
+			return helpStyle.Render("  Waiting for agent message...")
+		}
+		wrapped := wrapText(lastAssistant.Content, w)
+		for _, wl := range wrapped {
+			lines = append(lines, "  "+wl)
+		}
 	}
 
 	lines = append(lines, "")

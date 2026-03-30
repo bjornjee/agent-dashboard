@@ -177,6 +177,76 @@ func TestCloseResult_TriggersPruneDead(t *testing.T) {
 	}
 }
 
+func TestWaitingMessage_ShowsTmuxCapture(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+	m.capturedLines = []string{
+		"Bash command",
+		"",
+		"   mkdir -p /tmp/.vscode",
+		"   Create .vscode directory",
+		"",
+		" Claude requested permissions to edit /tmp/.vscode",
+		"",
+		" Do you want to proceed?",
+		" > 1. Yes",
+		"   2. Yes, and always allow",
+		"   3. No",
+	}
+	m.conversation = []ConversationEntry{
+		{Role: "assistant", Content: "Let me create that directory.", Timestamp: "2026-03-29T10:00:00Z"},
+	}
+
+	// Test waitingMessageContent directly (viewport clipping may hide content)
+	content := m.waitingMessageContent()
+
+	// Should show the tmux capture (permission prompt), not the JSONL assistant text
+	if !strings.Contains(content, "Do you want to proceed") {
+		t.Errorf("waiting message should show tmux capture with permission prompt, got:\n%s", content)
+	}
+	if !strings.Contains(content, "1. Yes") {
+		t.Errorf("waiting message should show permission options from tmux capture, got:\n%s", content)
+	}
+	// Should preserve indentation from tmux capture
+	if !strings.Contains(content, "   2. Yes, and always allow") {
+		t.Errorf("waiting message should preserve leading whitespace from tmux capture, got:\n%s", content)
+	}
+	// Should still show the reply hint
+	if !strings.Contains(content, "y/n") {
+		t.Errorf("waiting message should still show reply hint, got:\n%s", content)
+	}
+}
+
+func TestWaitingMessage_FallsBackToConversation(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+	m.capturedLines = nil // no tmux capture yet
+	m.conversation = []ConversationEntry{
+		{Role: "assistant", Content: "What should I do?", Timestamp: "2026-03-29T10:00:00Z"},
+	}
+
+	content := m.waitingMessageContent()
+
+	// With no capture, should fall back to conversation text
+	if !strings.Contains(content, "What should I do") {
+		t.Error("waiting message should fall back to conversation when no tmux capture")
+	}
+}
+
 func TestReplyMode_ShowsInputBar(t *testing.T) {
 	m := newModel("", "", nil)
 	m.width = 120
