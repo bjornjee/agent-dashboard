@@ -9,8 +9,8 @@ import (
 
 func TestParseZLine(t *testing.T) {
 	tests := []struct {
-		line    string
-		wantOk  bool
+		line     string
+		wantOk   bool
 		wantPath string
 		wantRank float64
 	}{

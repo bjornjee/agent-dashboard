@@ -88,17 +88,15 @@ func (m *model) updateRightContent() {
 
 	// Parent agent right panel
 	m.filesVP.SetContent(m.filesContent(*agent))
-	if m.planContent != "" {
-		m.historyVP.SetContent(m.planContentWrapped())
-	} else {
-		m.historyVP.SetContent(m.historyContent())
-	}
+	m.historyVP.SetContent(m.historyContent())
 
 	effState := m.effectiveState(*agent)
 	needsAttention := effState == "input" || effState == "error"
 	isDone := effState == "done" || effState == "idle"
 
-	if needsAttention {
+	if m.planVisible && m.renderedPlan != "" {
+		m.messageVP.SetContent(m.renderedPlan)
+	} else if needsAttention {
 		m.messageVP.SetContent(m.waitingMessageContent())
 	} else if isDone {
 		m.messageVP.SetContent(m.finalMessageContent())
@@ -330,15 +328,6 @@ func (m model) finalMessageContent() string {
 	wrapped := wrapText(lastAssistant.Content, m.rightWidth-3)
 	for _, wl := range wrapped {
 		lines = append(lines, "  "+wl)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (m model) planContentWrapped() string {
-	var lines []string
-	wrapped := wrapText(m.planContent, m.rightWidth-3)
-	for _, wl := range wrapped {
-		lines = append(lines, " "+wl)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -673,15 +662,13 @@ func (m model) renderRightPanel() string {
 		isDone := rpEffState == "done" || rpEffState == "idle"
 
 		filesLabel = " " + boldStyle.Render("Files:") + focusMarker(focusFiles) + scrollHint(m.filesVP)
-		if m.planContent != "" {
-			historyLabel = " " + planLabelStyle.Render("── Plan") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 21))
-		} else {
-			historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 18))
-		}
+		historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
+			" " + helpStyle.Render(strings.Repeat("─", 18))
 
-		if needsAttention {
+		if m.planVisible && m.renderedPlan != "" {
+			messageLabel = " " + planLabelStyle.Render("── Plan (p to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 8))
+		} else if needsAttention {
 			messageLabel = " " + lipgloss.NewStyle().Foreground(inputColor).Bold(true).
 				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
@@ -784,6 +771,9 @@ func (m model) renderHelpBar() string {
 	} else {
 		parts = append(parts, helpStyle.Render("enter")+" "+helpStyle.Render("jump"))
 		parts = append(parts, helpStyle.Render("r")+" "+helpStyle.Render("reply"))
+	}
+	if m.planContent != "" && m.selectedSubagent() == nil {
+		parts = append(parts, boldStyle.Render("p")+" plan")
 	}
 	parts = append(parts, boldStyle.Render("a")+" new")
 	parts = append(parts, boldStyle.Render("u")+" usage")

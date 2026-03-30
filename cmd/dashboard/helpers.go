@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -165,6 +166,29 @@ func hasContent(lines []string) bool {
 		}
 	}
 	return false
+}
+
+// renderPlanMarkdown renders markdown content using glamour with syntax highlighting.
+// Falls back to plain wrapText on error. Returns empty string for empty input.
+func renderPlanMarkdown(content string, width int) string {
+	if content == "" {
+		return ""
+	}
+	if width < 10 {
+		width = 10
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return strings.Join(wrapText(content, width), "\n")
+	}
+	out, err := r.Render(content)
+	if err != nil {
+		return strings.Join(wrapText(content, width), "\n")
+	}
+	return strings.TrimRight(out, "\n")
 }
 
 func wrapText(s string, width int) []string {

@@ -501,6 +501,128 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 	}
 }
 
+func TestPlanToggle(t *testing.T) {
+	setup := func() model {
+		m := newModel("", "", nil)
+		m.width = 120
+		m.height = 40
+		m.resizeViewports()
+		m.agents = []Agent{
+			{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+		}
+		m.buildTree()
+		m.tmuxAvailable = true
+		m.planContent = "# Test Plan\n\n## Steps\n1. Do A"
+		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
+		m.planVisible = true
+		m.updateRightContent()
+		return m
+	}
+
+	t.Run("p toggles plan off", func(t *testing.T) {
+		m := setup()
+		if !m.planVisible {
+			t.Fatal("planVisible should start true")
+		}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("p should toggle planVisible off")
+		}
+	})
+
+	t.Run("p toggles plan back on", func(t *testing.T) {
+		m := setup()
+		m.planVisible = false
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if !rm.planVisible {
+			t.Error("p should toggle planVisible on when plan content exists")
+		}
+	})
+
+	t.Run("p ignored when no plan", func(t *testing.T) {
+		m := setup()
+		m.planContent = ""
+		m.renderedPlan = ""
+		m.planVisible = false
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("p should not enable planVisible when there is no plan content")
+		}
+	})
+
+	t.Run("navigation clears planVisible", func(t *testing.T) {
+		m := setup()
+		// Add second agent for navigation
+		m.agents = append(m.agents, Agent{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp"})
+		m.buildTree()
+		if !m.planVisible {
+			t.Fatal("planVisible should be true before navigation")
+		}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("navigation should reset planVisible")
+		}
+	})
+
+	t.Run("p ignored on subagent", func(t *testing.T) {
+		m := setup()
+		m.planVisible = false // start off
+		m.agentSubagents["main:1.0"] = []SubagentInfo{
+			{AgentID: "sub1", AgentType: "Explore", Description: "test"},
+		}
+		m.buildTree()
+		m.selected = 1 // select subagent
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("p should not toggle plan when subagent is selected")
+		}
+	})
+}
+
+func TestPlanMsg_AutoShow(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+
+	// First planMsg with content should auto-show
+	result, _ := m.Update(planMsg{content: "# Plan\n\n## Steps"})
+	rm := result.(model)
+	if !rm.planVisible {
+		t.Error("first planMsg with content should auto-show plan")
+	}
+	if rm.renderedPlan == "" {
+		t.Error("planMsg should populate renderedPlan")
+	}
+
+	// Subsequent planMsg should not change planVisible state
+	rm.planVisible = false // user toggled off
+	result2, _ := rm.Update(planMsg{content: "# Updated Plan"})
+	rm2 := result2.(model)
+	if rm2.planVisible {
+		t.Error("subsequent planMsg should not re-show plan if user toggled off")
+	}
+
+	// Empty planMsg should clear everything
+	result3, _ := rm2.Update(planMsg{content: ""})
+	rm3 := result3.(model)
+	if rm3.planVisible {
+		t.Error("empty planMsg should clear planVisible")
+	}
+	if rm3.renderedPlan != "" {
+		t.Error("empty planMsg should clear renderedPlan")
+	}
+}
+
 // executeBatch runs a tea.Cmd (expected to be a Batch) and collects messages.
 func executeBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
@@ -582,11 +704,12 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 	if rm.planContent != planContent {
 		t.Errorf("planContent: expected %q, got %q", planContent, rm.planContent)
 	}
-
-	// Check that the history viewport contains the plan content
-	vpContent := rm.historyVP.View()
-	t.Logf("historyVP content length: %d", len(vpContent))
-	t.Logf("historyVP.View() = %q", vpContent)
+	if !rm.planVisible {
+		t.Error("first planMsg should auto-show plan (planVisible=true)")
+	}
+	if rm.renderedPlan == "" {
+		t.Error("planMsg should populate renderedPlan with glamour output")
+	}
 
 	// The plan content should contain parts of the plan
 	if !strings.Contains(rm.planContent, "Test Plan") {
@@ -599,5 +722,11 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 	rm2 := result2.(model)
 	if rm2.planContent != "" {
 		t.Errorf("empty planMsg should clear planContent, but got %q", rm2.planContent)
+	}
+	if rm2.planVisible {
+		t.Error("empty planMsg should clear planVisible")
+	}
+	if rm2.renderedPlan != "" {
+		t.Error("empty planMsg should clear renderedPlan")
 	}
 }

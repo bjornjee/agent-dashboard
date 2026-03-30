@@ -530,4 +530,3 @@ func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
 
 	return watcher, nil
 }
-

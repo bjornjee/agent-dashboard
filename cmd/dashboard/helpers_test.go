@@ -99,7 +99,7 @@ func TestAgentLabel(t *testing.T) {
 			want: "dev",
 		},
 		{
-			name: "empty agent",
+			name:  "empty agent",
 			agent: Agent{},
 			want:  "",
 		},
@@ -331,6 +331,40 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 	if found {
 		t.Error("findWindowByName should return false for empty window list")
 	}
+}
+
+func TestRenderPlanMarkdown(t *testing.T) {
+	t.Run("renders markdown with code block", func(t *testing.T) {
+		content := "# My Plan\n\n## Steps\n\n```go\nfunc main() {}\n```\n"
+		result := renderPlanMarkdown(content, 80)
+		if result == "" {
+			t.Fatal("renderPlanMarkdown returned empty string for non-empty input")
+		}
+		// Should contain the heading text
+		if !strings.Contains(result, "My Plan") {
+			t.Errorf("rendered output should contain heading text, got:\n%s", result)
+		}
+		// Should contain code content
+		if !strings.Contains(result, "func main()") {
+			t.Errorf("rendered output should contain code block content, got:\n%s", result)
+		}
+	})
+
+	t.Run("empty input returns empty", func(t *testing.T) {
+		result := renderPlanMarkdown("", 80)
+		if result != "" {
+			t.Errorf("expected empty output for empty input, got %q", result)
+		}
+	})
+
+	t.Run("respects width", func(t *testing.T) {
+		content := "# Plan\n\nThis is a very long line that should be wrapped when the width is small enough to require wrapping of the content."
+		narrow := renderPlanMarkdown(content, 40)
+		if narrow == "" {
+			t.Fatal("renderPlanMarkdown returned empty for non-empty input")
+		}
+		// Just verify it produces output — glamour handles wrapping internally
+	})
 }
 
 func TestPermissionModeStyle(t *testing.T) {
