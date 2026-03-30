@@ -36,8 +36,14 @@ type apiNinjasQuote struct {
 	Author string `json:"author"`
 }
 
-// fetchAndCacheQuotes fetches 10 quotes from API Ninjas and caches them in the DB.
-func fetchAndCacheQuotes(db *DB) {
+// maxDailyRetries is the max API calls per day to find one new unique quote
+// that fits the length constraint. ~37% of quotes fit maxQuoteLen, so on
+// average ~3 attempts needed; 10 gives comfortable margin for duplicates.
+const maxDailyRetries = 10
+
+// fetchAndCacheQuote retries up to maxDailyRetries times to find one new
+// unique quote that fits within maxQuoteLen.
+func fetchAndCacheQuote(db *DB) {
 	key := os.Getenv("API_NINJAS_KEY")
 	if key == "" {
 		return
@@ -49,33 +55,48 @@ func fetchAndCacheQuotes(db *DB) {
 	for _, cat := range []string{"wisdom", "philosophy", "life", "humor", "inspirational"} {
 		params.Add("categories", cat)
 	}
-
 	fullURL := baseURL + "?" + params.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, fullURL, nil)
-	if err != nil {
+	for attempt := range maxDailyRetries {
+		if attempt > 0 {
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		req, err := http.NewRequest(http.MethodGet, fullURL, nil)
+		if err != nil {
+			return
+		}
+		req.Header.Set("X-Api-Key", key)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		var results []apiNinjasQuote
+		json.NewDecoder(resp.Body).Decode(&results)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK || len(results) == 0 {
+			continue
+		}
+
+		r := results[0]
+		if len(r.Quote)+len(r.Author)+3 > maxQuoteLen {
+			continue
+		}
+		if db.QuoteExists(r.Quote) {
+			continue
+		}
+
+		if err := db.InsertQuotes([]QuoteRow{{Quote: r.Quote, Author: r.Author}}); err != nil {
+			return
+		}
+		db.SetLastQuoteFetch(time.Now().Format("2006-01-02"))
 		return
 	}
-	req.Header.Set("X-Api-Key", key)
-	resp, err := client.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return
-	}
-	var results []apiNinjasQuote
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil || len(results) == 0 {
-		return
-	}
-	rows := make([]QuoteRow, len(results))
-	for i, r := range results {
-		rows[i] = QuoteRow{Quote: r.Quote, Author: r.Author}
-	}
-	if err := db.InsertQuotes(rows); err != nil {
-		return
-	}
+
+	// Exhausted retries — still mark the day so we don't retry on every render.
 	db.SetLastQuoteFetch(time.Now().Format("2006-01-02"))
 }
 
@@ -85,7 +106,7 @@ func refreshQuotesIfNeeded(db *DB) {
 	if db.LastQuoteFetch() == today {
 		return
 	}
-	fetchAndCacheQuotes(db)
+	fetchAndCacheQuote(db)
 }
 
 // maxQuoteLen is the hard character limit for the full "quote — author" string.
