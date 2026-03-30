@@ -1,0 +1,477 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestProjectSlug(t *testing.T) {
+	tests := []struct {
+		cwd  string
+		want string
+	}{
+		{"/Users/bjornjee/Code/bjornjee/skills", "-Users-bjornjee-Code-bjornjee-skills"},
+		{"/Users/bjornjee/Code/newb/ctf", "-Users-bjornjee-Code-newb-ctf"},
+		{"/tmp/test", "-tmp-test"},
+	}
+	for _, tt := range tests {
+		got := ProjectSlug(tt.cwd)
+		if got != tt.want {
+			t.Errorf("ProjectSlug(%q) = %q, want %q", tt.cwd, got, tt.want)
+		}
+	}
+}
+
+func TestReadConversation_MissingFile(t *testing.T) {
+	entries := ReadConversation("/nonexistent", "no-such-id", 10)
+	if len(entries) != 0 {
+		t.Errorf("expected empty, got %d entries", len(entries))
+	}
+}
+
+func TestReadConversation_ParsesEntries(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"fix the bug"},"timestamp":"2026-03-28T10:15:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"let me think..."},{"type":"text","text":"I fixed the bug by updating the handler."}]},"timestamp":"2026-03-28T10:15:30Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]},"timestamp":"2026-03-28T10:15:35Z"}
+{"type":"user","message":{"role":"user","content":"thanks!"},"timestamp":"2026-03-28T10:16:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"You're welcome!"}]},"timestamp":"2026-03-28T10:16:30Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+
+	// Should have 4 entries: 2 user + 2 assistant text (skip tool_use-only entry)
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 entries, got %d: %+v", len(entries), entries)
+	}
+
+	// First entry: user
+	if entries[0].Role != "human" || entries[0].Content != "fix the bug" {
+		t.Errorf("entry 0: got %+v", entries[0])
+	}
+
+	// Second entry: assistant (thinking stripped, only text)
+	if entries[1].Role != "assistant" || entries[1].Content != "I fixed the bug by updating the handler." {
+		t.Errorf("entry 1: got %+v", entries[1])
+	}
+
+	// Third: user
+	if entries[2].Role != "human" || entries[2].Content != "thanks!" {
+		t.Errorf("entry 2: got %+v", entries[2])
+	}
+
+	// Fourth: assistant
+	if entries[3].Role != "assistant" || entries[3].Content != "You're welcome!" {
+		t.Errorf("entry 3: got %+v", entries[3])
+	}
+}
+
+func TestReadConversation_RespectsLimit(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"msg1"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"reply1"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":"msg2"},"timestamp":"2026-03-28T10:01:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"reply2"}]},"timestamp":"2026-03-28T10:01:01Z"}
+{"type":"user","message":{"role":"user","content":"msg3"},"timestamp":"2026-03-28T10:02:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"reply3"}]},"timestamp":"2026-03-28T10:02:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 2)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	// Should be the LAST 2 entries
+	if entries[0].Content != "msg3" {
+		t.Errorf("expected msg3, got %s", entries[0].Content)
+	}
+	if entries[1].Content != "reply3" {
+		t.Errorf("expected reply3, got %s", entries[1].Content)
+	}
+}
+
+func TestReadConversation_HandlesUserContentArray(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	// User messages with tool_result content (array format) should be skipped
+	jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"tool output"}]}]},"timestamp":"2026-03-28T10:15:00Z"}
+{"type":"user","message":{"role":"user","content":"actual user message"},"timestamp":"2026-03-28T10:16:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	// Only the string-content user message should appear
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Content != "actual user message" {
+		t.Errorf("expected 'actual user message', got %q", entries[0].Content)
+	}
+}
+
+func TestHasPendingToolUse_NoPending(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// Assistant sends tool_use, then user sends tool_result → not pending
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"file.go"}]}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingToolUse(projDir, sessionID) {
+		t.Error("expected no pending tool_use, but got true")
+	}
+}
+
+func TestHasPendingToolUse_Pending(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// Assistant sends tool_use with no subsequent tool_result → pending
+	jsonl := `{"type":"user","message":{"role":"user","content":"fix the bug"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll fix it."},{"type":"tool_use","id":"t1","name":"Edit","input":{"file_path":"foo.go"}}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingToolUse(projDir, sessionID) {
+		t.Error("expected pending tool_use, but got false")
+	}
+}
+
+func TestHasPendingToolUse_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(""), 0644)
+
+	if HasPendingToolUse(projDir, sessionID) {
+		t.Error("expected false for empty file")
+	}
+}
+
+func TestHasPendingToolUse_MissingFile(t *testing.T) {
+	if HasPendingToolUse("/nonexistent", "no-such") {
+		t.Error("expected false for missing file")
+	}
+}
+
+func TestHasPendingToolUse_TextOnlyAssistant(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// Last assistant message has only text, no tool_use → not pending
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"All done!"}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingToolUse(projDir, sessionID) {
+		t.Error("expected no pending tool_use for text-only assistant message")
+	}
+}
+
+func TestReadConversation_SkipsMalformedLines(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	jsonl := `not json at all
+{"type":"user","message":{"role":"user","content":"valid"},"timestamp":"2026-03-28T10:15:00Z"}
+{"broken json
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+}
+
+func TestFindSubagents_SortedByStartTimeDescending(t *testing.T) {
+	dir := t.TempDir()
+	sessionID := "sess-1"
+	subDir := filepath.Join(dir, sessionID, "subagents")
+	os.MkdirAll(subDir, 0755)
+
+	// Create 3 subagents with different start times
+	agents := []struct {
+		id        string
+		agentType string
+		desc      string
+		timestamp string // first JSONL entry timestamp
+	}{
+		{"aaa", "Explore", "oldest agent", "2026-03-28T10:00:00Z"},
+		{"bbb", "Bash", "middle agent", "2026-03-28T11:00:00Z"},
+		{"ccc", "Plan", "newest agent", "2026-03-28T12:00:00Z"},
+	}
+
+	for _, a := range agents {
+		meta := subagentMeta{AgentType: a.agentType, Description: a.desc}
+		data, _ := json.Marshal(meta)
+		os.WriteFile(filepath.Join(subDir, "agent-"+a.id+".meta.json"), data, 0644)
+
+		// JSONL with sessionId and timestamp
+		jsonl := `{"type":"system","sessionId":"` + sessionID + `","timestamp":"` + a.timestamp + `"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working"}],"stop_reason":"end_turn"},"timestamp":"` + a.timestamp + `"}
+`
+		os.WriteFile(filepath.Join(subDir, "agent-"+a.id+".jsonl"), []byte(jsonl), 0644)
+	}
+
+	subs := FindSubagents(dir, sessionID)
+	if len(subs) != 3 {
+		t.Fatalf("expected 3 subagents, got %d", len(subs))
+	}
+
+	// Should be sorted newest first: ccc, bbb, aaa
+	if subs[0].AgentID != "ccc" {
+		t.Errorf("expected first subagent to be 'ccc' (newest), got %q", subs[0].AgentID)
+	}
+	if subs[1].AgentID != "bbb" {
+		t.Errorf("expected second subagent to be 'bbb' (middle), got %q", subs[1].AgentID)
+	}
+	if subs[2].AgentID != "aaa" {
+		t.Errorf("expected third subagent to be 'aaa' (oldest), got %q", subs[2].AgentID)
+	}
+
+	// Verify StartedAt is populated
+	if subs[0].StartedAt == "" {
+		t.Error("expected StartedAt to be populated")
+	}
+}
+
+func TestMarkNotifications_TagsTaskNotificationPair(t *testing.T) {
+	entries := []ConversationEntry{
+		{Role: "human", Content: "fix the bug"},
+		{Role: "assistant", Content: "I fixed it. Here's the summary of changes."},
+		{Role: "human", Content: "<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n</task-notification>"},
+		{Role: "assistant", Content: "Background agent completed."},
+	}
+	markNotifications(entries)
+
+	if entries[0].IsNotification {
+		t.Error("regular user message should not be marked as notification")
+	}
+	if entries[1].IsNotification {
+		t.Error("regular assistant message should not be marked as notification")
+	}
+	if !entries[2].IsNotification {
+		t.Error("task-notification user message should be marked as notification")
+	}
+	if !entries[3].IsNotification {
+		t.Error("assistant response after task-notification should be marked as notification")
+	}
+}
+
+func TestMarkNotifications_MultipleConsecutive(t *testing.T) {
+	entries := []ConversationEntry{
+		{Role: "human", Content: "do the thing"},
+		{Role: "assistant", Content: "Done. All changes committed."},
+		{Role: "human", Content: "<task-notification><task-id>a1</task-id></task-notification>"},
+		{Role: "assistant", Content: "Agent A completed."},
+		{Role: "human", Content: "<task-notification><task-id>b2</task-id></task-notification>"},
+		{Role: "assistant", Content: "Agent B completed."},
+	}
+	markNotifications(entries)
+
+	if entries[0].IsNotification || entries[1].IsNotification {
+		t.Error("substantive entries should not be marked")
+	}
+	for i := 2; i <= 5; i++ {
+		if !entries[i].IsNotification {
+			t.Errorf("entry %d should be marked as notification", i)
+		}
+	}
+}
+
+func TestMarkNotifications_NotificationAtEnd(t *testing.T) {
+	entries := []ConversationEntry{
+		{Role: "human", Content: "hello"},
+		{Role: "assistant", Content: "Hi there!"},
+		{Role: "human", Content: "<task-notification><task-id>x</task-id></task-notification>"},
+	}
+	markNotifications(entries)
+
+	if !entries[2].IsNotification {
+		t.Error("trailing task-notification should still be marked")
+	}
+	if entries[0].IsNotification || entries[1].IsNotification {
+		t.Error("substantive entries should not be marked")
+	}
+}
+
+func TestReadConversation_MarksNotifications(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"fix the bug"},"timestamp":"2026-03-28T10:15:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Fixed!"}]},"timestamp":"2026-03-28T10:15:30Z"}
+{"type":"user","message":{"role":"user","content":"<task-notification><task-id>bg1</task-id><status>completed</status></task-notification>"},"timestamp":"2026-03-28T10:16:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Background done."}]},"timestamp":"2026-03-28T10:16:30Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 entries, got %d", len(entries))
+	}
+
+	if entries[0].IsNotification || entries[1].IsNotification {
+		t.Error("substantive entries should not be notifications")
+	}
+	if !entries[2].IsNotification {
+		t.Error("task-notification user entry should be marked")
+	}
+	if !entries[3].IsNotification {
+		t.Error("assistant response to task-notification should be marked")
+	}
+}
+
+func TestIsSubagentCompleted_EndTurn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.jsonl")
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"stop_reason":"end_turn"},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(path, []byte(jsonl), 0644)
+	if !isSubagentCompleted(path) {
+		t.Error("expected completed for stop_reason=end_turn")
+	}
+}
+
+func TestIsSubagentCompleted_ResultType(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.jsonl")
+	// Some subagents end with a "result" type entry
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"result","result":"success","timestamp":"2026-03-28T10:01:00Z"}
+`
+	os.WriteFile(path, []byte(jsonl), 0644)
+	if !isSubagentCompleted(path) {
+		t.Error("expected completed for type=result entry")
+	}
+}
+
+func TestIsSubagentCompleted_MaxTokens(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.jsonl")
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ran out"}],"stop_reason":"max_tokens"},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(path, []byte(jsonl), 0644)
+	if !isSubagentCompleted(path) {
+		t.Error("expected completed for stop_reason=max_tokens")
+	}
+}
+
+func TestIsSubagentCompleted_StillRunning(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.jsonl")
+	// Last entry is a tool_use with no stop_reason — still running
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(path, []byte(jsonl), 0644)
+	if isSubagentCompleted(path) {
+		t.Error("expected not completed for active tool_use")
+	}
+}
+
+func TestReadConversation_LargeAssistantMessageNotTruncated(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Create a 20000-char assistant message (simulating a plan)
+	longText := strings.Repeat("x", 20000)
+
+	msg := map[string]interface{}{
+		"role": "assistant",
+		"content": []map[string]string{
+			{"type": "text", "text": longText},
+		},
+	}
+	msgJSON, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	entry := `{"type":"assistant","message":` + string(msgJSON) + `,"timestamp":"2026-03-28T10:15:30Z"}`
+
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(entry+"\n"), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	// The full 20000-char message should be preserved, not truncated to 8000
+	if len(entries[0].Content) != 20000 {
+		t.Errorf("expected content length 20000, got %d (message was truncated)", len(entries[0].Content))
+	}
+}
+
+func TestIsSubagentCompleted_LargeFinalEntry(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.jsonl")
+
+	// The real bug: the final assistant message with stop_reason exceeds 4KB.
+	// When isSubagentCompleted seeks to (fileSize - 4KB), it lands mid-entry.
+	// The partial line fails JSON parsing and no complete line follows.
+	largeText := strings.Repeat("x", 6000)
+
+	// Small initial entry + large final entry with stop_reason
+	jsonl := `{"type":"system","sessionId":"sess-1","timestamp":"2026-03-28T09:59:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"` + largeText + `"}],"stop_reason":"end_turn"},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	if err := os.WriteFile(path, []byte(jsonl), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// File is >4KB but the completion signal is in the final entry which spans beyond 4KB
+	if len(jsonl) <= 4*1024 {
+		t.Fatalf("test setup error: file too small (%d bytes), need >4KB", len(jsonl))
+	}
+
+	if !isSubagentCompleted(path) {
+		t.Error("expected completed: large final entry with stop_reason=end_turn should be detected even when entry exceeds 4KB tail buffer")
+	}
+}
