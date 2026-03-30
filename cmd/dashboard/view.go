@@ -19,8 +19,8 @@ func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
-	if m.mode == modeCreateFolder {
-		fullHeight := panelHeight - 2 // minus panel border
+	if m.mode == modeCreateFolder || (m.planVisible && m.renderedPlan != "") {
+		fullHeight := panelHeight - headerLines - 2
 		if fullHeight < 3 {
 			fullHeight = 3
 		}
@@ -691,6 +691,12 @@ func (m model) renderRightPanel() string {
 	// Compose right panel (with blank-line buffers between sections)
 	var parts []string
 	if m.mode == modeUsage {
+		parts = []string{
+			strings.Join(header, "\n"),
+			messageLabel,
+			m.messageVP.View(),
+		}
+	} else if m.planVisible && m.renderedPlan != "" {
 		parts = []string{
 			strings.Join(header, "\n"),
 			messageLabel,
