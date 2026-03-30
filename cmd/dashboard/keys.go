@@ -270,6 +270,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 		}
 		return m, nil
+	case "e":
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.Cwd != "" {
+			return m, openEditor(agent.Cwd)
+		}
 	case "u":
 		if m.mode == modeUsage {
 			m.mode = modeNormal

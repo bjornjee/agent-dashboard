@@ -826,6 +826,7 @@ func (m model) renderHelpBar() string {
 	if m.planContent != "" && m.selectedSubagent() == nil {
 		parts = append(parts, boldStyle.Render("p")+" plan")
 	}
+	parts = append(parts, boldStyle.Render("e")+" editor")
 	parts = append(parts, boldStyle.Render("a")+" new")
 	parts = append(parts, boldStyle.Render("u")+" usage")
 	parts = append(parts, boldStyle.Render("c")+" collapse")

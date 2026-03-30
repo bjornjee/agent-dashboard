@@ -76,7 +76,8 @@ type model struct {
 	selectedSugg int      // index of highlighted suggestion
 
 	// Banner
-	quote   string           // random quote selected at startup
+	quote       string // random quote text selected at startup
+	quoteAuthor string // quote author (empty for fallback quotes)
 	nowFunc func() time.Time // injectable clock for testability
 
 	// Path validation for z suggestions (injectable for testing)
@@ -137,6 +138,7 @@ func newModel(statePath, selfTarget string, db *DB) model {
 	ti.Placeholder = "Type reply..."
 	ti.CharLimit = 4096
 
+	q, a := pickQuote(db)
 	return model{
 		agents:         nil,
 		statePath:      statePath,
@@ -154,7 +156,8 @@ func newModel(statePath, selfTarget string, db *DB) model {
 		collapsed:      make(map[string]bool),
 		dismissed:      make(map[string]bool),
 		prevEffState:   make(map[string]string),
-		quote:          pickQuote(db),
+		quote:          q,
+		quoteAuthor:    a,
 		nowFunc:        time.Now,
 		pathExists:     dirExists,
 	}
@@ -346,6 +349,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Jump failed: %v", msg.err)
 		} else {
 			m.statusMsg = "Jumped — switch back to this window for dashboard"
+		}
+		m.statusMsgTick = m.tickCount
+		return m, nil
+
+	case openEditorMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Editor failed: %v", msg.err)
+		} else {
+			m.statusMsg = "Opened VS Code"
 		}
 		m.statusMsgTick = m.tickCount
 		return m, nil
