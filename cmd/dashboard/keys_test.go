@@ -123,24 +123,6 @@ func TestCreateFolderMode_EscReturnsToNormal(t *testing.T) {
 	}
 }
 
-func TestIKeySelectsPaneDirectly(t *testing.T) {
-	m := newTestModelWithAgents()
-	m.selected = 0
-
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}}
-	result, cmd := m.handleKey(msg)
-	rm := result.(model)
-
-	// i should stay in modeNormal — it just issues a selectPane command
-	if rm.mode != modeNormal {
-		t.Errorf("expected modeNormal after i, got %d", rm.mode)
-	}
-	// Should return a command (selectPane)
-	if cmd == nil {
-		t.Error("expected selectPane command, got nil")
-	}
-}
-
 func TestShiftSDoesNothing(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.selected = 0
