@@ -60,7 +60,7 @@ func TestRandomQuote_ReturnsFromList(t *testing.T) {
 	q := fallbackQuote()
 	found := false
 	for _, candidate := range quotes {
-		if q == candidate {
+		if len(candidate) <= maxQuoteLen && q == "\" "+candidate+" \" " {
 			found = true
 			break
 		}
