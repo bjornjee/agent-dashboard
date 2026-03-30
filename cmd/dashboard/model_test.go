@@ -584,7 +584,7 @@ func TestPlanToggle(t *testing.T) {
 	})
 }
 
-func TestPlanMsg_AutoShow(t *testing.T) {
+func TestPlanMsg_NoAutoShow(t *testing.T) {
 	m := newModel("", "", nil)
 	m.width = 120
 	m.height = 40
@@ -594,22 +594,22 @@ func TestPlanMsg_AutoShow(t *testing.T) {
 	}
 	m.buildTree()
 
-	// First planMsg with content should auto-show
+	// planMsg with content should NOT auto-show (live/output is default)
 	result, _ := m.Update(planMsg{content: "# Plan\n\n## Steps"})
 	rm := result.(model)
-	if !rm.planVisible {
-		t.Error("first planMsg with content should auto-show plan")
+	if rm.planVisible {
+		t.Error("planMsg should not auto-show plan — live/output is default")
 	}
 	if rm.renderedPlan == "" {
-		t.Error("planMsg should populate renderedPlan")
+		t.Error("planMsg should populate renderedPlan for when user presses p")
 	}
 
-	// Subsequent planMsg should not change planVisible state
-	rm.planVisible = false // user toggled off
+	// User toggles on manually, then planMsg update should preserve that
+	rm.planVisible = true
 	result2, _ := rm.Update(planMsg{content: "# Updated Plan"})
 	rm2 := result2.(model)
-	if rm2.planVisible {
-		t.Error("subsequent planMsg should not re-show plan if user toggled off")
+	if !rm2.planVisible {
+		t.Error("planMsg should preserve planVisible when already true")
 	}
 
 	// Empty planMsg should clear everything
@@ -704,8 +704,8 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 	if rm.planContent != planContent {
 		t.Errorf("planContent: expected %q, got %q", planContent, rm.planContent)
 	}
-	if !rm.planVisible {
-		t.Error("first planMsg should auto-show plan (planVisible=true)")
+	if rm.planVisible {
+		t.Error("planMsg should not auto-show — live/output is default")
 	}
 	if rm.renderedPlan == "" {
 		t.Error("planMsg should populate renderedPlan with glamour output")

@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -10,6 +11,9 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
+
+//go:embed catppuccin-frappe.json
+var catppuccinFrappeStyle []byte
 
 // safeWindowNameRe matches characters safe for tmux window names.
 var safeWindowNameRe = regexp.MustCompile(`[^a-zA-Z0-9_.\-]`)
@@ -178,7 +182,7 @@ func renderPlanMarkdown(content string, width int) string {
 		width = 10
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStylesFromJSONBytes(catppuccinFrappeStyle),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {

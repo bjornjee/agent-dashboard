@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -333,6 +334,13 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 	}
 }
 
+// stripANSI removes ANSI escape sequences from a string for test assertions.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
+
 func TestRenderPlanMarkdown(t *testing.T) {
 	t.Run("renders markdown with code block", func(t *testing.T) {
 		content := "# My Plan\n\n## Steps\n\n```go\nfunc main() {}\n```\n"
@@ -340,13 +348,14 @@ func TestRenderPlanMarkdown(t *testing.T) {
 		if result == "" {
 			t.Fatal("renderPlanMarkdown returned empty string for non-empty input")
 		}
+		plain := stripANSI(result)
 		// Should contain the heading text
-		if !strings.Contains(result, "My Plan") {
-			t.Errorf("rendered output should contain heading text, got:\n%s", result)
+		if !strings.Contains(plain, "My Plan") {
+			t.Errorf("rendered output should contain heading text, got:\n%s", plain)
 		}
 		// Should contain code content
-		if !strings.Contains(result, "func main()") {
-			t.Errorf("rendered output should contain code block content, got:\n%s", result)
+		if !strings.Contains(plain, "func main()") {
+			t.Errorf("rendered output should contain code block content, got:\n%s", plain)
 		}
 	})
 

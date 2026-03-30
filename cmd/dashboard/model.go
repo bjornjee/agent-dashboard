@@ -240,13 +240,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case planMsg:
-		wasEmpty := m.planContent == ""
 		m.planContent = msg.content
 		if msg.content != "" {
 			m.renderedPlan = renderPlanMarkdown(msg.content, m.rightWidth-4)
-			if wasEmpty {
-				m.planVisible = true
-			}
 		} else {
 			m.renderedPlan = ""
 			m.planVisible = false
