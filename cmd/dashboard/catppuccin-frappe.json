@@ -19,30 +19,35 @@
     "bold": true
   },
   "h1": {
-    "prefix": "▓▓▓ ",
+    "prefix": "# ",
     "suffix": " ",
     "color": "#e78284",
     "bold": true
   },
   "h2": {
-    "prefix": "▓▓▓▓ ",
-    "color": "#ef9f76"
+    "prefix": "## ",
+    "color": "#ef9f76",
+    "bold": true
   },
   "h3": {
-    "prefix": "▓▓▓▓▓ ",
-    "color": "#e5c890"
+    "prefix": "### ",
+    "color": "#e5c890",
+    "bold": true
   },
   "h4": {
-    "prefix": "▓▓▓▓▓▓ ",
-    "color": "#a6d189"
+    "prefix": "#### ",
+    "color": "#a6d189",
+    "bold": true
   },
   "h5": {
-    "prefix": "▓▓▓▓▓▓▓ ",
-    "color": "#85c1dc"
+    "prefix": "##### ",
+    "color": "#85c1dc",
+    "bold": true
   },
   "h6": {
-    "prefix": "▓▓▓▓▓▓▓▓ ",
-    "color": "#babbf1"
+    "prefix": "###### ",
+    "color": "#babbf1",
+    "bold": true
   },
   "text": {},
   "strikethrough": {
