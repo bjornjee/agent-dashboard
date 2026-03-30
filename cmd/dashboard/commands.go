@@ -490,6 +490,13 @@ func (m model) loadPlan() tea.Cmd {
 	}
 }
 
+func openEditor(dir string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("code", dir)
+		return openEditorMsg{err: cmd.Start()}
+	}
+}
+
 func sendRawKey(target, key string) tea.Cmd {
 	return func() tea.Msg {
 		return sendResultMsg{err: TmuxSendRaw(target, key)}
