@@ -113,19 +113,19 @@ func refreshQuotesIfNeeded(db *DB) {
 // Based on ~1/3 terminal width (40 chars) * 2 lines = 80 chars.
 const maxQuoteLen = 80
 
-// pickQuote returns a random quote from the DB cache, falling back to hardcoded.
-func pickQuote(db *DB) string {
+// pickQuote returns the quote text and author (empty for fallback).
+func pickQuote(db *DB) (string, string) {
 	if db != nil {
 		refreshQuotesIfNeeded(db)
 		q, a := db.RandomQuote(maxQuoteLen)
 		if q != "" {
-			return fmt.Sprintf("\" %s — %s \"", q, a)
+			return q, a
 		}
 	}
-	return fallbackQuote()
+	return fallbackQuoteText(), ""
 }
 
-func fallbackQuote() string {
+func fallbackQuoteText() string {
 	var eligible []string
 	for _, q := range quotes {
 		if len(q) <= maxQuoteLen {
@@ -135,7 +135,79 @@ func fallbackQuote() string {
 	if len(eligible) == 0 {
 		return ""
 	}
-	return "\" " + eligible[rand.Intn(len(eligible))] + " \" "
+	return eligible[rand.Intn(len(eligible))]
+}
+
+// wrapWords word-wraps text into lines that fit within width.
+// prefix is prepended to the first line only.
+func wrapWords(words []string, width int, prefix string) []string {
+	if len(words) == 0 {
+		return nil
+	}
+	line := prefix + words[0]
+	var lines []string
+	for _, w := range words[1:] {
+		if len(line)+1+len(w) > width {
+			lines = append(lines, line)
+			line = w
+		} else {
+			line += " " + w
+		}
+	}
+	lines = append(lines, line)
+	return lines
+}
+
+// formatQuote formats the quote for display within the given width.
+// For authored quotes: quote text is word-wrapped, then author goes on its own
+// line with padding — unless it all fits on one line.
+// For fallback quotes: word-wrapped with at least 2 words on the last line.
+func formatQuote(text, author string, width int) string {
+	if width <= 0 || text == "" {
+		return ""
+	}
+
+	if author != "" {
+		oneLine := fmt.Sprintf("\" %s — %s \"", text, author)
+		if len(oneLine) <= width {
+			return oneLine
+		}
+		// Word-wrap the quote text, then put author on the last line.
+		words := strings.Fields(text)
+		lines := wrapWords(words, width, "\" ")
+		lines = append(lines, fmt.Sprintf("    — %s \"", author))
+		return strings.Join(lines, "\n")
+	}
+
+	// Fallback quote (no author)
+	oneLine := "\" " + text + " \""
+	if len(oneLine) <= width {
+		return oneLine
+	}
+
+	// Word-wrap, but ensure at least 2 words on the last line.
+	words := strings.Fields(text)
+	if len(words) <= 2 {
+		return "\" " + text + " \""
+	}
+	lines := wrapWords(words, width, "\" ")
+	// If the last line has only 1 word, pull a word from the previous line.
+	for len(lines) > 1 {
+		lastWords := strings.Fields(lines[len(lines)-1])
+		if len(lastWords) >= 2 {
+			break
+		}
+		// Pull the last word from the previous line down.
+		prevWords := strings.Fields(lines[len(lines)-2])
+		if len(prevWords) <= 1 {
+			break
+		}
+		pulled := prevWords[len(prevWords)-1]
+		lines[len(lines)-2] = strings.Join(prevWords[:len(prevWords)-1], " ")
+		lines[len(lines)-1] = pulled + " " + lines[len(lines)-1]
+	}
+	lines[len(lines)-1] += " \""
+	return strings.Join(lines, "\n")
 }
 
 func greeting(now time.Time) string {
@@ -252,8 +324,8 @@ func (m model) renderBanner() string {
 	// wrap awkwardly if the terminal is huge.
 	maxQuoteWidth := m.width / 3
 
-	// 4. Render the quote with its own style first
-	q := quoteStyle.Width(maxQuoteWidth).Render(m.quote)
+	// 4. Format the quote with wrapping awareness, then style it
+	q := quoteStyle.Render(formatQuote(m.quote, m.quoteAuthor, maxQuoteWidth))
 
 	// 5. Wrap that quote in a container that fills the remaining width
 	// and pushes the content to the Right.
