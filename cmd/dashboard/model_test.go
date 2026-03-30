@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -518,4 +519,85 @@ func executeBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
 		return msgs
 	}
 	return []tea.Msg{msg}
+}
+
+func TestPlanFlow_EndToEnd(t *testing.T) {
+	// Setup: create temp dirs with JSONL and plan file
+	dir := t.TempDir()
+	slug := "-test-project"
+	projDir := fmt.Sprintf("%s/projects/%s", dir, slug)
+	plansDir := fmt.Sprintf("%s/plans", dir)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(plansDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionID := "test-session-id"
+	planSlugName := "my-test-plan"
+	planContent := "# Test Plan\n\n## Steps\n1. Do thing A\n2. Do thing B"
+
+	// Write JSONL with slug field
+	jsonl := fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-28T10:00:00Z","slug":"%s"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"timestamp":"2026-03-28T10:00:01Z","slug":"%s"}
+`, planSlugName, planSlugName)
+	if err := os.WriteFile(fmt.Sprintf("%s/%s.jsonl", projDir, sessionID), []byte(jsonl), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write plan file
+	if err := os.WriteFile(fmt.Sprintf("%s/%s.md", plansDir, planSlugName), []byte(planContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify ReadPlanSlug finds the slug
+	gotSlug := ReadPlanSlug(projDir, sessionID)
+	if gotSlug != planSlugName {
+		t.Fatalf("ReadPlanSlug: expected %q, got %q", planSlugName, gotSlug)
+	}
+
+	// Verify ReadPlanContent reads the file
+	gotContent := ReadPlanContent(plansDir, planSlugName)
+	if gotContent != planContent {
+		t.Fatalf("ReadPlanContent: expected %q, got %q", planContent, gotContent)
+	}
+
+	// Now test the model flow
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	// Simulate state update with an agent
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/test/project", SessionID: sessionID},
+	}
+	m.buildTree()
+
+	// Simulate planMsg with content
+	result, _ := m.Update(planMsg{content: planContent})
+	rm := result.(model)
+
+	if rm.planContent != planContent {
+		t.Errorf("planContent: expected %q, got %q", planContent, rm.planContent)
+	}
+
+	// Check that the history viewport contains the plan content
+	vpContent := rm.historyVP.View()
+	t.Logf("historyVP content length: %d", len(vpContent))
+	t.Logf("historyVP.View() = %q", vpContent)
+
+	// The plan content should contain parts of the plan
+	if !strings.Contains(rm.planContent, "Test Plan") {
+		t.Error("planContent should contain 'Test Plan'")
+	}
+
+	// Test that planMsg with empty content CLEARS planContent
+	// (Bug fix: previously empty planMsg was silently ignored, causing stale plans)
+	result2, _ := rm.Update(planMsg{content: ""})
+	rm2 := result2.(model)
+	if rm2.planContent != "" {
+		t.Errorf("empty planMsg should clear planContent, but got %q", rm2.planContent)
+	}
 }

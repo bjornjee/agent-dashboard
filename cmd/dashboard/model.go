@@ -238,10 +238,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case planMsg:
-		if msg.content != "" {
-			m.planContent = msg.content
-			m.updateRightContent()
-		}
+		m.planContent = msg.content
+		m.updateRightContent()
 		return m, nil
 
 	case tickMsg:
