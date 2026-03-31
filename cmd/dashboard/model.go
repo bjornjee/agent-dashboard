@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // -- Tree node --
@@ -21,25 +23,26 @@ type treeNode struct {
 // -- Model --
 
 type model struct {
-	agents        []Agent
-	selected      int // index into treeNodes
-	treeNodes     []treeNode
-	width, height int
-	mode          int
-	textInput     textinput.Model
-	tmuxAvailable bool
-	statePath     string
-	selfPaneID    string
-	statusMsg     string
-	statusMsgTick int // tick when statusMsg was set; clears after 3s
-	capturedLines []string
-	conversation  []ConversationEntry
-	tickCount     int
-	agentUsage    map[string]Usage
-	totalUsage    Usage
-	db            *DB
-	dbTotalCost   float64
-	dbTodayCost   float64
+	agents          []Agent
+	selected        int // index into treeNodes
+	treeNodes       []treeNode
+	width, height   int
+	mode            int
+	textInput       textinput.Model
+	tmuxAvailable   bool
+	statePath       string
+	selfPaneID      string
+	statusMsg       string
+	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
+	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
+	capturedLines   []string
+	conversation    []ConversationEntry
+	tickCount       int
+	agentUsage      map[string]Usage
+	totalUsage      Usage
+	db              *DB
+	dbTotalCost     float64
+	dbTodayCost     float64
 
 	// Viewports
 	agentListVP viewport.Model
@@ -103,6 +106,48 @@ func (m *model) buildTree() {
 	}
 }
 
+// selectedIdentity returns the identity of the currently selected tree node:
+// the agent Target and (if a subagent is selected) the SubagentInfo.AgentID.
+func (m model) selectedIdentity() (target string, subID string) {
+	if m.selected < 0 || m.selected >= len(m.treeNodes) {
+		return "", ""
+	}
+	node := m.treeNodes[m.selected]
+	if node.AgentIdx < len(m.agents) {
+		target = m.agents[node.AgentIdx].Target
+	}
+	if node.Sub != nil {
+		subID = node.Sub.AgentID
+	}
+	return target, subID
+}
+
+// restoreSelection scans the tree for a node matching the given identity
+// and sets m.selected to that position. Falls back to clamping if not found.
+func (m *model) restoreSelection(target, subID string) {
+	for i, node := range m.treeNodes {
+		nodeTarget := ""
+		if node.AgentIdx < len(m.agents) {
+			nodeTarget = m.agents[node.AgentIdx].Target
+		}
+		if nodeTarget != target {
+			continue
+		}
+		if subID == "" && node.Sub == nil {
+			m.selected = i
+			return
+		}
+		if subID != "" && node.Sub != nil && node.Sub.AgentID == subID {
+			m.selected = i
+			return
+		}
+	}
+	// Not found — clamp to valid range
+	if m.selected >= len(m.treeNodes) {
+		m.selected = max(0, len(m.treeNodes)-1)
+	}
+}
+
 // nextParentIndex finds the next parent agent node in the given direction (1 or -1).
 // Returns the index of the next parent, or stays at current if none found.
 func (m model) nextParentIndex(dir int) int {
@@ -139,28 +184,33 @@ func newModel(statePath, selfPaneID string, db *DB) model {
 	ti.Placeholder = "Type reply..."
 	ti.CharLimit = 4096
 
+	s := spinner.New()
+	s.Spinner = spinner.Jump
+	s.Style = lipgloss.NewStyle().Foreground(inputColor)
+
 	q, a := pickQuote(db)
 	return model{
-		agents:         nil,
-		statePath:      statePath,
-		selfPaneID:     selfPaneID,
-		tmuxAvailable:  TmuxIsAvailable(),
-		textInput:      ti,
-		mode:           modeNormal,
-		db:             db,
-		agentListVP:    viewport.New(0, 0),
-		filesVP:        viewport.New(0, 0),
-		historyVP:      viewport.New(0, 0),
-		messageVP:      viewport.New(0, 0),
-		focusedVP:      focusAgentList,
-		agentSubagents: make(map[string][]SubagentInfo),
-		collapsed:      make(map[string]bool),
-		dismissed:      make(map[string]bool),
-		prevEffState:   make(map[string]string),
-		quote:          q,
-		quoteAuthor:    a,
-		nowFunc:        time.Now,
-		pathExists:     dirExists,
+		agents:          nil,
+		statePath:       statePath,
+		selfPaneID:      selfPaneID,
+		tmuxAvailable:   TmuxIsAvailable(),
+		textInput:       ti,
+		spawningSpinner: s,
+		mode:            modeNormal,
+		db:              db,
+		agentListVP:     viewport.New(0, 0),
+		filesVP:         viewport.New(0, 0),
+		historyVP:       viewport.New(0, 0),
+		messageVP:       viewport.New(0, 0),
+		focusedVP:       focusAgentList,
+		agentSubagents:  make(map[string][]SubagentInfo),
+		collapsed:       make(map[string]bool),
+		dismissed:       make(map[string]bool),
+		prevEffState:    make(map[string]string),
+		quote:           q,
+		quoteAuthor:     a,
+		nowFunc:         time.Now,
+		pathExists:      dirExists,
 	}
 }
 
@@ -187,6 +237,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateUpdatedMsg:
+		prevTarget, prevSubID := m.selectedIdentity()
 		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
@@ -221,9 +272,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.buildTree()
-		if m.selected >= len(m.treeNodes) {
-			m.selected = max(0, len(m.treeNodes)-1)
-		}
+		m.restoreSelection(prevTarget, prevSubID)
 		m.updateLeftContent()
 		m.updateRightContent()
 		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan()}
@@ -279,6 +328,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case spinner.TickMsg:
+		if m.statusMsg == "spawning" {
+			var cmd tea.Cmd
+			m.spawningSpinner, cmd = m.spawningSpinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case usageMsg:
 		m.agentUsage = msg.perAgent
 		m.totalUsage = msg.total
@@ -309,11 +366,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case subagentsMsg:
+		prevTarget2, prevSubID2 := m.selectedIdentity()
 		m.agentSubagents[msg.parentTarget] = msg.agents
 		m.buildTree()
-		if m.selected >= len(m.treeNodes) {
-			m.selected = max(0, len(m.treeNodes)-1)
-		}
+		m.restoreSelection(prevTarget2, prevSubID2)
 		m.updateLeftContent()
 		return m, nil
 

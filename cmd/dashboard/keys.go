@@ -56,7 +56,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if folder != "" {
 				m.statusMsg = "spawning"
 				m.statusMsgTick = -1 // don't auto-clear
-				return m, createSession(folder, m.agents, m.selfPaneID)
+				return m, tea.Batch(createSession(folder, m.agents, m.selfPaneID), m.spawningSpinner.Tick)
 			}
 			return m, nil
 		case "esc":
