@@ -588,18 +588,36 @@ func (m model) renderRightPanel() string {
 
 	// Create folder mode: simple form
 	if m.mode == modeCreateFolder {
+		content := m.messageVP.View()
+		if m.spawning {
+			contentLines := strings.Count(content, "\n") + 1
+			pad := panelHeight - contentLines - 1
+			if pad < 1 {
+				pad = 1
+			}
+			content += strings.Repeat("\n", pad) + m.spawningLine()
+		}
 		return borderStyle.
 			Width(m.rightWidth).
 			Height(panelHeight).
-			Render(m.messageVP.View())
+			Render(content)
 	}
 
 	agent := m.selectedAgent()
 	if agent == nil {
+		content := m.messageVP.View()
+		if m.spawning {
+			contentLines := strings.Count(content, "\n") + 1
+			pad := panelHeight - contentLines - 1
+			if pad < 1 {
+				pad = 1
+			}
+			content += strings.Repeat("\n", pad) + m.spawningLine()
+		}
 		return borderStyle.
 			Width(m.rightWidth).
 			Height(panelHeight).
-			Render(m.messageVP.View())
+			Render(content)
 	}
 
 	sub := m.selectedSubagent()
@@ -742,12 +760,7 @@ func (m model) renderRightPanel() string {
 	// Status message
 	statusLine := ""
 	if m.spawning {
-		frames := []string{"☱", "☲", "☴"}
-		frame := frames[m.tickCount%len(frames)]
-		statusLine = " " +
-			lipgloss.NewStyle().Foreground(inputColor).Render(frame) +
-			" " +
-			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
+		statusLine = m.spawningLine()
 	} else if m.statusMsg != "" {
 		statusLine = " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
 	}
@@ -779,16 +792,31 @@ func (m model) renderRightPanel() string {
 			m.messageVP.View(),
 		}
 	}
-	if statusLine != "" {
-		parts = append(parts, statusLine)
-	}
-
 	content := strings.Join(parts, "\n")
+
+	if statusLine != "" {
+		contentLines := strings.Count(content, "\n") + 1
+		// panelHeight is the inner height; pad so statusLine sits at the bottom
+		pad := panelHeight - contentLines - 1 // -1 for the status line itself
+		if pad < 1 {
+			pad = 1
+		}
+		content += strings.Repeat("\n", pad) + statusLine
+	}
 
 	return borderStyle.
 		Width(m.rightWidth).
 		Height(panelHeight).
 		Render(content)
+}
+
+func (m model) spawningLine() string {
+	frames := []string{"☱", "☲", "☴"}
+	frame := frames[m.tickCount%len(frames)]
+	return " " +
+		lipgloss.NewStyle().Foreground(inputColor).Render(frame) +
+		" " +
+		lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
 }
 
 func (m model) renderHelpBar() string {
