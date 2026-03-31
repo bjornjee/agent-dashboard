@@ -741,7 +741,14 @@ func (m model) renderRightPanel() string {
 
 	// Status message
 	statusLine := ""
-	if m.statusMsg != "" {
+	if m.statusMsg == "spawning" {
+		frames := []string{"☱", "☲", "☴"}
+		frame := frames[m.tickCount%len(frames)]
+		statusLine = " " +
+			lipgloss.NewStyle().Foreground(inputColor).Render(frame) +
+			" " +
+			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
+	} else if m.statusMsg != "" {
 		statusLine = " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
 	}
 
@@ -772,11 +779,17 @@ func (m model) renderRightPanel() string {
 			m.messageVP.View(),
 		}
 	}
-	if statusLine != "" {
-		parts = append(parts, statusLine)
-	}
-
 	content := strings.Join(parts, "\n")
+
+	if statusLine != "" {
+		contentLines := strings.Count(content, "\n") + 1
+		// panelHeight is the inner height; pad so statusLine sits at the bottom
+		pad := panelHeight - contentLines - 1 // -1 for the status line itself
+		if pad < 1 {
+			pad = 1
+		}
+		content += strings.Repeat("\n", pad) + statusLine
+	}
 
 	return borderStyle.
 		Width(m.rightWidth).

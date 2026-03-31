@@ -256,9 +256,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.tickCount++
-		// Auto-clear status message after 3 seconds
-		if m.statusMsg != "" && m.statusMsgTick >= 0 && m.tickCount-m.statusMsgTick >= 3 {
-			m.statusMsg = ""
+		// Auto-clear status message: errors get 6s, others 3s
+		if m.statusMsg != "" && m.statusMsgTick >= 0 {
+			ttl := 3
+			if strings.HasPrefix(m.statusMsg, "Create failed") || strings.HasPrefix(m.statusMsg, "Close failed") {
+				ttl = 6
+			}
+			if m.tickCount-m.statusMsgTick >= ttl {
+				m.statusMsg = ""
+			}
 		}
 		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation()}
 		if m.selectedSubagent() != nil {
@@ -318,8 +324,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			return m, nil
 		}
-		m.statusMsg = fmt.Sprintf("Session created: %s", msg.target)
-		m.statusMsgTick = m.tickCount
+		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
 		m.updateRightContent()
 		return m, tea.Batch(loadState(m.statePath), selectPane(msg.target))
 

@@ -387,6 +387,7 @@ func TestCreateSessionMsg_Success(t *testing.T) {
 	}
 	m.buildTree()
 
+	m.statusMsg = "spawning" // set by keys.go before createSession fires
 	result, _ := m.Update(createSessionMsg{target: "main:2.0", err: nil})
 	rm := result.(model)
 
@@ -394,8 +395,9 @@ func TestCreateSessionMsg_Success(t *testing.T) {
 	if rm.mode != modeNormal {
 		t.Errorf("expected modeNormal after successful create, got %d", rm.mode)
 	}
-	if !strings.Contains(rm.statusMsg, "Session created") {
-		t.Errorf("expected session created status, got %q", rm.statusMsg)
+	// statusMsg stays as "spawning" — it expires naturally via 3s auto-clear
+	if rm.statusMsg != "spawning" {
+		t.Errorf("expected spawning status to persist, got %q", rm.statusMsg)
 	}
 }
 
