@@ -802,3 +802,109 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 		t.Error("empty planMsg should clear renderedPlan")
 	}
 }
+
+func TestSpawningSpinner_TickAdvancesFrame(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	// Set spawning status
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	// Get initial spinner view
+	view1 := m.spawningSpinner.View()
+
+	// Send a spinner tick
+	tickCmd := m.spawningSpinner.Tick
+	tickMsg := tickCmd()
+	result, _ := m.Update(tickMsg)
+	m = result.(model)
+
+	// Frame should have advanced
+	view2 := m.spawningSpinner.View()
+	if view1 == view2 {
+		t.Error("spinner frame did not advance after tick")
+	}
+}
+
+func TestSelectionPinnedOnReorder(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	// Start with two agents: AgentA (running), AgentB (input/needs attention)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	// Select AgentB (running) at index 1
+	m.selected = 1
+	selectedTarget := m.agents[m.treeNodes[m.selected].AgentIdx].Target
+	if selectedTarget != "main:2.0" {
+		t.Fatalf("expected selected target main:2.0, got %s", selectedTarget)
+	}
+
+	// Now AgentB changes to "input" — both agents are now in needs-attention group.
+	// The reorder might change positions. Simulate via stateUpdatedMsg.
+	// We'll directly call the identity-capture + rebuild logic.
+	prevTarget, prevSubID := m.selectedIdentity()
+
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "input"},
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+	}
+	m.buildTree()
+	m.restoreSelection(prevTarget, prevSubID)
+
+	// Selection should still point to main:2.0
+	newTarget := m.agents[m.treeNodes[m.selected].AgentIdx].Target
+	if newTarget != "main:2.0" {
+		t.Errorf("expected selection pinned to main:2.0, got %s (index %d)", newTarget, m.selected)
+	}
+}
+
+func TestSelectionPinned_SubagentPreserved(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
+	}
+	m.agentSubagents = map[string][]SubagentInfo{
+		"main:1.0": {{AgentID: "sub-abc", AgentType: "Explore", Description: "research"}},
+	}
+	m.buildTree()
+
+	// Select the subagent (index 1: main:1.0's subagent)
+	m.selected = 1
+	node := m.treeNodes[m.selected]
+	if node.Sub == nil || node.Sub.AgentID != "sub-abc" {
+		t.Fatal("expected subagent sub-abc at index 1")
+	}
+
+	prevTarget, prevSubID := m.selectedIdentity()
+
+	// Reorder: new agent enters needs-attention, shifting indices
+	m.agents = []Agent{
+		{Target: "main:3.0", Window: 3, Pane: 0, State: "input"},
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
+	}
+	m.agentSubagents["main:3.0"] = nil
+	m.buildTree()
+	m.restoreSelection(prevTarget, prevSubID)
+
+	// Should still point to sub-abc under main:1.0
+	node = m.treeNodes[m.selected]
+	if node.Sub == nil || node.Sub.AgentID != "sub-abc" {
+		t.Errorf("expected selection pinned to subagent sub-abc, got node at index %d (sub=%v)", m.selected, node.Sub)
+	}
+}
