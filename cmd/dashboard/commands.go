@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -222,64 +221,6 @@ func loadUsage(agents []Agent) tea.Cmd {
 	return func() tea.Msg {
 		perAgent, total := ReadAllUsage(agentsCopy)
 		return usageMsg{perAgent: perAgent, total: total}
-	}
-}
-
-// notifyNeedsAttention sends a desktop notification when an agent transitions
-// to "needs attention" state. Uses terminal-notifier if available, falls back
-// to osascript.
-func notifyNeedsAttention(agent Agent) tea.Cmd {
-	title := "Claude Code"
-	body := "Agent needs attention"
-	if agent.LastMessagePreview != "" {
-		body = agent.LastMessagePreview
-		runes := []rune(body)
-		if len(runes) > 100 {
-			body = string(runes[:100]) + "..."
-		}
-	}
-	subtitle := ""
-	if agent.Branch != "" {
-		subtitle = agent.Branch
-	}
-
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		// Try terminal-notifier first
-		if _, err := exec.LookPath("terminal-notifier"); err == nil {
-			groupID := agent.SessionID
-			if groupID == "" {
-				groupID = agent.Target
-			}
-			args := []string{"-title", title, "-message", body, "-group", "claude-dashboard-" + groupID}
-			if subtitle != "" {
-				args = append(args, "-subtitle", subtitle)
-			}
-			args = append(args, "-sound", "default")
-
-			// Add tmux click action using pane ID for reliable targeting
-			if agent.TmuxPaneID != "" {
-				target := ResolveTarget(agent.TmuxPaneID)
-				if target != "" && ValidateTarget(target) == nil {
-					sw := extractSessionWindow(target)
-					action := fmt.Sprintf("tmux select-window -t %s && tmux select-pane -t %s", sw, target)
-					args = append(args, "-execute", action)
-				}
-			}
-
-			_ = exec.CommandContext(ctx, "terminal-notifier", args...).Run()
-			return notifyResultMsg{}
-		}
-
-		// Fallback: osascript
-		script := fmt.Sprintf(`display notification %q with title %q`, body, title)
-		if subtitle != "" {
-			script = fmt.Sprintf(`display notification %q with title %q subtitle %q sound name "default"`, body, title, subtitle)
-		}
-		_ = exec.CommandContext(ctx, "osascript", "-e", script).Run()
-		return notifyResultMsg{}
 	}
 }
 

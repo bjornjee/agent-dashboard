@@ -27,7 +27,6 @@ type subagentsMsg struct {
 }
 type planMsg struct{ content string }
 type openEditorMsg struct{ err error }
-type notifyResultMsg struct{}
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {
 	err error

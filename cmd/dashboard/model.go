@@ -66,10 +66,6 @@ type model struct {
 	planVisible  bool   // true when plan is shown in message VP
 	renderedPlan string // glamour-rendered plan markdown
 
-	// Previous effective state per agent — used to detect transitions
-	// and fire desktop notifications on needs-attention.
-	prevEffState map[string]string // agentTarget → last effectiveState result
-
 	// Close confirmation
 	confirmPaneID    string // tmux pane ID (%N) pending close
 	confirmSessionID string // session_id of agent pending close
@@ -206,7 +202,6 @@ func newModel(statePath, selfPaneID string, db *DB) model {
 		agentSubagents:  make(map[string][]SubagentInfo),
 		collapsed:       make(map[string]bool),
 		dismissed:       make(map[string]bool),
-		prevEffState:    make(map[string]string),
 		quote:           q,
 		quoteAuthor:     a,
 		nowFunc:         time.Now,
@@ -244,11 +239,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, a := range m.agents {
 			live[a.Target] = true
 		}
-		for target := range m.prevEffState {
-			if !live[target] {
-				delete(m.prevEffState, target)
-			}
-		}
 		for target := range m.agentSubagents {
 			if !live[target] {
 				delete(m.agentSubagents, target)
@@ -277,9 +267,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateRightContent()
 		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan()}
 		cmds = append(cmds, m.loadAllSubagents()...)
-		if cmd := m.checkNeedsAttentionTransition(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		return m, tea.Batch(cmds...)
 
 	case conversationMsg:
@@ -436,9 +423,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Focus failed: %v", msg.err)
 			m.statusMsgTick = m.tickCount
 		}
-		return m, nil
-
-	case notifyResultMsg:
 		return m, nil
 
 	case tea.MouseMsg:

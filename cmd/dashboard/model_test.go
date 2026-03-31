@@ -57,30 +57,6 @@ func TestBuildTree_CollapsedHidesSubs(t *testing.T) {
 	}
 }
 
-func TestEffectiveState_ReturnsStateDirectly(t *testing.T) {
-	// effectiveState is now a pass-through — state file is the single source of truth.
-	// Hooks (agent-state-fast.js) write "input" on PermissionRequest and "running" on PostToolUse.
-	m := newModel("", "", nil)
-	tests := []struct {
-		name  string
-		state string
-	}{
-		{"running", "running"},
-		{"input", "input"},
-		{"done", "done"},
-		{"error", "error"},
-		{"idle", "idle"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			agent := Agent{Target: "a:0.1", State: tt.state}
-			if got := m.effectiveState(agent); got != tt.state {
-				t.Errorf("effectiveState(%q) = %q, want %q", tt.state, got, tt.state)
-			}
-		})
-	}
-}
-
 func TestCurrentTool_InAgentStruct(t *testing.T) {
 	// Verify CurrentTool field is available and serializes correctly
 	agent := Agent{
@@ -531,8 +507,6 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 	m.buildTree()
 
 	// Populate maps for both agents
-	m.prevEffState["main:1.0"] = "running"
-	m.prevEffState["main:2.0"] = "done"
 	m.agentSubagents["main:1.0"] = []SubagentInfo{{AgentID: "sub1"}}
 	m.agentSubagents["main:2.0"] = []SubagentInfo{{AgentID: "sub2"}}
 	m.collapsed["main:1.0"] = true
@@ -555,9 +529,6 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 	}
 
 	// main:2.0 maps should be pruned
-	if _, ok := rm.prevEffState["main:2.0"]; ok {
-		t.Error("prevEffState for main:2.0 should be pruned")
-	}
 	if _, ok := rm.agentSubagents["main:2.0"]; ok {
 		t.Error("agentSubagents for main:2.0 should be pruned")
 	}

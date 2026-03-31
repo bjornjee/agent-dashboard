@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -121,39 +120,6 @@ func agentBadges(agent Agent) string {
 		return ""
 	}
 	return strings.Join(parts, " ")
-}
-
-// effectiveState returns the display state for an agent.
-// The state file is the single source of truth — hooks (agent-state-fast.js)
-// write "input" on PermissionRequest and "running" on PostToolUse directly.
-func (m model) effectiveState(agent Agent) string {
-	return agent.State
-}
-
-// checkNeedsAttentionTransition compares each agent's current effective state
-// against its previous state. If any agent transitioned to "input" or "error",
-// it fires a desktop notification. Updates prevEffState in place and returns
-// a batched command (or nil if no transitions occurred).
-//
-// NOTE: Uses pointer receiver because it mutates prevEffState. The caller
-// (model.Update) returns the model by value, so mutations are carried forward.
-func (m *model) checkNeedsAttentionTransition() tea.Cmd {
-	var cmds []tea.Cmd
-	for _, agent := range m.agents {
-		eff := m.effectiveState(agent)
-		prev := m.prevEffState[agent.Target]
-		m.prevEffState[agent.Target] = eff
-
-		needsAttention := eff == "input" || eff == "error"
-		wasAttention := prev == "input" || prev == "error"
-		if needsAttention && !wasAttention {
-			cmds = append(cmds, notifyNeedsAttention(agent))
-		}
-	}
-	if len(cmds) == 0 {
-		return nil
-	}
-	return tea.Batch(cmds...)
 }
 
 func hasContent(lines []string) bool {

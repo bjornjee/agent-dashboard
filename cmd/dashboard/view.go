@@ -90,7 +90,7 @@ func (m *model) updateRightContent() {
 	m.filesVP.SetContent(m.filesContent(*agent))
 	m.historyVP.SetContent(m.historyContent())
 
-	effState := m.effectiveState(*agent)
+	effState := agent.State
 	needsAttention := effState == "input" || effState == "error"
 	isDone := effState == "done" || effState == "idle"
 
@@ -171,7 +171,7 @@ func (m model) agentListContent() string {
 		}
 
 		// Parent agent node
-		effState := m.effectiveState(agent)
+		effState := agent.State
 		group := statePriority[effState]
 		if group == 0 {
 			group = 3
@@ -622,7 +622,7 @@ func (m model) renderRightPanel() string {
 		header = append(header, titleStyle.Render(fmt.Sprintf(" PEEK: %s ", name)))
 		header = append(header, "")
 
-		effState := m.effectiveState(*agent)
+		effState := agent.State
 		si := stateIcons[effState]
 		if si.icon == "" {
 			si = stateIcons["idle"]
@@ -714,7 +714,7 @@ func (m model) renderRightPanel() string {
 		messageLabel = " " + boldStyle.Render("── Output") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 			" " + helpStyle.Render(strings.Repeat("─", 19))
 	} else {
-		rpEffState := m.effectiveState(*agent)
+		rpEffState := agent.State
 		needsAttention := rpEffState == "input" || rpEffState == "error"
 		isDone := rpEffState == "done" || rpEffState == "idle"
 
@@ -837,7 +837,7 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, boldStyle.Render("enter")+" jump")
 		parts = append(parts, boldStyle.Render("r")+" reply")
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
-			es := m.effectiveState(*agent)
+			es := agent.State
 			if es == "input" || es == "error" {
 				parts = append(parts, boldStyle.Render("y/n")+" quick answer")
 			}
