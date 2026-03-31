@@ -42,7 +42,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "enter":
 			folder := m.textInput.Value()
-			if folder == "" && len(m.suggestions) > 0 && m.selectedSugg < len(m.suggestions) {
+			if m.suggNavigated && len(m.suggestions) > 0 && m.selectedSugg < len(m.suggestions) {
+				folder = m.suggestions[m.selectedSugg]
+			} else if folder == "" && len(m.suggestions) > 0 && m.selectedSugg < len(m.suggestions) {
 				folder = m.suggestions[m.selectedSugg]
 			}
 			m.mode = modeNormal
@@ -50,6 +52,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput.Placeholder = "Type reply..."
 			m.suggestions = nil
 			m.selectedSugg = 0
+			m.suggNavigated = false
 			if folder != "" {
 				return m, createSession(folder, m.agents, m.selfTarget)
 			}
@@ -60,6 +63,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput.Placeholder = "Type reply..."
 			m.suggestions = nil
 			m.selectedSugg = 0
+			m.suggNavigated = false
 			m.updateRightContent()
 			return m, nil
 		case "tab":
@@ -68,18 +72,21 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.textInput.CursorEnd()
 				m.suggestions = nil
 				m.selectedSugg = 0
+				m.suggNavigated = false
 			}
 			m.updateRightContent()
 			return m, nil
 		case "down":
 			if len(m.suggestions) > 0 {
 				m.selectedSugg = (m.selectedSugg + 1) % len(m.suggestions)
+				m.suggNavigated = true
 				m.updateRightContent()
 			}
 			return m, nil
 		case "up":
 			if len(m.suggestions) > 0 {
 				m.selectedSugg = (m.selectedSugg - 1 + len(m.suggestions)) % len(m.suggestions)
+				m.suggNavigated = true
 				m.updateRightContent()
 			}
 			return m, nil
@@ -88,6 +95,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput, cmd = m.textInput.Update(msg)
 			m.suggestions = filterZSuggestions(m.textInput.Value(), m.zEntries, m.pathExists)
 			m.selectedSugg = 0
+			m.suggNavigated = false
 			m.updateRightContent()
 			return m, cmd
 		}
@@ -297,6 +305,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.suggestions = filterZSuggestions("", m.zEntries, m.pathExists)
 		m.selectedSugg = 0
+		m.suggNavigated = false
 		m.updateRightContent()
 		return m, textinput.Blink
 	case "y", "n":

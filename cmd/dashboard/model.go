@@ -71,9 +71,10 @@ type model struct {
 	confirmTarget string // tmux target pending close confirmation
 
 	// Z-plugin suggestions for create folder mode
-	zEntries     []zEntry // cached z entries from ~/.z
-	suggestions  []string // filtered suggestions for current input
-	selectedSugg int      // index of highlighted suggestion
+	zEntries      []zEntry // cached z entries from ~/.z
+	suggestions   []string // filtered suggestions for current input
+	selectedSugg  int      // index of highlighted suggestion
+	suggNavigated bool     // true when user navigated suggestions with up/down
 
 	// Banner
 	quote       string // random quote text selected at startup
