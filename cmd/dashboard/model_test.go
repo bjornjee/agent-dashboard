@@ -349,7 +349,7 @@ func TestFindWindowForRepo_MatchesByFolder(t *testing.T) {
 		{Target: "main:2.0", Session: "main", Window: 2, Pane: 0, Cwd: "/home/user/code/other"},
 	}
 
-	sw, found := findWindowForRepo(agents, "/home/user/code/skills", "main:0.0")
+	sw, found := findWindowForRepo(agents, "/home/user/code/skills", "%0")
 	if !found {
 		t.Fatal("expected to find window for matching folder")
 	}
@@ -363,21 +363,21 @@ func TestFindWindowForRepo_NoMatch(t *testing.T) {
 		{Target: "main:1.0", Session: "main", Window: 1, Pane: 0, Cwd: "/home/user/code/skills"},
 	}
 
-	_, found := findWindowForRepo(agents, "/home/user/code/newrepo", "main:0.0")
+	_, found := findWindowForRepo(agents, "/home/user/code/newrepo", "%0")
 	if found {
 		t.Error("expected no match for different folder")
 	}
 }
 
 func TestFindWindowForRepo_EmptyAgents(t *testing.T) {
-	_, found := findWindowForRepo(nil, "/home/user/code/skills", "main:0.0")
+	_, found := findWindowForRepo(nil, "/home/user/code/skills", "%0")
 	if found {
 		t.Error("expected no match with empty agents")
 	}
 }
 
 func TestCreateSessionMsg_Success(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "main:0.0", nil)
+	m := newModel("/tmp/test-state.json", "%0", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -400,7 +400,7 @@ func TestCreateSessionMsg_Success(t *testing.T) {
 }
 
 func TestCreateSessionMsg_Error(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "main:0.0", nil)
+	m := newModel("/tmp/test-state.json", "%0", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -518,7 +518,7 @@ func TestCreateFolderMode_SuggestionsInView(t *testing.T) {
 }
 
 func TestStateUpdate_PrunesAllMaps(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "main:0.0", nil)
+	m := newModel("/tmp/test-state.json", "%0", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()

@@ -1,38 +1,23 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// ownTarget resolves the dashboard's own tmux pane to a target string
+// ownPaneID returns the dashboard's own tmux pane ID (%N format)
 // so we can exclude it from the agent list.
-func ownTarget() string {
-	pane := os.Getenv("TMUX_PANE")
-	if pane == "" {
-		return ""
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", pane,
-		"#{session_name}:#{window_index}.#{pane_index}").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+func ownPaneID() string {
+	return os.Getenv("TMUX_PANE")
 }
 
 func main() {
-	statePath := DefaultStatePath()
+	stateDir := DefaultStateDir()
 
 	// Clean stale agents (>10 min since last update) on startup
-	CleanStale(statePath, 10*60)
+	CleanStale(stateDir, 10*60)
 
 	db, err := OpenDB(DefaultDBPath())
 	if err != nil {
@@ -42,12 +27,12 @@ func main() {
 		defer db.Close()
 	}
 
-	self := ownTarget()
-	m := newModel(statePath, self, db)
+	selfPane := ownPaneID()
+	m := newModel(stateDir, selfPane, db)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
-	// Start file watcher
-	watcher, err := watchStateFile(statePath, p)
+	// Start directory watcher for per-agent state files
+	watcher, err := watchStateDir(stateDir, p)
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)

@@ -106,17 +106,28 @@ func TmuxKillPane(target string) error {
 	return exec.CommandContext(ctx, "tmux", "kill-pane", "-t", target).Run()
 }
 
-// TmuxListPanes returns the set of all live tmux pane targets (session:window.pane).
-func TmuxListPanes() map[string]bool {
+// ResolveTarget resolves a tmux pane ID (%N) to its current target string
+// (session:window.pane). Returns "" if the pane no longer exists.
+func ResolveTarget(paneID string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
 	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", paneID,
+		"#{session_name}:#{window_index}.#{pane_index}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
 
+// TmuxListLivePaneIDs returns the set of all live tmux pane IDs (%N format).
+func TmuxListLivePaneIDs() map[string]bool {
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
 	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
-		"-F", "#{session_name}:#{window_index}.#{pane_index}").Output()
+		"-F", "#{pane_id}").Output()
 	if err != nil {
 		return nil
 	}
-
 	panes := make(map[string]bool)
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line != "" {
@@ -124,54 +135,6 @@ func TmuxListPanes() map[string]bool {
 		}
 	}
 	return panes
-}
-
-// TmuxListPanesWithID returns a mapping of stable pane IDs (%N) to target strings.
-// Pane IDs are stable across window renumbering, unlike target strings.
-func TmuxListPanesWithID() map[string]string {
-	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
-	defer cancel()
-
-	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
-		"-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}").Output()
-	if err != nil {
-		return nil
-	}
-
-	return parseListPanesWithIDOutput(string(out))
-}
-
-// parseListPanesWithIDOutput parses "paneID\ttarget" lines into a map.
-func parseListPanesWithIDOutput(output string) map[string]string {
-	result := make(map[string]string)
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		result[parts[0]] = parts[1]
-	}
-	return result
-}
-
-// BuildTargetRenames compares pane snapshots before and after a kill to detect
-// tmux window renumbering. Returns a map of oldTarget → newTarget for panes
-// that were renumbered. The killedTarget is excluded from results.
-func BuildTargetRenames(before, after map[string]string, killedTarget string) map[string]string {
-	renames := make(map[string]string)
-	for paneID, oldTarget := range before {
-		if oldTarget == killedTarget {
-			continue // skip the killed pane
-		}
-		newTarget, alive := after[paneID]
-		if alive && newTarget != oldTarget {
-			renames[oldTarget] = newTarget
-		}
-	}
-	return renames
 }
 
 // TmuxWindowInfo holds a tmux window's index and name.

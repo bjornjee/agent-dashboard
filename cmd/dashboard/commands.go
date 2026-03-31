@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,11 +17,15 @@ import (
 
 func (m model) captureSelected() tea.Cmd {
 	agent := m.selectedAgent()
-	if !m.tmuxAvailable || agent == nil {
+	if !m.tmuxAvailable || agent == nil || agent.TmuxPaneID == "" {
 		return nil
 	}
-	target := agent.Target
+	paneID := agent.TmuxPaneID
 	return func() tea.Msg {
+		target := ResolveTarget(paneID)
+		if target == "" {
+			return captureResultMsg{lines: nil}
+		}
 		lines, err := TmuxCapture(target, 15)
 		if err != nil {
 			return captureResultMsg{lines: nil}
@@ -116,16 +119,12 @@ func (m model) loadAllSubagents() []tea.Cmd {
 }
 
 func pruneDead(statePath string) tea.Cmd {
-	return pruneDeadWithRenames(statePath, nil)
-}
-
-func pruneDeadWithRenames(statePath string, renames map[string]string) tea.Cmd {
 	return func() tea.Msg {
-		livePanes := TmuxListPanes()
-		if len(livePanes) == 0 {
+		livePaneIDs := TmuxListLivePaneIDs()
+		if len(livePaneIDs) == 0 {
 			return pruneDeadMsg{removed: 0}
 		}
-		removed := PruneDead(statePath, livePanes, renames)
+		removed := PruneDead(statePath, livePaneIDs)
 		return pruneDeadMsg{removed: removed}
 	}
 }
@@ -197,37 +196,23 @@ func loadDBCost(db *DB) tea.Cmd {
 	}
 }
 
-func closePane(target, statePath string) tea.Cmd {
+// closePane kills a tmux pane and removes its agent state file.
+// paneID is the immutable tmux pane ID (%N), sessionID is the agent's session_id.
+func closePane(paneID, sessionID, stateDir string) tea.Cmd {
 	return func() tea.Msg {
-		// Snapshot pane IDs before kill to detect window renumbering
-		beforePanes := TmuxListPanesWithID()
-
+		// Resolve current target from pane ID for the kill command
+		target := ResolveTarget(paneID)
+		if target == "" {
+			// Pane already dead — just clean up the file
+			_ = RemoveAgent(stateDir, sessionID)
+			return closeResultMsg{err: nil}
+		}
 		err := TmuxKillPane(target)
 		if err != nil {
 			return closeResultMsg{err: err}
 		}
-
-		// Snapshot after kill to detect renumbered targets
-		afterPanes := TmuxListPanesWithID()
-		// If beforePanes is nil (tmux timeout), no renames will be detected.
-		// PruneDead will clean up stale targets on the next tick.
-		renames := BuildTargetRenames(beforePanes, afterPanes, target)
-
-		// Remove killed agent and apply renames for surviving agents.
-		// Best-effort: if the write fails, PruneDead on the next tick will clean up.
-		sf := ReadState(statePath)
-		delete(sf.Agents, target)
-		for oldTarget, newTarget := range renames {
-			if agent, ok := sf.Agents[oldTarget]; ok {
-				delete(sf.Agents, oldTarget)
-				agent.Target = newTarget
-				sf.Agents[newTarget] = agent
-			}
-		}
-		data, _ := json.Marshal(sf)
-		_ = os.WriteFile(statePath, data, 0644)
-
-		return closeResultMsg{err: nil, renames: renames}
+		_ = RemoveAgent(stateDir, sessionID)
+		return closeResultMsg{err: nil}
 	}
 }
 
@@ -264,18 +249,24 @@ func notifyNeedsAttention(agent Agent) tea.Cmd {
 
 		// Try terminal-notifier first
 		if _, err := exec.LookPath("terminal-notifier"); err == nil {
-			args := []string{"-title", title, "-message", body, "-group", "claude-dashboard-" + agent.Target}
+			groupID := agent.SessionID
+			if groupID == "" {
+				groupID = agent.Target
+			}
+			args := []string{"-title", title, "-message", body, "-group", "claude-dashboard-" + groupID}
 			if subtitle != "" {
 				args = append(args, "-subtitle", subtitle)
 			}
 			args = append(args, "-sound", "default")
 
-			// Add tmux click action — ValidateTarget guarantees target contains
-			// only [a-zA-Z0-9_.\-:] so no shell metacharacters are possible.
-			if ValidateTarget(agent.Target) == nil {
-				sw := extractSessionWindow(agent.Target)
-				action := fmt.Sprintf("tmux select-window -t %s && tmux select-pane -t %s", sw, agent.Target)
-				args = append(args, "-execute", action)
+			// Add tmux click action using pane ID for reliable targeting
+			if agent.TmuxPaneID != "" {
+				target := ResolveTarget(agent.TmuxPaneID)
+				if target != "" && ValidateTarget(target) == nil {
+					sw := extractSessionWindow(target)
+					action := fmt.Sprintf("tmux select-window -t %s && tmux select-pane -t %s", sw, target)
+					args = append(args, "-execute", action)
+				}
 			}
 
 			_ = exec.CommandContext(ctx, "terminal-notifier", args...).Run()
@@ -304,8 +295,12 @@ func tickEvery() tea.Cmd {
 	})
 }
 
-func jumpToAgent(target string) tea.Cmd {
+func jumpToAgent(paneID string) tea.Cmd {
 	return func() tea.Msg {
+		target := ResolveTarget(paneID)
+		if target == "" {
+			return jumpResultMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
+		}
 		return jumpResultMsg{err: TmuxJump(target)}
 	}
 }
@@ -316,8 +311,12 @@ func selectPane(target string) tea.Cmd {
 	}
 }
 
-func sendReply(target, text string) tea.Cmd {
+func sendReply(paneID, text string) tea.Cmd {
 	return func() tea.Msg {
+		target := ResolveTarget(paneID)
+		if target == "" {
+			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
+		}
 		return sendResultMsg{err: TmuxSendKeys(target, text)}
 	}
 }
@@ -327,10 +326,11 @@ func sendReply(target, text string) tea.Cmd {
 // It first tries an exact path match, then falls back to repo-name matching
 // only when at least one side is a worktree path (to avoid false collisions
 // between unrelated repos that share the same basename).
-func findWindowForRepo(agents []Agent, folder, selfTarget string) (string, bool) {
+// selfPaneID is the dashboard's own pane ID (%N) to exclude.
+func findWindowForRepo(agents []Agent, folder, selfPaneID string) (string, bool) {
 	// Pass 1: exact path match
 	for _, agent := range agents {
-		if agent.Target == selfTarget {
+		if agent.TmuxPaneID == selfPaneID {
 			continue
 		}
 		if agent.Cwd == folder {
@@ -345,7 +345,7 @@ func findWindowForRepo(agents []Agent, folder, selfTarget string) (string, bool)
 	}
 	folderIsWorktree := strings.Contains(folder, "/worktrees/")
 	for _, agent := range agents {
-		if agent.Target == selfTarget {
+		if agent.TmuxPaneID == selfPaneID {
 			continue
 		}
 		agentIsWorktree := strings.Contains(agent.Cwd, "/worktrees/")
@@ -360,9 +360,8 @@ func findWindowForRepo(agents []Agent, folder, selfTarget string) (string, bool)
 }
 
 // findWindowByName returns the first window whose Name equals repoName,
-// excluding the window that contains the dashboard pane (selfTarget).
-func findWindowByName(windows []TmuxWindowInfo, repoName, session, selfTarget string) (string, bool) {
-	dashboardSW := extractSessionWindow(selfTarget)
+// excluding the window identified by dashboardSW (e.g. "main:2").
+func findWindowByName(windows []TmuxWindowInfo, repoName, session, dashboardSW string) (string, bool) {
 	for _, w := range windows {
 		candidate := fmt.Sprintf("%s:%d", session, w.Index)
 		if w.Name == repoName && candidate != dashboardSW {
@@ -403,14 +402,16 @@ func validateFolder(path string) (string, error) {
 }
 
 // createSession creates a new Claude Code session in a tmux pane.
-func createSession(folder string, agents []Agent, selfTarget string) tea.Cmd {
+func createSession(folder string, agents []Agent, selfPaneID string) tea.Cmd {
 	return func() tea.Msg {
 		absFolder, err := validateFolder(folder)
 		if err != nil {
 			return createSessionMsg{err: err}
 		}
 
+		selfTarget := ResolveTarget(selfPaneID)
 		session := extractSession(selfTarget)
+		dashboardSW := extractSessionWindow(selfTarget)
 		repoName := sanitizeWindowName(repoFromCwd(absFolder))
 		if repoName == "" {
 			repoName = "claude"
@@ -419,12 +420,12 @@ func createSession(folder string, agents []Agent, selfTarget string) tea.Cmd {
 		var newTarget string
 
 		// Check for existing window
-		sw, found := findWindowForRepo(agents, absFolder, selfTarget)
+		sw, found := findWindowForRepo(agents, absFolder, selfPaneID)
 		if !found {
 			// Fallback: check window names
 			windows, wErr := TmuxListWindows(session)
 			if wErr == nil {
-				sw, found = findWindowByName(windows, repoName, session, selfTarget)
+				sw, found = findWindowByName(windows, repoName, session, dashboardSW)
 			}
 		}
 
@@ -497,16 +498,28 @@ func openEditor(dir string) tea.Cmd {
 	}
 }
 
-func sendRawKey(target, key string) tea.Cmd {
+func sendRawKey(paneID, key string) tea.Cmd {
 	return func() tea.Msg {
+		target := ResolveTarget(paneID)
+		if target == "" {
+			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
+		}
 		return sendResultMsg{err: TmuxSendRaw(target, key)}
 	}
 }
 
-func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
+func watchStateDir(dir string, p *tea.Program) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
+	}
+
+	watchDir := agentsDir(dir)
+	// Ensure the agents directory exists before watching
+	_ = os.MkdirAll(watchDir, 0755)
+	if err := watcher.Add(watchDir); err != nil {
+		watcher.Close()
+		return nil, fmt.Errorf("cannot watch %s: %w", watchDir, err)
 	}
 
 	go func() {
@@ -520,14 +533,14 @@ func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
 					}
 					return
 				}
-				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
 					// Debounce rapid writes from concurrent hooks to read
 					// the settled state rather than intermediate values.
 					if debounce != nil {
 						debounce.Stop()
 					}
 					debounce = time.AfterFunc(50*time.Millisecond, func() {
-						p.Send(stateUpdatedMsg{state: ReadState(path)})
+						p.Send(stateUpdatedMsg{state: ReadState(dir)})
 					})
 				}
 			case _, ok := <-watcher.Errors:
@@ -537,14 +550,6 @@ func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
 			}
 		}
 	}()
-
-	if err := watcher.Add(path); err != nil {
-		dir := filepath.Dir(path)
-		if dirErr := watcher.Add(dir); dirErr != nil {
-			watcher.Close()
-			return nil, fmt.Errorf("cannot watch %s: %w", path, err)
-		}
-	}
 
 	return watcher, nil
 }

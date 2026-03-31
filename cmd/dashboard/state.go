@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Agent struct {
 	Cwd                string   `json:"cwd"`
 	Branch             string   `json:"branch"`
 	SessionID          string   `json:"session_id"`
+	TmuxPaneID         string   `json:"tmux_pane_id"`
 	StartedAt          string   `json:"started_at"`
 	UpdatedAt          string   `json:"updated_at"`
 	LastMessagePreview string   `json:"last_message_preview"`
@@ -44,45 +46,95 @@ var statePriority = map[string]int{
 	"done":    3, // completed
 }
 
-// DefaultStatePath returns ~/.claude/agent-dashboard/state.json.
-func DefaultStatePath() string {
+// DefaultStateDir returns ~/.claude/agent-dashboard.
+func DefaultStateDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "/tmp/agent-dashboard/state.json"
+		return "/tmp/agent-dashboard"
 	}
-	return filepath.Join(home, ".claude", "agent-dashboard", "state.json")
+	return filepath.Join(home, ".claude", "agent-dashboard")
 }
 
-// ReadState reads and parses the state file. Returns empty state on any error.
-func ReadState(path string) StateFile {
-	data, err := os.ReadFile(path)
+// agentsDir returns the agents subdirectory within the state directory.
+func agentsDir(dir string) string {
+	return filepath.Join(dir, "agents")
+}
+
+// ReadState reads all per-agent JSON files from dir/agents/*.json.
+// Agents are keyed by session_id (the filename stem). Returns empty state on error.
+func ReadState(dir string) StateFile {
+	sf := StateFile{Agents: make(map[string]Agent)}
+
+	entries, err := os.ReadDir(agentsDir(dir))
 	if err != nil {
-		return StateFile{Agents: make(map[string]Agent)}
+		return sf
 	}
 
-	var sf StateFile
-	if err := json.Unmarshal(data, &sf); err != nil {
-		return StateFile{Agents: make(map[string]Agent)}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(agentsDir(dir), entry.Name()))
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil {
+			continue
+		}
+		// Use session_id as the key; fall back to filename stem
+		key := agent.SessionID
+		if key == "" {
+			key = strings.TrimSuffix(entry.Name(), ".json")
+		}
+		if key != "" {
+			sf.Agents[key] = agent
+		}
 	}
 
-	if sf.Agents == nil {
-		sf.Agents = make(map[string]Agent)
-	}
 	return sf
 }
 
+// agentFileMap returns a map of session_id → file path for all agent files.
+func agentFileMap(dir string) map[string]string {
+	m := make(map[string]string)
+	entries, err := os.ReadDir(agentsDir(dir))
+	if err != nil {
+		return m
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(agentsDir(dir), entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil {
+			continue
+		}
+		key := agent.SessionID
+		if key == "" {
+			key = strings.TrimSuffix(entry.Name(), ".json")
+		}
+		if key != "" {
+			m[key] = path
+		}
+	}
+	return m
+}
+
 // SortedAgents returns agents sorted by state priority, then by updated_at.
-// selfTarget is excluded from the list (the dashboard's own pane).
-func SortedAgents(sf StateFile, selfTarget string) []Agent {
+// selfPaneID is excluded from the list (the dashboard's own pane, e.g. "%5").
+func SortedAgents(sf StateFile, selfPaneID string) []Agent {
 	agents := make([]Agent, 0, len(sf.Agents))
 	for _, a := range sf.Agents {
-		if a.Target == "" || a.State == "" {
+		if a.State == "" {
 			continue
 		}
-		if ValidateTarget(a.Target) != nil {
-			continue
-		}
-		if selfTarget != "" && a.Target == selfTarget {
+		if selfPaneID != "" && a.TmuxPaneID == selfPaneID {
 			continue
 		}
 		agents = append(agents, a)
@@ -110,88 +162,92 @@ func SortedAgents(sf StateFile, selfTarget string) []Agent {
 	return agents
 }
 
-// CleanStale removes agents that haven't been updated within maxAgeSecs.
-func CleanStale(path string, maxAgeSecs int) {
-	sf := ReadState(path)
+// CleanStale removes agent files that haven't been updated within maxAgeSecs.
+func CleanStale(dir string, maxAgeSecs int) {
 	now := time.Now()
-	changed := false
-
-	for id, agent := range sf.Agents {
+	entries, err := os.ReadDir(agentsDir(dir))
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(agentsDir(dir), entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil || agent.UpdatedAt == "" {
+			_ = os.Remove(path)
+			continue
+		}
 		t, err := time.Parse(time.RFC3339, agent.UpdatedAt)
 		if err != nil || now.Sub(t).Seconds() > float64(maxAgeSecs) {
-			delete(sf.Agents, id)
-			changed = true
+			_ = os.Remove(path)
 		}
-	}
-
-	if changed {
-		data, _ := json.Marshal(sf)
-		_ = os.WriteFile(path, data, 0644)
 	}
 }
 
-// PruneDead removes agents whose tmux panes no longer exist.
-// renames maps oldTarget → newTarget for panes that were renumbered
-// (e.g., due to tmux renumber-windows). Renamed agents are updated
-// in-place rather than deleted. Pass nil if no renames are known.
+// PruneDead removes agent files whose tmux panes no longer exist.
+// livePaneIDs is the set of currently live tmux pane IDs (%N format).
 // Returns the number of agents removed.
-func PruneDead(path string, livePanes map[string]bool, renames map[string]string) int {
-	sf := ReadState(path)
-	changed := false
-	removed := 0
-
-	// First pass: apply renames for agents whose targets changed
-	for oldTarget, newTarget := range renames {
-		agent, exists := sf.Agents[oldTarget]
-		if !exists {
-			continue
-		}
-		delete(sf.Agents, oldTarget)
-		agent.Target = newTarget
-		sf.Agents[newTarget] = agent
-		changed = true
+func PruneDead(dir string, livePaneIDs map[string]bool) int {
+	entries, err := os.ReadDir(agentsDir(dir))
+	if err != nil {
+		return 0
 	}
 
-	// Second pass: count truly dead agents
-	totalAgents := len(sf.Agents)
-	var deadIDs []string
-	for id := range sf.Agents {
-		if !livePanes[id] {
-			deadIDs = append(deadIDs, id)
+	type deadFile struct {
+		path string
+	}
+	var dead []deadFile
+	totalAgents := 0
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(agentsDir(dir), entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil {
+			continue
+		}
+		totalAgents++
+		// Check liveness by immutable pane ID
+		if agent.TmuxPaneID == "" || !livePaneIDs[agent.TmuxPaneID] {
+			dead = append(dead, deadFile{path: path})
 		}
 	}
 
 	// Safety net: refuse to wipe all agents at once — almost certainly
 	// a transient tmux issue. CleanStale handles truly dead agents.
-	if len(deadIDs) == totalAgents && totalAgents > 0 {
-		if changed {
-			data, _ := json.Marshal(sf)
-			_ = os.WriteFile(path, data, 0644)
-		}
+	if len(dead) == totalAgents && totalAgents > 0 {
 		return 0
 	}
 
-	for _, id := range deadIDs {
-		delete(sf.Agents, id)
-		removed++
-	}
-
-	if removed > 0 || changed {
-		data, _ := json.Marshal(sf)
-		_ = os.WriteFile(path, data, 0644)
+	removed := 0
+	for _, d := range dead {
+		if os.Remove(d.path) == nil {
+			removed++
+		}
 	}
 	return removed
 }
 
-// RemoveAgent removes an agent from the state file by target.
-func RemoveAgent(path, target string) error {
-	sf := ReadState(path)
-	delete(sf.Agents, target)
-	data, err := json.Marshal(sf)
-	if err != nil {
-		return err
+// RemoveAgent removes an agent's file by session_id.
+func RemoveAgent(dir, sessionID string) error {
+	files := agentFileMap(dir)
+	path, ok := files[sessionID]
+	if !ok {
+		return nil // not found, nothing to do
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.Remove(path)
 }
 
 // FormatDuration returns a human-readable duration since the given ISO8601 timestamp.
