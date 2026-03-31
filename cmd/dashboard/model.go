@@ -72,10 +72,9 @@ type model struct {
 	confirmSessionID string // session_id of agent pending close
 
 	// Z-plugin suggestions for create folder mode
-	zEntries      []zEntry // cached z entries from ~/.z
-	suggestions   []string // filtered suggestions for current input
-	selectedSugg  int      // index of highlighted suggestion
-	suggNavigated bool     // true when user navigated suggestions with up/down
+	zEntries     []zEntry // cached z entries from ~/.z
+	suggestions  []string // filtered suggestions for current input
+	selectedSugg int      // index of highlighted suggestion
 
 	// Banner
 	quote       string           // random quote text selected at startup

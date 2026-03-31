@@ -9,32 +9,48 @@ import (
 
 func TestParseZLine(t *testing.T) {
 	tests := []struct {
+		name     string
 		line     string
 		wantOk   bool
 		wantPath string
 		wantRank float64
+		wantTS   int64
 	}{
-		{"/Users/me/code|100|1774000000", true, "/Users/me/code", 100},
-		{"/tmp/test|0.5|1770000000", true, "/tmp/test", 0.5},
-		{"invalid line", false, "", 0},
-		{"", false, "", 0},
-		{"|100|123", false, "", 0}, // empty path
+		{"standard entry", "/Users/me/code|100|1774000000", true, "/Users/me/code", 100, 1774000000},
+		{"fractional rank", "/tmp/test|0.5|1770000000", true, "/tmp/test", 0.5, 1770000000},
+		{"no separators", "invalid line", false, "", 0, 0},
+		{"empty string", "", false, "", 0, 0},
+		{"empty path", "|100|123", false, "", 0, 0},
+		{"path with pipe", "/Users/me/co|de|100|1774000000", false, "", 0, 0}, // SplitN(3) puts "de|100" into rank — fails parse
+		{"path with spaces", "/Users/me/my folder|50|1774000000", true, "/Users/me/my folder", 50, 1774000000},
+		{"negative rank", "/tmp/neg|-5|1774000000", true, "/tmp/neg", -5, 1774000000},
+		{"zero rank", "/tmp/zero|0|1774000000", true, "/tmp/zero", 0, 1774000000},
+		{"non-numeric rank", "/tmp/bad|abc|1774000000", false, "", 0, 0},
+		{"non-numeric timestamp", "/tmp/bad|100|notanumber", false, "", 0, 0},
+		{"only two fields", "/tmp/bad|100", false, "", 0, 0},
+		{"trailing newline", "/Users/me/code|100|1774000000\n", false, "", 0, 0}, // \n in timestamp field
+		{"large rank", "/tmp/big|999999.99|1774000000", true, "/tmp/big", 999999.99, 1774000000},
 	}
 
 	for _, tt := range tests {
-		entry, ok := parseZLine(tt.line)
-		if ok != tt.wantOk {
-			t.Errorf("parseZLine(%q): ok=%v, want %v", tt.line, ok, tt.wantOk)
-			continue
-		}
-		if ok {
+		t.Run(tt.name, func(t *testing.T) {
+			entry, ok := parseZLine(tt.line)
+			if ok != tt.wantOk {
+				t.Fatalf("ok=%v, want %v", ok, tt.wantOk)
+			}
+			if !ok {
+				return
+			}
 			if entry.Path != tt.wantPath {
-				t.Errorf("parseZLine(%q): path=%q, want %q", tt.line, entry.Path, tt.wantPath)
+				t.Errorf("path=%q, want %q", entry.Path, tt.wantPath)
 			}
 			if entry.Rank != tt.wantRank {
-				t.Errorf("parseZLine(%q): rank=%f, want %f", tt.line, entry.Rank, tt.wantRank)
+				t.Errorf("rank=%f, want %f", entry.Rank, tt.wantRank)
 			}
-		}
+			if tt.wantTS != 0 && entry.Timestamp != tt.wantTS {
+				t.Errorf("timestamp=%d, want %d", entry.Timestamp, tt.wantTS)
+			}
+		})
 	}
 }
 
@@ -58,6 +74,81 @@ func TestLoadZEntries(t *testing.T) {
 	}
 	if entries[0].Path != "/Users/me/code/skills" {
 		t.Errorf("first entry path=%q", entries[0].Path)
+	}
+}
+
+func TestLoadZEntriesFromFile_Empty(t *testing.T) {
+	dir := t.TempDir()
+	zFile := filepath.Join(dir, ".z")
+	if err := os.WriteFile(zFile, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entries := loadZEntriesFromFile(zFile)
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries from empty file, got %d", len(entries))
+	}
+}
+
+func TestLoadZEntriesFromFile_MissingFile(t *testing.T) {
+	entries := loadZEntriesFromFile("/nonexistent/path/.z")
+	if entries != nil {
+		t.Errorf("expected nil for missing file, got %v", entries)
+	}
+}
+
+func TestLoadZEntriesFromFile_SkipsBadLines(t *testing.T) {
+	dir := t.TempDir()
+	zFile := filepath.Join(dir, ".z")
+	content := strings.Join([]string{
+		"/good/path|100|1774000000",
+		"bad line no pipes",
+		"",
+		"/another/good|50|1773000000",
+		"|0|0",
+		"/no-timestamp|100",
+	}, "\n")
+	if err := os.WriteFile(zFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entries := loadZEntriesFromFile(zFile)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 valid entries, got %d", len(entries))
+	}
+	if entries[0].Path != "/good/path" {
+		t.Errorf("first entry path=%q, want /good/path", entries[0].Path)
+	}
+	if entries[1].Path != "/another/good" {
+		t.Errorf("second entry path=%q, want /another/good", entries[1].Path)
+	}
+}
+
+func TestLoadZEntriesFromFile_TrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	zFile := filepath.Join(dir, ".z")
+	content := "/Users/me/code|100|1774000000\n"
+	if err := os.WriteFile(zFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entries := loadZEntriesFromFile(zFile)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+}
+
+func TestLoadZEntriesFromFile_DuplicatePaths(t *testing.T) {
+	dir := t.TempDir()
+	zFile := filepath.Join(dir, ".z")
+	content := strings.Join([]string{
+		"/Users/me/code|100|1774000000",
+		"/Users/me/code|200|1774001000",
+	}, "\n")
+	if err := os.WriteFile(zFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	entries := loadZEntriesFromFile(zFile)
+	// z file can have duplicate paths; loadZEntriesFromFile doesn't deduplicate
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries (no dedup), got %d", len(entries))
 	}
 }
 
