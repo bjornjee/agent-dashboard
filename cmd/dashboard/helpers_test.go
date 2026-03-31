@@ -205,7 +205,7 @@ func TestFindWindowForRepo_MatchesWorktrees(t *testing.T) {
 		},
 	}
 	// Different path but same repo — should find the window
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/skills", "main:0.0")
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/skills", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match worktree agent to same repo")
 	}
@@ -223,7 +223,7 @@ func TestFindWindowForRepo_ExactPathMatch(t *testing.T) {
 			Cwd:     "/Users/test/Code/bjornjee/agent-dashboard",
 		},
 	}
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/bjornjee/agent-dashboard", "main:0.0")
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/bjornjee/agent-dashboard", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match exact path")
 	}
@@ -242,7 +242,7 @@ func TestFindWindowForRepo_DifferentReposSameBasename(t *testing.T) {
 		},
 	}
 	// Different parent, same basename "app" — should NOT match
-	_, found := findWindowForRepo(agents, "/Users/test/Code/project-b/app", "main:0.0")
+	_, found := findWindowForRepo(agents, "/Users/test/Code/project-b/app", "%0")
 	if found {
 		t.Error("findWindowForRepo should not match different repos with same basename")
 	}
@@ -258,7 +258,7 @@ func TestFindWindowForRepo_WorktreeToPlain(t *testing.T) {
 		},
 	}
 	// Worktree folder should match agent at plain repo path
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feature-x", "main:0.0")
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feature-x", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match worktree folder to plain agent cwd")
 	}
@@ -277,7 +277,7 @@ func TestFindWindowForRepo_WorktreeToWorktree(t *testing.T) {
 		},
 	}
 	// Both sides are worktrees for the same repo
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/branch-b", "main:0.0")
+	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/branch-b", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match two worktrees of the same repo")
 	}
@@ -295,7 +295,7 @@ func TestFindWindowForRepo_NoMatchDifferentRepo(t *testing.T) {
 			Cwd:     "/Users/test/Code/other-repo",
 		},
 	}
-	_, found := findWindowForRepo(agents, "/Users/test/Code/skills", "main:0.0")
+	_, found := findWindowForRepo(agents, "/Users/test/Code/skills", "%0")
 	if found {
 		t.Error("findWindowForRepo should not match different repos")
 	}
@@ -306,14 +306,14 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 		{Index: 1, Name: "other-project"},
 		{Index: 2, Name: "agent-dashboard"}, // dashboard's own window
 	}
-	// selfTarget is in window 2 — the fallback should NOT match window 2
-	sw, found := findWindowByName(windows, "agent-dashboard", "main", "main:2.0")
+	// dashboardSW is "main:2" — the fallback should NOT match window 2
+	sw, found := findWindowByName(windows, "agent-dashboard", "main", "main:2")
 	if found {
 		t.Errorf("findWindowByName should skip dashboard's own window, but matched %s", sw)
 	}
 
 	// But it SHOULD match a different window with the same name
-	sw, found = findWindowByName(windows, "other-project", "main", "main:2.0")
+	sw, found = findWindowByName(windows, "other-project", "main", "main:2")
 	if !found {
 		t.Error("findWindowByName should match non-dashboard window")
 	}
@@ -321,14 +321,8 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 		t.Errorf("expected main:1, got %s", sw)
 	}
 
-	// selfTarget without pane suffix should still skip correctly
-	_, found = findWindowByName(windows, "agent-dashboard", "main", "main:2")
-	if found {
-		t.Error("findWindowByName should skip dashboard window even without pane suffix")
-	}
-
 	// Empty window list should return not-found
-	_, found = findWindowByName(nil, "agent-dashboard", "main", "main:2.0")
+	_, found = findWindowByName(nil, "agent-dashboard", "main", "main:2")
 	if found {
 		t.Error("findWindowByName should return false for empty window list")
 	}

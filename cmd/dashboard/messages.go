@@ -30,8 +30,7 @@ type openEditorMsg struct{ err error }
 type notifyResultMsg struct{}
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {
-	err     error
-	renames map[string]string // oldTarget → newTarget (from window renumbering)
+	err error
 }
 type createSessionMsg struct {
 	target string

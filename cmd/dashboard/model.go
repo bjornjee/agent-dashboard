@@ -29,7 +29,7 @@ type model struct {
 	textInput     textinput.Model
 	tmuxAvailable bool
 	statePath     string
-	selfTarget    string
+	selfPaneID    string
 	statusMsg     string
 	statusMsgTick int // tick when statusMsg was set; clears after 3s
 	capturedLines []string
@@ -68,7 +68,8 @@ type model struct {
 	prevEffState map[string]string // agentTarget → last effectiveState result
 
 	// Close confirmation
-	confirmTarget string // tmux target pending close confirmation
+	confirmPaneID    string // tmux pane ID (%N) pending close
+	confirmSessionID string // session_id of agent pending close
 
 	// Z-plugin suggestions for create folder mode
 	zEntries      []zEntry // cached z entries from ~/.z
@@ -134,7 +135,7 @@ func (m model) selectedSubagent() *SubagentInfo {
 	return m.treeNodes[m.selected].Sub
 }
 
-func newModel(statePath, selfTarget string, db *DB) model {
+func newModel(statePath, selfPaneID string, db *DB) model {
 	ti := textinput.New()
 	ti.Placeholder = "Type reply..."
 	ti.CharLimit = 4096
@@ -143,7 +144,7 @@ func newModel(statePath, selfTarget string, db *DB) model {
 	return model{
 		agents:         nil,
 		statePath:      statePath,
-		selfTarget:     selfTarget,
+		selfPaneID:     selfPaneID,
 		tmuxAvailable:  TmuxIsAvailable(),
 		textInput:      ti,
 		mode:           modeNormal,
@@ -187,7 +188,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateUpdatedMsg:
-		m.agents = SortedAgents(msg.state, m.selfTarget)
+		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
 		for _, a := range m.agents {
@@ -330,8 +331,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Pane closed"
 		}
 		m.statusMsgTick = m.tickCount
-		// Renames already applied to state file inside closePane; pruneDead
-		// only needs to catch agents that were already dead before this kill.
 		return m, tea.Batch(loadState(m.statePath), pruneDead(m.statePath))
 
 	case pruneDeadMsg:

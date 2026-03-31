@@ -54,7 +54,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedSugg = 0
 			m.suggNavigated = false
 			if folder != "" {
-				return m, createSession(folder, m.agents, m.selfTarget)
+				return m, createSession(folder, m.agents, m.selfPaneID)
 			}
 			return m, nil
 		case "esc":
@@ -111,7 +111,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			if text != "" {
 				if agent := m.selectedAgent(); agent != nil {
-					return m, sendReply(agent.Target, text)
+					return m, sendReply(agent.TmuxPaneID, text)
 				}
 			}
 			return m, nil
@@ -132,12 +132,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmClose {
 		switch key {
 		case "y":
-			target := m.confirmTarget
-			m.confirmTarget = ""
+			paneID := m.confirmPaneID
+			sessionID := m.confirmSessionID
+			m.confirmPaneID = ""
+			m.confirmSessionID = ""
 			m.mode = modeNormal
-			return m, closePane(target, m.statePath)
+			return m, closePane(paneID, sessionID, m.statePath)
 		case "n", "esc":
-			m.confirmTarget = ""
+			m.confirmPaneID = ""
+			m.confirmSessionID = ""
 			m.mode = modeNormal
 			m.statusMsg = ""
 			return m, nil
@@ -206,7 +209,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if agent := m.selectedAgent(); agent != nil && m.tmuxAvailable {
 			// Parent agent: confirm close
 			m.mode = modeConfirmClose
-			m.confirmTarget = agent.Target
+			m.confirmPaneID = agent.TmuxPaneID
+			m.confirmSessionID = agent.SessionID
 			m.statusMsg = fmt.Sprintf("Close pane %s? (y/n)", agent.Target)
 			m.statusMsgTick = -1 // pinned: don't auto-clear
 			return m, nil
@@ -259,7 +263,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if agent := m.selectedAgent(); agent != nil {
-			return m, jumpToAgent(agent.Target)
+			return m, jumpToAgent(agent.TmuxPaneID)
 		}
 	case "r":
 		if !m.tmuxAvailable {
@@ -312,14 +316,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := m.effectiveState(*agent)
 			if es == "input" || es == "error" {
-				return m, sendRawKey(agent.Target, key)
+				return m, sendRawKey(agent.TmuxPaneID, key)
 			}
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := m.effectiveState(*agent)
 			if es == "input" || es == "error" {
-				return m, sendRawKey(agent.Target, key)
+				return m, sendRawKey(agent.TmuxPaneID, key)
 			}
 		}
 	}

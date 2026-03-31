@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type Agent struct {
 	Cwd                string   `json:"cwd"`
 	Branch             string   `json:"branch"`
 	SessionID          string   `json:"session_id"`
+	TmuxPaneID         string   `json:"tmux_pane_id"`
 	StartedAt          string   `json:"started_at"`
 	UpdatedAt          string   `json:"updated_at"`
 	LastMessagePreview string   `json:"last_message_preview"`
@@ -59,7 +61,7 @@ func agentsDir(dir string) string {
 }
 
 // ReadState reads all per-agent JSON files from dir/agents/*.json.
-// Returns empty state on any error.
+// Agents are keyed by session_id (the filename stem). Returns empty state on error.
 func ReadState(dir string) StateFile {
 	sf := StateFile{Agents: make(map[string]Agent)}
 
@@ -80,15 +82,20 @@ func ReadState(dir string) StateFile {
 		if err := json.Unmarshal(data, &agent); err != nil {
 			continue
 		}
-		if agent.Target != "" {
-			sf.Agents[agent.Target] = agent
+		// Use session_id as the key; fall back to filename stem
+		key := agent.SessionID
+		if key == "" {
+			key = strings.TrimSuffix(entry.Name(), ".json")
+		}
+		if key != "" {
+			sf.Agents[key] = agent
 		}
 	}
 
 	return sf
 }
 
-// agentFileMap returns a map of target → file path for all agent files.
+// agentFileMap returns a map of session_id → file path for all agent files.
 func agentFileMap(dir string) map[string]string {
 	m := make(map[string]string)
 	entries, err := os.ReadDir(agentsDir(dir))
@@ -108,25 +115,26 @@ func agentFileMap(dir string) map[string]string {
 		if err := json.Unmarshal(data, &agent); err != nil {
 			continue
 		}
-		if agent.Target != "" {
-			m[agent.Target] = path
+		key := agent.SessionID
+		if key == "" {
+			key = strings.TrimSuffix(entry.Name(), ".json")
+		}
+		if key != "" {
+			m[key] = path
 		}
 	}
 	return m
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.
-// selfTarget is excluded from the list (the dashboard's own pane).
-func SortedAgents(sf StateFile, selfTarget string) []Agent {
+// selfPaneID is excluded from the list (the dashboard's own pane, e.g. "%5").
+func SortedAgents(sf StateFile, selfPaneID string) []Agent {
 	agents := make([]Agent, 0, len(sf.Agents))
 	for _, a := range sf.Agents {
-		if a.Target == "" || a.State == "" {
+		if a.State == "" {
 			continue
 		}
-		if ValidateTarget(a.Target) != nil {
-			continue
-		}
-		if selfTarget != "" && a.Target == selfTarget {
+		if selfPaneID != "" && a.TmuxPaneID == selfPaneID {
 			continue
 		}
 		agents = append(agents, a)
@@ -183,23 +191,25 @@ func CleanStale(dir string, maxAgeSecs int) {
 }
 
 // PruneDead removes agent files whose tmux panes no longer exist.
-// renames maps oldTarget → newTarget for panes that were renumbered
-// (e.g., due to tmux renumber-windows). Renamed agents are updated
-// in-place rather than deleted. Pass nil if no renames are known.
+// livePaneIDs is the set of currently live tmux pane IDs (%N format).
 // Returns the number of agents removed.
-func PruneDead(dir string, livePanes map[string]bool, renames map[string]string) int {
-	files := agentFileMap(dir)
-	totalAgents := len(files)
-	removed := 0
+func PruneDead(dir string, livePaneIDs map[string]bool) int {
+	entries, err := os.ReadDir(agentsDir(dir))
+	if err != nil {
+		return 0
+	}
 
-	// First pass: apply renames to files on disk. Each rename is looked up
-	// in the original (unmutated) file map to avoid order-dependent collisions
-	// when rename chains overlap (e.g. A→B and B→C).
-	for oldTarget, newTarget := range renames {
-		path, exists := files[oldTarget]
-		if !exists {
+	type deadFile struct {
+		path string
+	}
+	var dead []deadFile
+	totalAgents := 0
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
+		path := filepath.Join(agentsDir(dir), entry.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
@@ -208,45 +218,32 @@ func PruneDead(dir string, livePanes map[string]bool, renames map[string]string)
 		if err := json.Unmarshal(data, &agent); err != nil {
 			continue
 		}
-		agent.Target = newTarget
-		newData, err := json.MarshalIndent(agent, "", "  ")
-		if err != nil {
-			continue
-		}
-		_ = os.WriteFile(path, newData, 0644)
-	}
-
-	// Re-read the file map after renames to get the accurate post-rename state.
-	files = agentFileMap(dir)
-
-	// Second pass: find truly dead agents
-	var deadTargets []string
-	for target := range files {
-		if !livePanes[target] {
-			deadTargets = append(deadTargets, target)
+		totalAgents++
+		// Check liveness by immutable pane ID
+		if agent.TmuxPaneID == "" || !livePaneIDs[agent.TmuxPaneID] {
+			dead = append(dead, deadFile{path: path})
 		}
 	}
 
 	// Safety net: refuse to wipe all agents at once — almost certainly
 	// a transient tmux issue. CleanStale handles truly dead agents.
-	if len(deadTargets) == totalAgents && totalAgents > 0 {
+	if len(dead) == totalAgents && totalAgents > 0 {
 		return 0
 	}
 
-	for _, target := range deadTargets {
-		if path, ok := files[target]; ok {
-			_ = os.Remove(path)
+	removed := 0
+	for _, d := range dead {
+		if os.Remove(d.path) == nil {
 			removed++
 		}
 	}
-
 	return removed
 }
 
-// RemoveAgent removes an agent's file by target.
-func RemoveAgent(dir, target string) error {
+// RemoveAgent removes an agent's file by session_id.
+func RemoveAgent(dir, sessionID string) error {
 	files := agentFileMap(dir)
-	path, ok := files[target]
+	path, ok := files[sessionID]
 	if !ok {
 		return nil // not found, nothing to do
 	}
