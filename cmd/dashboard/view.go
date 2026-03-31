@@ -588,36 +588,18 @@ func (m model) renderRightPanel() string {
 
 	// Create folder mode: simple form
 	if m.mode == modeCreateFolder {
-		content := m.messageVP.View()
-		if m.spawning {
-			contentLines := strings.Count(content, "\n") + 1
-			pad := panelHeight - contentLines - 1
-			if pad < 1 {
-				pad = 1
-			}
-			content += strings.Repeat("\n", pad) + m.spawningLine()
-		}
 		return borderStyle.
 			Width(m.rightWidth).
 			Height(panelHeight).
-			Render(content)
+			Render(m.messageVP.View())
 	}
 
 	agent := m.selectedAgent()
 	if agent == nil {
-		content := m.messageVP.View()
-		if m.spawning {
-			contentLines := strings.Count(content, "\n") + 1
-			pad := panelHeight - contentLines - 1
-			if pad < 1 {
-				pad = 1
-			}
-			content += strings.Repeat("\n", pad) + m.spawningLine()
-		}
 		return borderStyle.
 			Width(m.rightWidth).
 			Height(panelHeight).
-			Render(content)
+			Render(m.messageVP.View())
 	}
 
 	sub := m.selectedSubagent()
@@ -759,8 +741,13 @@ func (m model) renderRightPanel() string {
 
 	// Status message
 	statusLine := ""
-	if m.spawning {
-		statusLine = m.spawningLine()
+	if m.statusMsg == "spawning" {
+		frames := []string{"☱", "☲", "☴"}
+		frame := frames[m.tickCount%len(frames)]
+		statusLine = " " +
+			lipgloss.NewStyle().Foreground(inputColor).Render(frame) +
+			" " +
+			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
 	} else if m.statusMsg != "" {
 		statusLine = " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
 	}
@@ -808,15 +795,6 @@ func (m model) renderRightPanel() string {
 		Width(m.rightWidth).
 		Height(panelHeight).
 		Render(content)
-}
-
-func (m model) spawningLine() string {
-	frames := []string{"☱", "☲", "☴"}
-	frame := frames[m.tickCount%len(frames)]
-	return " " +
-		lipgloss.NewStyle().Foreground(inputColor).Render(frame) +
-		" " +
-		lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
 }
 
 func (m model) renderHelpBar() string {

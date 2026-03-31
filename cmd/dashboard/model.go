@@ -83,9 +83,6 @@ type model struct {
 
 	// Path validation for z suggestions (injectable for testing)
 	pathExists func(string) bool
-
-	// Session creation spinner
-	spawning bool
 }
 
 // buildTree rebuilds the flat tree node list from agents and their subagents.
@@ -315,7 +312,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case createSessionMsg:
-		m.spawning = false
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Create failed: %v", msg.err)
 			m.statusMsgTick = m.tickCount
