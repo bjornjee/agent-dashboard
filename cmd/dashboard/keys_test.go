@@ -156,3 +156,84 @@ func TestCreateFolderMode_EnterAcceptsSuggestion(t *testing.T) {
 		t.Error("expected createSession command when suggestion available, got nil")
 	}
 }
+
+func TestCreateFolderMode_EnterUsesNavigatedSuggestion(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.textInput.SetValue("sales") // user typed partial query
+	m.suggestions = []string{"/Users/test/code/sales-app", "/Users/test/code/sales-demo"}
+	m.selectedSugg = 1
+
+	// Simulate having navigated with down arrow
+	m.suggNavigated = true
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.handleKey(msg)
+
+	// Should use the navigated suggestion, not the partial text "sales"
+	if cmd == nil {
+		t.Error("expected createSession command when navigated suggestion selected, got nil")
+	}
+}
+
+func TestCreateFolderMode_DownSetsNavigated(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b"}
+	m.selectedSugg = 0
+
+	msg := tea.KeyMsg{Type: tea.KeyDown}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if !rm.suggNavigated {
+		t.Error("expected suggNavigated=true after down key")
+	}
+}
+
+func TestCreateFolderMode_TypingResetsNavigated(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.suggNavigated = true
+	m.suggestions = []string{"/Users/test/code/a"}
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.suggNavigated {
+		t.Error("expected suggNavigated=false after typing")
+	}
+}
+
+func TestCreateFolderMode_EnterWithTextNoNavUsesText(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.textInput.SetValue("/Users/test/code/typed-path")
+	m.suggestions = []string{"/Users/test/code/suggestion"}
+	m.selectedSugg = 0
+	m.suggNavigated = false // user typed but did not navigate
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.handleKey(msg)
+
+	// Should use the typed text, not the suggestion — returns a command since typed path is non-empty
+	if cmd == nil {
+		t.Error("expected createSession command for typed path, got nil")
+	}
+}
+
+func TestCreateFolderMode_UpSetsNavigated(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b"}
+	m.selectedSugg = 1
+
+	msg := tea.KeyMsg{Type: tea.KeyUp}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if !rm.suggNavigated {
+		t.Error("expected suggNavigated=true after up key")
+	}
+}

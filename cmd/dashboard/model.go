@@ -71,14 +71,15 @@ type model struct {
 	confirmTarget string // tmux target pending close confirmation
 
 	// Z-plugin suggestions for create folder mode
-	zEntries     []zEntry // cached z entries from ~/.z
-	suggestions  []string // filtered suggestions for current input
-	selectedSugg int      // index of highlighted suggestion
+	zEntries      []zEntry // cached z entries from ~/.z
+	suggestions   []string // filtered suggestions for current input
+	selectedSugg  int      // index of highlighted suggestion
+	suggNavigated bool     // true when user navigated suggestions with up/down
 
 	// Banner
-	quote       string // random quote text selected at startup
-	quoteAuthor string // quote author (empty for fallback quotes)
-	nowFunc func() time.Time // injectable clock for testability
+	quote       string           // random quote text selected at startup
+	quoteAuthor string           // quote author (empty for fallback quotes)
+	nowFunc     func() time.Time // injectable clock for testability
 
 	// Path validation for z suggestions (injectable for testing)
 	pathExists func(string) bool
