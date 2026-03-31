@@ -2,9 +2,9 @@
 
 A tmux-integrated TUI for monitoring Claude Code agents across sessions, built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe.
 
-https://github.com/user-attachments/assets/PLACEHOLDER
+https://github.com/user-attachments/assets/736b633f-93d7-4d83-8c9a-fd7ebc598a89
 
-Reads agent state from `~/.claude/agent-dashboard/state.json` (written by the [bjornjee-skills](https://github.com/bjornjee/skills) Claude Code plugin).
+Reads agent state from per-agent JSON files in `~/.claude/agent-dashboard/agents/` (written by the [bjornjee-skills](https://github.com/bjornjee/skills) Claude Code plugin).
 
 ## Features
 
