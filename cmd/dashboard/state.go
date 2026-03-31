@@ -32,7 +32,7 @@ type Agent struct {
 	CurrentTool        string   `json:"current_tool"`
 }
 
-// StateFile is the top-level JSON structure.
+// StateFile is the in-memory aggregate of all per-agent JSON files.
 type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
 }

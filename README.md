@@ -4,7 +4,7 @@ A tmux-integrated TUI for monitoring Claude Code agents across sessions, built w
 
 https://github.com/user-attachments/assets/PLACEHOLDER
 
-Reads agent state from `~/.claude/agent-dashboard/state.json` (written by the [bjornjee-skills](https://github.com/bjornjee/skills) Claude Code plugin).
+Reads agent state from per-agent JSON files in `~/.claude/agent-dashboard/agents/` (written by the [bjornjee-skills](https://github.com/bjornjee/skills) Claude Code plugin).
 
 ## Features
 
