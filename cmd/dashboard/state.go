@@ -44,31 +44,75 @@ var statePriority = map[string]int{
 	"done":    3, // completed
 }
 
-// DefaultStatePath returns ~/.claude/agent-dashboard/state.json.
-func DefaultStatePath() string {
+// DefaultStateDir returns ~/.claude/agent-dashboard.
+func DefaultStateDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "/tmp/agent-dashboard/state.json"
+		return "/tmp/agent-dashboard"
 	}
-	return filepath.Join(home, ".claude", "agent-dashboard", "state.json")
+	return filepath.Join(home, ".claude", "agent-dashboard")
 }
 
-// ReadState reads and parses the state file. Returns empty state on any error.
-func ReadState(path string) StateFile {
-	data, err := os.ReadFile(path)
+// agentsDir returns the agents subdirectory within the state directory.
+func agentsDir(dir string) string {
+	return filepath.Join(dir, "agents")
+}
+
+// ReadState reads all per-agent JSON files from dir/agents/*.json.
+// Returns empty state on any error.
+func ReadState(dir string) StateFile {
+	sf := StateFile{Agents: make(map[string]Agent)}
+
+	entries, err := os.ReadDir(agentsDir(dir))
 	if err != nil {
-		return StateFile{Agents: make(map[string]Agent)}
+		return sf
 	}
 
-	var sf StateFile
-	if err := json.Unmarshal(data, &sf); err != nil {
-		return StateFile{Agents: make(map[string]Agent)}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(agentsDir(dir), entry.Name()))
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil {
+			continue
+		}
+		if agent.Target != "" {
+			sf.Agents[agent.Target] = agent
+		}
 	}
 
-	if sf.Agents == nil {
-		sf.Agents = make(map[string]Agent)
-	}
 	return sf
+}
+
+// agentFileMap returns a map of target → file path for all agent files.
+func agentFileMap(dir string) map[string]string {
+	m := make(map[string]string)
+	entries, err := os.ReadDir(agentsDir(dir))
+	if err != nil {
+		return m
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(agentsDir(dir), entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil {
+			continue
+		}
+		if agent.Target != "" {
+			m[agent.Target] = path
+		}
+	}
+	return m
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.
@@ -110,88 +154,103 @@ func SortedAgents(sf StateFile, selfTarget string) []Agent {
 	return agents
 }
 
-// CleanStale removes agents that haven't been updated within maxAgeSecs.
-func CleanStale(path string, maxAgeSecs int) {
-	sf := ReadState(path)
+// CleanStale removes agent files that haven't been updated within maxAgeSecs.
+func CleanStale(dir string, maxAgeSecs int) {
 	now := time.Now()
-	changed := false
-
-	for id, agent := range sf.Agents {
+	entries, err := os.ReadDir(agentsDir(dir))
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(agentsDir(dir), entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil || agent.UpdatedAt == "" {
+			_ = os.Remove(path)
+			continue
+		}
 		t, err := time.Parse(time.RFC3339, agent.UpdatedAt)
 		if err != nil || now.Sub(t).Seconds() > float64(maxAgeSecs) {
-			delete(sf.Agents, id)
-			changed = true
+			_ = os.Remove(path)
 		}
-	}
-
-	if changed {
-		data, _ := json.Marshal(sf)
-		_ = os.WriteFile(path, data, 0644)
 	}
 }
 
-// PruneDead removes agents whose tmux panes no longer exist.
+// PruneDead removes agent files whose tmux panes no longer exist.
 // renames maps oldTarget → newTarget for panes that were renumbered
 // (e.g., due to tmux renumber-windows). Renamed agents are updated
 // in-place rather than deleted. Pass nil if no renames are known.
 // Returns the number of agents removed.
-func PruneDead(path string, livePanes map[string]bool, renames map[string]string) int {
-	sf := ReadState(path)
-	changed := false
+func PruneDead(dir string, livePanes map[string]bool, renames map[string]string) int {
+	files := agentFileMap(dir)
+	totalAgents := len(files)
 	removed := 0
 
-	// First pass: apply renames for agents whose targets changed
+	// First pass: apply renames to files on disk. Each rename is looked up
+	// in the original (unmutated) file map to avoid order-dependent collisions
+	// when rename chains overlap (e.g. A→B and B→C).
 	for oldTarget, newTarget := range renames {
-		agent, exists := sf.Agents[oldTarget]
+		path, exists := files[oldTarget]
 		if !exists {
 			continue
 		}
-		delete(sf.Agents, oldTarget)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var agent Agent
+		if err := json.Unmarshal(data, &agent); err != nil {
+			continue
+		}
 		agent.Target = newTarget
-		sf.Agents[newTarget] = agent
-		changed = true
+		newData, err := json.MarshalIndent(agent, "", "  ")
+		if err != nil {
+			continue
+		}
+		_ = os.WriteFile(path, newData, 0644)
 	}
 
-	// Second pass: count truly dead agents
-	totalAgents := len(sf.Agents)
-	var deadIDs []string
-	for id := range sf.Agents {
-		if !livePanes[id] {
-			deadIDs = append(deadIDs, id)
+	// Re-read the file map after renames to get the accurate post-rename state.
+	files = agentFileMap(dir)
+
+	// Second pass: find truly dead agents
+	var deadTargets []string
+	for target := range files {
+		if !livePanes[target] {
+			deadTargets = append(deadTargets, target)
 		}
 	}
 
 	// Safety net: refuse to wipe all agents at once — almost certainly
 	// a transient tmux issue. CleanStale handles truly dead agents.
-	if len(deadIDs) == totalAgents && totalAgents > 0 {
-		if changed {
-			data, _ := json.Marshal(sf)
-			_ = os.WriteFile(path, data, 0644)
-		}
+	if len(deadTargets) == totalAgents && totalAgents > 0 {
 		return 0
 	}
 
-	for _, id := range deadIDs {
-		delete(sf.Agents, id)
-		removed++
+	for _, target := range deadTargets {
+		if path, ok := files[target]; ok {
+			_ = os.Remove(path)
+			removed++
+		}
 	}
 
-	if removed > 0 || changed {
-		data, _ := json.Marshal(sf)
-		_ = os.WriteFile(path, data, 0644)
-	}
 	return removed
 }
 
-// RemoveAgent removes an agent from the state file by target.
-func RemoveAgent(path, target string) error {
-	sf := ReadState(path)
-	delete(sf.Agents, target)
-	data, err := json.Marshal(sf)
-	if err != nil {
-		return err
+// RemoveAgent removes an agent's file by target.
+func RemoveAgent(dir, target string) error {
+	files := agentFileMap(dir)
+	path, ok := files[target]
+	if !ok {
+		return nil // not found, nothing to do
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.Remove(path)
 }
 
 // FormatDuration returns a human-readable duration since the given ISO8601 timestamp.

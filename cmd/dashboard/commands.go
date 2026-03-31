@@ -197,7 +197,7 @@ func loadDBCost(db *DB) tea.Cmd {
 	}
 }
 
-func closePane(target, statePath string) tea.Cmd {
+func closePane(target, stateDir string) tea.Cmd {
 	return func() tea.Msg {
 		// Snapshot pane IDs before kill to detect window renumbering
 		beforePanes := TmuxListPanesWithID()
@@ -213,19 +213,31 @@ func closePane(target, statePath string) tea.Cmd {
 		// PruneDead will clean up stale targets on the next tick.
 		renames := BuildTargetRenames(beforePanes, afterPanes, target)
 
-		// Remove killed agent and apply renames for surviving agents.
-		// Best-effort: if the write fails, PruneDead on the next tick will clean up.
-		sf := ReadState(statePath)
-		delete(sf.Agents, target)
+		// Remove killed agent's file. Apply renames for surviving agents.
+		// Best-effort: if the operations fail, PruneDead on the next tick will clean up.
+		_ = RemoveAgent(stateDir, target)
+
+		files := agentFileMap(stateDir)
 		for oldTarget, newTarget := range renames {
-			if agent, ok := sf.Agents[oldTarget]; ok {
-				delete(sf.Agents, oldTarget)
-				agent.Target = newTarget
-				sf.Agents[newTarget] = agent
+			path, ok := files[oldTarget]
+			if !ok {
+				continue
 			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			var agent Agent
+			if err := json.Unmarshal(data, &agent); err != nil {
+				continue
+			}
+			agent.Target = newTarget
+			newData, err := json.MarshalIndent(agent, "", "  ")
+			if err != nil {
+				continue
+			}
+			_ = os.WriteFile(path, newData, 0644)
 		}
-		data, _ := json.Marshal(sf)
-		_ = os.WriteFile(statePath, data, 0644)
 
 		return closeResultMsg{err: nil, renames: renames}
 	}
@@ -503,10 +515,18 @@ func sendRawKey(target, key string) tea.Cmd {
 	}
 }
 
-func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
+func watchStateDir(dir string, p *tea.Program) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
+	}
+
+	watchDir := agentsDir(dir)
+	// Ensure the agents directory exists before watching
+	_ = os.MkdirAll(watchDir, 0755)
+	if err := watcher.Add(watchDir); err != nil {
+		watcher.Close()
+		return nil, fmt.Errorf("cannot watch %s: %w", watchDir, err)
 	}
 
 	go func() {
@@ -520,14 +540,14 @@ func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
 					}
 					return
 				}
-				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
 					// Debounce rapid writes from concurrent hooks to read
 					// the settled state rather than intermediate values.
 					if debounce != nil {
 						debounce.Stop()
 					}
 					debounce = time.AfterFunc(50*time.Millisecond, func() {
-						p.Send(stateUpdatedMsg{state: ReadState(path)})
+						p.Send(stateUpdatedMsg{state: ReadState(dir)})
 					})
 				}
 			case _, ok := <-watcher.Errors:
@@ -537,14 +557,6 @@ func watchStateFile(path string, p *tea.Program) (*fsnotify.Watcher, error) {
 			}
 		}
 	}()
-
-	if err := watcher.Add(path); err != nil {
-		dir := filepath.Dir(path)
-		if dirErr := watcher.Add(dir); dirErr != nil {
-			watcher.Close()
-			return nil, fmt.Errorf("cannot watch %s: %w", path, err)
-		}
-	}
 
 	return watcher, nil
 }

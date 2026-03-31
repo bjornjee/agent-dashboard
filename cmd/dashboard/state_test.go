@@ -1,13 +1,40 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestReadState_MissingFile(t *testing.T) {
-	sf := ReadState("/nonexistent/path.json")
+// writeAgentFile is a test helper that writes an agent JSON file to dir/agents/.
+func writeAgentFile(t *testing.T, dir, filename string, agent Agent) {
+	t.Helper()
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		t.Fatalf("create agents dir: %v", err)
+	}
+	data, err := json.Marshal(agent)
+	if err != nil {
+		t.Fatalf("marshal agent: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, filename), data, 0644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+}
+
+func TestReadState_MissingDir(t *testing.T) {
+	sf := ReadState("/nonexistent/path")
+	if len(sf.Agents) != 0 {
+		t.Errorf("expected empty agents, got %d", len(sf.Agents))
+	}
+}
+
+func TestReadState_EmptyAgentsDir(t *testing.T) {
+	tmp := t.TempDir()
+	os.MkdirAll(filepath.Join(tmp, "agents"), 0755)
+
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 0 {
 		t.Errorf("expected empty agents, got %d", len(sf.Agents))
 	}
@@ -15,10 +42,11 @@ func TestReadState_MissingFile(t *testing.T) {
 
 func TestReadState_InvalidJSON(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte("not json{{{"), 0644)
+	agentsDir := filepath.Join(tmp, "agents")
+	os.MkdirAll(agentsDir, 0755)
+	os.WriteFile(filepath.Join(agentsDir, "bad.json"), []byte("not json{{{"), 0644)
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 0 {
 		t.Errorf("expected empty agents for invalid JSON, got %d", len(sf.Agents))
 	}
@@ -26,15 +54,10 @@ func TestReadState_InvalidJSON(t *testing.T) {
 
 func TestReadState_ValidState(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"a:0.1": {"target":"a:0.1","state":"running","session":"a"},
-			"b:1.0": {"target":"b:1.0","state":"input","session":"b"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "a:0.1", State: "running", Session: "a"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "b:1.0", State: "input", Session: "b"})
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents, got %d", len(sf.Agents))
 	}
@@ -88,20 +111,15 @@ func TestSortedAgents_SkipsInvalid(t *testing.T) {
 
 func TestRemoveAgent(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"a:0.1": {"target":"a:0.1","state":"running","session":"a"},
-			"b:1.0": {"target":"b:1.0","state":"input","session":"b"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "a:0.1", State: "running", Session: "a"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "b:1.0", State: "input", Session: "b"})
 
-	err := RemoveAgent(path, "a:0.1")
+	err := RemoveAgent(tmp, "a:0.1")
 	if err != nil {
 		t.Fatalf("RemoveAgent failed: %v", err)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Fatalf("expected 1 agent after removal, got %d", len(sf.Agents))
 	}
@@ -115,15 +133,14 @@ func TestRemoveAgent(t *testing.T) {
 
 func TestRemoveAgent_NonExistent(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{"agents":{"a:0.1":{"target":"a:0.1","state":"running"}}}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "a:0.1", State: "running"})
 
-	err := RemoveAgent(path, "nonexistent:0.0")
+	err := RemoveAgent(tmp, "nonexistent:0.0")
 	if err != nil {
 		t.Fatalf("RemoveAgent should not fail on nonexistent target: %v", err)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Errorf("expected 1 agent unchanged, got %d", len(sf.Agents))
 	}
@@ -131,13 +148,8 @@ func TestRemoveAgent_NonExistent(t *testing.T) {
 
 func TestPruneDead_WithRenames(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"main:1.0": {"target":"main:1.0","state":"running","session":"main","cwd":"/code/a"},
-			"main:2.0": {"target":"main:2.0","state":"running","session":"main","cwd":"/code/b"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "main:1.0", State: "running", Session: "main", Cwd: "/code/a"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "main:2.0", State: "running", Session: "main", Cwd: "/code/b"})
 
 	// After killing main:1.0, window 2 renumbered to window 1
 	livePanes := map[string]bool{
@@ -148,9 +160,9 @@ func TestPruneDead_WithRenames(t *testing.T) {
 		"main:2.0": "main:1.0", // B was renumbered
 	}
 
-	removed := PruneDead(path, livePanes, renames)
+	removed := PruneDead(tmp, livePanes, renames)
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 
 	// Only 1 agent should remain (B with new target)
 	if len(sf.Agents) != 1 {
@@ -176,13 +188,8 @@ func TestPruneDead_WithRenames(t *testing.T) {
 
 func TestPruneDead_NoRenames(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
-			"main:1.1": {"target":"main:1.1","state":"done","session":"main"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "main:1.0", State: "running", Session: "main"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "main:1.1", State: "done", Session: "main"})
 
 	livePanes := map[string]bool{
 		"main:0.0": true,
@@ -190,12 +197,12 @@ func TestPruneDead_NoRenames(t *testing.T) {
 		// main:1.1 is dead
 	}
 
-	removed := PruneDead(path, livePanes, nil)
+	removed := PruneDead(tmp, livePanes, nil)
 	if removed != 1 {
 		t.Errorf("expected 1 removed, got %d", removed)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(sf.Agents))
 	}
@@ -206,23 +213,18 @@ func TestPruneDead_NoRenames(t *testing.T) {
 
 func TestPruneDead_EmptyLivePanes(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
-			"main:2.0": {"target":"main:2.0","state":"running","session":"main"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "main:1.0", State: "running", Session: "main"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "main:2.0", State: "running", Session: "main"})
 
 	// Empty non-nil map simulates tmux returning success with empty output.
 	// PruneDead should refuse to delete all agents in this case.
 	livePanes := map[string]bool{}
-	removed := PruneDead(path, livePanes, nil)
+	removed := PruneDead(tmp, livePanes, nil)
 	if removed != 0 {
 		t.Errorf("expected 0 removed with empty livePanes, got %d", removed)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
 	}
@@ -230,25 +232,20 @@ func TestPruneDead_EmptyLivePanes(t *testing.T) {
 
 func TestPruneDead_AllAgentsDead(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
-			"main:2.0": {"target":"main:2.0","state":"running","session":"main"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "main:1.0", State: "running", Session: "main"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "main:2.0", State: "running", Session: "main"})
 
 	// livePanes has panes but none match any agent — all would be deleted.
 	// Safety net should refuse to wipe all agents at once.
 	livePanes := map[string]bool{
 		"main:0.0": true, // dashboard pane only
 	}
-	removed := PruneDead(path, livePanes, nil)
+	removed := PruneDead(tmp, livePanes, nil)
 	if removed != 0 {
 		t.Errorf("expected 0 removed when all agents would be wiped, got %d", removed)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
 	}
@@ -256,13 +253,8 @@ func TestPruneDead_AllAgentsDead(t *testing.T) {
 
 func TestPruneDead_AllDeadWithRenames(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"main:2.0": {"target":"main:2.0","state":"running","session":"main","cwd":"/code/a"},
-			"main:3.0": {"target":"main:3.0","state":"running","session":"main","cwd":"/code/b"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "main:2.0", State: "running", Session: "main", Cwd: "/code/a"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "main:3.0", State: "running", Session: "main", Cwd: "/code/b"})
 
 	// Window renumbering: main:2.0 → main:1.0, main:3.0 → main:2.0
 	// But no agents match livePanes after rename, so safety net should fire.
@@ -277,12 +269,12 @@ func TestPruneDead_AllDeadWithRenames(t *testing.T) {
 		"main:3.0": "main:2.0",
 	}
 
-	removed := PruneDead(path, livePanes, renames)
+	removed := PruneDead(tmp, livePanes, renames)
 	if removed != 0 {
 		t.Errorf("expected 0 removed (safety net), got %d", removed)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
 	}
@@ -298,14 +290,9 @@ func TestPruneDead_AllDeadWithRenames(t *testing.T) {
 
 func TestPruneDead_PartialDead(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "state.json")
-	os.WriteFile(path, []byte(`{
-		"agents": {
-			"main:1.0": {"target":"main:1.0","state":"running","session":"main"},
-			"main:1.1": {"target":"main:1.1","state":"running","session":"main"},
-			"main:2.0": {"target":"main:2.0","state":"done","session":"main"}
-		}
-	}`), 0644)
+	writeAgentFile(t, tmp, "a.json", Agent{Target: "main:1.0", State: "running", Session: "main"})
+	writeAgentFile(t, tmp, "b.json", Agent{Target: "main:1.1", State: "running", Session: "main"})
+	writeAgentFile(t, tmp, "c.json", Agent{Target: "main:2.0", State: "done", Session: "main"})
 
 	livePanes := map[string]bool{
 		"main:0.0": true,
@@ -314,12 +301,12 @@ func TestPruneDead_PartialDead(t *testing.T) {
 		// main:2.0 is dead
 	}
 
-	removed := PruneDead(path, livePanes, nil)
+	removed := PruneDead(tmp, livePanes, nil)
 	if removed != 1 {
 		t.Errorf("expected 1 removed, got %d", removed)
 	}
 
-	sf := ReadState(path)
+	sf := ReadState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents after partial prune, got %d", len(sf.Agents))
 	}

@@ -29,10 +29,10 @@ func ownTarget() string {
 }
 
 func main() {
-	statePath := DefaultStatePath()
+	stateDir := DefaultStateDir()
 
 	// Clean stale agents (>10 min since last update) on startup
-	CleanStale(statePath, 10*60)
+	CleanStale(stateDir, 10*60)
 
 	db, err := OpenDB(DefaultDBPath())
 	if err != nil {
@@ -43,11 +43,11 @@ func main() {
 	}
 
 	self := ownTarget()
-	m := newModel(statePath, self, db)
+	m := newModel(stateDir, self, db)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
-	// Start file watcher
-	watcher, err := watchStateFile(statePath, p)
+	// Start directory watcher for per-agent state files
+	watcher, err := watchStateDir(stateDir, p)
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)
