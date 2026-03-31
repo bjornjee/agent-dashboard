@@ -157,26 +157,23 @@ func TestCreateFolderMode_EnterAcceptsSuggestion(t *testing.T) {
 	}
 }
 
-func TestCreateFolderMode_EnterUsesNavigatedSuggestion(t *testing.T) {
+func TestCreateFolderMode_EnterUsesHighlightedSuggestion(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
 	m.textInput.SetValue("sales") // user typed partial query
 	m.suggestions = []string{"/Users/test/code/sales-app", "/Users/test/code/sales-demo"}
 	m.selectedSugg = 1
 
-	// Simulate having navigated with down arrow
-	m.suggNavigated = true
-
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	_, cmd := m.handleKey(msg)
 
-	// Should use the navigated suggestion, not the partial text "sales"
+	// Should use the highlighted suggestion, not the partial text "sales"
 	if cmd == nil {
-		t.Error("expected createSession command when navigated suggestion selected, got nil")
+		t.Error("expected createSession command when suggestion highlighted, got nil")
 	}
 }
 
-func TestCreateFolderMode_DownSetsNavigated(t *testing.T) {
+func TestCreateFolderMode_DownAdvancesSelection(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
 	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b"}
@@ -186,54 +183,70 @@ func TestCreateFolderMode_DownSetsNavigated(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if !rm.suggNavigated {
-		t.Error("expected suggNavigated=true after down key")
+	if rm.selectedSugg != 1 {
+		t.Errorf("expected selectedSugg=1 after down key, got %d", rm.selectedSugg)
 	}
 }
 
-func TestCreateFolderMode_TypingResetsNavigated(t *testing.T) {
+func TestCreateFolderMode_TypingResetsSelection(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
-	m.suggNavigated = true
-	m.suggestions = []string{"/Users/test/code/a"}
+	m.selectedSugg = 2
+	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b", "/Users/test/code/c"}
 
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.suggNavigated {
-		t.Error("expected suggNavigated=false after typing")
+	if rm.selectedSugg != 0 {
+		t.Errorf("expected selectedSugg=0 after typing, got %d", rm.selectedSugg)
 	}
 }
 
-func TestCreateFolderMode_EnterWithTextNoNavUsesText(t *testing.T) {
+func TestCreateFolderMode_EnterWithTextUsesSuggestionWhenVisible(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
-	m.textInput.SetValue("/Users/test/code/typed-path")
+	m.textInput.SetValue("typed")
 	m.suggestions = []string{"/Users/test/code/suggestion"}
 	m.selectedSugg = 0
-	m.suggNavigated = false // user typed but did not navigate
 
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
 	_, cmd := m.handleKey(msg)
 
-	// Should use the typed text, not the suggestion — returns a command since typed path is non-empty
+	// When suggestions are visible the highlighted entry is always used,
+	// even if the user typed partial text without navigating.
+	if cmd == nil {
+		t.Error("expected createSession command using highlighted suggestion, got nil")
+	}
+}
+
+func TestCreateFolderMode_EnterWithTextNoSuggestionsUsesText(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.textInput.SetValue("/Users/test/code/typed-path")
+	m.suggestions = nil // no suggestions visible
+	m.selectedSugg = 0
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.handleKey(msg)
+
+	// No suggestions visible — fall back to typed text.
 	if cmd == nil {
 		t.Error("expected createSession command for typed path, got nil")
 	}
 }
 
-func TestCreateFolderMode_UpSetsNavigated(t *testing.T) {
+func TestCreateFolderMode_UpWrapsSelection(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
 	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b"}
-	m.selectedSugg = 1
+	m.selectedSugg = 0
 
 	msg := tea.KeyMsg{Type: tea.KeyUp}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if !rm.suggNavigated {
-		t.Error("expected suggNavigated=true after up key")
+	if rm.selectedSugg != 1 {
+		t.Errorf("expected selectedSugg=1 after up wrap, got %d", rm.selectedSugg)
 	}
 }
