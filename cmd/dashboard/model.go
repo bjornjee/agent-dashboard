@@ -318,8 +318,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			return m, nil
 		}
-		m.statusMsg = fmt.Sprintf("Session created: %s", msg.target)
-		m.statusMsgTick = m.tickCount
+		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
 		m.updateRightContent()
 		return m, tea.Batch(loadState(m.statePath), selectPane(msg.target))
 
