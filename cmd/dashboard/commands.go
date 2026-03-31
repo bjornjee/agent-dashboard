@@ -430,16 +430,18 @@ func createSession(folder string, agents []Agent, selfPaneID string) tea.Cmd {
 		}
 
 		if found {
-			// Check pane limit
+			// Check pane limit; if the window no longer exists (stale agent
+			// state), fall through and create a fresh window instead.
 			count, cErr := TmuxCountPanes(sw)
 			if cErr != nil {
-				return createSessionMsg{err: fmt.Errorf("cannot count panes: %w", cErr)}
-			}
-			if count >= maxPanesPerWindow {
+				found = false
+			} else if count >= maxPanesPerWindow {
 				return createSessionMsg{err: fmt.Errorf("4-pane limit reached for %s", repoName)}
+			} else {
+				newTarget, err = TmuxSplitWindow(sw, absFolder)
 			}
-			newTarget, err = TmuxSplitWindow(sw, absFolder)
-		} else {
+		}
+		if !found {
 			newTarget, err = TmuxNewWindow(session, repoName, absFolder)
 		}
 
