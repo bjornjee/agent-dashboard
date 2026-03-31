@@ -741,7 +741,14 @@ func (m model) renderRightPanel() string {
 
 	// Status message
 	statusLine := ""
-	if m.statusMsg != "" {
+	if m.spawning {
+		frames := []string{"☱", "☲", "☴"}
+		frame := frames[m.tickCount%len(frames)]
+		statusLine = " " +
+			lipgloss.NewStyle().Foreground(inputColor).Render(frame) +
+			" " +
+			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
+	} else if m.statusMsg != "" {
 		statusLine = " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
 	}
 

@@ -54,6 +54,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.suggestions = nil
 			m.selectedSugg = 0
 			if folder != "" {
+				m.spawning = true
 				return m, createSession(folder, m.agents, m.selfPaneID)
 			}
 			return m, nil
