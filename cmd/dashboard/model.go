@@ -77,9 +77,9 @@ type model struct {
 	suggNavigated bool     // true when user navigated suggestions with up/down
 
 	// Banner
-	quote       string // random quote text selected at startup
-	quoteAuthor string // quote author (empty for fallback quotes)
-	nowFunc func() time.Time // injectable clock for testability
+	quote       string           // random quote text selected at startup
+	quoteAuthor string           // quote author (empty for fallback quotes)
+	nowFunc     func() time.Time // injectable clock for testability
 
 	// Path validation for z suggestions (injectable for testing)
 	pathExists func(string) bool
