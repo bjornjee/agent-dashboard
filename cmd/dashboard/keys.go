@@ -28,6 +28,14 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// When plan is visible, the right panel is just header + messageVP (full height).
+	// Route all right-panel mouse events directly to messageVP.
+	if m.planVisible && m.renderedPlan != "" {
+		var cmd tea.Cmd
+		m.messageVP, cmd = m.messageVP.Update(msg)
+		return m, cmd
+	}
+
 	// Route to inner right viewport based on Y position
 	// Header takes ~headerLines rows + 1 border
 	rightStart := 1 + bannerHeight // top border + banner
@@ -327,6 +335,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.planVisible {
 				m.messageVP.GotoTop()
 			}
+		}
+		return m, nil
+	case "J":
+		if m.planVisible && m.renderedPlan != "" {
+			m.messageVP.LineDown(1)
+		}
+		return m, nil
+	case "K":
+		if m.planVisible && m.renderedPlan != "" {
+			m.messageVP.LineUp(1)
 		}
 		return m, nil
 	case "e":

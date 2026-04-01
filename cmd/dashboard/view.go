@@ -919,6 +919,7 @@ func (m model) renderHelpBar() string {
 
 	if m.diffVisible {
 		parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
+		parts = append(parts, boldStyle.Render("J/K")+" line scroll")
 		parts = append(parts, boldStyle.Render("d/esc")+" close")
 		return helpStyle.Render("  " + strings.Join(parts, "  "))
 	}
@@ -960,6 +961,9 @@ func (m model) renderHelpBar() string {
 	parts = append(parts, boldStyle.Render("⇧↑/⇧↓")+" next agent")
 	parts = append(parts, boldStyle.Render("tab")+" focus")
 	parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
+	if m.planVisible && m.renderedPlan != "" {
+		parts = append(parts, boldStyle.Render("J/K")+" line scroll")
+	}
 	parts = append(parts, boldStyle.Render("q")+" quit")
 
 	return m.truncateHelpBar(parts)
