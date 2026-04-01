@@ -168,7 +168,7 @@ func (m model) agentListContent() string {
 
 			line := fmt.Sprintf("       %s %s %s", helpStyle.Render(prefix), subIcon, subLabel)
 			if nodeIdx == m.selected {
-				line = selectedStyle.Render(fmt.Sprintf("       %s ▶ %s", prefix, subLabel))
+				line = highlightLine(line, m.leftWidth)
 			}
 			lines = append(lines, line)
 			continue
@@ -222,7 +222,7 @@ func (m model) agentListContent() string {
 		line := fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayRepo, duration)
 
 		if nodeIdx == m.selected {
-			line = selectedStyle.Render(fmt.Sprintf("  %s %s %s  %s", si.icon, paneID, plainRepo, duration))
+			line = highlightLine(line, m.leftWidth)
 		}
 
 		lines = append(lines, line)
@@ -235,11 +235,11 @@ func (m model) agentListContent() string {
 			if maxBranch > 0 && len([]rune(branchStr)) > maxBranch {
 				branchStr = string([]rune(branchStr)[:maxBranch-1]) + "…"
 			}
+			branchLine := branchIndent + styledBranch(branchStr)
 			if nodeIdx == m.selected {
-				lines = append(lines, selectedStyle.Render(branchIndent+branchStr))
-			} else {
-				lines = append(lines, branchIndent+styledBranch(branchStr))
+				branchLine = highlightLine(branchLine, m.leftWidth)
 			}
+			lines = append(lines, branchLine)
 		}
 
 		// Metadata badges

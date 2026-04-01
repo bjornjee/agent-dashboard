@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -398,6 +399,49 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
+
+		// Insert a placeholder agent immediately so the panel doesn't jump
+		// when the state file appears on the next tick. The placeholder is
+		// naturally replaced when loadState returns with real data.
+		if sess, win, pane, ok := parseTarget(msg.target); ok {
+			already := false
+			for _, a := range m.agents {
+				if a.Target == msg.target {
+					already = true
+					break
+				}
+			}
+			if !already {
+				m.agents = append(m.agents, Agent{
+					Target:  msg.target,
+					Session: sess,
+					Window:  win,
+					Pane:    pane,
+					State:   "running",
+				})
+				// Re-sort so placeholder appears in correct position
+				sort.Slice(m.agents, func(i, j int) bool {
+					pi := statePriority[m.agents[i].State]
+					pj := statePriority[m.agents[j].State]
+					if pi == 0 {
+						pi = 99
+					}
+					if pj == 0 {
+						pj = 99
+					}
+					if pi != pj {
+						return pi < pj
+					}
+					if m.agents[i].Window != m.agents[j].Window {
+						return m.agents[i].Window < m.agents[j].Window
+					}
+					return m.agents[i].Pane < m.agents[j].Pane
+				})
+				m.buildTree()
+				m.updateLeftContent()
+			}
+		}
+
 		m.updateRightContent()
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
 
