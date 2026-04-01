@@ -206,28 +206,22 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "up", "k":
 		if m.selected > 0 {
+			m.saveCurrentCache()
 			m.selected--
 			m.statusMsg = ""
 			m.mode = modeNormal
-			m.conversation = nil
-			m.planContent = ""
-			m.planVisible = false
-			m.renderedPlan = ""
-			m.subActivity = nil
+			m.restoreCurrentCache()
 			m.updateLeftContent()
 			m.updateRightContent()
 			return m, m.loadSelectionData()
 		}
 	case "down", "j":
 		if m.selected < len(m.treeNodes)-1 {
+			m.saveCurrentCache()
 			m.selected++
 			m.statusMsg = ""
 			m.mode = modeNormal
-			m.conversation = nil
-			m.planContent = ""
-			m.planVisible = false
-			m.renderedPlan = ""
-			m.subActivity = nil
+			m.restoreCurrentCache()
 			m.updateLeftContent()
 			m.updateRightContent()
 			return m, m.loadSelectionData()
@@ -271,14 +265,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Jump to next parent agent (skip subagents)
 		next := m.nextParentIndex(1)
 		if next != m.selected {
+			m.saveCurrentCache()
 			m.selected = next
 			m.statusMsg = ""
 			m.mode = modeNormal
-			m.conversation = nil
-			m.planContent = ""
-			m.planVisible = false
-			m.renderedPlan = ""
-			m.subActivity = nil
+			m.restoreCurrentCache()
 			m.updateLeftContent()
 			m.updateRightContent()
 			return m, m.loadSelectionData()
@@ -287,14 +278,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Jump to previous parent agent (skip subagents)
 		prev := m.nextParentIndex(-1)
 		if prev != m.selected {
+			m.saveCurrentCache()
 			m.selected = prev
 			m.statusMsg = ""
 			m.mode = modeNormal
-			m.conversation = nil
-			m.planContent = ""
-			m.planVisible = false
-			m.renderedPlan = ""
-			m.subActivity = nil
+			m.restoreCurrentCache()
 			m.updateLeftContent()
 			m.updateRightContent()
 			return m, m.loadSelectionData()

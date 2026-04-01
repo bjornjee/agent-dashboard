@@ -983,3 +983,191 @@ func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
 		t.Error("expected placeholder agent for main:2.0 to be present immediately after create")
 	}
 }
+
+func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/a"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	// Simulate conversation loaded for agent A
+	m.conversation = []ConversationEntry{
+		{Role: "assistant", Content: "Hello from agent A"},
+	}
+	m.capturedLines = []string{"live output A"}
+	m.planContent = "plan A"
+	m.renderedPlan = "rendered plan A"
+
+	// Save agent A's state, switch to agent B
+	m.saveCurrentCache()
+	m.selected = 1
+	m.restoreCurrentCache()
+
+	// Agent B should have empty state
+	if len(m.conversation) != 0 {
+		t.Errorf("expected empty conversation for uncached agent B, got %d entries", len(m.conversation))
+	}
+	if len(m.capturedLines) != 0 {
+		t.Errorf("expected empty capturedLines for uncached agent B, got %d", len(m.capturedLines))
+	}
+	if m.planContent != "" {
+		t.Errorf("expected empty planContent for uncached agent B, got %q", m.planContent)
+	}
+
+	// Switch back to agent A — state should be restored
+	m.saveCurrentCache()
+	m.selected = 0
+	m.restoreCurrentCache()
+
+	if len(m.conversation) != 1 || m.conversation[0].Content != "Hello from agent A" {
+		t.Errorf("expected agent A conversation to be restored, got %v", m.conversation)
+	}
+	if len(m.capturedLines) != 1 || m.capturedLines[0] != "live output A" {
+		t.Errorf("expected agent A capturedLines to be restored, got %v", m.capturedLines)
+	}
+	if m.planContent != "plan A" {
+		t.Errorf("expected agent A planContent to be restored, got %q", m.planContent)
+	}
+}
+
+func TestSaveRestoreCache_SubagentKey(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.agentSubagents["main:1.0"] = []SubagentInfo{
+		{AgentID: "sub1", AgentType: "Explore", Description: "test"},
+	}
+	m.buildTree()
+	// Tree: [parent, sub1]
+
+	// Select subagent
+	m.selected = 1
+	m.subActivity = []ActivityEntry{{Kind: "tool", Content: "ls"}}
+	m.saveCurrentCache()
+
+	// Switch to parent
+	m.selected = 0
+	m.restoreCurrentCache()
+	if len(m.subActivity) != 0 {
+		t.Errorf("parent should not have subActivity, got %d entries", len(m.subActivity))
+	}
+
+	// Switch back to subagent — activity should be restored
+	m.saveCurrentCache()
+	m.selected = 1
+	m.restoreCurrentCache()
+	if len(m.subActivity) != 1 {
+		t.Errorf("expected subagent activity to be restored, got %d entries", len(m.subActivity))
+	}
+}
+
+func TestCreateSession_CallsResizeViewports(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	origRightWidth := m.rightWidth
+	origFilesH := m.filesVP.Height
+
+	// Simulate createSessionMsg
+	result, _ := m.Update(createSessionMsg{target: "main:2.0"})
+	rm := result.(model)
+
+	// Viewport dimensions should remain consistent (resizeViewports was called)
+	if rm.rightWidth != origRightWidth {
+		t.Errorf("rightWidth changed after createSession: %d → %d", origRightWidth, rm.rightWidth)
+	}
+	if rm.filesVP.Height != origFilesH {
+		t.Errorf("filesVP.Height changed after createSession: %d → %d", origFilesH, rm.filesVP.Height)
+	}
+}
+
+func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	// Populate caches for both agents
+	m.selected = 0
+	m.conversation = []ConversationEntry{{Role: "assistant", Content: "A"}}
+	m.saveCurrentCache()
+	m.selected = 1
+	m.conversation = []ConversationEntry{{Role: "assistant", Content: "B"}}
+	m.saveCurrentCache()
+
+	if len(m.agentCaches) != 2 {
+		t.Fatalf("expected 2 caches, got %d", len(m.agentCaches))
+	}
+
+	// Simulate state update where agent main:2.0 is gone
+	newState := StateFile{Agents: map[string]Agent{
+		"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}}
+	result, _ := m.Update(stateUpdatedMsg{state: newState})
+	rm := result.(model)
+
+	if len(rm.agentCaches) != 1 {
+		t.Errorf("expected cache pruned to 1, got %d", len(rm.agentCaches))
+	}
+	if _, ok := rm.agentCaches["main:2.0"]; ok {
+		t.Error("cache for removed agent main:2.0 should have been pruned")
+	}
+}
+
+func TestNavigationDown_PreservesHistory(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/a"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	// Load conversation for agent A
+	m.conversation = []ConversationEntry{
+		{Role: "assistant", Content: "Agent A message"},
+	}
+	m.renderedHistory = "cached history"
+	m.historyConvLen = 1
+
+	// Navigate down to agent B
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	rm := result.(model)
+
+	if rm.selected != 1 {
+		t.Fatalf("expected selected=1 after down, got %d", rm.selected)
+	}
+
+	// Navigate back up to agent A
+	result, _ = rm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	rm = result.(model)
+
+	if rm.selected != 0 {
+		t.Fatalf("expected selected=0 after up, got %d", rm.selected)
+	}
+
+	// Agent A's conversation should be restored from cache
+	if len(rm.conversation) != 1 || rm.conversation[0].Content != "Agent A message" {
+		t.Errorf("expected agent A conversation to be restored after navigate back, got %v", rm.conversation)
+	}
+}
