@@ -66,7 +66,20 @@ func TmuxJump(target string) error {
 		return fmt.Errorf("select-pane failed for %s: %w", target, err)
 	}
 
+	// Best-effort zoom: fails harmlessly when the window has only one pane.
+	_ = TmuxZoomPane(target)
+
 	return nil
+}
+
+// TmuxZoomPane toggles zoom on a tmux pane (equivalent to prefix + z).
+func TmuxZoomPane(target string) error {
+	if err := ValidateTarget(target); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, "tmux", "resize-pane", "-Z", "-t", target).Run()
 }
 
 // TmuxSelectPane switches focus to the given tmux pane without changing window.
@@ -99,11 +112,27 @@ func TmuxSendRaw(target, key string) error {
 	return exec.CommandContext(ctx, "tmux", "send-keys", "-t", target, key).Run()
 }
 
-// TmuxKillPane kills a tmux pane by target.
+// TmuxKillPane kills a tmux pane by target and rebalances the window layout.
 func TmuxKillPane(target string) error {
+	sw := extractSessionWindow(target)
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
 	defer cancel()
-	return exec.CommandContext(ctx, "tmux", "kill-pane", "-t", target).Run()
+	if err := exec.CommandContext(ctx, "tmux", "kill-pane", "-t", target).Run(); err != nil {
+		return fmt.Errorf("kill-pane failed for %s: %w", target, err)
+	}
+	// Rebalance remaining panes; ignore error (window may now be empty)
+	_ = TmuxEvenLayout(sw)
+	return nil
+}
+
+// TmuxEvenLayout applies a tiled layout to evenly space panes in a window.
+func TmuxEvenLayout(sessionWindow string) error {
+	if err := ValidateTarget(sessionWindow); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, "tmux", "select-layout", "-t", sessionWindow, "tiled").Run()
 }
 
 // ResolveTarget resolves a tmux pane ID (%N) to its current target string
@@ -266,6 +295,8 @@ func TmuxSplitWindow(sessionWindow, startDir string) (string, error) {
 	if err := ValidateTarget(target); err != nil {
 		return "", fmt.Errorf("split-window returned invalid target %q: %w", target, err)
 	}
+	// Rebalance panes in the window after adding one
+	_ = TmuxEvenLayout(sessionWindow)
 	return target, nil
 }
 
