@@ -35,6 +35,15 @@ type Agent struct {
 	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
 }
 
+// EffectiveDir returns the best directory for git operations and editor opening.
+// Prefers WorktreeCwd (agent may be in a worktree) over Cwd (launch directory).
+func (a Agent) EffectiveDir() string {
+	if a.WorktreeCwd != "" {
+		return a.WorktreeCwd
+	}
+	return a.Cwd
+}
+
 // StateFile is the in-memory aggregate of all per-agent JSON files.
 type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
@@ -153,11 +162,23 @@ func ResolveAgentTargets(sf *StateFile, paneTargets map[string]PaneTarget) {
 }
 
 // ResolveAgentBranches overwrites each agent's Branch with the live value
-// from git. If WorktreeCwd is set, it is tried first (the agent may be
-// operating in a worktree whose branch differs from the launch directory).
-// Falls back to Cwd. Agents where both fail are left unchanged.
-func ResolveAgentBranches(sf *StateFile) {
+// from git using a hierarchical resolution strategy:
+//  1. WorktreeCwd — the agent may be operating in a worktree
+//  2. Cwd — the launch directory from the state file
+//  3. paneCwds — live tmux pane working directory (fallback when hooks omit cwd)
+//
+// When an agent has no Cwd but a tmux pane cwd is available, Cwd is
+// backfilled so that agentLabel() and the detail header can display it.
+// Agents where all sources fail are left unchanged.
+func ResolveAgentBranches(sf *StateFile, paneCwds map[string]string) {
 	for key, agent := range sf.Agents {
+		// Backfill Cwd from tmux pane when the state file lacks it
+		if agent.Cwd == "" && agent.TmuxPaneID != "" && paneCwds != nil {
+			if pc, ok := paneCwds[agent.TmuxPaneID]; ok {
+				agent.Cwd = pc
+			}
+		}
+
 		var branch string
 		if agent.WorktreeCwd != "" {
 			branch = gitBranch(agent.WorktreeCwd)

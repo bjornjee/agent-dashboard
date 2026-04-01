@@ -426,7 +426,7 @@ func TestResolveAgentBranches(t *testing.T) {
 		},
 	}
 
-	ResolveAgentBranches(&sf)
+	ResolveAgentBranches(&sf, nil)
 
 	// Agent with valid cwd should have branch updated to something non-empty and not the stale value
 	if sf.Agents["with-cwd"].Branch == "stale-branch" || sf.Agents["with-cwd"].Branch == "" {
@@ -463,7 +463,7 @@ func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
 		},
 	}
 
-	ResolveAgentBranches(&sf)
+	ResolveAgentBranches(&sf, nil)
 
 	if sf.Agents["worktree"].Branch == "stale" || sf.Agents["worktree"].Branch == "" {
 		t.Errorf("worktree: expected branch from WorktreeCwd, got %q", sf.Agents["worktree"].Branch)
@@ -476,6 +476,49 @@ func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
 	}
 	if sf.Agents["both-bad"].Branch != "should-stay" {
 		t.Errorf("both-bad: expected unchanged, got %q", sf.Agents["both-bad"].Branch)
+	}
+}
+
+func TestResolveAgentBranches_PaneCwdFallback(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			// No Cwd, no WorktreeCwd — should backfill from paneCwds and resolve branch
+			"no-cwd": {TmuxPaneID: "%10", Branch: "stale", State: "running"},
+			// Has Cwd already — should NOT be overwritten by paneCwds
+			"has-cwd": {TmuxPaneID: "%11", Cwd: cwd, Branch: "stale", State: "running"},
+			// No TmuxPaneID — cannot use paneCwds fallback
+			"no-pane": {Branch: "should-stay", State: "running"},
+		},
+	}
+
+	paneCwds := map[string]string{
+		"%10": cwd,
+		"%11": "/should/not/be/used",
+	}
+
+	ResolveAgentBranches(&sf, paneCwds)
+
+	// no-cwd: Cwd should be backfilled and branch resolved
+	if sf.Agents["no-cwd"].Cwd != cwd {
+		t.Errorf("no-cwd: expected Cwd backfilled to %q, got %q", cwd, sf.Agents["no-cwd"].Cwd)
+	}
+	if sf.Agents["no-cwd"].Branch == "stale" || sf.Agents["no-cwd"].Branch == "" {
+		t.Errorf("no-cwd: expected branch resolved from paneCwds, got %q", sf.Agents["no-cwd"].Branch)
+	}
+
+	// has-cwd: Cwd should remain unchanged (not overwritten)
+	if sf.Agents["has-cwd"].Cwd != cwd {
+		t.Errorf("has-cwd: Cwd should remain %q, got %q", cwd, sf.Agents["has-cwd"].Cwd)
+	}
+
+	// no-pane: should be unchanged
+	if sf.Agents["no-pane"].Branch != "should-stay" {
+		t.Errorf("no-pane: expected unchanged, got %q", sf.Agents["no-pane"].Branch)
 	}
 }
 
@@ -494,6 +537,26 @@ func TestGitBranch(t *testing.T) {
 
 	// Empty path — git -C "" resolves to cwd, so gitBranch may return
 	// a value. ResolveAgentBranches guards against empty Cwd upstream.
+}
+
+func TestEffectiveDir(t *testing.T) {
+	tests := []struct {
+		name  string
+		agent Agent
+		want  string
+	}{
+		{"worktree preferred", Agent{Cwd: "/launch", WorktreeCwd: "/worktree"}, "/worktree"},
+		{"cwd fallback", Agent{Cwd: "/launch"}, "/launch"},
+		{"both empty", Agent{}, ""},
+		{"worktree only", Agent{WorktreeCwd: "/worktree"}, "/worktree"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.agent.EffectiveDir(); got != tt.want {
+				t.Errorf("EffectiveDir() = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestFormatDuration(t *testing.T) {
