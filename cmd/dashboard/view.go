@@ -966,6 +966,7 @@ func (m model) renderHelpBar() string {
 	}
 	parts = append(parts, boldStyle.Render("e")+" editor")
 	parts = append(parts, boldStyle.Render("d")+" diff")
+	parts = append(parts, boldStyle.Render("g")+" PR")
 	parts = append(parts, boldStyle.Render("a")+" new")
 	parts = append(parts, boldStyle.Render("u")+" usage")
 	parts = append(parts, boldStyle.Render("c")+" collapse")

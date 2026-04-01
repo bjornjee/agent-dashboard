@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -459,6 +461,90 @@ func openEditor(dir string) tea.Cmd {
 	return func() tea.Msg {
 		cmd := exec.Command("code", dir)
 		return openEditorMsg{err: cmd.Start()}
+	}
+}
+
+func gitRemoteURL(dir string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "remote", "get-url", "origin").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func parseGitHubRepo(remoteURL string) (owner, repo string, ok bool) {
+	remoteURL = strings.TrimSpace(remoteURL)
+
+	// SSH: git@github.com:owner/repo.git
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		path := strings.TrimPrefix(remoteURL, "git@github.com:")
+		path = strings.TrimSuffix(path, ".git")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+		return "", "", false
+	}
+
+	// HTTPS: https://github.com/owner/repo.git
+	if strings.HasPrefix(remoteURL, "https://github.com/") {
+		path := strings.TrimPrefix(remoteURL, "https://github.com/")
+		path = strings.TrimSuffix(path, ".git")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+		return "", "", false
+	}
+
+	return "", "", false
+}
+
+func gitDefaultBranch(dir string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "symbolic-ref", "refs/remotes/origin/HEAD").Output()
+	if err == nil {
+		ref := strings.TrimSpace(string(out))
+		// refs/remotes/origin/main -> main
+		if parts := strings.Split(ref, "/"); len(parts) > 0 {
+			return parts[len(parts)-1]
+		}
+	}
+	return "main"
+}
+
+func buildPRURL(owner, repo, base, branch string) string {
+	return fmt.Sprintf("https://github.com/%s/%s/compare/%s...%s?expand=1",
+		url.PathEscape(owner),
+		url.PathEscape(repo),
+		url.PathEscape(base),
+		url.PathEscape(branch),
+	)
+}
+
+func openPR(dir, branch string) tea.Cmd {
+	return func() tea.Msg {
+		base := gitDefaultBranch(dir)
+		if branch == base {
+			return openPRMsg{err: fmt.Errorf("cannot create PR from %s branch", branch)}
+		}
+
+		remoteURL, err := gitRemoteURL(dir)
+		if err != nil {
+			return openPRMsg{err: fmt.Errorf("failed to get remote: %w", err)}
+		}
+
+		owner, repo, ok := parseGitHubRepo(remoteURL)
+		if !ok {
+			return openPRMsg{err: fmt.Errorf("not a GitHub remote: %s", remoteURL)}
+		}
+
+		prURL := buildPRURL(owner, repo, base, branch)
+		cmd := exec.Command("open", prURL)
+		return openPRMsg{err: cmd.Start()}
 	}
 }
 
