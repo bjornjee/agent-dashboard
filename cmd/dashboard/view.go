@@ -61,19 +61,19 @@ func (m *model) updateRightContent() {
 		return
 	}
 
+	// Usage mode overrides right panel content (works even with no agents)
+	if m.mode == modeUsage {
+		m.filesVP.SetContent("")
+		m.historyVP.SetContent("")
+		m.messageVP.SetContent(m.usageContent())
+		return
+	}
+
 	agent := m.selectedAgent()
 	if agent == nil {
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
 		m.messageVP.SetContent("  No agents found")
-		return
-	}
-
-	// Usage mode overrides right panel content
-	if m.mode == modeUsage {
-		m.filesVP.SetContent("")
-		m.historyVP.SetContent("")
-		m.messageVP.SetContent(m.usageContent())
 		return
 	}
 
