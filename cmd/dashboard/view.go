@@ -673,7 +673,7 @@ func (m model) renderRightPanel() string {
 		if name == "" {
 			name = agent.Target
 		}
-		header = append(header, titleStyle.Render(fmt.Sprintf(" PEEK: %s ", name)))
+		header = append(header, titleStyle.Render(fmt.Sprintf(" %s ", name)))
 		header = append(header, "")
 
 		effState := agent.State
@@ -698,21 +698,32 @@ func (m model) renderRightPanel() string {
 		if agent.PermissionMode != "" && agent.PermissionMode != "default" {
 			metaParts = append(metaParts, permissionModeStyle(agent.PermissionMode))
 		}
-		header = append(header, " "+strings.Join(metaParts, helpStyle.Render(" │ ")))
+		header = append(header, " "+strings.Join(metaParts, helpStyle.Render(" | ")))
 		header = append(header, "")
 
+		dimLabel := lipgloss.NewStyle().Foreground(themeSubtext0)
+
 		if agent.Branch != "" {
-			header = append(header, fmt.Sprintf(" Branch: %s", boldStyle.Render(agent.Branch)))
+			header = append(header, fmt.Sprintf(" %s %s", dimLabel.Render("branch"), boldStyle.Render(agent.Branch)))
+		}
+		repo := repoFromCwd(agent.WorktreeCwd)
+		if repo == "" {
+			repo = repoFromCwd(agent.Cwd)
+		}
+		if repo != "" {
+			header = append(header, fmt.Sprintf(" %s  %s", dimLabel.Render("folder"), repo))
 		}
 		if agent.Cwd != "" {
-			dirLine := fmt.Sprintf(" Dir: %s", agent.Cwd)
+			dirLine := fmt.Sprintf(" %s    %s", dimLabel.Render("dir"), agent.Cwd)
 			for _, wl := range wrapText(dirLine, m.rightWidth-4) {
 				header = append(header, wl)
 			}
 		}
+		header = append(header, "")
 
 		if u, ok := m.agentUsage[agent.Target]; ok && u.OutputTokens > 0 {
-			costLine := fmt.Sprintf(" Cost: %s  (in: %s  out: %s  cache: %s)",
+			costLine := fmt.Sprintf(" %s   %s  (in: %s  out: %s  cache: %s)",
+				dimLabel.Render("cost"),
 				boldStyle.Render(FormatCost(u.CostUSD)),
 				FormatTokens(u.InputTokens),
 				FormatTokens(u.OutputTokens),
@@ -723,7 +734,8 @@ func (m model) renderRightPanel() string {
 		}
 
 		if agent.SubagentCount > 0 {
-			header = append(header, fmt.Sprintf(" Subagents: %s active",
+			header = append(header, fmt.Sprintf(" %s %s active",
+				dimLabel.Render("agents"),
 				lipgloss.NewStyle().Foreground(runningColor).Bold(true).
 					Render(fmt.Sprintf("%d", agent.SubagentCount))))
 		}

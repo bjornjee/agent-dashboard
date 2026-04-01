@@ -79,6 +79,24 @@ func TestAgentLabel(t *testing.T) {
 			want: "skills/feat/dashboard-agent-naming",
 		},
 		{
+			name: "worktree_cwd preferred over cwd",
+			agent: Agent{
+				Cwd:         "/Users/bjornjee/Code/tomoro",
+				WorktreeCwd: "/Users/bjornjee/Code/tomoro/worktrees/tomoro-meta-harness/refactor-branch",
+				Branch:      "refactor-branch",
+			},
+			want: "tomoro-meta-harness/refactor-branch",
+		},
+		{
+			name: "worktree_cwd non-worktree path",
+			agent: Agent{
+				Cwd:         "/Users/bjornjee/Code/tomoro",
+				WorktreeCwd: "/Users/bjornjee/Code/tomoro/tomoro-meta-harness",
+				Branch:      "main",
+			},
+			want: "tomoro-meta-harness/main",
+		},
+		{
 			name: "repo only no branch",
 			agent: Agent{
 				Cwd: "/Users/bjornjee/Code/bjornjee/skills",
