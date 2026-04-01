@@ -126,6 +126,29 @@ func agentFileMap(dir string) map[string]string {
 	return m
 }
 
+// ResolveAgentTargets updates each agent's Target, Session, Window, and Pane
+// to match the live tmux state. paneTargets maps pane IDs (%N) to their current
+// coordinates. Agents without a TmuxPaneID or without a match are left unchanged.
+func ResolveAgentTargets(sf *StateFile, paneTargets map[string]PaneTarget) {
+	if paneTargets == nil {
+		return
+	}
+	for key, agent := range sf.Agents {
+		if agent.TmuxPaneID == "" {
+			continue
+		}
+		pt, ok := paneTargets[agent.TmuxPaneID]
+		if !ok {
+			continue
+		}
+		agent.Target = pt.Target
+		agent.Session = pt.Session
+		agent.Window = pt.Window
+		agent.Pane = pt.Pane
+		sf.Agents[key] = agent
+	}
+}
+
 // SortedAgents returns agents sorted by state priority, then by updated_at.
 // selfPaneID is excluded from the list (the dashboard's own pane, e.g. "%5").
 func SortedAgents(sf StateFile, selfPaneID string) []Agent {
