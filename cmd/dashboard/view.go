@@ -99,7 +99,11 @@ func (m *model) updateRightContent() {
 	} else if needsAttention {
 		m.messageVP.SetContent(m.waitingMessageContent())
 	} else if isDone {
-		m.messageVP.SetContent(m.finalMessageContent())
+		if m.mode == modeReply {
+			m.messageVP.SetContent(m.waitingMessageContent())
+		} else {
+			m.messageVP.SetContent(m.finalMessageContent())
+		}
 	} else if m.tmuxAvailable && hasContent(m.capturedLines) {
 		w := m.rightWidth - 4
 		var lines []string
@@ -747,9 +751,15 @@ func (m model) renderRightPanel() string {
 				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
 		} else if isDone {
-			messageLabel = " " + lipgloss.NewStyle().Foreground(doneColor).Bold(true).
-				Render("── Final message") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 12))
+			if m.mode == modeReply {
+				messageLabel = " " + lipgloss.NewStyle().Foreground(inputColor).Bold(true).
+					Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+					" " + helpStyle.Render(strings.Repeat("─", 9))
+			} else {
+				messageLabel = " " + lipgloss.NewStyle().Foreground(doneColor).Bold(true).
+					Render("── Final message") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+					" " + helpStyle.Render(strings.Repeat("─", 12))
+			}
 		} else {
 			messageLabel = " " + boldStyle.Render("── Live") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 21))

@@ -301,6 +301,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeReply
 			m.textInput.Focus()
 			m.updateRightContent()
+			m.messageVP.GotoBottom()
 			return m, textinput.Blink
 		}
 	case "p":
