@@ -66,6 +66,10 @@ type model struct {
 	leftWidth  int
 	rightWidth int
 
+	// Diff-specific layout (narrower left, wider right)
+	diffLeftWidth  int
+	diffRightWidth int
+
 	// Subagent tree
 	agentSubagents map[string][]SubagentInfo // parentTarget → subagents
 	collapsed      map[string]bool           // parentTarget → collapsed state
@@ -81,8 +85,10 @@ type model struct {
 	diffVisible      bool
 	diffFiles        []*gitdiff.File
 	selectedDiffFile int
+	diffExpandedAll  bool // expand/collapse all context blocks
 	diffFileVP       viewport.Model
 	diffContentVP    viewport.Model
+	diffFuncCtx      []string // per-row function context for sticky header
 
 	// Close confirmation
 	confirmPaneID    string // tmux pane ID (%N) pending close
@@ -553,14 +559,19 @@ func (m *model) resizeViewports() {
 
 	m.textInput.Width = m.rightWidth - 12 // account for "Reply: " prefix + padding
 
-	// Diff viewer viewports
+	// Diff viewer viewports (narrower left panel for file list)
+	m.diffLeftWidth = m.width*20/100 - 2
+	if m.diffLeftWidth < 20 {
+		m.diffLeftWidth = 20
+	}
+	m.diffRightWidth = m.width - m.diffLeftWidth - 4
 	diffPanelHeight := panelHeight - 4 // header + padding
 	if diffPanelHeight < 3 {
 		diffPanelHeight = 3
 	}
-	m.diffFileVP.Width = m.leftWidth
+	m.diffFileVP.Width = m.diffLeftWidth
 	m.diffFileVP.Height = diffPanelHeight
-	m.diffContentVP.Width = m.rightWidth
+	m.diffContentVP.Width = m.diffRightWidth
 	m.diffContentVP.Height = diffPanelHeight
 
 	if m.planContent != "" && m.planVisible {

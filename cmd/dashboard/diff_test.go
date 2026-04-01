@@ -121,15 +121,85 @@ func TestDiffSideBySideContent(t *testing.T) {
 	m.selectedDiffFile = 0
 	m.diffVisible = true
 
-	content := m.diffSideBySideContent()
+	content, _ := m.diffSideBySideContent()
+	plain := stripANSI(content)
 
 	if content == "" {
 		t.Fatal("expected non-empty side-by-side content")
 	}
-	if !strings.Contains(content, "old line") {
-		t.Fatal("expected content to contain 'old line'")
+	if !strings.Contains(plain, "old line") {
+		t.Fatalf("expected content to contain 'old line', got:\n%s", plain)
 	}
-	if !strings.Contains(content, "new line") {
-		t.Fatal("expected content to contain 'new line'")
+	if !strings.Contains(plain, "new line") {
+		t.Fatalf("expected content to contain 'new line', got:\n%s", plain)
+	}
+}
+
+func TestSyntaxHighlightLine(t *testing.T) {
+	lexer := getLexerForFile("test.go")
+	if lexer == nil {
+		t.Fatal("expected lexer for .go file")
+	}
+
+	highlighted := syntaxHighlightLine(lexer, "func main() {")
+	if highlighted == "func main() {" {
+		t.Fatal("expected highlighted output to differ from plain text")
+	}
+	if !strings.Contains(highlighted, "\x1b[") {
+		t.Fatal("expected ANSI escape codes in highlighted output")
+	}
+}
+
+func TestApplyDiffBackground(t *testing.T) {
+	result := applyDiffBackground("hello", 40, 56, 40, 20)
+	if !strings.Contains(result, "\x1b[48;2;40;56;40m") {
+		t.Fatal("expected background ANSI code in result")
+	}
+	if !strings.Contains(result, "hello") {
+		t.Fatal("expected original content preserved")
+	}
+}
+
+func TestCollapsibleContextBlocks(t *testing.T) {
+	m := newModel("/tmp/test-state.json", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	// Create 10 context lines to trigger collapsing
+	var lines []gitdiff.Line
+	for i := 0; i < 10; i++ {
+		lines = append(lines, gitdiff.Line{Op: gitdiff.OpContext, Line: fmt.Sprintf("context line %d\n", i)})
+	}
+
+	m.diffFiles = []*gitdiff.File{
+		{
+			OldName: "test.go",
+			NewName: "test.go",
+			TextFragments: []*gitdiff.TextFragment{
+				{
+					OldPosition: 1,
+					NewPosition: 1,
+					Lines:       lines,
+				},
+			},
+		},
+	}
+	m.selectedDiffFile = 0
+	m.diffVisible = true
+	m.diffExpandedAll = false
+
+	collapsed, _ := m.diffSideBySideContent()
+	collapsedPlain := stripANSI(collapsed)
+	if !strings.Contains(collapsedPlain, "lines hidden") {
+		t.Fatalf("expected collapsed placeholder, got:\n%s", collapsedPlain)
+	}
+
+	// Now expand
+	m.diffExpandedAll = true
+	expanded, _ := m.diffSideBySideContent()
+	expandedPlain := stripANSI(expanded)
+	if strings.Contains(expandedPlain, "lines hidden") {
+		t.Fatal("expected no collapsed placeholder when expanded")
 	}
 }
