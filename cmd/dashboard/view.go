@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // -- Content Builders --
@@ -248,6 +249,13 @@ func (m model) agentListContent() string {
 		// Collapse indicator if has subagents
 		if subs := m.agentSubagents[agent.Target]; len(subs) > 0 && m.collapsed[agent.Target] {
 			lines = append(lines, helpStyle.Render(fmt.Sprintf("       ▸ %d subagents (c to expand)", len(subs))))
+		}
+	}
+
+	// Clamp all lines to panel width to prevent layout overflow
+	if m.leftWidth > 0 {
+		for i, line := range lines {
+			lines[i] = ansi.Truncate(line, m.leftWidth, "…")
 		}
 	}
 
