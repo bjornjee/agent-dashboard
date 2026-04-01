@@ -1041,6 +1041,44 @@ func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
 	}
 }
 
+func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	m := newModel("/tmp/test-state.json", "%0", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	// Agent at window 1 with file changes — user is looking at this agent
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running",
+			FilesChanged: []string{"+old_file.go"}},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	// Verify pre-condition: selected agent is main:1.0
+	if agent := m.selectedAgent(); agent == nil || agent.Target != "main:1.0" {
+		t.Fatal("pre-condition: expected main:1.0 to be selected")
+	}
+
+	// Create a new session — the placeholder sorts before or after the existing agent.
+	// The bug: m.selected stays at 0 even though the agent at index 0 may change.
+	m.statusMsg = "spawning"
+	result, _ := m.Update(createSessionMsg{target: "main:0.0", err: nil})
+	rm := result.(model)
+
+	// After creating a new agent, the previously selected agent (main:1.0)
+	// should still be selected — NOT the newly created placeholder.
+	agent := rm.selectedAgent()
+	if agent == nil {
+		t.Fatal("expected a selected agent after create, got nil")
+	}
+	if agent.Target != "main:1.0" {
+		t.Errorf("expected selection to stay on main:1.0, got %q (stale selection)", agent.Target)
+	}
+}
+
 func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 	m := newModel("", "", nil)
 	m.width = 120
