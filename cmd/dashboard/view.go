@@ -562,8 +562,14 @@ func (m model) View() string {
 	}
 
 	banner := m.renderBanner()
-	left := m.renderLeftPanel()
-	right := m.renderRightPanel()
+	var left, right string
+	if m.diffVisible {
+		left = m.renderDiffFilePanel()
+		right = m.renderDiffContentPanel()
+	} else {
+		left = m.renderLeftPanel()
+		right = m.renderRightPanel()
+	}
 	main := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	help := m.renderHelpBar()
@@ -821,6 +827,12 @@ func (m model) renderHelpBar() string {
 
 	parts = append(parts, boldStyle.Render("↑/↓")+" navigate")
 
+	if m.diffVisible {
+		parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
+		parts = append(parts, boldStyle.Render("d/esc")+" close")
+		return helpStyle.Render("  " + strings.Join(parts, "  "))
+	}
+
 	if m.mode == modeCreateFolder {
 		parts = append(parts, boldStyle.Render("enter")+" create")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
@@ -850,6 +862,7 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, boldStyle.Render("p")+" plan")
 	}
 	parts = append(parts, boldStyle.Render("e")+" editor")
+	parts = append(parts, boldStyle.Render("d")+" diff")
 	parts = append(parts, boldStyle.Render("a")+" new")
 	parts = append(parts, boldStyle.Render("u")+" usage")
 	parts = append(parts, boldStyle.Render("c")+" collapse")

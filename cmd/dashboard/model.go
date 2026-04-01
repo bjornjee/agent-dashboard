@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bluekeyes/go-gitdiff/gitdiff"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -65,6 +66,13 @@ type model struct {
 	planContent  string
 	planVisible  bool   // true when plan is shown in message VP
 	renderedPlan string // glamour-rendered plan markdown
+
+	// Diff viewer
+	diffVisible      bool
+	diffFiles        []*gitdiff.File
+	selectedDiffFile int
+	diffFileVP       viewport.Model
+	diffContentVP    viewport.Model
 
 	// Close confirmation
 	confirmPaneID    string // tmux pane ID (%N) pending close
@@ -199,6 +207,8 @@ func newModel(statePath, selfPaneID string, db *DB) model {
 		historyVP:       viewport.New(0, 0),
 		messageVP:       viewport.New(0, 0),
 		focusedVP:       focusAgentList,
+		diffFileVP:      viewport.New(0, 0),
+		diffContentVP:   viewport.New(0, 0),
 		agentSubagents:  make(map[string][]SubagentInfo),
 		collapsed:       make(map[string]bool),
 		dismissed:       make(map[string]bool),
@@ -425,6 +435,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case diffMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Diff failed: %v", msg.err)
+			m.statusMsgTick = m.tickCount
+			return m, nil
+		}
+		if len(msg.files) == 0 {
+			m.statusMsg = "No changes"
+			m.statusMsgTick = m.tickCount
+			return m, nil
+		}
+		m.diffFiles = msg.files
+		m.selectedDiffFile = 0
+		m.diffVisible = true
+		m.updateDiffContent()
+		return m, nil
+
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
 
@@ -463,6 +490,16 @@ func (m *model) resizeViewports() {
 	m.messageVP.Height = msgHeight
 
 	m.textInput.Width = m.rightWidth - 12 // account for "Reply: " prefix + padding
+
+	// Diff viewer viewports
+	diffPanelHeight := panelHeight - 4 // header + padding
+	if diffPanelHeight < 3 {
+		diffPanelHeight = 3
+	}
+	m.diffFileVP.Width = m.leftWidth
+	m.diffFileVP.Height = diffPanelHeight
+	m.diffContentVP.Width = m.rightWidth
+	m.diffContentVP.Height = diffPanelHeight
 
 	if m.planContent != "" && m.planVisible {
 		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
