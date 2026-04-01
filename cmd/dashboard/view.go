@@ -198,30 +198,49 @@ func (m model) agentListContent() string {
 
 		paneID := fmt.Sprintf("%d.%d", agent.Window, agent.Pane)
 
-		plainLabel := agentLabel(agent)
-		styledLabel := agentLabelStyled(agent)
+		repo := agentRepo(agent)
+		repoStyled := agentRepoStyled(agent)
 
 		duration := ""
 		if effState == "running" {
 			duration = FormatDuration(agent.UpdatedAt)
 		}
 
-		maxLabel := m.leftWidth - 5 - len(paneID) - 2 - len(duration)
-		// Fall back to plain text when truncation is needed; styled ANSI cannot be safely sliced.
-		displayLabel := styledLabel
-		plainRunes := []rune(plainLabel)
-		if maxLabel > 0 && len(plainRunes) > maxLabel {
-			displayLabel = string(plainRunes[:maxLabel-1]) + "…"
+		// Truncate repo name if needed (repo only, no branch on this line)
+		plainRepo := repo
+		if plainRepo == "" {
+			plainRepo = agent.Session
+		}
+		maxRepo := m.leftWidth - 5 - len(paneID) - 2 - len(duration)
+		displayRepo := repoStyled
+		repoRunes := []rune(plainRepo)
+		if maxRepo > 0 && len(repoRunes) > maxRepo {
+			displayRepo = string(repoRunes[:maxRepo-1]) + "…"
 		}
 
 		icon := lipgloss.NewStyle().Foreground(si.color).Render(si.icon)
-		line := fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayLabel, duration)
+		line := fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayRepo, duration)
 
 		if nodeIdx == m.selected {
-			line = selectedStyle.Render(fmt.Sprintf("  %s %s %s  %s", si.icon, paneID, plainLabel, duration))
+			line = selectedStyle.Render(fmt.Sprintf("  %s %s %s  %s", si.icon, paneID, plainRepo, duration))
 		}
 
 		lines = append(lines, line)
+
+		// Branch on its own line, indented to align under repo name
+		if agent.Branch != "" {
+			branchIndent := strings.Repeat(" ", 5+len(paneID)+1) // "   " + icon + " " + paneID + " "
+			maxBranch := m.leftWidth - len(branchIndent)
+			branchStr := agent.Branch
+			if maxBranch > 0 && len([]rune(branchStr)) > maxBranch {
+				branchStr = string([]rune(branchStr)[:maxBranch-1]) + "…"
+			}
+			if nodeIdx == m.selected {
+				lines = append(lines, selectedStyle.Render(branchIndent+branchStr))
+			} else {
+				lines = append(lines, branchIndent+styledBranch(branchStr))
+			}
+		}
 
 		// Metadata badges
 		badges := agentBadges(agent)
@@ -675,9 +694,7 @@ func (m model) renderRightPanel() string {
 		// Parent agent header
 		projectTitleStyle := lipgloss.NewStyle().
 			Bold(true).
-			Foreground(themeSapphire).
-			Background(themeSurface0).
-			Padding(0, 1)
+			Foreground(themeText)
 
 		repo := agentRepo(*agent)
 		if repo == "" {
@@ -717,23 +734,17 @@ func (m model) renderRightPanel() string {
 			header = append(header, fmt.Sprintf(" %s %s", padLabel("branch", metaLabelWidth), styledBranch(agent.Branch)))
 		}
 		if dir := agent.EffectiveDir(); dir != "" {
-			dirLine := fmt.Sprintf(" %s %s", padLabel("dir", metaLabelWidth), dir)
-			for _, wl := range wrapText(dirLine, m.rightWidth-4) {
-				header = append(header, wl)
-			}
+			header = append(header, wrapMetaLine("dir", metaLabelWidth, dir, m.rightWidth-4)...)
 		}
 		header = append(header, "")
 
 		if u, ok := m.agentUsage[agent.Target]; ok && u.OutputTokens > 0 {
-			costLine := fmt.Sprintf(" %s %s  (in: %s  out: %s  cache: %s)",
-				padLabel("cost", metaLabelWidth),
-				boldStyle.Render(FormatCost(u.CostUSD)),
+			costValue := fmt.Sprintf("%s  (in: %s  out: %s  cache: %s)",
+				costStyle.Render(FormatCost(u.CostUSD)),
 				FormatTokens(u.InputTokens),
 				FormatTokens(u.OutputTokens),
 				FormatTokens(u.CacheReadTokens+u.CacheWriteTokens))
-			for _, wl := range wrapText(costLine, m.rightWidth-4) {
-				header = append(header, wl)
-			}
+			header = append(header, wrapMetaLine("cost", metaLabelWidth, costValue, m.rightWidth-4)...)
 		}
 
 		if agent.SubagentCount > 0 {

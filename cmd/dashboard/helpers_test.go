@@ -499,6 +499,88 @@ func TestAgentLabel_PipeSeparator(t *testing.T) {
 	}
 }
 
+func TestAgentRepoStyled(t *testing.T) {
+	t.Run("repo only", func(t *testing.T) {
+		agent := Agent{Cwd: "/Users/test/Code/skills"}
+		got := agentRepoStyled(agent)
+		plain := stripANSI(got)
+		if plain != "skills" {
+			t.Errorf("agentRepoStyled repo-only = %q, want %q", plain, "skills")
+		}
+	})
+
+	t.Run("repo with branch returns repo only", func(t *testing.T) {
+		agent := Agent{Cwd: "/Users/test/Code/skills", Branch: "feat/foo"}
+		got := agentRepoStyled(agent)
+		plain := stripANSI(got)
+		if plain != "skills" {
+			t.Errorf("agentRepoStyled with branch = %q, want %q", plain, "skills")
+		}
+		// Should NOT contain branch
+		if strings.Contains(plain, "feat/foo") {
+			t.Error("agentRepoStyled should not contain branch")
+		}
+	})
+
+	t.Run("no repo falls back to session", func(t *testing.T) {
+		agent := Agent{Session: "dev"}
+		got := agentRepoStyled(agent)
+		if got != "dev" {
+			t.Errorf("agentRepoStyled fallback = %q, want %q", got, "dev")
+		}
+	})
+}
+
+func TestWrapMetaLine(t *testing.T) {
+	t.Run("short value no wrap", func(t *testing.T) {
+		lines := wrapMetaLine("dir", 9, "/short/path", 60)
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		plain := stripANSI(lines[0])
+		if !strings.Contains(plain, "dir") {
+			t.Error("should contain label 'dir'")
+		}
+		if !strings.Contains(plain, "/short/path") {
+			t.Error("should contain value '/short/path'")
+		}
+	})
+
+	t.Run("long value wraps with indent", func(t *testing.T) {
+		// Use a multi-word value that will wrap (paths are single words and won't wrap)
+		longValue := "in: 8 out: 528 cache: 122.8k tokens used total"
+		lines := wrapMetaLine("cost", 9, longValue, 35)
+		if len(lines) < 2 {
+			t.Fatalf("expected wrapped output (>=2 lines), got %d lines", len(lines))
+		}
+		// First line has the label
+		plain0 := stripANSI(lines[0])
+		if !strings.Contains(plain0, "cost") {
+			t.Error("first line should contain label")
+		}
+		// Continuation lines should be indented (leading spaces)
+		for i := 1; i < len(lines); i++ {
+			if !strings.HasPrefix(lines[i], " ") {
+				t.Errorf("continuation line %d should be indented, got %q", i, lines[i])
+			}
+		}
+	})
+
+	t.Run("alignment matches padLabel width", func(t *testing.T) {
+		lines1 := wrapMetaLine("branch", 9, "feat/foo", 60)
+		lines2 := wrapMetaLine("dir", 9, "/some/path", 60)
+		// Both first lines should have the value starting at the same column
+		plain1 := stripANSI(lines1[0])
+		plain2 := stripANSI(lines2[0])
+		// Find where the value starts (after the padded label + space)
+		idx1 := strings.Index(plain1, "feat/foo")
+		idx2 := strings.Index(plain2, "/some/path")
+		if idx1 != idx2 {
+			t.Errorf("values should align: branch value at col %d, dir value at col %d", idx1, idx2)
+		}
+	})
+}
+
 func TestPermissionModeStyle(t *testing.T) {
 	// permissionModeStyle should preserve the original mode text in its output
 	modes := []string{"plan", "auto-edit", "full-auto", "custom"}
