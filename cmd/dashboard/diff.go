@@ -19,7 +19,7 @@ func loadDiffCmd(dir string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff").Output()
+		out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", "HEAD").Output()
 		if err != nil {
 			return diffMsg{err: err}
 		}
