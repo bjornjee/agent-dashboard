@@ -627,6 +627,54 @@ func TestPlanToggle(t *testing.T) {
 			t.Error("p should not toggle plan when subagent is selected")
 		}
 	})
+
+	t.Run("J scrolls plan down one line", func(t *testing.T) {
+		m := setup()
+		m.messageVP.SetContent(scrollableContent(100))
+		before := m.messageVP.YOffset
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		rm := result.(model)
+		if rm.messageVP.YOffset != before+1 {
+			t.Errorf("J should scroll plan down by 1 line, got offset %d (was %d)", rm.messageVP.YOffset, before)
+		}
+	})
+
+	t.Run("K scrolls plan up one line", func(t *testing.T) {
+		m := setup()
+		m.messageVP.SetContent(scrollableContent(100))
+		// Scroll down first so we can scroll up
+		m.messageVP.LineDown(5)
+		before := m.messageVP.YOffset
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		rm := result.(model)
+		if rm.messageVP.YOffset != before-1 {
+			t.Errorf("K should scroll plan up by 1 line, got offset %d (was %d)", rm.messageVP.YOffset, before)
+		}
+	})
+
+	t.Run("J ignored when plan not visible", func(t *testing.T) {
+		m := setup()
+		m.planVisible = false
+		m.updateRightContent()
+		before := m.messageVP.YOffset
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		rm := result.(model)
+		if rm.messageVP.YOffset != before {
+			t.Error("J should not scroll messageVP when plan is not visible")
+		}
+	})
+
+	t.Run("K ignored when plan not visible", func(t *testing.T) {
+		m := setup()
+		m.planVisible = false
+		m.updateRightContent()
+		before := m.messageVP.YOffset
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		rm := result.(model)
+		if rm.messageVP.YOffset != before {
+			t.Error("K should not scroll messageVP when plan is not visible")
+		}
+	})
 }
 
 func TestPlanMsg_NoAutoShow(t *testing.T) {
@@ -666,6 +714,15 @@ func TestPlanMsg_NoAutoShow(t *testing.T) {
 	if rm3.renderedPlan != "" {
 		t.Error("empty planMsg should clear renderedPlan")
 	}
+}
+
+// scrollableContent returns n lines of text suitable for testing viewport scrolling.
+func scrollableContent(n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "line %d\n", i)
+	}
+	return b.String()
 }
 
 // executeBatch runs a tea.Cmd (expected to be a Batch) and collects messages.
