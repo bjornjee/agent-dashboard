@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
@@ -877,5 +878,49 @@ func TestSelectionPinned_SubagentPreserved(t *testing.T) {
 	node = m.treeNodes[m.selected]
 	if node.Sub == nil || node.Sub.AgentID != "sub-abc" {
 		t.Errorf("expected selection pinned to subagent sub-abc, got node at index %d (sub=%v)", m.selected, node.Sub)
+	}
+}
+
+func TestSpawningSpinner_VisibleWithNoAgents(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	// No agents — dashboard is empty
+	m.agents = nil
+	m.buildTree()
+
+	// Set spawning status (as keys.go does when user creates a session)
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	// Render the right panel
+	view := m.renderRightPanel()
+
+	// The spawning spinner text should be visible even with no agents
+	if !strings.Contains(view, "Spawning agent") {
+		t.Errorf("spawning spinner should be visible when no agents exist, got:\n%s", view)
+	}
+}
+
+func TestHelpBar_FitsWithinWidth(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 80 // typical laptop terminal width
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+
+	bar := m.renderHelpBar()
+
+	// The help bar should not exceed the terminal width.
+	// lipgloss.Width accounts for ANSI escape sequences.
+	barWidth := lipgloss.Width(bar)
+	if barWidth > m.width {
+		t.Errorf("help bar width (%d) exceeds terminal width (%d)", barWidth, m.width)
 	}
 }
