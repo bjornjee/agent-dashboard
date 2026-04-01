@@ -200,7 +200,7 @@ func TmuxNewWindow(session, windowName, startDir string) (string, error) {
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "tmux",
-		"new-window", "-t", session, "-n", windowName, "-c", startDir,
+		"new-window", "-t", session+":", "-n", windowName, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
 	).Output()
 	if err != nil {

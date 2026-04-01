@@ -1,8 +1,18 @@
 package main
 
 import (
+	"context"
+	"os/exec"
 	"testing"
+	"time"
 )
+
+// runTmux is a test helper that runs a tmux command with a timeout.
+func runTmux(args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "tmux", args...).Run()
+}
 
 func TestValidateTarget(t *testing.T) {
 	valid := []string{
@@ -224,6 +234,39 @@ func TestParsePaneTargetsOutput(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTmuxNewWindow_MultipleWindows(t *testing.T) {
+	if !TmuxIsAvailable() {
+		t.Skip("tmux not available")
+	}
+
+	// Regression test: TmuxNewWindow must work when the session already has
+	// multiple windows. Previously, passing "-t session" (without trailing
+	// colon) caused tmux to try inserting at the current window index,
+	// failing with "index N in use" when a client was attached.
+	session := "test-new-window"
+	dir := t.TempDir()
+
+	if err := runTmux("new-session", "-d", "-s", session, "-x", "80", "-y", "24"); err != nil {
+		t.Fatalf("new-session: %v", err)
+	}
+	defer runTmux("kill-session", "-t", session)
+
+	// Fill up several windows
+	_ = runTmux("new-window", "-t", session+":")
+	_ = runTmux("new-window", "-t", session+":")
+
+	target, err := TmuxNewWindow(session, "test-win", dir)
+	if err != nil {
+		t.Fatalf("TmuxNewWindow failed: %v", err)
+	}
+	if target == "" {
+		t.Fatal("expected non-empty target")
+	}
+	if err := ValidateTarget(target); err != nil {
+		t.Errorf("returned invalid target %q: %v", target, err)
 	}
 }
 
