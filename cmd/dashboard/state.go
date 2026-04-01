@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -147,6 +149,33 @@ func ResolveAgentTargets(sf *StateFile, paneTargets map[string]PaneTarget) {
 		agent.Pane = pt.Pane
 		sf.Agents[key] = agent
 	}
+}
+
+// ResolveAgentBranches overwrites each agent's Branch with the live value
+// from git. Agents without a Cwd or where git fails are left unchanged.
+func ResolveAgentBranches(sf *StateFile) {
+	for key, agent := range sf.Agents {
+		if agent.Cwd == "" {
+			continue
+		}
+		branch := gitBranch(agent.Cwd)
+		if branch == "" {
+			continue
+		}
+		agent.Branch = branch
+		sf.Agents[key] = agent
+	}
+}
+
+// gitBranch returns the current branch name for a directory, or "" on error.
+func gitBranch(dir string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.

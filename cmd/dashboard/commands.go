@@ -230,6 +230,7 @@ func loadState(path string, tmuxAvailable bool) tea.Cmd {
 		if tmuxAvailable {
 			ResolveAgentTargets(&sf, TmuxListPaneTargets())
 		}
+		ResolveAgentBranches(&sf)
 		return stateUpdatedMsg{state: sf}
 	}
 }
@@ -491,6 +492,7 @@ func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Wa
 						if tmuxAvailable {
 							ResolveAgentTargets(&sf, TmuxListPaneTargets())
 						}
+						ResolveAgentBranches(&sf)
 						p.Send(stateUpdatedMsg{state: sf})
 					})
 				}
