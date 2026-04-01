@@ -355,6 +355,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
 			return m, loadDiffCmd(agent.EffectiveDir())
 		}
+	case "g":
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {
+			return m, openPR(agent.EffectiveDir(), agent.Branch)
+		}
 	case "u":
 		if m.mode == modeUsage {
 			m.mode = modeNormal

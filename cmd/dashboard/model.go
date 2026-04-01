@@ -608,6 +608,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsgTick = m.tickCount
 		return m, nil
 
+	case openPRMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("PR link failed: %v", msg.err)
+		} else {
+			m.statusMsg = "Opened PR page in browser"
+		}
+		m.statusMsgTick = m.tickCount
+		return m, nil
+
 	case sendResultMsg:
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Reply failed: %v", msg.err)

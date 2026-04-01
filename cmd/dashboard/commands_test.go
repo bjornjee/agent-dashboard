@@ -53,6 +53,120 @@ func TestValidateFolder_NotDir(t *testing.T) {
 	}
 }
 
+func TestParseGitHubRepo(t *testing.T) {
+	tests := []struct {
+		name      string
+		remoteURL string
+		wantOwner string
+		wantRepo  string
+		wantOK    bool
+	}{
+		{
+			name:      "SSH URL",
+			remoteURL: "git@github.com:bjornjee/agent-dashboard.git",
+			wantOwner: "bjornjee",
+			wantRepo:  "agent-dashboard",
+			wantOK:    true,
+		},
+		{
+			name:      "HTTPS URL",
+			remoteURL: "https://github.com/bjornjee/agent-dashboard.git",
+			wantOwner: "bjornjee",
+			wantRepo:  "agent-dashboard",
+			wantOK:    true,
+		},
+		{
+			name:      "HTTPS without .git suffix",
+			remoteURL: "https://github.com/bjornjee/agent-dashboard",
+			wantOwner: "bjornjee",
+			wantRepo:  "agent-dashboard",
+			wantOK:    true,
+		},
+		{
+			name:      "SSH without .git suffix",
+			remoteURL: "git@github.com:bjornjee/agent-dashboard",
+			wantOwner: "bjornjee",
+			wantRepo:  "agent-dashboard",
+			wantOK:    true,
+		},
+		{
+			name:      "non-GitHub SSH",
+			remoteURL: "git@gitlab.com:bjornjee/agent-dashboard.git",
+			wantOK:    false,
+		},
+		{
+			name:      "non-GitHub HTTPS",
+			remoteURL: "https://gitlab.com/bjornjee/agent-dashboard.git",
+			wantOK:    false,
+		},
+		{
+			name:      "empty string",
+			remoteURL: "",
+			wantOK:    false,
+		},
+		{
+			name:      "malformed URL",
+			remoteURL: "not-a-url",
+			wantOK:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner, repo, ok := parseGitHubRepo(tt.remoteURL)
+			if owner != tt.wantOwner || repo != tt.wantRepo || ok != tt.wantOK {
+				t.Errorf("parseGitHubRepo(%q) = (%q, %q, %v), want (%q, %q, %v)",
+					tt.remoteURL, owner, repo, ok, tt.wantOwner, tt.wantRepo, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestBuildPRURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		owner  string
+		repo   string
+		base   string
+		branch string
+		want   string
+	}{
+		{
+			name:   "simple branch",
+			owner:  "bjornjee",
+			repo:   "agent-dashboard",
+			base:   "main",
+			branch: "feat/auto-open-pr",
+			want:   "https://github.com/bjornjee/agent-dashboard/compare/main...feat%2Fauto-open-pr?expand=1",
+		},
+		{
+			name:   "master base",
+			owner:  "bjornjee",
+			repo:   "agent-dashboard",
+			base:   "master",
+			branch: "fix-bug",
+			want:   "https://github.com/bjornjee/agent-dashboard/compare/master...fix-bug?expand=1",
+		},
+		{
+			name:   "branch with special chars",
+			owner:  "bjornjee",
+			repo:   "agent-dashboard",
+			base:   "main",
+			branch: "feat/hello world",
+			want:   "https://github.com/bjornjee/agent-dashboard/compare/main...feat%2Fhello%20world?expand=1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildPRURL(tt.owner, tt.repo, tt.base, tt.branch)
+			if got != tt.want {
+				t.Errorf("buildPRURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateFolder_TildeExpansion(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
