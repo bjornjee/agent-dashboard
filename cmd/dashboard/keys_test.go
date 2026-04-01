@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -233,6 +234,19 @@ func TestCreateFolderMode_EnterWithTextNoSuggestionsUsesText(t *testing.T) {
 	// No suggestions visible — fall back to typed text.
 	if cmd == nil {
 		t.Error("expected createSession command for typed path, got nil")
+	}
+}
+
+func TestUsageModeWorksWithNoAgents(t *testing.T) {
+	m := newModel("", "", nil)
+	m.agents = nil // no agents
+	m.mode = modeUsage
+
+	m.updateRightContent()
+
+	content := m.messageVP.View()
+	if !strings.Contains(content, "USAGE BREAKDOWN") {
+		t.Errorf("expected usage content when mode is modeUsage with no agents, got %q", content)
 	}
 }
 
