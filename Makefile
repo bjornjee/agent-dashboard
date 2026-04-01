@@ -1,7 +1,10 @@
 .PHONY: build test install clean seed help
 
+VERSION := $(shell cat VERSION)
+LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
+
 build: ## Build the dashboard binary
-	go build -o bin/agent-dashboard ./cmd/dashboard/
+	go build $(LDFLAGS) -o bin/agent-dashboard ./cmd/dashboard/
 
 test: ## Run all tests
 	go test ./cmd/dashboard/...
