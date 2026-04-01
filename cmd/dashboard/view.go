@@ -596,10 +596,21 @@ func (m model) renderRightPanel() string {
 
 	agent := m.selectedAgent()
 	if agent == nil {
+		content := m.messageVP.View()
+		// Show status line (e.g. spawning spinner) even with no agents
+		statusLine := m.statusLine()
+		if statusLine != "" {
+			contentLines := strings.Count(content, "\n") + 1
+			pad := panelHeight - contentLines - 1
+			if pad < 1 {
+				pad = 1
+			}
+			content += strings.Repeat("\n", pad) + statusLine
+		}
 		return borderStyle.
 			Width(m.rightWidth).
 			Height(panelHeight).
-			Render(m.messageVP.View())
+			Render(content)
 	}
 
 	sub := m.selectedSubagent()
@@ -739,16 +750,7 @@ func (m model) renderRightPanel() string {
 		}
 	}
 
-	// Status message
-	statusLine := ""
-	if m.statusMsg == "spawning" {
-		statusLine = " " +
-			m.spawningSpinner.View() +
-			" " +
-			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
-	} else if m.statusMsg != "" {
-		statusLine = " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
-	}
+	statusLine := m.statusLine()
 
 	// Compose right panel (with blank-line buffers between sections)
 	var parts []string
@@ -795,6 +797,20 @@ func (m model) renderRightPanel() string {
 		Render(content)
 }
 
+// statusLine returns the status message line (spawning spinner, errors, etc).
+func (m model) statusLine() string {
+	if m.statusMsg == "spawning" {
+		return " " +
+			m.spawningSpinner.View() +
+			" " +
+			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
+	}
+	if m.statusMsg != "" {
+		return " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
+	}
+	return ""
+}
+
 func (m model) renderHelpBar() string {
 	var parts []string
 
@@ -824,13 +840,13 @@ func (m model) renderHelpBar() string {
 	if m.mode == modeCreateFolder {
 		parts = append(parts, boldStyle.Render("enter")+" create")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
-		return helpStyle.Render("  " + strings.Join(parts, "  "))
+		return m.truncateHelpBar(parts)
 	}
 
 	if m.mode == modeReply {
 		parts = append(parts, boldStyle.Render("enter")+" send")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
-		return helpStyle.Render("  " + strings.Join(parts, "  "))
+		return m.truncateHelpBar(parts)
 	}
 
 	if m.tmuxAvailable {
@@ -859,5 +875,27 @@ func (m model) renderHelpBar() string {
 	parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
 	parts = append(parts, boldStyle.Render("q")+" quit")
 
-	return helpStyle.Render("  " + strings.Join(parts, "  "))
+	return m.truncateHelpBar(parts)
+}
+
+// truncateHelpBar joins help bar parts and truncates to fit within the terminal width.
+func (m model) truncateHelpBar(parts []string) string {
+	maxWidth := m.width - 2 // leave room for leading padding
+	if maxWidth <= 0 {
+		return ""
+	}
+
+	var included []string
+	totalWidth := 0
+	for _, p := range parts {
+		rendered := helpStyle.Render(p)
+		w := lipgloss.Width(rendered) + 2 // +2 for "  " separator
+		if totalWidth+w > maxWidth && len(included) > 0 {
+			break
+		}
+		included = append(included, p)
+		totalWidth += w
+	}
+
+	return helpStyle.Render("  " + strings.Join(included, "  "))
 }
