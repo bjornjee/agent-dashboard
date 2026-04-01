@@ -119,6 +119,42 @@ func ResolveTarget(paneID string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// TmuxPaneCwd returns the current working directory of a tmux pane by its
+// pane ID (%N format). Returns "" if the pane doesn't exist or on error.
+func TmuxPaneCwd(paneID string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", paneID,
+		"#{pane_current_path}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TmuxListPaneCwds returns pane_id → current working directory for every live pane.
+// Used as a batch fallback when agent state files lack a cwd field.
+func TmuxListPaneCwds() map[string]string {
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
+		"-F", "#{pane_id}\t#{pane_current_path}").Output()
+	if err != nil {
+		return nil
+	}
+	result := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) == 2 && parts[1] != "" {
+			result[parts[0]] = parts[1]
+		}
+	}
+	return result
+}
+
 // TmuxListLivePaneIDs returns the set of all live tmux pane IDs (%N format).
 func TmuxListLivePaneIDs() map[string]bool {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)

@@ -241,10 +241,12 @@ func loadUsage(agents []Agent) tea.Cmd {
 func loadState(path string, tmuxAvailable bool) tea.Cmd {
 	return func() tea.Msg {
 		sf := ReadState(path)
+		var paneCwds map[string]string
 		if tmuxAvailable {
 			ResolveAgentTargets(&sf, TmuxListPaneTargets())
+			paneCwds = TmuxListPaneCwds()
 		}
-		ResolveAgentBranches(&sf)
+		ResolveAgentBranches(&sf, paneCwds)
 		return stateUpdatedMsg{state: sf}
 	}
 }
@@ -506,7 +508,11 @@ func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Wa
 						if tmuxAvailable {
 							ResolveAgentTargets(&sf, TmuxListPaneTargets())
 						}
-						ResolveAgentBranches(&sf)
+						var pc map[string]string
+						if tmuxAvailable {
+							pc = TmuxListPaneCwds()
+						}
+						ResolveAgentBranches(&sf, pc)
 						p.Send(stateUpdatedMsg{state: sf})
 					})
 				}

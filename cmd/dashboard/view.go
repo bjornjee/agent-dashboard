@@ -713,8 +713,8 @@ func (m model) renderRightPanel() string {
 		if repo != "" {
 			header = append(header, fmt.Sprintf(" %s  %s", dimLabel.Render("folder"), repo))
 		}
-		if agent.Cwd != "" {
-			dirLine := fmt.Sprintf(" %s    %s", dimLabel.Render("dir"), agent.Cwd)
+		if dir := agent.EffectiveDir(); dir != "" {
+			dirLine := fmt.Sprintf(" %s    %s", dimLabel.Render("dir"), dir)
 			for _, wl := range wrapText(dirLine, m.rightWidth-4) {
 				header = append(header, wl)
 			}

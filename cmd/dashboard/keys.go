@@ -317,12 +317,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "e":
-		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.Cwd != "" {
-			return m, openEditor(agent.Cwd)
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			return m, openEditor(agent.EffectiveDir())
 		}
 	case "d":
-		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.Cwd != "" {
-			return m, loadDiffCmd(agent.Cwd)
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			return m, loadDiffCmd(agent.EffectiveDir())
 		}
 	case "u":
 		if m.mode == modeUsage {
