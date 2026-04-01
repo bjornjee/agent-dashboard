@@ -21,13 +21,13 @@ func (m *model) updateRightContent() {
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
 	if m.mode == modeCreateFolder || (m.planVisible && m.renderedPlan != "") {
-		fullHeight := panelHeight - headerLines - 2
-		if fullHeight < 3 {
-			fullHeight = 3
+		fullHeight := panelHeight - defaultHeaderLines - 1 // -1 for section label
+		if fullHeight < minMessageHeight {
+			fullHeight = minMessageHeight
 		}
 		m.messageVP.Height = fullHeight
 	} else {
-		_, _, msgHeight := panelHeights(panelHeight)
+		_, _, msgHeight := panelHeights(panelHeight, defaultHeaderLines)
 		m.messageVP.Height = msgHeight
 	}
 
@@ -761,6 +761,15 @@ func (m model) renderRightPanel() string {
 		header = append(header, "")
 	}
 
+	// Dynamically compute viewport heights based on actual header size.
+	// This value receiver works on a copy, so mutations are render-local.
+	headerStr := strings.Join(header, "\n")
+	actualHeaderLines := strings.Count(headerStr, "\n") + 1
+	filesH, historyH, msgH := panelHeights(panelHeight, actualHeaderLines)
+	m.filesVP.Height = filesH
+	m.historyVP.Height = historyH
+	m.messageVP.Height = msgH
+
 	// Section labels + viewports
 	focusMarker := func(vp int) string {
 		if m.focusedVP == vp {
@@ -835,20 +844,23 @@ func (m model) renderRightPanel() string {
 	// Compose right panel (with blank-line buffers between sections)
 	var parts []string
 	if m.mode == modeUsage {
+		// Single-section layout: header + label + messageVP
+		m.messageVP.Height = max(panelHeight-actualHeaderLines-1, minMessageHeight)
 		parts = []string{
-			strings.Join(header, "\n"),
+			headerStr,
 			messageLabel,
 			m.messageVP.View(),
 		}
 	} else if m.planVisible && m.renderedPlan != "" {
+		m.messageVP.Height = max(panelHeight-actualHeaderLines-1, minMessageHeight)
 		parts = []string{
-			strings.Join(header, "\n"),
+			headerStr,
 			messageLabel,
 			m.messageVP.View(),
 		}
 	} else {
 		parts = []string{
-			strings.Join(header, "\n"),
+			headerStr,
 			filesLabel,
 			m.filesVP.View(),
 			"",
