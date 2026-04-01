@@ -27,6 +27,28 @@ func sanitizeWindowName(name string) string {
 	return safe
 }
 
+// highlightLine applies a background highlight to a line while preserving
+// inner ANSI foreground colors. It pads the line to the given width and
+// re-applies the background after each SGR reset so colors aren't lost.
+func highlightLine(line string, width int) string {
+	// themeSurface1 = #51576d = RGB(81, 87, 109)
+	const bgCode = "\x1b[48;2;81;87;109m"
+	const boldCode = "\x1b[1m"
+	const reset = "\x1b[0m"
+
+	// Re-apply background after each inner reset so it persists
+	inner := strings.ReplaceAll(line, reset, reset+bgCode+boldCode)
+
+	// Pad to full width
+	visWidth := lipgloss.Width(line)
+	padding := ""
+	if visWidth < width {
+		padding = strings.Repeat(" ", width-visWidth)
+	}
+
+	return bgCode + boldCode + inner + padding + reset
+}
+
 // repoFromCwd extracts the repo name from a working directory path.
 // For worktree paths like /foo/worktrees/skills/branch-name, returns "skills".
 // For normal paths like /foo/skills, returns "skills" (filepath.Base).

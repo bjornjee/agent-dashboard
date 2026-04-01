@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestRepoFromCwd(t *testing.T) {
@@ -592,4 +593,54 @@ func TestPermissionModeStyle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHighlightLine(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+
+	t.Run("preserves inner ANSI colors", func(t *testing.T) {
+		red := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000")).Render("RED")
+		line := "  " + red + " text"
+		result := highlightLine(line, 20)
+
+		// The inner red foreground escape should still be present
+		if !strings.Contains(result, "\x1b[38;2;255;0;0m") {
+			t.Error("highlightLine should preserve inner foreground colors")
+		}
+		// The background color (themeSurface1 = #51576d = 81,87,109) should be present
+		if !strings.Contains(result, "\x1b[48;2;81;87;109m") {
+			t.Error("highlightLine should apply background color")
+		}
+	})
+
+	t.Run("pads to width", func(t *testing.T) {
+		result := highlightLine("hi", 10)
+		visWidth := lipgloss.Width(result)
+		if visWidth != 10 {
+			t.Errorf("highlightLine should pad to width 10, got %d", visWidth)
+		}
+	})
+
+	t.Run("does not pad when line is wider than width", func(t *testing.T) {
+		line := "this is a long line"
+		result := highlightLine(line, 5)
+		// Should still contain the original text
+		if !strings.Contains(result, "this is a long line") {
+			t.Error("highlightLine should preserve line content even when wider than width")
+		}
+	})
+
+	t.Run("background reapplied after inner resets", func(t *testing.T) {
+		red := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000")).Render("R")
+		blue := lipgloss.NewStyle().Foreground(lipgloss.Color("#0000ff")).Render("B")
+		line := red + " " + blue
+		result := highlightLine(line, 20)
+
+		// Count background applications — should appear at start and after each inner reset
+		bgCode := "\x1b[48;2;81;87;109m"
+		count := strings.Count(result, bgCode)
+		if count < 3 {
+			t.Errorf("expected background reapplied at least 3 times (start + after 2 resets), got %d", count)
+		}
+	})
 }

@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
@@ -922,5 +923,63 @@ func TestHelpBar_FitsWithinWidth(t *testing.T) {
 	barWidth := lipgloss.Width(bar)
 	if barWidth > m.width {
 		t.Errorf("help bar width (%d) exceeds terminal width (%d)", barWidth, m.width)
+	}
+}
+
+func TestSelectedSubagent_PreservesIcon(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+
+	m := newModel("", "", nil)
+	m.width = 80
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.agentSubagents = map[string][]SubagentInfo{
+		"main:1.0": {
+			{AgentID: "sub1", AgentType: "Explore", Description: "test", Completed: true},
+		},
+	}
+	m.buildTree()
+	// Select the subagent (index 1, after parent at index 0)
+	m.selected = 1
+
+	content := m.agentListContent()
+
+	// A completed subagent should show checkmark, not arrow, even when selected
+	if strings.Contains(content, "▶ Explore") {
+		t.Error("selected completed subagent should show ✓ icon, not ▶")
+	}
+	if !strings.Contains(content, "✓") {
+		t.Error("selected completed subagent should contain ✓ icon")
+	}
+}
+
+func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
+	m := newModel("/tmp/test-state.json", "%0", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	m.statusMsg = "spawning"
+	result, _ := m.Update(createSessionMsg{target: "main:2.0", err: nil})
+	rm := result.(model)
+
+	// A placeholder agent should be inserted immediately
+	found := false
+	for _, a := range rm.agents {
+		if a.Target == "main:2.0" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected placeholder agent for main:2.0 to be present immediately after create")
 	}
 }
