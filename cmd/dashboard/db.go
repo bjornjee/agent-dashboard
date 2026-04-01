@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -125,14 +126,30 @@ func (db *DB) CostForDate(date string) float64 {
 // RandomQuote returns a random quote that fits within maxLen characters
 // (quote + " — " + author), or empty strings if none fit.
 func (db *DB) RandomQuote(maxLen int) (quote, author string) {
+	tx, err := db.conn.Beginx()
+	if err != nil {
+		return "", ""
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var count int
+	err = tx.Get(&count, `
+		SELECT COUNT(*) FROM quotes
+		WHERE LENGTH(quote) + LENGTH(author) + 3 <= ?`, maxLen)
+	if err != nil || count == 0 {
+		return "", ""
+	}
+
+	offset := rand.Intn(count)
+
 	var row struct {
 		Quote  string `db:"quote"`
 		Author string `db:"author"`
 	}
-	err := db.conn.Get(&row, `
+	err = tx.Get(&row, `
 		SELECT quote, author FROM quotes
 		WHERE LENGTH(quote) + LENGTH(author) + 3 <= ?
-		ORDER BY RANDOM() LIMIT 1`, maxLen)
+		LIMIT 1 OFFSET ?`, maxLen, offset)
 	if err != nil {
 		return "", ""
 	}
