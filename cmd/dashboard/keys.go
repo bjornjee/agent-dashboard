@@ -8,6 +8,11 @@ import (
 )
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Help overlay: swallow mouse events
+	if m.helpVisible {
+		return m, nil
+	}
+
 	// Diff mode: route mouse to diff viewports
 	if m.diffVisible {
 		leftBorderEnd := m.diffLeftWidth + 2
@@ -161,6 +166,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.statusMsg = ""
 			return m, nil
+		}
+		return m, nil
+	}
+
+	// Help overlay
+	if m.helpVisible {
+		switch key {
+		case "h", "esc":
+			m.helpVisible = false
+		default:
+			// swallow all other keys
 		}
 		return m, nil
 	}
@@ -359,6 +375,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {
 			return m, openPR(agent.EffectiveDir(), agent.Branch)
 		}
+	case "h":
+		m.helpVisible = true
+		return m, nil
 	case "u":
 		if m.mode == modeUsage {
 			m.mode = modeNormal

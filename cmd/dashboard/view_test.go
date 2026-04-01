@@ -68,3 +68,62 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 		}
 	})
 }
+
+func TestRenderHelpOverlayContainsSections(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+
+	m := newModel("", "", nil)
+	m.width = 100
+	m.height = 40
+
+	content := m.renderHelpOverlay()
+
+	sections := []string{"Navigation", "Agent Actions", "View Controls", "Diff Mode", "Input Modes"}
+	for _, s := range sections {
+		if !strings.Contains(content, s) {
+			t.Errorf("help overlay missing section %q", s)
+		}
+	}
+}
+
+func TestSlimHelpBarContainsHHelp(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+
+	m := newModel("", "", nil)
+	m.width = 120
+	m.tmuxAvailable = true
+
+	bar := m.renderHelpBar()
+
+	if !strings.Contains(bar, "help") {
+		t.Error("slim help bar should contain 'help' hint")
+	}
+	// Should contain lifecycle essentials
+	if !strings.Contains(bar, "new") {
+		t.Error("slim help bar should contain 'new' hint")
+	}
+	if !strings.Contains(bar, "close") {
+		t.Error("slim help bar should contain 'close' hint")
+	}
+	// Should NOT contain the old verbose hints
+	if strings.Contains(bar, "editor") {
+		t.Error("slim help bar should not contain 'editor' — moved to overlay")
+	}
+	if strings.Contains(bar, "collapse") {
+		t.Error("slim help bar should not contain 'collapse' — moved to overlay")
+	}
+}
+
+func TestHelpBarWhenHelpVisible(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+
+	m := newModel("", "", nil)
+	m.width = 120
+	m.helpVisible = true
+
+	bar := m.renderHelpBar()
+
+	if !strings.Contains(bar, "close") {
+		t.Error("help bar when helpVisible should contain 'close' hint")
+	}
+}
