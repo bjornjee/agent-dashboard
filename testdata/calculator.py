@@ -17,10 +17,15 @@ def multiply(a: float, b: float) -> float:
 
 
 def divide(a: float, b: float) -> float:
-    """Divide a by b."""
+    """Divide a by b, returning a float result."""
     if b == 0:
-        raise ValueError("Cannot divide by zero")
+        raise ZeroDivisionError("Cannot divide by zero")
     return a / b
+
+
+def power(a: float, b: float) -> float:
+    """Raise a to the power of b."""
+    return a ** b
 
 
 class Calculator:
@@ -35,6 +40,7 @@ class Calculator:
             "subtract": subtract,
             "multiply": multiply,
             "divide": divide,
+            "power": power,
         }
         if operation not in ops:
             raise ValueError(f"Unknown operation: {operation}")

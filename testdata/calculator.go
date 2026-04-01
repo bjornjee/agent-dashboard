@@ -48,6 +48,16 @@ func (c *Calculator) Divide(a, b float64) (float64, error) {
 	return result, nil
 }
 
+// Power returns a raised to the power of b.
+func (c *Calculator) Power(a, b float64) float64 {
+	result := 1.0
+	for i := 0; i < int(b); i++ {
+		result *= a
+	}
+	c.history = append(c.history, fmt.Sprintf("power(%g, %g) = %g", a, b, result))
+	return result
+}
+
 // History returns a copy of the calculation history.
 func (c *Calculator) History() []string {
 	out := make([]string, len(c.history))
@@ -58,4 +68,12 @@ func (c *Calculator) History() []string {
 // ClearHistory removes all history entries.
 func (c *Calculator) ClearHistory() {
 	c.history = c.history[:0]
+}
+
+// LastResult returns the most recent history entry, or empty string if none.
+func (c *Calculator) LastResult() string {
+	if len(c.history) == 0 {
+		return ""
+	}
+	return c.history[len(c.history)-1]
 }

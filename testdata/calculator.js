@@ -16,9 +16,13 @@ function multiply(a, b) {
 
 function divide(a, b) {
   if (b === 0) {
-    throw new Error("Cannot divide by zero");
+    throw new RangeError("Cannot divide by zero");
   }
   return a / b;
+}
+
+function power(a, b) {
+  return Math.pow(a, b);
 }
 
 class Calculator {
@@ -27,7 +31,7 @@ class Calculator {
   }
 
   calculate(operation, a, b) {
-    const ops = { add, subtract, multiply, divide };
+    const ops = { add, subtract, multiply, divide, power };
     if (!(operation in ops)) {
       throw new Error(`Unknown operation: ${operation}`);
     }
@@ -46,4 +50,4 @@ class Calculator {
   }
 }
 
-module.exports = { add, subtract, multiply, divide, Calculator };
+module.exports = { add, subtract, multiply, divide, power, Calculator };
