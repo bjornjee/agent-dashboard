@@ -68,7 +68,7 @@ func TestAgentLabel(t *testing.T) {
 				Cwd:    "/Users/bjornjee/Code/bjornjee/skills",
 				Branch: "feat/dashboard-agent-naming",
 			},
-			want: "skills/feat/dashboard-agent-naming",
+			want: "skills | feat/dashboard-agent-naming",
 		},
 		{
 			name: "worktree repo and branch",
@@ -76,7 +76,7 @@ func TestAgentLabel(t *testing.T) {
 				Cwd:    "/Users/bjornjee/Code/bjornjee/worktrees/skills/dashboard-agent-naming",
 				Branch: "feat/dashboard-agent-naming",
 			},
-			want: "skills/feat/dashboard-agent-naming",
+			want: "skills | feat/dashboard-agent-naming",
 		},
 		{
 			name: "worktree_cwd preferred over cwd",
@@ -85,7 +85,7 @@ func TestAgentLabel(t *testing.T) {
 				WorktreeCwd: "/Users/bjornjee/Code/tomoro/worktrees/tomoro-meta-harness/refactor-branch",
 				Branch:      "refactor-branch",
 			},
-			want: "tomoro-meta-harness/refactor-branch",
+			want: "tomoro-meta-harness | refactor-branch",
 		},
 		{
 			name: "worktree_cwd non-worktree path",
@@ -94,7 +94,7 @@ func TestAgentLabel(t *testing.T) {
 				WorktreeCwd: "/Users/bjornjee/Code/tomoro/tomoro-meta-harness",
 				Branch:      "main",
 			},
-			want: "tomoro-meta-harness/main",
+			want: "tomoro-meta-harness | main",
 		},
 		{
 			name: "repo only no branch",
@@ -386,6 +386,117 @@ func TestRenderPlanMarkdown(t *testing.T) {
 		}
 		// Just verify it produces output — glamour handles wrapping internally
 	})
+}
+
+func TestAgentRepo(t *testing.T) {
+	tests := []struct {
+		name  string
+		agent Agent
+		want  string
+	}{
+		{
+			name:  "from WorktreeCwd",
+			agent: Agent{WorktreeCwd: "/Users/test/Code/worktrees/skills/feat-branch", Cwd: "/Users/test/Code/other"},
+			want:  "skills",
+		},
+		{
+			name:  "fallback to Cwd",
+			agent: Agent{Cwd: "/Users/test/Code/myapp"},
+			want:  "myapp",
+		},
+		{
+			name:  "empty agent",
+			agent: Agent{},
+			want:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agentRepo(tt.agent)
+			if got != tt.want {
+				t.Errorf("agentRepo() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBranchColor(t *testing.T) {
+	tests := []struct {
+		name   string
+		branch string
+		want   lipgloss.Color
+	}{
+		{"feat prefix", "feat/dashboard", themeGreen},
+		{"fix prefix", "fix/auth-bug", themePeach},
+		{"chore prefix", "chore/update-deps", themeLavender},
+		{"hotfix prefix", "hotfix/critical", themeRed},
+		{"refactor prefix", "refactor/cleanup", themeYellow},
+		{"release prefix", "release/v1.0", themeMauve},
+		{"main branch", "main", themeText},
+		{"master branch", "master", themeText},
+		{"unknown prefix", "some-random-branch", themeSubtext0},
+		{"empty branch", "", themeSubtext0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := branchColor(tt.branch)
+			if got != tt.want {
+				t.Errorf("branchColor(%q) = %q, want %q", tt.branch, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPadLabel(t *testing.T) {
+	// padLabel should produce a string whose visual width equals the requested width
+	got := padLabel("dir", 9)
+	visualWidth := lipgloss.Width(got)
+	if visualWidth != 9 {
+		t.Errorf("padLabel(\"dir\", 9) visual width = %d, want 9", visualWidth)
+	}
+
+	got = padLabel("branch", 9)
+	visualWidth = lipgloss.Width(got)
+	if visualWidth != 9 {
+		t.Errorf("padLabel(\"branch\", 9) visual width = %d, want 9", visualWidth)
+	}
+
+	got = padLabel("agents", 9)
+	visualWidth = lipgloss.Width(got)
+	if visualWidth != 9 {
+		t.Errorf("padLabel(\"agents\", 9) visual width = %d, want 9", visualWidth)
+	}
+}
+
+func TestAgentLabelStyled(t *testing.T) {
+	agent := Agent{
+		Cwd:    "/Users/test/Code/skills",
+		Branch: "feat/dashboard",
+	}
+	got := agentLabelStyled(agent)
+	plain := stripANSI(got)
+	// Should contain repo, separator, and branch
+	if !strings.Contains(plain, "skills") {
+		t.Errorf("agentLabelStyled should contain repo name, got %q", plain)
+	}
+	if !strings.Contains(plain, "|") {
+		t.Errorf("agentLabelStyled should contain | separator, got %q", plain)
+	}
+	if !strings.Contains(plain, "feat/dashboard") {
+		t.Errorf("agentLabelStyled should contain branch, got %q", plain)
+	}
+}
+
+func TestAgentLabel_PipeSeparator(t *testing.T) {
+	// agentLabel should now use " | " separator instead of "/"
+	agent := Agent{
+		Cwd:    "/Users/test/Code/skills",
+		Branch: "feat/dashboard",
+	}
+	got := agentLabel(agent)
+	if got != "skills | feat/dashboard" {
+		t.Errorf("agentLabel() = %q, want %q", got, "skills | feat/dashboard")
+	}
 }
 
 func TestPermissionModeStyle(t *testing.T) {
