@@ -327,12 +327,16 @@ func (m model) renderBanner() string {
 	// 4. Format the quote with wrapping awareness, then style it
 	q := quoteStyle.Render(formatQuote(m.quote, m.quoteAuthor, maxQuoteWidth))
 
-	// 5. Wrap that quote in a container that fills the remaining width
+	// 4b. Version label
+	ver := helpStyle.Render("v" + Version)
+
+	// 5. Wrap that quote + version in a container that fills the remaining width
 	// and pushes the content to the Right.
+	rightContent := lipgloss.JoinVertical(lipgloss.Right, ver, q)
 	right := lipgloss.NewStyle().
 		Width(rightWidth).
 		Align(lipgloss.Right).
-		Render(q)
+		Render(rightContent)
 
 	// 6. Join them. No extra spacers needed here because 'right'
 	// already fills the gap.
