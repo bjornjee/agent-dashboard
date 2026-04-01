@@ -63,9 +63,9 @@ const (
 // Layout constants for the right panel viewports.
 // Heights are computed proportionally via panelHeights().
 const (
-	headerLines  = 8 // header + state + branch + dir + cost + spacers
-	sectionGaps  = 6 // gaps between sections (labels + blank-line buffers)
-	bannerHeight = 6 // top banner: 11 pixel rows rendered via half-blocks
+	defaultHeaderLines = 9  // estimate for mouse routing & initial sizing; render overrides
+	sectionGaps        = 5  // 3 section labels + 2 blank-line buffers between sections
+	bannerHeight       = 6  // top banner: 11 pixel rows rendered via half-blocks
 
 	minFilesHeight   = 3
 	minHistoryHeight = 5
@@ -75,7 +75,7 @@ const (
 // panelHeights computes proportional heights for the three right-panel
 // viewports given the total panel height.  Files 15%, History 30%, Live gets
 // the remainder (~55%).
-func panelHeights(panelHeight int) (filesH, historyH, msgH int) {
+func panelHeights(panelHeight, headerLines int) (filesH, historyH, msgH int) {
 	available := panelHeight - headerLines - sectionGaps
 	if available < minFilesHeight+minHistoryHeight+minMessageHeight {
 		return minFilesHeight, minHistoryHeight, minMessageHeight

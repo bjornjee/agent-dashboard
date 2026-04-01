@@ -652,7 +652,7 @@ func (m *model) resizeViewports() {
 	m.agentListVP.Width = m.leftWidth
 	m.agentListVP.Height = panelHeight
 
-	filesH, historyH, msgH := panelHeights(panelHeight)
+	filesH, historyH, msgH := panelHeights(panelHeight, defaultHeaderLines)
 
 	m.filesVP.Width = m.rightWidth
 	m.filesVP.Height = filesH
