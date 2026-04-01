@@ -247,6 +247,89 @@ func TmuxCountPanes(sessionWindow string) (int, error) {
 	return parseCountPanesOutput(string(out)), nil
 }
 
+// PaneTarget holds the resolved tmux coordinates for a pane.
+type PaneTarget struct {
+	Session string
+	Window  int
+	Pane    int
+	Target  string // "session:window.pane"
+}
+
+// parseTarget splits a fully-qualified "session:window.pane" string into its
+// components. Requires all three components — "session:window" (no pane) returns
+// ok=false. Used as a fallback to extract Window/Pane from Agent.Target when
+// tmux is unavailable.
+func parseTarget(target string) (session string, window, pane int, ok bool) {
+	colonIdx := strings.Index(target, ":")
+	if colonIdx <= 0 || colonIdx >= len(target)-1 {
+		return "", 0, 0, false
+	}
+	session = target[:colonIdx]
+	rest := target[colonIdx+1:]
+
+	dotIdx := strings.Index(rest, ".")
+	if dotIdx < 0 || dotIdx >= len(rest)-1 {
+		return "", 0, 0, false
+	}
+
+	w, err := strconv.Atoi(rest[:dotIdx])
+	if err != nil {
+		return "", 0, 0, false
+	}
+	p, err := strconv.Atoi(rest[dotIdx+1:])
+	if err != nil {
+		return "", 0, 0, false
+	}
+	return session, w, p, true
+}
+
+// parsePaneTargetsOutput parses the output of:
+//
+//	tmux list-panes -a -F "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}"
+func parsePaneTargetsOutput(output string) map[string]PaneTarget {
+	result := make(map[string]PaneTarget)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) != 4 {
+			continue
+		}
+		paneID := parts[0]
+		session := parts[1]
+		w, err := strconv.Atoi(parts[2])
+		if err != nil {
+			continue
+		}
+		p, err := strconv.Atoi(parts[3])
+		if err != nil {
+			continue
+		}
+		result[paneID] = PaneTarget{
+			Session: session,
+			Window:  w,
+			Pane:    p,
+			Target:  fmt.Sprintf("%s:%d.%d", session, w, p),
+		}
+	}
+	return result
+}
+
+// TmuxListPaneTargets returns the current target for every live tmux pane.
+// The map key is the pane ID (%N format). Returns nil on error (e.g. tmux
+// timeout); callers must handle nil gracefully (ResolveAgentTargets does).
+func TmuxListPaneTargets() map[string]PaneTarget {
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
+		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}").Output()
+	if err != nil {
+		return nil
+	}
+	return parsePaneTargetsOutput(string(out))
+}
+
 // extractSession returns the session name from a tmux target (session:window.pane → session).
 func extractSession(target string) string {
 	if idx := strings.Index(target, ":"); idx != -1 {

@@ -221,7 +221,7 @@ func newModel(statePath, selfPaneID string, db *DB) model {
 
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		loadState(m.statePath),
+		loadState(m.statePath, m.tmuxAvailable),
 		tickEvery(),
 		m.captureSelected(),
 		loadUsage(m.agents),
@@ -379,7 +379,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
 		m.updateRightContent()
-		return m, tea.Batch(loadState(m.statePath), selectPane(msg.target))
+		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
 
 	case closeResultMsg:
 		if msg.err != nil {
@@ -388,11 +388,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Pane closed"
 		}
 		m.statusMsgTick = m.tickCount
-		return m, tea.Batch(loadState(m.statePath), pruneDead(m.statePath))
+		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), pruneDead(m.statePath))
 
 	case pruneDeadMsg:
 		if msg.removed > 0 {
-			return m, loadState(m.statePath)
+			return m, loadState(m.statePath, m.tmuxAvailable)
 		}
 		return m, nil
 

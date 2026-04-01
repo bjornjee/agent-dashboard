@@ -285,6 +285,132 @@ func TestPruneDead_NoPaneID(t *testing.T) {
 	}
 }
 
+func TestResolveAgentTargets(t *testing.T) {
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"s1": {
+				SessionID:  "s1",
+				Target:     "tomoro:3.2",
+				TmuxPaneID: "%90",
+				Session:    "tomoro",
+				Window:     3,
+				Pane:       2,
+				State:      "running",
+			},
+			"s2": {
+				SessionID:  "s2",
+				Target:     "tomoro:2.1",
+				TmuxPaneID: "%87",
+				Session:    "tomoro",
+				Window:     2,
+				Pane:       1,
+				State:      "input",
+			},
+			"s3": {
+				// No TmuxPaneID — should be left unchanged
+				SessionID: "s3",
+				Target:    "tomoro:1.0",
+				Session:   "tomoro",
+				Window:    1,
+				Pane:      0,
+				State:     "done",
+			},
+		},
+	}
+
+	// Simulate tmux having renumbered windows (window 3 → 2, window 2 → 1)
+	paneTargets := map[string]PaneTarget{
+		"%90": {Session: "tomoro", Window: 2, Pane: 2, Target: "tomoro:2.2"},
+		"%87": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
+	}
+
+	ResolveAgentTargets(&sf, paneTargets)
+
+	// s1 should be updated
+	s1 := sf.Agents["s1"]
+	if s1.Target != "tomoro:2.2" {
+		t.Errorf("s1.Target = %q, want %q", s1.Target, "tomoro:2.2")
+	}
+	if s1.Window != 2 || s1.Pane != 2 {
+		t.Errorf("s1 Window.Pane = %d.%d, want 2.2", s1.Window, s1.Pane)
+	}
+	if s1.Session != "tomoro" {
+		t.Errorf("s1.Session = %q, want %q", s1.Session, "tomoro")
+	}
+
+	// s2 should be updated
+	s2 := sf.Agents["s2"]
+	if s2.Target != "tomoro:1.1" {
+		t.Errorf("s2.Target = %q, want %q", s2.Target, "tomoro:1.1")
+	}
+	if s2.Window != 1 || s2.Pane != 1 {
+		t.Errorf("s2 Window.Pane = %d.%d, want 1.1", s2.Window, s2.Pane)
+	}
+
+	// s3 should be unchanged (no TmuxPaneID)
+	s3 := sf.Agents["s3"]
+	if s3.Target != "tomoro:1.0" {
+		t.Errorf("s3.Target = %q, want %q (unchanged)", s3.Target, "tomoro:1.0")
+	}
+	if s3.Window != 1 || s3.Pane != 0 {
+		t.Errorf("s3 Window.Pane = %d.%d, want 1.0 (unchanged)", s3.Window, s3.Pane)
+	}
+}
+
+func TestResolveAgentTargets_DeadPane(t *testing.T) {
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"alive": {Target: "tomoro:3.2", TmuxPaneID: "%90", Session: "tomoro", Window: 3, Pane: 2, State: "running"},
+			"dead":  {Target: "tomoro:2.1", TmuxPaneID: "%87", Session: "tomoro", Window: 2, Pane: 1, State: "input"},
+		},
+	}
+
+	// Only %90 is live; %87 is dead (not in the map)
+	paneTargets := map[string]PaneTarget{
+		"%90": {Session: "tomoro", Window: 2, Pane: 2, Target: "tomoro:2.2"},
+	}
+
+	ResolveAgentTargets(&sf, paneTargets)
+
+	// alive should be updated
+	alive := sf.Agents["alive"]
+	if alive.Window != 2 || alive.Pane != 2 {
+		t.Errorf("alive Window.Pane = %d.%d, want 2.2", alive.Window, alive.Pane)
+	}
+
+	// dead should be unchanged (stale values kept as fallback)
+	dead := sf.Agents["dead"]
+	if dead.Window != 2 || dead.Pane != 1 {
+		t.Errorf("dead Window.Pane = %d.%d, want 2.1 (unchanged)", dead.Window, dead.Pane)
+	}
+}
+
+func TestResolveAgentTargets_EmptyMap(t *testing.T) {
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"s1": {Target: "tomoro:3.2", TmuxPaneID: "%90", Window: 3, Pane: 2, State: "running"},
+		},
+	}
+	// Empty (non-nil) map — all agents should be left unchanged
+	ResolveAgentTargets(&sf, map[string]PaneTarget{})
+	if sf.Agents["s1"].Window != 3 {
+		t.Errorf("expected window unchanged with empty map")
+	}
+}
+
+func TestResolveAgentTargets_NilMap(t *testing.T) {
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"s1": {Target: "tomoro:3.2", TmuxPaneID: "%90", Window: 3, Pane: 2, State: "running"},
+		},
+	}
+	// nil paneTargets should not panic, agents left unchanged
+	ResolveAgentTargets(&sf, nil)
+	if sf.Agents["s1"].Window != 3 {
+		t.Errorf("expected window unchanged with nil map")
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration("") != "" {
 		t.Error("expected empty for empty input")

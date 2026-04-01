@@ -224,9 +224,13 @@ func loadUsage(agents []Agent) tea.Cmd {
 	}
 }
 
-func loadState(path string) tea.Cmd {
+func loadState(path string, tmuxAvailable bool) tea.Cmd {
 	return func() tea.Msg {
-		return stateUpdatedMsg{state: ReadState(path)}
+		sf := ReadState(path)
+		if tmuxAvailable {
+			ResolveAgentTargets(&sf, TmuxListPaneTargets())
+		}
+		return stateUpdatedMsg{state: sf}
 	}
 }
 
@@ -451,7 +455,7 @@ func sendRawKey(paneID, key string) tea.Cmd {
 	}
 }
 
-func watchStateDir(dir string, p *tea.Program) (*fsnotify.Watcher, error) {
+func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -483,7 +487,11 @@ func watchStateDir(dir string, p *tea.Program) (*fsnotify.Watcher, error) {
 						debounce.Stop()
 					}
 					debounce = time.AfterFunc(50*time.Millisecond, func() {
-						p.Send(stateUpdatedMsg{state: ReadState(dir)})
+						sf := ReadState(dir)
+						if tmuxAvailable {
+							ResolveAgentTargets(&sf, TmuxListPaneTargets())
+						}
+						p.Send(stateUpdatedMsg{state: sf})
 					})
 				}
 			case _, ok := <-watcher.Errors:

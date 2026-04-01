@@ -32,7 +32,7 @@ func main() {
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// Start directory watcher for per-agent state files
-	watcher, err := watchStateDir(stateDir, p)
+	watcher, err := watchStateDir(stateDir, p, m.tmuxAvailable)
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)
