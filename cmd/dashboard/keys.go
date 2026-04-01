@@ -188,6 +188,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+u":
 			m.diffContentVP.HalfViewUp()
 			return m, nil
+		case "J":
+			m.diffContentVP.LineDown(1)
+			return m, nil
+		case "K":
+			m.diffContentVP.LineUp(1)
+			return m, nil
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		}

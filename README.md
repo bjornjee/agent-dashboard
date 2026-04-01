@@ -74,7 +74,8 @@ Or run directly:
 | Key | Action |
 |-----|--------|
 | `j/k` or `arrows` | Select file |
-| `Ctrl+U/D` | Scroll diff content |
+| `J/K` (shift) | Scroll diff content (single line) |
+| `Ctrl+U/D` | Scroll diff content (half page) |
 | `e` | Expand/collapse all context |
 | `d` or `Esc` | Exit diff viewer |
 
