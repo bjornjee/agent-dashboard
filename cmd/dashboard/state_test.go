@@ -411,6 +411,56 @@ func TestResolveAgentTargets_NilMap(t *testing.T) {
 	}
 }
 
+func TestResolveAgentBranches(t *testing.T) {
+	// Use the current repo directory — we know it's a git repo.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"with-cwd":    {Cwd: cwd, Branch: "stale-branch", State: "running"},
+			"no-cwd":      {Cwd: "", Branch: "should-stay", State: "running"},
+			"bad-cwd":     {Cwd: "/nonexistent/path", Branch: "should-stay", State: "running"},
+		},
+	}
+
+	ResolveAgentBranches(&sf)
+
+	// Agent with valid cwd should have branch updated to something non-empty and not the stale value
+	if sf.Agents["with-cwd"].Branch == "stale-branch" || sf.Agents["with-cwd"].Branch == "" {
+		t.Errorf("expected branch to be resolved from git, got %q", sf.Agents["with-cwd"].Branch)
+	}
+
+	// Agent without cwd should be unchanged
+	if sf.Agents["no-cwd"].Branch != "should-stay" {
+		t.Errorf("expected branch unchanged for no-cwd agent, got %q", sf.Agents["no-cwd"].Branch)
+	}
+
+	// Agent with bad cwd should be unchanged
+	if sf.Agents["bad-cwd"].Branch != "should-stay" {
+		t.Errorf("expected branch unchanged for bad-cwd agent, got %q", sf.Agents["bad-cwd"].Branch)
+	}
+}
+
+func TestGitBranch(t *testing.T) {
+	// Valid git repo
+	cwd, _ := os.Getwd()
+	branch := gitBranch(cwd)
+	if branch == "" {
+		t.Error("expected non-empty branch for current repo")
+	}
+
+	// Invalid path
+	if gitBranch("/nonexistent/path") != "" {
+		t.Error("expected empty branch for invalid path")
+	}
+
+	// Empty path — git -C "" resolves to cwd, so gitBranch may return
+	// a value. ResolveAgentBranches guards against empty Cwd upstream.
+}
+
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration("") != "" {
 		t.Error("expected empty for empty input")
