@@ -627,6 +627,13 @@ func (m model) View() string {
 	}
 
 	banner := m.renderBanner()
+
+	if m.helpVisible {
+		overlay := m.renderHelpOverlay()
+		helpBar := m.renderHelpBar()
+		return lipgloss.JoinVertical(lipgloss.Left, banner, overlay, helpBar)
+	}
+
 	var left, right string
 	if m.diffVisible {
 		left = m.renderDiffFilePanel()
@@ -927,12 +934,17 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, "│")
 	}
 
-	parts = append(parts, boldStyle.Render("↑/↓")+" navigate")
+	// Help overlay active: minimal bar
+	if m.helpVisible {
+		parts = append(parts, boldStyle.Render("h/esc")+" close help")
+		return helpStyle.Render("  " + strings.Join(parts, "  "))
+	}
 
 	if m.diffVisible {
 		parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
 		parts = append(parts, boldStyle.Render("J/K")+" line scroll")
 		parts = append(parts, boldStyle.Render("d/esc")+" close")
+		parts = append(parts, boldStyle.Render("h")+" help")
 		return helpStyle.Render("  " + strings.Join(parts, "  "))
 	}
 
@@ -948,35 +960,14 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
+	// Normal mode: slim bar with essential hints only
 	if m.tmuxAvailable {
 		parts = append(parts, boldStyle.Render("enter")+" jump")
 		parts = append(parts, boldStyle.Render("r")+" reply")
-		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
-			es := agent.State
-			if es == "input" || es == "error" {
-				parts = append(parts, boldStyle.Render("y/n")+" quick answer")
-			}
-		}
-	} else {
-		parts = append(parts, helpStyle.Render("enter")+" "+helpStyle.Render("jump"))
-		parts = append(parts, helpStyle.Render("r")+" "+helpStyle.Render("reply"))
 	}
-	if m.planContent != "" && m.selectedSubagent() == nil {
-		parts = append(parts, boldStyle.Render("p")+" plan")
-	}
-	parts = append(parts, boldStyle.Render("e")+" editor")
 	parts = append(parts, boldStyle.Render("d")+" diff")
 	parts = append(parts, boldStyle.Render("g")+" PR")
-	parts = append(parts, boldStyle.Render("a")+" new")
-	parts = append(parts, boldStyle.Render("u")+" usage")
-	parts = append(parts, boldStyle.Render("c")+" collapse")
-	parts = append(parts, boldStyle.Render("x")+" close/dismiss")
-	parts = append(parts, boldStyle.Render("⇧↑/⇧↓")+" next agent")
-	parts = append(parts, boldStyle.Render("tab")+" focus")
-	parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
-	if m.planVisible && m.renderedPlan != "" {
-		parts = append(parts, boldStyle.Render("J/K")+" line scroll")
-	}
+	parts = append(parts, boldStyle.Render("h")+" help")
 	parts = append(parts, boldStyle.Render("q")+" quit")
 
 	return m.truncateHelpBar(parts)
@@ -1002,4 +993,78 @@ func (m model) truncateHelpBar(parts []string) string {
 	}
 
 	return helpStyle.Render("  " + strings.Join(included, "  "))
+}
+
+// renderHelpOverlay renders a full-screen help legend with all keybindings grouped by context.
+func (m model) renderHelpOverlay() string {
+	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
+	contentWidth := m.width - 4               // account for border
+
+	headerStyle := titleStyle
+	keyStyle := boldStyle
+	descStyle := helpStyle
+
+	line := func(key, desc string) string {
+		return fmt.Sprintf("  %s  %s", keyStyle.Render(fmt.Sprintf("%-12s", key)), descStyle.Render(desc))
+	}
+
+	var lines []string
+
+	// Navigation
+	lines = append(lines, headerStyle.Render("  Navigation"))
+	lines = append(lines, line("↑ / k", "Previous agent"))
+	lines = append(lines, line("↓ / j", "Next agent"))
+	lines = append(lines, line("⇧↑ / ⇧↓", "Jump to parent agent"))
+	lines = append(lines, line("tab", "Cycle focus forward"))
+	lines = append(lines, line("⇧tab", "Cycle focus backward"))
+	lines = append(lines, line("^u / ^d", "Half-page scroll"))
+	lines = append(lines, line("J / K", "Line scroll (plan/diff)"))
+	lines = append(lines, "")
+
+	// Agent Actions
+	lines = append(lines, headerStyle.Render("  Agent Actions"))
+	lines = append(lines, line("enter", "Jump to agent pane"))
+	lines = append(lines, line("r", "Reply to agent"))
+	lines = append(lines, line("e", "Open editor"))
+	lines = append(lines, line("a", "Create new session"))
+	lines = append(lines, line("x", "Close/dismiss agent"))
+	lines = append(lines, line("c", "Collapse/expand subagents"))
+	lines = append(lines, "")
+
+	// View Controls
+	lines = append(lines, headerStyle.Render("  View Controls"))
+	lines = append(lines, line("p", "Toggle plan view"))
+	lines = append(lines, line("u", "Toggle usage view"))
+	lines = append(lines, line("d", "View diff"))
+	lines = append(lines, line("g", "Open PR in browser"))
+	lines = append(lines, line("h", "Toggle this help"))
+	lines = append(lines, "")
+
+	// Diff Mode
+	lines = append(lines, headerStyle.Render("  Diff Mode"))
+	lines = append(lines, line("↑ / k", "Previous file"))
+	lines = append(lines, line("↓ / j", "Next file"))
+	lines = append(lines, line("e", "Toggle expand all"))
+	lines = append(lines, line("^u / ^d", "Scroll"))
+	lines = append(lines, line("J / K", "Line scroll"))
+	lines = append(lines, line("d / esc", "Close diff"))
+	lines = append(lines, "")
+
+	// Input Modes
+	lines = append(lines, headerStyle.Render("  Input Modes"))
+	lines = append(lines, line("enter", "Send reply / create session"))
+	lines = append(lines, line("tab", "Auto-complete (create mode)"))
+	lines = append(lines, line("esc", "Cancel"))
+	lines = append(lines, "")
+
+	// Quit
+	lines = append(lines, line("q / ^c", "Quit dashboard"))
+
+	content := strings.Join(lines, "\n")
+
+	style := borderStyle.
+		Width(contentWidth).
+		Height(panelHeight)
+
+	return style.Render(content)
 }

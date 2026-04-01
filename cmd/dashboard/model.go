@@ -106,6 +106,9 @@ type model struct {
 	diffContentVP    viewport.Model
 	diffFuncCtx      []string // per-row function context for sticky header
 
+	// Help overlay
+	helpVisible bool
+
 	// Close confirmation
 	confirmPaneID    string // tmux pane ID (%N) pending close
 	confirmSessionID string // session_id of agent pending close

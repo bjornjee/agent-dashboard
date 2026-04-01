@@ -264,3 +264,59 @@ func TestCreateFolderMode_UpWrapsSelection(t *testing.T) {
 		t.Errorf("expected selectedSugg=1 after up wrap, got %d", rm.selectedSugg)
 	}
 }
+
+func TestHKeyOpensHelp(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.selected = 0
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if !rm.helpVisible {
+		t.Error("expected helpVisible=true after pressing h")
+	}
+}
+
+func TestHKeyClosesHelp(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.helpVisible = true
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.helpVisible {
+		t.Error("expected helpVisible=false after pressing h in help overlay")
+	}
+}
+
+func TestEscClosesHelp(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.helpVisible = true
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.helpVisible {
+		t.Error("expected helpVisible=false after pressing esc in help overlay")
+	}
+}
+
+func TestHelpOverlaySwallowsKeys(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.helpVisible = true
+
+	// 'r' should not enter reply mode when help is visible
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeNormal {
+		t.Errorf("expected modeNormal when help visible, got %d", rm.mode)
+	}
+	if !rm.helpVisible {
+		t.Error("help should remain visible when pressing unrelated key")
+	}
+}
