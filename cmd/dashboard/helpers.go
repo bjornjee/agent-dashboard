@@ -47,18 +47,23 @@ func repoFromCwd(cwd string) string {
 	return base
 }
 
-// agentLabel returns a display label for an agent: "repo/branch" with fallbacks.
-// When WorktreeCwd is set, it is preferred over Cwd for deriving the repo name
-// (the agent may be operating in a worktree whose path differs from the launch dir).
-func agentLabel(agent Agent) string {
+// agentRepo extracts the repo name from an agent, preferring WorktreeCwd.
+func agentRepo(agent Agent) string {
 	repo := repoFromCwd(agent.WorktreeCwd)
 	if repo == "" {
 		repo = repoFromCwd(agent.Cwd)
 	}
+	return repo
+}
+
+// agentLabel returns a plain display label for an agent: "repo | branch" with fallbacks.
+// Used for width calculation and non-styled contexts.
+func agentLabel(agent Agent) string {
+	repo := agentRepo(agent)
 	branch := agent.Branch
 
 	if repo != "" && branch != "" {
-		return repo + "/" + branch
+		return repo + " | " + branch
 	}
 	if repo != "" {
 		return repo
@@ -67,6 +72,66 @@ func agentLabel(agent Agent) string {
 		return branch
 	}
 	return agent.Session
+}
+
+// branchColor returns the theme color for a branch based on its prefix.
+func branchColor(branch string) lipgloss.Color {
+	b := strings.ToLower(branch)
+	switch {
+	case b == "main" || b == "master":
+		return themeText
+	case strings.HasPrefix(b, "feat/") || strings.HasPrefix(b, "feature/"):
+		return themeGreen
+	case strings.HasPrefix(b, "fix/"):
+		return themePeach
+	case strings.HasPrefix(b, "hotfix/"):
+		return themeRed
+	case strings.HasPrefix(b, "chore/"):
+		return themeLavender
+	case strings.HasPrefix(b, "refactor/"):
+		return themeYellow
+	case strings.HasPrefix(b, "release/"):
+		return themeMauve
+	default:
+		return themeSubtext0
+	}
+}
+
+// styledBranch renders a branch name with prefix-appropriate color.
+func styledBranch(branch string) string {
+	return lipgloss.NewStyle().Foreground(branchColor(branch)).Render(branch)
+}
+
+// agentLabelStyled returns a styled label with repo in sapphire, | dim, branch colored by prefix.
+func agentLabelStyled(agent Agent) string {
+	repo := agentRepo(agent)
+	branch := agent.Branch
+
+	repoStyle := lipgloss.NewStyle().Foreground(themeSapphire).Bold(true)
+	sepStyle := lipgloss.NewStyle().Foreground(themeOverlay0)
+
+	if repo != "" && branch != "" {
+		return repoStyle.Render(repo) + sepStyle.Render(" | ") + styledBranch(branch)
+	}
+	if repo != "" {
+		return repoStyle.Render(repo)
+	}
+	if branch != "" {
+		return styledBranch(branch)
+	}
+	return agent.Session
+}
+
+// padLabel renders a label with dim style and pads it to a fixed visual width.
+// If the rendered label is already wider than width, it is returned as-is.
+func padLabel(label string, width int) string {
+	dimLabel := lipgloss.NewStyle().Foreground(themeSubtext0)
+	rendered := dimLabel.Render(label)
+	renderedWidth := lipgloss.Width(rendered)
+	if renderedWidth < width {
+		rendered += strings.Repeat(" ", width-renderedWidth)
+	}
+	return rendered
 }
 
 // modelShort returns a single-letter model indicator with color.
