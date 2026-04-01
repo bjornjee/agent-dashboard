@@ -960,11 +960,12 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
-	// Normal mode: slim bar with essential hints only
+	// Normal mode: essential lifecycle hints for first-timers
+	parts = append(parts, boldStyle.Render("a")+" new")
 	if m.tmuxAvailable {
 		parts = append(parts, boldStyle.Render("enter")+" jump")
-		parts = append(parts, boldStyle.Render("r")+" reply")
 	}
+	parts = append(parts, boldStyle.Render("x")+" close")
 	parts = append(parts, boldStyle.Render("d")+" diff")
 	parts = append(parts, boldStyle.Render("g")+" PR")
 	parts = append(parts, boldStyle.Render("h")+" help")

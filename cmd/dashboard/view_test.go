@@ -98,6 +98,13 @@ func TestSlimHelpBarContainsHHelp(t *testing.T) {
 	if !strings.Contains(bar, "help") {
 		t.Error("slim help bar should contain 'help' hint")
 	}
+	// Should contain lifecycle essentials
+	if !strings.Contains(bar, "new") {
+		t.Error("slim help bar should contain 'new' hint")
+	}
+	if !strings.Contains(bar, "close") {
+		t.Error("slim help bar should contain 'close' hint")
+	}
 	// Should NOT contain the old verbose hints
 	if strings.Contains(bar, "editor") {
 		t.Error("slim help bar should not contain 'editor' — moved to overlay")
