@@ -307,7 +307,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "p":
 		if m.selectedAgent() != nil && m.selectedSubagent() == nil && m.planContent != "" {
 			m.planVisible = !m.planVisible
+			if m.planVisible {
+				m.focusedVP = focusMessage
+			}
 			m.updateRightContent()
+			if m.planVisible {
+				m.messageVP.GotoTop()
+			}
 		}
 		return m, nil
 	case "e":
