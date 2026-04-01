@@ -332,7 +332,7 @@ func (m model) renderBanner() string {
 
 	// 5. Wrap that quote + version in a container that fills the remaining width
 	// and pushes the content to the Right.
-	rightContent := lipgloss.JoinVertical(lipgloss.Right, ver, q)
+	rightContent := lipgloss.JoinVertical(lipgloss.Right, ver, "", q)
 	right := lipgloss.NewStyle().
 		Width(rightWidth).
 		Align(lipgloss.Right).
