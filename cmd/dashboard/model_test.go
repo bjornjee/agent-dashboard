@@ -1085,8 +1085,9 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 	if len(m.conversation) != 1 || m.conversation[0].Content != "Hello from agent A" {
 		t.Errorf("expected agent A conversation to be restored, got %v", m.conversation)
 	}
-	if len(m.capturedLines) != 1 || m.capturedLines[0] != "live output A" {
-		t.Errorf("expected agent A capturedLines to be restored, got %v", m.capturedLines)
+	// capturedLines is ephemeral — not cached, re-captured every tick
+	if len(m.capturedLines) != 0 {
+		t.Errorf("capturedLines should not be restored from cache (ephemeral), got %v", m.capturedLines)
 	}
 	if m.planContent != "plan A" {
 		t.Errorf("expected agent A planContent to be restored, got %q", m.planContent)
@@ -1226,5 +1227,178 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 	// Agent A's conversation should be restored from cache
 	if len(rm.conversation) != 1 || rm.conversation[0].Content != "Agent A message" {
 		t.Errorf("expected agent A conversation to be restored after navigate back, got %v", rm.conversation)
+	}
+}
+
+func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/a"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	// Populate with source and derived data
+	m.conversation = []ConversationEntry{
+		{Role: "assistant", Content: "Hello"},
+	}
+	m.capturedLines = []string{"live output"}
+	m.renderedHistory = "big rendered string"
+	m.historyConvLen = 1
+	m.historyRightWidth = 100
+	m.planContent = "plan content"
+	m.renderedPlan = "big rendered plan"
+	m.planVisible = true
+
+	m.saveCurrentCache()
+
+	cache := m.agentCaches[m.cacheKey()]
+
+	// Source data should be cached
+	if len(cache.conversation) != 1 {
+		t.Errorf("conversation should be cached, got %d entries", len(cache.conversation))
+	}
+	if cache.planContent != "plan content" {
+		t.Errorf("planContent should be cached, got %q", cache.planContent)
+	}
+	if !cache.planVisible {
+		t.Error("planVisible should be cached")
+	}
+
+	// Switch to agent B and back — verify derived fields are zeroed on restore
+	m.selected = 1
+	m.restoreCurrentCache()
+	m.saveCurrentCache()
+	m.selected = 0
+	m.restoreCurrentCache()
+
+	// Ephemeral data should NOT be restored from cache
+	if len(m.capturedLines) != 0 {
+		t.Errorf("capturedLines should not be restored, got %d", len(m.capturedLines))
+	}
+	if m.renderedHistory != "" {
+		t.Errorf("renderedHistory should not be restored, got %q", m.renderedHistory)
+	}
+	if m.historyConvLen != 0 {
+		t.Errorf("historyConvLen should not be restored, got %d", m.historyConvLen)
+	}
+	if m.historyRightWidth != 0 {
+		t.Errorf("historyRightWidth should not be restored, got %d", m.historyRightWidth)
+	}
+}
+
+func TestRestoreCache_RegeneratesPlan(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/a"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	// Set up plan content and save
+	m.planContent = "# My Plan\n\nSome content"
+	m.planVisible = true
+	m.renderedPlan = "old rendered plan"
+	m.saveCurrentCache()
+
+	// Switch to agent B
+	m.selected = 1
+	m.restoreCurrentCache()
+
+	// Switch back to agent A
+	m.saveCurrentCache()
+	m.selected = 0
+	m.restoreCurrentCache()
+
+	// planContent and planVisible should be restored
+	if m.planContent != "# My Plan\n\nSome content" {
+		t.Errorf("planContent should be restored, got %q", m.planContent)
+	}
+	if !m.planVisible {
+		t.Error("planVisible should be restored")
+	}
+	// renderedPlan should be regenerated (non-empty) from planContent
+	if m.renderedPlan == "" {
+		t.Error("renderedPlan should be regenerated from planContent on restore")
+	}
+}
+
+func TestCacheCapsSubActivity(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.agentSubagents["main:1.0"] = []SubagentInfo{
+		{AgentID: "sub1", AgentType: "Explore", Description: "test"},
+	}
+	m.buildTree()
+
+	// Select subagent and set 500 activity entries
+	m.selected = 1
+	entries := make([]ActivityEntry, 500)
+	for i := range entries {
+		entries[i] = ActivityEntry{Kind: "tool", Content: fmt.Sprintf("entry %d", i)}
+	}
+	m.subActivity = entries
+	m.saveCurrentCache()
+
+	cache := m.agentCaches[m.cacheKey()]
+	if len(cache.subActivity) > 300 {
+		t.Errorf("subActivity should be capped at 300, got %d", len(cache.subActivity))
+	}
+	// Should keep the LAST 300 entries
+	if cache.subActivity[0].Content != "entry 200" {
+		t.Errorf("should keep last 300 entries, first entry is %q", cache.subActivity[0].Content)
+	}
+}
+
+func TestDismissedSubagentCachePruned(t *testing.T) {
+	m := newModel("", "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.agentSubagents["main:1.0"] = []SubagentInfo{
+		{AgentID: "sub1", AgentType: "Explore", Description: "test"},
+	}
+	m.buildTree()
+
+	// Cache subagent state
+	m.selected = 1
+	m.subActivity = []ActivityEntry{{Kind: "tool", Content: "ls"}}
+	m.saveCurrentCache()
+
+	// Verify cache exists for subagent
+	subKey := "main:1.0:sub1"
+	if _, ok := m.agentCaches[subKey]; !ok {
+		t.Fatal("expected cache for subagent")
+	}
+
+	// Dismiss the subagent
+	m.dismissed[subKey] = true
+
+	// Simulate state update — parent agent still alive
+	newState := StateFile{Agents: map[string]Agent{
+		"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}}
+	m.selected = 0
+	result, _ := m.Update(stateUpdatedMsg{state: newState})
+	rm := result.(model)
+
+	if _, ok := rm.agentCaches[subKey]; ok {
+		t.Error("cache for dismissed subagent should have been pruned")
 	}
 }

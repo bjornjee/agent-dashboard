@@ -27,17 +27,12 @@ type treeNode struct {
 // agentCache stores per-agent UI state so switching between agents preserves
 // conversation history, live output, plan content, etc.
 type agentCache struct {
-	capturedLines     []string
-	conversation      []ConversationEntry
-	convFileOffset    int64
-	convSessionKey    string
-	renderedHistory   string
-	historyConvLen    int
-	historyRightWidth int
-	planContent       string
-	renderedPlan      string
-	planVisible       bool
-	subActivity       []ActivityEntry
+	conversation   []ConversationEntry
+	convFileOffset int64
+	convSessionKey string
+	planContent    string
+	planVisible    bool
+	subActivity    []ActivityEntry
 }
 
 // -- Model --
@@ -230,54 +225,66 @@ func (m model) cacheKey() string {
 }
 
 // saveCurrentCache persists the current agent's UI state into agentCaches.
+// Only source data is cached; derived renders (renderedHistory, renderedPlan)
+// and ephemeral data (capturedLines) are regenerated on restore.
 func (m *model) saveCurrentCache() {
 	key := m.cacheKey()
 	if key == "" {
 		return // empty tree or out-of-range selection — nothing to save
 	}
+	// Cap subActivity to reduce memory for long-running subagents.
+	// Copy the slice to avoid aliasing with the model's live slice.
+	const maxCachedActivity = 300
+	var activity []ActivityEntry
+	if len(m.subActivity) > maxCachedActivity {
+		activity = make([]ActivityEntry, maxCachedActivity)
+		copy(activity, m.subActivity[len(m.subActivity)-maxCachedActivity:])
+	} else if len(m.subActivity) > 0 {
+		activity = make([]ActivityEntry, len(m.subActivity))
+		copy(activity, m.subActivity)
+	}
 	m.agentCaches[key] = &agentCache{
-		capturedLines:     m.capturedLines,
-		conversation:      m.conversation,
-		convFileOffset:    m.convFileOffset,
-		convSessionKey:    m.convSessionKey,
-		renderedHistory:   m.renderedHistory,
-		historyConvLen:    m.historyConvLen,
-		historyRightWidth: m.historyRightWidth,
-		planContent:       m.planContent,
-		renderedPlan:      m.renderedPlan,
-		planVisible:       m.planVisible,
-		subActivity:       m.subActivity,
+		conversation:   m.conversation,
+		convFileOffset: m.convFileOffset,
+		convSessionKey: m.convSessionKey,
+		planContent:    m.planContent,
+		planVisible:    m.planVisible,
+		subActivity:    activity,
 	}
 }
 
 // restoreCurrentCache loads cached UI state for the newly selected agent,
-// or zeros out the fields if no cache exists.
+// or zeros out the fields if no cache exists. Derived renders are regenerated
+// synchronously from source data to avoid empty panels.
 func (m *model) restoreCurrentCache() {
 	key := m.cacheKey()
 	if c, ok := m.agentCaches[key]; ok && c != nil {
-		m.capturedLines = c.capturedLines
 		m.conversation = c.conversation
 		m.convFileOffset = c.convFileOffset
 		m.convSessionKey = c.convSessionKey
-		m.renderedHistory = c.renderedHistory
-		m.historyConvLen = c.historyConvLen
-		m.historyRightWidth = c.historyRightWidth
 		m.planContent = c.planContent
-		m.renderedPlan = c.renderedPlan
 		m.planVisible = c.planVisible
 		m.subActivity = c.subActivity
 	} else {
-		m.capturedLines = nil
 		m.conversation = nil
 		m.convFileOffset = 0
 		m.convSessionKey = ""
-		m.renderedHistory = ""
-		m.historyConvLen = 0
-		m.historyRightWidth = 0
 		m.planContent = ""
-		m.renderedPlan = ""
 		m.planVisible = false
 		m.subActivity = nil
+	}
+
+	// Zero ephemeral/derived fields — regenerated on demand
+	m.capturedLines = nil
+	m.renderedHistory = ""
+	m.historyConvLen = 0
+	m.historyRightWidth = 0
+
+	// Regenerate plan render synchronously to avoid empty plan panel
+	if m.planContent != "" && m.planVisible {
+		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
+	} else {
+		m.renderedPlan = ""
 	}
 }
 
@@ -383,6 +390,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !live[parentTarget] {
 				delete(m.agentCaches, key)
+				continue
+			}
+			// Prune dismissed subagent caches
+			if m.dismissed[key] {
+				delete(m.agentCaches, key)
 			}
 		}
 		m.buildTree()
@@ -393,7 +405,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// doesn't restore stale offsets after this reset.
 		if key := m.cacheKey(); key != "" {
 			if c, ok := m.agentCaches[key]; ok {
-				c.renderedHistory = ""
 				c.convFileOffset = 0
 			}
 		}
