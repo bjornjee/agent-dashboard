@@ -694,6 +694,198 @@ func TestCleanSlashCommand(t *testing.T) {
 	}
 }
 
+func TestConversationEqual(t *testing.T) {
+	a := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
+		{Role: "assistant", Content: "hi", Timestamp: "2026-03-28T10:00:01Z"},
+	}
+	b := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
+		{Role: "assistant", Content: "hi", Timestamp: "2026-03-28T10:00:01Z"},
+	}
+	if !conversationEqual(a, b) {
+		t.Error("identical slices should be equal")
+	}
+}
+
+func TestConversationEqual_DifferentLength(t *testing.T) {
+	a := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
+	}
+	b := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
+		{Role: "assistant", Content: "hi", Timestamp: "2026-03-28T10:00:01Z"},
+	}
+	if conversationEqual(a, b) {
+		t.Error("different lengths should not be equal")
+	}
+}
+
+func TestConversationEqual_DifferentContent(t *testing.T) {
+	a := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
+	}
+	b := []ConversationEntry{
+		{Role: "human", Content: "goodbye", Timestamp: "2026-03-28T10:00:00Z"},
+	}
+	if conversationEqual(a, b) {
+		t.Error("different content should not be equal")
+	}
+}
+
+func TestConversationEqual_DifferentNotification(t *testing.T) {
+	a := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsNotification: false},
+	}
+	b := []ConversationEntry{
+		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsNotification: true},
+	}
+	if conversationEqual(a, b) {
+		t.Error("different IsNotification should not be equal")
+	}
+}
+
+func TestConversationEqual_BothNil(t *testing.T) {
+	if !conversationEqual(nil, nil) {
+		t.Error("both nil should be equal")
+	}
+}
+
+func TestConversationEqual_BothEmpty(t *testing.T) {
+	if !conversationEqual([]ConversationEntry{}, []ConversationEntry{}) {
+		t.Error("both empty should be equal")
+	}
+}
+
+func TestReadConversationIncremental_FirstRead(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries, offset := ReadConversationIncremental(filepath.Join(dir, slug), sessionID, 50, nil, 0)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if offset == 0 {
+		t.Error("expected non-zero offset after first read")
+	}
+	if entries[0].Content != "hello" || entries[1].Content != "hi" {
+		t.Errorf("unexpected entries: %+v", entries)
+	}
+}
+
+func TestReadConversationIncremental_AppendNew(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+	path := filepath.Join(projDir, sessionID+".jsonl")
+
+	// Initial write
+	jsonl1 := `{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(path, []byte(jsonl1), 0644)
+
+	entries, offset := ReadConversationIncremental(projDir, sessionID, 50, nil, 0)
+	if len(entries) != 2 {
+		t.Fatalf("first read: expected 2 entries, got %d", len(entries))
+	}
+
+	// Append more entries
+	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	f.WriteString(`{"type":"user","message":{"role":"user","content":"more"},"timestamp":"2026-03-28T10:01:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"timestamp":"2026-03-28T10:01:01Z"}
+`)
+	f.Close()
+
+	// Incremental read should only parse new entries
+	entries2, offset2 := ReadConversationIncremental(projDir, sessionID, 50, entries, offset)
+	if len(entries2) != 4 {
+		t.Fatalf("second read: expected 4 entries, got %d", len(entries2))
+	}
+	if offset2 <= offset {
+		t.Error("offset should advance")
+	}
+	if entries2[2].Content != "more" || entries2[3].Content != "ok" {
+		t.Errorf("unexpected new entries: %+v", entries2[2:])
+	}
+}
+
+func TestReadConversationIncremental_RespectsLimit(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+	path := filepath.Join(projDir, sessionID+".jsonl")
+
+	// Write 6 entries, limit 4
+	var builder strings.Builder
+	for i := 0; i < 6; i++ {
+		builder.WriteString(fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"msg%d"},"timestamp":"2026-03-28T10:%02d:00Z"}`, i, i))
+		builder.WriteByte('\n')
+	}
+	os.WriteFile(path, []byte(builder.String()), 0644)
+
+	entries, _ := ReadConversationIncremental(projDir, sessionID, 4, nil, 0)
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 entries (limit), got %d", len(entries))
+	}
+	// Should be the last 4
+	if entries[0].Content != "msg2" {
+		t.Errorf("expected msg2 first, got %s", entries[0].Content)
+	}
+}
+
+func TestReadConversationIncremental_FileShrunk(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+	path := filepath.Join(projDir, sessionID+".jsonl")
+
+	// Write data
+	jsonl := `{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(path, []byte(jsonl), 0644)
+	_, offset := ReadConversationIncremental(projDir, sessionID, 50, nil, 0)
+
+	// Truncate and rewrite smaller content
+	os.WriteFile(path, []byte(`{"type":"user","message":{"role":"user","content":"new"},"timestamp":"2026-03-28T11:00:00Z"}
+`), 0644)
+
+	// Should detect shrink and do full re-read
+	entries, _ := ReadConversationIncremental(projDir, sessionID, 50, nil, offset)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after shrink, got %d", len(entries))
+	}
+	if entries[0].Content != "new" {
+		t.Errorf("expected 'new', got %s", entries[0].Content)
+	}
+}
+
+func TestReadConversationIncremental_MissingFile(t *testing.T) {
+	entries, offset := ReadConversationIncremental("/nonexistent", "no-such", 50, nil, 0)
+	if len(entries) != 0 {
+		t.Errorf("expected empty, got %d entries", len(entries))
+	}
+	if offset != 0 {
+		t.Errorf("expected 0 offset, got %d", offset)
+	}
+}
+
 func TestParseUserEntry_SlashCommand(t *testing.T) {
 	content := "<command-message>skills:refactor</command-message>\n<command-name>/skills:refactor</command-name>\n<command-args>clean up the auth module</command-args>"
 	contentJSON, _ := json.Marshal(content)

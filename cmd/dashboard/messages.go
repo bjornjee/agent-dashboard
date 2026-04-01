@@ -9,7 +9,11 @@ type tickMsg time.Time
 type jumpResultMsg struct{ err error }
 type sendResultMsg struct{ err error }
 type captureResultMsg struct{ lines []string }
-type conversationMsg struct{ entries []ConversationEntry }
+type conversationMsg struct {
+	entries    []ConversationEntry
+	fileOffset int64  // byte offset after reading JSONL
+	sessionKey string // projDir+sessionID for cache invalidation
+}
 type pruneDeadMsg struct{ removed int }
 type usageMsg struct {
 	perAgent map[string]Usage

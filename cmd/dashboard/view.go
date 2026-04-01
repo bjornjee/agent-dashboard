@@ -254,43 +254,76 @@ func (m model) filesContent(agent Agent) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m model) historyContent() string {
+// renderHistoryEntry renders a single conversation entry as styled line(s).
+func renderHistoryEntry(entry ConversationEntry, w int) string {
+	ts := ""
+	if t, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
+		ts = t.Local().Format("15:04")
+	}
+
+	role := entry.Role
+	rStyle := lipgloss.NewStyle().Foreground(runningColor).Bold(true)
+	if entry.IsNotification {
+		role = "sub-agent"
+		rStyle = lipgloss.NewStyle().Foreground(doneColor)
+	} else if entry.Role == "human" {
+		rStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
+	}
+
+	preview := strings.Split(entry.Content, "\n")[0]
+	header := fmt.Sprintf(" %s %s ",
+		helpStyle.Render("["+ts+"]"),
+		rStyle.Render(role+":"))
+	// Wrap the preview text, indenting continuation lines
+	wrapped := wrapText(preview, w-len(ts)-len(role)-6)
+	var lines []string
+	for i, wl := range wrapped {
+		if i == 0 {
+			lines = append(lines, header+wl)
+		} else {
+			lines = append(lines, strings.Repeat(" ", len(ts)+len(role)+6)+wl)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *model) historyContent() string {
 	if len(m.conversation) == 0 {
 		return helpStyle.Render("  No conversation history")
 	}
 
 	w := m.rightWidth - 4
+
+	// Layer 2: return cached string if nothing changed
+	if m.renderedHistory != "" &&
+		m.historyConvLen == len(m.conversation) &&
+		m.historyRightWidth == w {
+		return m.renderedHistory
+	}
+
+	// Layer 3: incremental append when conversation grew
+	if m.renderedHistory != "" &&
+		len(m.conversation) > m.historyConvLen &&
+		m.historyRightWidth == w {
+		var newLines []string
+		for _, entry := range m.conversation[m.historyConvLen:] {
+			newLines = append(newLines, renderHistoryEntry(entry, w))
+		}
+		m.renderedHistory = m.renderedHistory + "\n" + strings.Join(newLines, "\n")
+		m.historyConvLen = len(m.conversation)
+		m.historyRightWidth = w
+		return m.renderedHistory
+	}
+
+	// Full re-render (first load, agent switch, width change, conversation shrunk)
 	var lines []string
 	for _, entry := range m.conversation {
-		ts := ""
-		if t, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
-			ts = t.Local().Format("15:04")
-		}
-
-		role := entry.Role
-		rStyle := lipgloss.NewStyle().Foreground(runningColor).Bold(true)
-		if entry.IsNotification {
-			role = "sub-agent"
-			rStyle = lipgloss.NewStyle().Foreground(doneColor)
-		} else if entry.Role == "human" {
-			rStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
-		}
-
-		preview := strings.Split(entry.Content, "\n")[0]
-		header := fmt.Sprintf(" %s %s ",
-			helpStyle.Render("["+ts+"]"),
-			rStyle.Render(role+":"))
-		// Wrap the preview text, indenting continuation lines
-		wrapped := wrapText(preview, w-len(ts)-len(role)-6)
-		for i, wl := range wrapped {
-			if i == 0 {
-				lines = append(lines, header+wl)
-			} else {
-				lines = append(lines, strings.Repeat(" ", len(ts)+len(role)+6)+wl)
-			}
-		}
+		lines = append(lines, renderHistoryEntry(entry, w))
 	}
-	return strings.Join(lines, "\n")
+	m.renderedHistory = strings.Join(lines, "\n")
+	m.historyConvLen = len(m.conversation)
+	m.historyRightWidth = w
+	return m.renderedHistory
 }
 
 func (m model) waitingMessageContent() string {

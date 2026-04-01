@@ -46,6 +46,16 @@ func (m model) loadConversation() tea.Cmd {
 	sessionID := agent.SessionID
 	cwd := agent.Cwd
 
+	// Capture offset state for incremental reading
+	sessionKey := projDir + ":" + sessionID
+	prevOffset := m.convFileOffset
+	var prevEntries []ConversationEntry
+	if m.convSessionKey == sessionKey {
+		prevEntries = m.conversation
+	} else {
+		prevOffset = 0 // different session — full re-read
+	}
+
 	return func() tea.Msg {
 		if sessionID == "" {
 			sessionID = FindSessionID(cwd)
@@ -53,8 +63,12 @@ func (m model) loadConversation() tea.Cmd {
 		if sessionID == "" {
 			return conversationMsg{entries: nil}
 		}
-		entries := ReadConversation(projDir, sessionID, 50)
-		return conversationMsg{entries: entries}
+		entries, newOffset := ReadConversationIncremental(projDir, sessionID, 50, prevEntries, prevOffset)
+		return conversationMsg{
+			entries:    entries,
+			fileOffset: newOffset,
+			sessionKey: projDir + ":" + sessionID,
+		}
 	}
 }
 
