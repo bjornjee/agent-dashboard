@@ -308,7 +308,7 @@ func findWindowForRepo(agents []Agent, folder, selfPaneID string) (string, bool)
 		if agent.TmuxPaneID == selfPaneID {
 			continue
 		}
-		agentIsWorktree := strings.Contains(agent.Cwd, "/worktrees/")
+		agentIsWorktree := strings.Contains(agent.Cwd, "/worktrees/") || agent.WorktreeCwd != ""
 		if !folderIsWorktree && !agentIsWorktree {
 			continue
 		}

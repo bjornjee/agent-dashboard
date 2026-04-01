@@ -444,6 +444,41 @@ func TestResolveAgentBranches(t *testing.T) {
 	}
 }
 
+func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			// WorktreeCwd set to valid git dir — should use it
+			"worktree": {WorktreeCwd: cwd, Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
+			// WorktreeCwd set to invalid path — should fall back to Cwd
+			"fallback": {WorktreeCwd: "/nonexistent/worktree", Cwd: cwd, Branch: "stale", State: "running"},
+			// WorktreeCwd empty — should use Cwd as before
+			"no-worktree": {Cwd: cwd, Branch: "stale", State: "running"},
+			// Both invalid — should be unchanged
+			"both-bad": {WorktreeCwd: "/bad/wt", Cwd: "/bad/cwd", Branch: "should-stay", State: "running"},
+		},
+	}
+
+	ResolveAgentBranches(&sf)
+
+	if sf.Agents["worktree"].Branch == "stale" || sf.Agents["worktree"].Branch == "" {
+		t.Errorf("worktree: expected branch from WorktreeCwd, got %q", sf.Agents["worktree"].Branch)
+	}
+	if sf.Agents["fallback"].Branch == "stale" || sf.Agents["fallback"].Branch == "" {
+		t.Errorf("fallback: expected branch from Cwd fallback, got %q", sf.Agents["fallback"].Branch)
+	}
+	if sf.Agents["no-worktree"].Branch == "stale" || sf.Agents["no-worktree"].Branch == "" {
+		t.Errorf("no-worktree: expected branch from Cwd, got %q", sf.Agents["no-worktree"].Branch)
+	}
+	if sf.Agents["both-bad"].Branch != "should-stay" {
+		t.Errorf("both-bad: expected unchanged, got %q", sf.Agents["both-bad"].Branch)
+	}
+}
+
 func TestGitBranch(t *testing.T) {
 	// Valid git repo
 	cwd, _ := os.Getwd()

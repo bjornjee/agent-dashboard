@@ -32,6 +32,7 @@ type Agent struct {
 	SubagentCount      int      `json:"subagent_count"`
 	LastHookEvent      string   `json:"last_hook_event"`
 	CurrentTool        string   `json:"current_tool"`
+	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
 }
 
 // StateFile is the in-memory aggregate of all per-agent JSON files.
@@ -152,13 +153,18 @@ func ResolveAgentTargets(sf *StateFile, paneTargets map[string]PaneTarget) {
 }
 
 // ResolveAgentBranches overwrites each agent's Branch with the live value
-// from git. Agents without a Cwd or where git fails are left unchanged.
+// from git. If WorktreeCwd is set, it is tried first (the agent may be
+// operating in a worktree whose branch differs from the launch directory).
+// Falls back to Cwd. Agents where both fail are left unchanged.
 func ResolveAgentBranches(sf *StateFile) {
 	for key, agent := range sf.Agents {
-		if agent.Cwd == "" {
-			continue
+		var branch string
+		if agent.WorktreeCwd != "" {
+			branch = gitBranch(agent.WorktreeCwd)
 		}
-		branch := gitBranch(agent.Cwd)
+		if branch == "" && agent.Cwd != "" {
+			branch = gitBranch(agent.Cwd)
+		}
 		if branch == "" {
 			continue
 		}
