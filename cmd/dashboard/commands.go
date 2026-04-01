@@ -543,6 +543,10 @@ func openPR(dir, branch string) tea.Cmd {
 		}
 
 		prURL := buildPRURL(owner, repo, base, branch)
+		parsed, err := url.Parse(prURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" {
+			return openPRMsg{err: fmt.Errorf("refusing to open unexpected URL: %s", prURL)}
+		}
 		cmd := exec.Command("open", prURL)
 		return openPRMsg{err: cmd.Start()}
 	}
