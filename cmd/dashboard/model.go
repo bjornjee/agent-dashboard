@@ -234,7 +234,7 @@ func (m *model) saveCurrentCache() {
 	}
 	// Cap subActivity to reduce memory for long-running subagents.
 	// Copy the slice to avoid aliasing with the model's live slice.
-	const maxCachedActivity = 100
+	const maxCachedActivity = 300
 	var activity []ActivityEntry
 	if len(m.subActivity) > maxCachedActivity {
 		activity = make([]ActivityEntry, maxCachedActivity)

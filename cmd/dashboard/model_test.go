@@ -1344,9 +1344,9 @@ func TestCacheCapsSubActivity(t *testing.T) {
 	}
 	m.buildTree()
 
-	// Select subagent and set 200 activity entries
+	// Select subagent and set 500 activity entries
 	m.selected = 1
-	entries := make([]ActivityEntry, 200)
+	entries := make([]ActivityEntry, 500)
 	for i := range entries {
 		entries[i] = ActivityEntry{Kind: "tool", Content: fmt.Sprintf("entry %d", i)}
 	}
@@ -1354,12 +1354,12 @@ func TestCacheCapsSubActivity(t *testing.T) {
 	m.saveCurrentCache()
 
 	cache := m.agentCaches[m.cacheKey()]
-	if len(cache.subActivity) > 100 {
-		t.Errorf("subActivity should be capped at 100, got %d", len(cache.subActivity))
+	if len(cache.subActivity) > 300 {
+		t.Errorf("subActivity should be capped at 300, got %d", len(cache.subActivity))
 	}
-	// Should keep the LAST 100 entries
-	if cache.subActivity[0].Content != "entry 100" {
-		t.Errorf("should keep last 100 entries, first entry is %q", cache.subActivity[0].Content)
+	// Should keep the LAST 300 entries
+	if cache.subActivity[0].Content != "entry 200" {
+		t.Errorf("should keep last 300 entries, first entry is %q", cache.subActivity[0].Content)
 	}
 }
 
