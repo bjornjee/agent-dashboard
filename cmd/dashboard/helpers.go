@@ -48,8 +48,13 @@ func repoFromCwd(cwd string) string {
 }
 
 // agentLabel returns a display label for an agent: "repo/branch" with fallbacks.
+// When WorktreeCwd is set, it is preferred over Cwd for deriving the repo name
+// (the agent may be operating in a worktree whose path differs from the launch dir).
 func agentLabel(agent Agent) string {
-	repo := repoFromCwd(agent.Cwd)
+	repo := repoFromCwd(agent.WorktreeCwd)
+	if repo == "" {
+		repo = repoFromCwd(agent.Cwd)
+	}
 	branch := agent.Branch
 
 	if repo != "" && branch != "" {
