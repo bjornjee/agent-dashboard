@@ -496,18 +496,16 @@ func (m *model) resizeViewports() {
 	m.agentListVP.Width = m.leftWidth
 	m.agentListVP.Height = panelHeight
 
+	filesH, historyH, msgH := panelHeights(panelHeight)
+
 	m.filesVP.Width = m.rightWidth
-	m.filesVP.Height = filesVPHeight
+	m.filesVP.Height = filesH
 
 	m.historyVP.Width = m.rightWidth
-	m.historyVP.Height = historyVPHeight
+	m.historyVP.Height = historyH
 
-	msgHeight := panelHeight - headerLines - filesVPHeight - historyVPHeight - sectionGaps
-	if msgHeight < 3 {
-		msgHeight = 3
-	}
 	m.messageVP.Width = m.rightWidth
-	m.messageVP.Height = msgHeight
+	m.messageVP.Height = msgH
 
 	m.textInput.Width = m.rightWidth - 12 // account for "Reply: " prefix + padding
 

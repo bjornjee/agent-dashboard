@@ -20,8 +20,8 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Header takes ~headerLines rows + 1 border
 	rightStart := 1 + bannerHeight // top border + banner
 	filesStart := rightStart + headerLines
-	historyStart := filesStart + filesVPHeight + 2     // +1 label +1 buffer
-	messageStart := historyStart + historyVPHeight + 2 // +1 label +1 buffer
+	historyStart := filesStart + m.filesVP.Height + 2     // +1 label +1 buffer
+	messageStart := historyStart + m.historyVP.Height + 2 // +1 label +1 buffer
 
 	var cmd tea.Cmd
 	if msg.Y >= messageStart {
