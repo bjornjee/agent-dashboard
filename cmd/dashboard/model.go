@@ -45,6 +45,15 @@ type model struct {
 	dbTotalCost     float64
 	dbTodayCost     float64
 
+	// History render cache (Layers 2+3)
+	renderedHistory   string // cached output of historyContent()
+	historyConvLen    int    // len(m.conversation) when cache was built
+	historyRightWidth int    // m.rightWidth when cache was built
+
+	// Conversation file offset (Layer 4)
+	convFileOffset int64  // byte offset after last JSONL read
+	convSessionKey string // projDir+sessionID for cache invalidation
+
 	// Viewports
 	agentListVP viewport.Model
 	filesVP     viewport.Model
@@ -273,6 +282,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.buildTree()
 		m.restoreSelection(prevTarget, prevSubID)
+		m.renderedHistory = "" // invalidate cache on state update
+		m.convFileOffset = 0  // reset offset — agent list may have changed
 		m.updateLeftContent()
 		m.updateRightContent()
 		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan()}
@@ -280,8 +291,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case conversationMsg:
+		// Only update offset tracking when we have a valid session
+		if msg.sessionKey != "" {
+			m.convFileOffset = msg.fileOffset
+			m.convSessionKey = msg.sessionKey
+		}
+		if conversationEqual(m.conversation, msg.entries) {
+			return m, nil // nothing changed — skip re-render
+		}
 		prevLen := len(m.conversation)
 		m.conversation = msg.entries
+		m.renderedHistory = "" // invalidate cache (Layer 2)
 		m.updateRightContent()
 		// On first load, scroll history to end
 		if prevLen == 0 {
@@ -504,6 +524,7 @@ func (m *model) resizeViewports() {
 	if m.planContent != "" && m.planVisible {
 		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
 	}
+	m.renderedHistory = "" // invalidate cache on resize
 	m.updateLeftContent()
 	m.updateRightContent()
 }

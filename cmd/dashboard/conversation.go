@@ -43,20 +43,86 @@ type contentBlock struct {
 	Text string `json:"text"`
 }
 
+// conversationEqual returns true if two conversation slices have the same
+// entries (length, role, content, timestamp, and notification flag).
+func conversationEqual(a, b []ConversationEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Role != b[i].Role ||
+			a[i].Content != b[i].Content ||
+			a[i].Timestamp != b[i].Timestamp ||
+			a[i].IsNotification != b[i].IsNotification {
+			return false
+		}
+	}
+	return true
+}
+
 // ReadConversation reads the Claude Code session JSONL and returns
 // the last `limit` user/assistant text entries.
 // projDir is the full path to the project directory under ~/.claude/projects/.
 func ReadConversation(projDir, sessionID string, limit int) []ConversationEntry {
+	entries, _ := ReadConversationIncremental(projDir, sessionID, limit, nil, 0)
+	return entries
+}
+
+// ReadConversationIncremental reads conversation entries incrementally.
+// On first call, pass prev=nil and prevOffset=0 for a full read.
+// On subsequent calls, pass the previous entries and offset to only parse new data.
+// Returns the updated entries slice (capped at limit) and the new file offset.
+// If the file shrank (truncation/rewrite), it falls back to a full re-read.
+func ReadConversationIncremental(projDir, sessionID string, limit int, prev []ConversationEntry, prevOffset int64) ([]ConversationEntry, int64) {
 	path := filepath.Join(projDir, sessionID+".jsonl")
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	defer f.Close()
 
-	var all []ConversationEntry
+	// Check file size for shrink detection
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, 0
+	}
+	fileSize := stat.Size()
+
+	// If file shrank or offset is invalid, do full re-read
+	if prevOffset > fileSize || prevOffset < 0 {
+		prevOffset = 0
+		prev = nil
+	}
+
+	// Nothing new in the file — return previous entries as-is
+	if prevOffset > 0 && prevOffset == fileSize && prev != nil {
+		return prev, prevOffset
+	}
+
+	// Seek to previous offset for incremental read
+	if prevOffset > 0 {
+		if _, err := f.Seek(prevOffset, 0); err != nil {
+			// Seek failed — fall back to full read
+			prevOffset = 0
+			prev = nil
+			if _, err := f.Seek(0, 0); err != nil {
+				return nil, 0
+			}
+		}
+	}
+
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line
+
+	// For incremental reads, start with previous entries
+	var all []ConversationEntry
+	prevLen := 0
+	if prevOffset > 0 && prev != nil {
+		// Snapshot previous entries for incremental append
+		all = make([]ConversationEntry, len(prev))
+		copy(all, prev)
+		prevLen = len(all)
+	}
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -81,12 +147,23 @@ func ReadConversation(projDir, sessionID string, limit int) []ConversationEntry 
 		}
 	}
 
-	markNotifications(all)
+	// Only mark notifications on new entries + the boundary entry from prev
+	// (the boundary entry might be a pending notification awaiting its pair).
+	notifStart := prevLen
+	if notifStart > 0 {
+		notifStart-- // include last prev entry for boundary check
+	}
+	if notifStart < len(all) {
+		markNotifications(all[notifStart:])
+	}
 
+	// Cap at limit (keep last N)
 	if limit > 0 && len(all) > limit {
 		all = all[len(all)-limit:]
 	}
-	return all
+
+	// The scanner reads to EOF; file offset == file size
+	return all, fileSize
 }
 
 // markNotifications tags task-notification user messages and
