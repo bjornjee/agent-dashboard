@@ -65,6 +65,9 @@ var (
 	boldStyle      = lipgloss.NewStyle().Bold(true)
 	costStyle      = lipgloss.NewStyle().Foreground(themePeach).Bold(true)
 	planLabelStyle = lipgloss.NewStyle().Foreground(themeMauve).Bold(true)
+
+	diffCollapsedStyle  = lipgloss.NewStyle().Foreground(themeOverlay1).Italic(true)
+	diffScrollHintStyle = lipgloss.NewStyle().Foreground(themeSapphire)
 )
 
 type stateIcon struct {

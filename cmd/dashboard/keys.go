@@ -8,6 +8,18 @@ import (
 )
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Diff mode: route mouse to diff viewports
+	if m.diffVisible {
+		leftBorderEnd := m.diffLeftWidth + 2
+		var cmd tea.Cmd
+		if msg.X < leftBorderEnd {
+			m.diffFileVP, cmd = m.diffFileVP.Update(msg)
+		} else {
+			m.diffContentVP, cmd = m.diffContentVP.Update(msg)
+		}
+		return m, cmd
+	}
+
 	leftBorderEnd := m.leftWidth + 2
 
 	if msg.X < leftBorderEnd {
@@ -150,18 +162,25 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "d", "esc":
 			m.diffVisible = false
+			m.diffExpandedAll = false
 			return m, nil
 		case "up", "k":
 			if m.selectedDiffFile > 0 {
 				m.selectedDiffFile--
+				m.diffExpandedAll = false
 				m.updateDiffContent()
 			}
 			return m, nil
 		case "down", "j":
 			if m.selectedDiffFile < len(m.diffFiles)-1 {
 				m.selectedDiffFile++
+				m.diffExpandedAll = false
 				m.updateDiffContent()
 			}
+			return m, nil
+		case "e":
+			m.diffExpandedAll = !m.diffExpandedAll
+			m.updateDiffContent()
 			return m, nil
 		case "ctrl+d":
 			m.diffContentVP.HalfViewDown()
