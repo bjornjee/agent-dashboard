@@ -26,10 +26,7 @@ func (m *model) updateRightContent() {
 		}
 		m.messageVP.Height = fullHeight
 	} else {
-		msgHeight := panelHeight - headerLines - filesVPHeight - historyVPHeight - sectionGaps
-		if msgHeight < 3 {
-			msgHeight = 3
-		}
+		_, _, msgHeight := panelHeights(panelHeight)
 		m.messageVP.Height = msgHeight
 	}
 

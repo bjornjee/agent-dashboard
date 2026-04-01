@@ -60,11 +60,31 @@ const (
 	focusCount // sentinel for wrapping
 )
 
-// Fixed heights for inner viewports
+// Layout constants for the right panel viewports.
+// Heights are computed proportionally via panelHeights().
 const (
-	filesVPHeight   = 5
-	historyVPHeight = 10
-	headerLines     = 8 // header + state + branch + dir + cost + spacers
-	sectionGaps     = 6 // gaps between sections (labels + blank-line buffers)
-	bannerHeight    = 6 // top banner: 11 pixel rows rendered via half-blocks
+	headerLines  = 8 // header + state + branch + dir + cost + spacers
+	sectionGaps  = 6 // gaps between sections (labels + blank-line buffers)
+	bannerHeight = 6 // top banner: 11 pixel rows rendered via half-blocks
+
+	minFilesHeight   = 3
+	minHistoryHeight = 5
+	minMessageHeight = 5
 )
+
+// panelHeights computes proportional heights for the three right-panel
+// viewports given the total panel height.  Files 15%, History 30%, Live gets
+// the remainder (~55%).
+func panelHeights(panelHeight int) (filesH, historyH, msgH int) {
+	available := panelHeight - headerLines - sectionGaps
+	if available < minFilesHeight+minHistoryHeight+minMessageHeight {
+		return minFilesHeight, minHistoryHeight, minMessageHeight
+	}
+	filesH = max(available*15/100, minFilesHeight)
+	historyH = max(available*30/100, minHistoryHeight)
+	msgH = available - filesH - historyH
+	if msgH < minMessageHeight {
+		msgH = minMessageHeight
+	}
+	return filesH, historyH, msgH
+}
