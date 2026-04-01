@@ -145,6 +145,36 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Diff viewer mode
+	if m.diffVisible {
+		switch key {
+		case "d", "esc":
+			m.diffVisible = false
+			return m, nil
+		case "up", "k":
+			if m.selectedDiffFile > 0 {
+				m.selectedDiffFile--
+				m.updateDiffContent()
+			}
+			return m, nil
+		case "down", "j":
+			if m.selectedDiffFile < len(m.diffFiles)-1 {
+				m.selectedDiffFile++
+				m.updateDiffContent()
+			}
+			return m, nil
+		case "ctrl+d":
+			m.diffContentVP.HalfViewDown()
+			return m, nil
+		case "ctrl+u":
+			m.diffContentVP.HalfViewUp()
+			return m, nil
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Normal mode
 	switch key {
 	case "q", "ctrl+c":
@@ -282,6 +312,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "e":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.Cwd != "" {
 			return m, openEditor(agent.Cwd)
+		}
+	case "d":
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.Cwd != "" {
+			return m, loadDiffCmd(agent.Cwd)
 		}
 	case "u":
 		if m.mode == modeUsage {
