@@ -122,6 +122,39 @@ func agentLabelStyled(agent Agent) string {
 	return agent.Session
 }
 
+// agentRepoStyled returns only the styled repo name (no branch), for the left panel first line.
+func agentRepoStyled(agent Agent) string {
+	repo := agentRepo(agent)
+	if repo != "" {
+		return lipgloss.NewStyle().Foreground(themeSapphire).Bold(true).Render(repo)
+	}
+	return agent.Session
+}
+
+// wrapMetaLine renders a right-panel metadata line with a padded label and a value,
+// wrapping long values with proper indentation so all values stay aligned.
+func wrapMetaLine(label string, labelWidth int, value string, totalWidth int) []string {
+	prefix := fmt.Sprintf(" %s ", padLabel(label, labelWidth))
+	prefixWidth := 1 + labelWidth + 1 // leading space + label visual width + trailing space
+	valueWidth := totalWidth - prefixWidth
+	if valueWidth <= 0 {
+		return []string{prefix + value}
+	}
+
+	wrapped := wrapText(value, valueWidth)
+	if len(wrapped) == 0 {
+		return []string{prefix + value}
+	}
+
+	indent := strings.Repeat(" ", prefixWidth)
+	var lines []string
+	lines = append(lines, prefix+wrapped[0])
+	for _, w := range wrapped[1:] {
+		lines = append(lines, indent+w)
+	}
+	return lines
+}
+
 // padLabel renders a label with dim style and pads it to a fixed visual width.
 // If the rendered label is already wider than width, it is returned as-is.
 func padLabel(label string, width int) string {
