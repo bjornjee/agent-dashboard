@@ -535,6 +535,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if !already {
+				prevTarget, prevSubID := m.selectedIdentity()
 				m.agents = append(m.agents, Agent{
 					Target:  msg.target,
 					Session: sess,
@@ -561,6 +562,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.agents[i].Pane < m.agents[j].Pane
 				})
 				m.buildTree()
+				m.restoreSelection(prevTarget, prevSubID)
 				m.resizeViewports() // recalculate viewport dimensions for new agent count
 			}
 		}
