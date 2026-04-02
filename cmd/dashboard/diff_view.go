@@ -31,9 +31,9 @@ var (
 	diffAddStyle    = lipgloss.NewStyle().Foreground(themeGreen)
 	diffDelStyle    = lipgloss.NewStyle().Foreground(themeRed)
 	diffHunkStyle   = lipgloss.NewStyle().Foreground(themeMauve).Bold(true)
-	diffFileModIcon = lipgloss.NewStyle().Foreground(themeYellow).Render("●")
-	diffFileAddIcon = lipgloss.NewStyle().Foreground(themeGreen).Render("●")
-	diffFileDelIcon = lipgloss.NewStyle().Foreground(themeRed).Render("●")
+	diffFileModIcon = lipgloss.NewStyle().Foreground(themeYellow).Render("~")
+	diffFileAddIcon = lipgloss.NewStyle().Foreground(themeGreen).Render("+")
+	diffFileDelIcon = lipgloss.NewStyle().Foreground(themeRed).Render("-")
 	diffDirStyle    = lipgloss.NewStyle().Foreground(themeOverlay1)
 	diffCountStyle  = lipgloss.NewStyle().Foreground(themeOverlay1)
 )
@@ -382,7 +382,9 @@ func wrapANSI(s string, width int) []string {
 
 // -- File tree --
 
-func (m model) diffFileTreeContent() string {
+// diffTreeCursorLine is set by diffFileTreeContent to the first rendered line
+// index of the cursor entry (used for auto-scrolling).
+func (m model) diffFileTreeContent() (string, int) {
 	maxWidth := m.diffLeftWidth - 4
 	if maxWidth < 10 {
 		maxWidth = 10
@@ -390,10 +392,15 @@ func (m model) diffFileTreeContent() string {
 
 	vis := m.visibleDiffEntries()
 	var lines []string
+	cursorLine := 0
 
 	for visIdx, entryIdx := range vis {
 		entry := m.diffTreeEntries[entryIdx]
 		isCursor := visIdx == m.diffCursor
+
+		if isCursor {
+			cursorLine = len(lines)
+		}
 
 		if entry.isDir {
 			chevron := "▾"
@@ -402,11 +409,24 @@ func (m model) diffFileTreeContent() string {
 			}
 			count := m.dirFileCount(entry.dirKey)
 			countStr := diffCountStyle.Render(fmt.Sprintf(" (%d)", count))
-			line := " " + chevron + " " + diffDirStyle.Render(entry.label) + countStr
-			if isCursor {
-				line = selectedStyle.Render(line)
+
+			// Smart-truncate long directory paths from the left.
+			dirLabel := entry.label
+			dirMaxWidth := maxWidth - 5 - lipgloss.Width(countStr) // " ▾ " prefix + count
+			if dirMaxWidth > 0 && len([]rune(dirLabel)) > dirMaxWidth {
+				// Truncate from the left, keeping the rightmost (most unique) part.
+				runes := []rune(dirLabel)
+				dirLabel = "…" + string(runes[len(runes)-dirMaxWidth+1:])
 			}
-			lines = append(lines, line)
+
+			if isCursor {
+				// Highlight only the directory label, keep chevron and count normal.
+				line := " " + chevron + " " + selectedStyle.Render(dirLabel) + countStr
+				lines = append(lines, line)
+			} else {
+				line := " " + chevron + " " + diffDirStyle.Render(dirLabel) + countStr
+				lines = append(lines, line)
+			}
 			continue
 		}
 
@@ -436,25 +456,32 @@ func (m model) diffFileTreeContent() string {
 
 				var line string
 				if first {
-					line = prefix + chunk
+					if isCursor {
+						line = prefix + selectedStyle.Render(chunk)
+					} else {
+						line = prefix + chunk
+					}
 					first = false
 				} else {
-					line = strings.Repeat(" ", prefixWidth) + chunk
-				}
-				if isCursor {
-					line = selectedStyle.Render(line)
+					if isCursor {
+						line = strings.Repeat(" ", prefixWidth) + selectedStyle.Render(chunk)
+					} else {
+						line = strings.Repeat(" ", prefixWidth) + chunk
+					}
 				}
 				lines = append(lines, line)
 			}
 		} else {
-			line := prefix + entry.label
 			if isCursor {
-				line = selectedStyle.Render(line)
+				line := prefix + selectedStyle.Render(entry.label)
+				lines = append(lines, line)
+			} else {
+				line := prefix + entry.label
+				lines = append(lines, line)
 			}
-			lines = append(lines, line)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), cursorLine
 }
 
 // -- Side-by-side content with syntax highlighting & collapsible blocks --
@@ -776,7 +803,24 @@ func (m model) renderDiffContentPanel() string {
 }
 
 func (m *model) updateDiffContent() {
-	m.diffFileVP.SetContent(m.diffFileTreeContent())
+	tree, cursorLine := m.diffFileTreeContent()
+	m.diffFileVP.SetContent(tree)
+
+	// Auto-scroll: keep cursor visible in the file list viewport.
+	// Only scroll if cursor is within the visible entries range.
+	vis := m.visibleDiffEntries()
+	if m.diffCursor >= 0 && m.diffCursor < len(vis) {
+		vpHeight := m.diffFileVP.Height
+		yOff := m.diffFileVP.YOffset
+		if vpHeight > 0 {
+			if cursorLine < yOff {
+				m.diffFileVP.SetYOffset(cursorLine)
+			} else if cursorLine >= yOff+vpHeight {
+				m.diffFileVP.SetYOffset(cursorLine - vpHeight + 1)
+			}
+		}
+	}
+
 	content, funcCtx := m.diffSideBySideContent()
 	m.diffContentVP.SetContent(content)
 	m.diffFuncCtx = funcCtx
