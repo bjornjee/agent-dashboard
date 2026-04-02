@@ -424,7 +424,7 @@ func TestCreateWizard_SkillNoneToMessage(t *testing.T) {
 	}
 }
 
-func TestCreateWizard_EscFromSkill(t *testing.T) {
+func TestCreateWizard_EscFromSkillGoesBackToFolder(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateSkill
 	m.createFolder = "/Users/test/repo"
@@ -434,30 +434,91 @@ func TestCreateWizard_EscFromSkill(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeNormal {
-		t.Errorf("expected modeNormal after esc, got %d", rm.mode)
+	if rm.mode != modeCreateFolder {
+		t.Errorf("expected modeCreateFolder after esc from skill, got %d", rm.mode)
 	}
-	if rm.createFolder != "" {
-		t.Errorf("expected createFolder reset, got %q", rm.createFolder)
+	// Folder should be preserved in the text input
+	if rm.textInput.Value() != "/Users/test/repo" {
+		t.Errorf("expected textInput to show previous folder, got %q", rm.textInput.Value())
 	}
 	if rm.selectedCreateSkill != 0 {
 		t.Errorf("expected selectedCreateSkill reset, got %d", rm.selectedCreateSkill)
 	}
 }
 
-func TestCreateWizard_EscFromMessage(t *testing.T) {
+func TestCreateWizard_CtrlCFromSkillCancels(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateSkill
+	m.createFolder = "/Users/test/repo"
+	m.selectedCreateSkill = 2
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeNormal {
+		t.Errorf("expected modeNormal after ctrl+c, got %d", rm.mode)
+	}
+	if rm.createFolder != "" {
+		t.Errorf("expected createFolder reset, got %q", rm.createFolder)
+	}
+}
+
+func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateMessage
 	m.createFolder = "/Users/test/repo"
 	m.createSkillName = "feature"
+	m.skillsAvailable = true
+	m.availableSkills = []string{"(none)", "feature", "fix"}
 	m.textInput.SetValue("some message")
 
 	msg := tea.KeyMsg{Type: tea.KeyEsc}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
+	// Should go back to skill selection since skills are available
+	if rm.mode != modeCreateSkill {
+		t.Errorf("expected modeCreateSkill after esc from message, got %d", rm.mode)
+	}
+	if rm.createSkillName != "" {
+		t.Errorf("expected createSkillName reset for re-selection, got %q", rm.createSkillName)
+	}
+}
+
+func TestCreateWizard_EscFromMessageGoesToFolderWhenNoSkills(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateMessage
+	m.createFolder = "/Users/test/repo"
+	m.skillsAvailable = false
+	m.textInput.SetValue("some message")
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	// No skills — should go back to folder selection
+	if rm.mode != modeCreateFolder {
+		t.Errorf("expected modeCreateFolder after esc (no skills), got %d", rm.mode)
+	}
+	if rm.textInput.Value() != "/Users/test/repo" {
+		t.Errorf("expected textInput to show previous folder, got %q", rm.textInput.Value())
+	}
+}
+
+func TestCreateWizard_CtrlCFromMessageCancels(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateMessage
+	m.createFolder = "/Users/test/repo"
+	m.createSkillName = "feature"
+	m.textInput.SetValue("some message")
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
 	if rm.mode != modeNormal {
-		t.Errorf("expected modeNormal after esc, got %d", rm.mode)
+		t.Errorf("expected modeNormal after ctrl+c, got %d", rm.mode)
 	}
 	if rm.createFolder != "" {
 		t.Errorf("expected createFolder reset, got %q", rm.createFolder)

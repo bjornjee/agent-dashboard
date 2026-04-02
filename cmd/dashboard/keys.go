@@ -156,6 +156,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			return m, textinput.Blink
 		case "esc":
+			// Back to folder selection
+			m.mode = modeCreateFolder
+			m.selectedCreateSkill = 0
+			m.textInput.SetValue(m.createFolder)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			m.suggestions = filterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
+			m.selectedSugg = 0
+			m.updateRightContent()
+			return m, textinput.Blink
+		case "ctrl+c":
 			m.mode = modeNormal
 			m.textInput.Reset()
 			m.textInput.Placeholder = "Type reply..."
@@ -202,6 +213,24 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.spawningSpinner.Tick,
 			)
 		case "esc":
+			// Back to skill selection (if available) or folder selection
+			m.textInput.Reset()
+			if m.skillsAvailable {
+				m.mode = modeCreateSkill
+				m.createSkillName = ""
+				m.updateRightContent()
+				return m, nil
+			}
+			// No skills — back to folder selection
+			m.mode = modeCreateFolder
+			m.textInput.SetValue(m.createFolder)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			m.suggestions = filterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
+			m.selectedSugg = 0
+			m.updateRightContent()
+			return m, textinput.Blink
+		case "ctrl+c":
 			m.mode = modeNormal
 			m.textInput.Reset()
 			m.textInput.Placeholder = "Type reply..."
@@ -279,7 +308,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Diff viewer mode
 	if m.diffVisible {
 		switch key {
-		case "d", "esc":
+		case "d", "q", "esc":
 			m.diffVisible = false
 			m.diffExpandedAll = false
 			return m, nil
@@ -313,7 +342,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "K":
 			m.diffContentVP.LineUp(1)
 			return m, nil
-		case "q", "ctrl+c":
+		case "ctrl+c":
 			return m, tea.Quit
 		}
 		return m, nil

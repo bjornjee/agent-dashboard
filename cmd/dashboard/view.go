@@ -78,7 +78,7 @@ func (m *model) updateRightContent() {
 			}
 		}
 		lines = append(lines, "")
-		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc to cancel"))
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc back │ ^C cancel"))
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
@@ -99,7 +99,7 @@ func (m *model) updateRightContent() {
 		lines = append(lines, "  "+boldStyle.Render("Message:"))
 		lines = append(lines, "  "+m.textInput.View())
 		lines = append(lines, "")
-		lines = append(lines, "  "+helpStyle.Render("Enter to launch │ Esc to cancel"))
+		lines = append(lines, "  "+helpStyle.Render("Enter to launch │ Esc back │ ^C cancel"))
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
@@ -990,7 +990,7 @@ func (m model) renderHelpBar() string {
 	if m.diffVisible {
 		parts = append(parts, boldStyle.Render("^u/^d")+" scroll")
 		parts = append(parts, boldStyle.Render("J/K")+" line scroll")
-		parts = append(parts, boldStyle.Render("d/esc")+" close")
+		parts = append(parts, boldStyle.Render("q/d/esc")+" close")
 		parts = append(parts, boldStyle.Render("h")+" help")
 		return helpStyle.Render("  " + strings.Join(parts, "  "))
 	}
@@ -1004,13 +1004,15 @@ func (m model) renderHelpBar() string {
 	if m.mode == modeCreateSkill {
 		parts = append(parts, boldStyle.Render("enter")+" select")
 		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
-		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		parts = append(parts, boldStyle.Render("esc")+" back")
+		parts = append(parts, boldStyle.Render("^c")+" cancel")
 		return m.truncateHelpBar(parts)
 	}
 
 	if m.mode == modeCreateMessage {
 		parts = append(parts, boldStyle.Render("enter")+" launch")
-		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		parts = append(parts, boldStyle.Render("esc")+" back")
+		parts = append(parts, boldStyle.Render("^c")+" cancel")
 		return m.truncateHelpBar(parts)
 	}
 
