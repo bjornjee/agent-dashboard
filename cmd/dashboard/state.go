@@ -223,10 +223,10 @@ func ApplyPinnedStates(sf *StateFile) {
 	}
 }
 
-// ApplyPlanOverrides checks each idle_prompt agent for a pending plan review
+// ApplyIdleOverrides checks each idle_prompt agent for a pending plan review
 // (ExitPlanMode) or pending question (AskUserQuestion) and overrides the
 // state accordingly. Plan takes priority over question.
-func ApplyPlanOverrides(sf *StateFile, projectsDir string) {
+func ApplyIdleOverrides(sf *StateFile, projectsDir string) {
 	for key, agent := range sf.Agents {
 		if agent.State != "idle_prompt" {
 			continue
