@@ -440,7 +440,12 @@ func (m model) waitingMessageContent() string {
 		lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
 			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, m.availableSkills, "        "))
 	} else {
-		lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
+		agent := m.selectedAgent()
+		if agent != nil && agent.State == "question" {
+			lines = append(lines, " "+helpStyle.Render("Press r to reply, enter to jump to agent"))
+		} else {
+			lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
+		}
 	}
 
 	return strings.Join(lines, "\n")

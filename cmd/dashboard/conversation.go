@@ -612,10 +612,23 @@ func belongsToSession(jsonlPath, sessionID string) bool {
 	return false
 }
 
-// HasPendingPlanReview checks if the last assistant message contains an
-// ExitPlanMode tool_use with no subsequent user message. This indicates
-// the agent presented a plan and is waiting for user approval.
+// HasPendingPlanReview checks if the most recent ExitPlanMode tool_use
+// has no subsequent human user message. System-generated tool_result
+// entries (always present after ExitPlanMode) are not counted as human input.
 func HasPendingPlanReview(projDir, sessionID string) bool {
+	return hasPendingToolCall(projDir, sessionID, "ExitPlanMode")
+}
+
+// HasPendingQuestion checks if the most recent AskUserQuestion tool_use
+// has no subsequent human user message.
+func HasPendingQuestion(projDir, sessionID string) bool {
+	return hasPendingToolCall(projDir, sessionID, "AskUserQuestion")
+}
+
+// hasPendingToolCall checks if the most recent tool_use with the given name
+// has no subsequent human user message. System-generated tool_result
+// entries are not counted as human input.
+func hasPendingToolCall(projDir, sessionID, toolName string) bool {
 	path := filepath.Join(projDir, sessionID+".jsonl")
 	f, err := os.Open(path)
 	if err != nil {
@@ -637,8 +650,8 @@ func HasPendingPlanReview(projDir, sessionID string) bool {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, tailSize), tailSize)
 
-	hasExitPlan := false
-	userAfter := false
+	found := false
+	humanAfter := false
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -661,28 +674,42 @@ func HasPendingPlanReview(projDir, sessionID string) bool {
 			if json.Unmarshal(env.Content, &blocks) != nil {
 				continue
 			}
-			found := false
 			for _, b := range blocks {
-				if b.Type == "tool_use" && b.Name == "ExitPlanMode" {
+				if b.Type == "tool_use" && b.Name == toolName {
 					found = true
+					humanAfter = false
 					break
 				}
 			}
-			if found {
-				hasExitPlan = true
-				userAfter = false
-			} else {
-				hasExitPlan = false
-				userAfter = false
-			}
 		case "user":
-			if hasExitPlan {
-				userAfter = true
+			if found && isHumanUserEntry(entry.Message) {
+				humanAfter = true
 			}
 		}
 	}
 
-	return hasExitPlan && !userAfter
+	return found && !humanAfter
+}
+
+// isHumanUserEntry returns true if a user message contains actual human
+// input rather than only system-generated tool_result blocks.
+func isHumanUserEntry(msg json.RawMessage) bool {
+	var env messageEnvelope
+	if json.Unmarshal(msg, &env) != nil {
+		return true // can't parse — assume human
+	}
+	// Plain string content is always human text
+	var blocks []contentBlock
+	if json.Unmarshal(env.Content, &blocks) != nil {
+		return true // content is a string, not array — human text
+	}
+	// If every block is a tool_result, it's system-generated
+	for _, b := range blocks {
+		if b.Type != "tool_result" {
+			return true
+		}
+	}
+	return false
 }
 
 // HasPendingToolUse checks if the last assistant message in the session JSONL

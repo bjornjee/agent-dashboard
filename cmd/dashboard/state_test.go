@@ -790,9 +790,9 @@ func TestIsBlocked_IncludesPlan(t *testing.T) {
 	}
 }
 
-// planTestSetup creates a temp directory structure that ApplyPlanOverrides can resolve.
+// planTestSetup creates a temp directory structure that ApplyIdleOverrides can resolve.
 // Returns (projectsDir, cwd) where cwd is the agent's working directory and
-// projectsDir contains the JSONL at the path ApplyPlanOverrides expects.
+// projectsDir contains the JSONL at the path ApplyIdleOverrides expects.
 func planTestSetup(t *testing.T, sessionID, jsonl string) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -804,9 +804,11 @@ func planTestSetup(t *testing.T, sessionID, jsonl string) (string, string) {
 	return dir, cwd
 }
 
-func TestApplyPlanOverrides_OverridesIdlePrompt(t *testing.T) {
+func TestApplyIdleOverrides_OverridesIdlePrompt(t *testing.T) {
 	sessionID := "sess-plan"
+	// Realistic JSONL: ExitPlanMode is always followed by a tool_result user entry
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted for review"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
 	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
 
@@ -816,14 +818,14 @@ func TestApplyPlanOverrides_OverridesIdlePrompt(t *testing.T) {
 		},
 	}
 
-	ApplyPlanOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf, projectsDir)
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan', got %q", sf.Agents[sessionID].State)
 	}
 }
 
-func TestApplyPlanOverrides_LeavesNonIdleAlone(t *testing.T) {
+func TestApplyIdleOverrides_LeavesNonIdleAlone(t *testing.T) {
 	sessionID := "sess-running"
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
 `
@@ -835,14 +837,14 @@ func TestApplyPlanOverrides_LeavesNonIdleAlone(t *testing.T) {
 		},
 	}
 
-	ApplyPlanOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf, projectsDir)
 
 	if sf.Agents[sessionID].State != "running" {
 		t.Errorf("expected state 'running' unchanged, got %q", sf.Agents[sessionID].State)
 	}
 }
 
-func TestApplyPlanOverrides_NoOverrideWithoutPlan(t *testing.T) {
+func TestApplyIdleOverrides_NoOverrideWithoutPlan(t *testing.T) {
 	sessionID := "sess-idle"
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-03-28T10:00:00Z"}
 `
@@ -854,9 +856,52 @@ func TestApplyPlanOverrides_NoOverrideWithoutPlan(t *testing.T) {
 		},
 	}
 
-	ApplyPlanOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf, projectsDir)
 
 	if sf.Agents[sessionID].State != "idle_prompt" {
 		t.Errorf("expected state 'idle_prompt' unchanged, got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyIdleOverrides_QuestionOverride(t *testing.T) {
+	sessionID := "sess-question"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Option A"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "question" {
+		t.Errorf("expected state 'question', got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyIdleOverrides_PlanTakesPriorityOverQuestion(t *testing.T) {
+	sessionID := "sess-both"
+	// Both ExitPlanMode and AskUserQuestion present, no human response → plan wins
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"A"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:03Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "plan" {
+		t.Errorf("expected 'plan' to take priority over 'question', got %q", sf.Agents[sessionID].State)
 	}
 }

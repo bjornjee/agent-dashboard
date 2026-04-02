@@ -190,8 +190,8 @@ func TestWaitingMessage_ShowsLastAssistantMessage(t *testing.T) {
 	if !strings.Contains(content, "Let me create that directory") {
 		t.Errorf("waiting message should show last assistant message, got:\n%s", content)
 	}
-	// Should still show the reply hint
-	if !strings.Contains(content, "y/n") {
+	// Should still show the reply hint (question state shows "r to reply, enter to jump")
+	if !strings.Contains(content, "r to reply") {
 		t.Errorf("waiting message should still show reply hint, got:\n%s", content)
 	}
 }
