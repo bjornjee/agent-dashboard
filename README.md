@@ -23,6 +23,17 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **Pixel art banner** — axolotl rendered with half-block Unicode characters
 - **Semantic versioning** — version injected at build time via `-ldflags`
 
+## Prerequisites
+
+| Dependency | Required | Purpose |
+|------------|----------|---------|
+| [tmux](https://github.com/tmux/tmux) | Yes | Agent pane management and live capture |
+| [Claude Code](https://claude.com/claude-code) | Yes | The agents this dashboard monitors |
+| [Go 1.21+](https://go.dev/dl/) | Yes | Building the dashboard binary |
+| [Node.js 18+](https://nodejs.org/) | Yes | Claude Code adapter hooks |
+| [git](https://git-scm.com/) | Yes | Diff viewer, branch detection |
+| [z (zsh plugin)](https://github.com/agkozak/zsh-z) | No | Frecency-ranked directory suggestions when creating sessions |
+
 ## Install
 
 ### 1. Install the Claude Code plugin
@@ -97,6 +108,7 @@ Or run directly:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
+| `AGENT_DASHBOARD_DIR` | Override default state directory (`~/.agent-dashboard`) | No |
 | `API_NINJAS_KEY` | API key for quote-of-the-day | No (falls back to built-in quotes) |
 
 ## Development
@@ -121,8 +133,8 @@ To bump the version, edit `VERSION` and rebuild.
 agent-dashboard/
 ├── Makefile
 ├── VERSION
+├── install.sh                     # self-contained installer
 ├── agent-dashboard.tmux           # tmux plugin binding (prefix + D)
-├── scripts/install.sh             # build + setup helper
 ├── cmd/
 │   ├── dashboard/
 │   │   ├── main.go                # entry point
@@ -147,6 +159,14 @@ agent-dashboard/
 │   │   └── *_test.go              # tests
 │   └── populate-quotes/
 │       └── main.go                # bulk quote fetcher for SQLite cache
+├── adapters/claude-code/          # Claude Code plugin
+│   ├── hooks/hooks.json           # lifecycle hook definitions
+│   ├── scripts/hooks/             # hook implementations (JS)
+│   ├── packages/                  # shared JS modules (agent-state, git, tmux)
+│   ├── skills/                    # workflow skills (feature, fix, pr, etc.)
+│   └── agents/                    # agent methodology guides
+├── schema/
+│   └── agent-state.schema.json    # JSON Schema for agent state files
 └── go.mod / go.sum
 ```
 
@@ -164,10 +184,6 @@ agent-dashboard/
 | [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure Go SQLite |
 | [fsnotify](https://github.com/fsnotify/fsnotify) | File system watcher |
 
-## Companion Plugin
+## Works Best With
 
-This dashboard reads state written by the [bjornjee-skills](https://github.com/bjornjee/skills) Claude Code plugin. Install both for the full experience:
-
-```
-/plugin marketplace add bjornjee/skills
-```
+This dashboard pairs well with the [everything-claude-code](https://github.com/affaan-m/everything-claude-code) plugin for a complete agent workflow experience.

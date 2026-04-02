@@ -15,7 +15,7 @@ func mkdirAll(t *testing.T, path string) {
 
 func TestDiscoverSkills_ValidDir(t *testing.T) {
 	tmp := t.TempDir()
-	skillsDir := filepath.Join(tmp, "bjornjee-skills", "skills", "0.22.1", "skills")
+	skillsDir := filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.22.1", "skills")
 	for _, name := range []string{"feature", "fix", "chore"} {
 		mkdirAll(t, filepath.Join(skillsDir, name))
 	}
@@ -40,7 +40,7 @@ func TestDiscoverSkills_NoDir(t *testing.T) {
 
 func TestDiscoverSkills_EmptySkillsDir(t *testing.T) {
 	tmp := t.TempDir()
-	mkdirAll(t, filepath.Join(tmp, "bjornjee-skills", "skills", "1.0.0", "skills"))
+	mkdirAll(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "1.0.0", "skills"))
 	got := discoverSkills(tmp)
 	if got != nil {
 		t.Errorf("expected nil for empty skills dir, got %v", got)
@@ -49,8 +49,8 @@ func TestDiscoverSkills_EmptySkillsDir(t *testing.T) {
 
 func TestDiscoverSkills_VersionOrdering(t *testing.T) {
 	tmp := t.TempDir()
-	mkdirAll(t, filepath.Join(tmp, "bjornjee-skills", "skills", "0.9.0", "skills", "old"))
-	mkdirAll(t, filepath.Join(tmp, "bjornjee-skills", "skills", "0.22.1", "skills", "new"))
+	mkdirAll(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.9.0", "skills", "old"))
+	mkdirAll(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.22.1", "skills", "new"))
 
 	got := discoverSkills(tmp)
 	want := []string{"new"}

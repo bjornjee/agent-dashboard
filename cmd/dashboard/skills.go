@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-// discoverSkills scans the bjornjee-skills plugin cache for skill names.
+// discoverSkills scans the agent-dashboard plugin cache for skill names.
 // It finds the latest version directory, then lists subdirectories under skills/.
 // Returns nil if the directory doesn't exist or contains no skills.
 func discoverSkills(pluginCacheDir string) []string {
-	versionsDir := filepath.Join(pluginCacheDir, "bjornjee-skills", "skills")
+	versionsDir := filepath.Join(pluginCacheDir, "agent-dashboard", "agent-dashboard")
 	versions, err := os.ReadDir(versionsDir)
 	if err != nil {
 		return nil
