@@ -155,7 +155,7 @@ func TestCloseResult_TriggersPruneDead(t *testing.T) {
 	}
 }
 
-func TestWaitingMessage_ShowsTmuxCapture(t *testing.T) {
+func TestWaitingMessage_ShowsLastAssistantMessage(t *testing.T) {
 	m := newModel(testConfig(""), "", nil)
 	m.width = 120
 	m.height = 40
@@ -185,16 +185,9 @@ func TestWaitingMessage_ShowsTmuxCapture(t *testing.T) {
 	// Test waitingMessageContent directly (viewport clipping may hide content)
 	content := m.waitingMessageContent()
 
-	// Should show the tmux capture (permission prompt), not the JSONL assistant text
-	if !strings.Contains(content, "Do you want to proceed") {
-		t.Errorf("waiting message should show tmux capture with permission prompt, got:\n%s", content)
-	}
-	if !strings.Contains(content, "1. Yes") {
-		t.Errorf("waiting message should show permission options from tmux capture, got:\n%s", content)
-	}
-	// Should preserve indentation from tmux capture
-	if !strings.Contains(content, "   2. Yes, and always allow") {
-		t.Errorf("waiting message should preserve leading whitespace from tmux capture, got:\n%s", content)
+	// Should always show the last assistant message, not tmux capture
+	if !strings.Contains(content, "Let me create that directory") {
+		t.Errorf("waiting message should show last assistant message, got:\n%s", content)
 	}
 	// Should still show the reply hint
 	if !strings.Contains(content, "y/n") {
