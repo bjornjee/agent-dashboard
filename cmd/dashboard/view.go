@@ -141,7 +141,7 @@ func (m *model) updateRightContent() {
 		m.messageVP.SetContent(m.renderedPlan)
 	} else if isBlocked(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
-	} else if isFinished(effState) {
+	} else if isFinished(effState) || isMerged(effState) {
 		if m.mode == modeReply {
 			m.messageVP.SetContent(m.waitingMessageContent())
 		} else {
@@ -870,11 +870,15 @@ func (m model) renderRightPanel() string {
 			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
 				Render("── Agent is blocked") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
-		} else if isFinished(rpEffState) {
+		} else if isFinished(rpEffState) || isMerged(rpEffState) {
 			if m.mode == modeReply {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
 					Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 					" " + helpStyle.Render(strings.Repeat("─", 9))
+			} else if isMerged(rpEffState) {
+				messageLabel = " " + lipgloss.NewStyle().Foreground(mergedColor).Bold(true).
+					Render("── Merged (x to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+					" " + helpStyle.Render(strings.Repeat("─", 6))
 			} else {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(doneColor).Bold(true).
 					Render("── Final message") + focusMarker(focusMessage) + scrollHint(m.messageVP) +

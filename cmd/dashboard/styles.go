@@ -61,6 +61,7 @@ var (
 	runningColor    = themeBlue
 	idlePromptColor = themeOverlay1
 	doneColor       = themeGreen
+	mergedColor     = themeTeal
 
 	// Legacy aliases
 	inputColor = themeYellow
@@ -89,6 +90,7 @@ var stateIcons = map[string]stateIcon{
 	"idle_prompt": {"○", idlePromptColor},
 	"idle":        {"○", idleColor}, // legacy
 	"done":        {"✓", doneColor},
+	"merged":      {"⏏", mergedColor},
 }
 
 var groupHeaders = map[int]struct {
@@ -98,6 +100,7 @@ var groupHeaders = map[int]struct {
 	1: {"BLOCKED", permissionColor},
 	2: {"RUNNING", runningColor},
 	3: {"FINISHED", doneColor},
+	4: {"MERGED", mergedColor},
 }
 
 // isBlocked returns true when the agent needs user action to continue.
@@ -118,6 +121,11 @@ func isFinished(state string) bool {
 	return false
 }
 
+// isMerged returns true when the agent's branch has been merged and is safe to close.
+func isMerged(state string) bool {
+	return state == "merged"
+}
+
 // stateLabel returns a human-readable label for the agent state.
 var stateLabels = map[string]string{
 	"permission":  "Waiting for approval",
@@ -127,5 +135,6 @@ var stateLabels = map[string]string{
 	"running":     "Running",
 	"idle_prompt": "Idle at prompt",
 	"idle":        "Idle",  // legacy
+	"merged":      "Branch merged",
 	"done":        "Done",
 }

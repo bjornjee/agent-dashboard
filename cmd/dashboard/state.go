@@ -49,7 +49,7 @@ type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
 }
 
-// State groups: blocked → running → finished.
+// State groups: blocked → running → finished → merged.
 // Legacy states (input, idle) are mapped to their new equivalents.
 var statePriority = map[string]int{
 	"permission":  1, // blocked — needs approval
@@ -60,6 +60,7 @@ var statePriority = map[string]int{
 	"idle_prompt": 3, // finished turn, at prompt
 	"idle":        3, // legacy: treat as idle_prompt
 	"done":        3, // finished task
+	"merged":      4, // branch merged — safe to close
 }
 
 // agentsDir returns the agents subdirectory within the state directory.
@@ -198,6 +199,40 @@ func gitBranch(dir string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// isBranchMerged checks whether branch has been merged into the default branch.
+// Returns true if every commit on branch is reachable from the default branch.
+func isBranchMerged(dir, branch string) bool {
+	if branch == "" || dir == "" {
+		return false
+	}
+	defaultBranch := gitDefaultBranch(dir)
+	if defaultBranch == "" || branch == defaultBranch {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	// merge-base --is-ancestor exits 0 if branch is ancestor of default
+	err := exec.CommandContext(ctx, "git", "-C", dir,
+		"merge-base", "--is-ancestor", branch, defaultBranch).Run()
+	return err == nil
+}
+
+// PromoteMerged promotes finished agents whose branch has been merged into the
+// default branch to the "merged" state. This is a dashboard-side derived state
+// — hooks don't know about PR merges.
+func PromoteMerged(sf *StateFile) {
+	for key, agent := range sf.Agents {
+		if !isFinished(agent.State) {
+			continue
+		}
+		dir := agent.EffectiveDir()
+		if isBranchMerged(dir, agent.Branch) {
+			agent.State = "merged"
+			sf.Agents[key] = agent
+		}
+	}
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.
