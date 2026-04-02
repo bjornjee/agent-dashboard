@@ -961,8 +961,130 @@ func TestHasPendingPlanReview_NoPlan(t *testing.T) {
 	}
 }
 
+func TestHasPendingPlanReview_PendingWithToolResult(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// ExitPlanMode followed by tool_result only → still pending (tool_result is system-generated, not human input)
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted for review"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingPlanReview(projDir, sessionID) {
+		t.Error("expected pending plan review — tool_result is not a human response")
+	}
+}
+
+func TestHasPendingPlanReview_ApprovedAfterToolResult(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// ExitPlanMode → tool_result → human text → approved
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":"yes, go ahead"},"timestamp":"2026-03-28T10:00:02Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingPlanReview(projDir, sessionID) {
+		t.Error("expected no pending plan review — human approved after tool_result")
+	}
+}
+
+func TestHasPendingPlanReview_PendingWithAssistantAfterToolResult(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// ExitPlanMode → tool_result → assistant text (continuation, no human input) → still pending
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I have presented my plan for review."}]},"timestamp":"2026-03-28T10:00:02Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingPlanReview(projDir, sessionID) {
+		t.Error("expected pending plan review — assistant text after tool_result is not human approval")
+	}
+}
+
 func TestHasPendingPlanReview_MissingFile(t *testing.T) {
 	if HasPendingPlanReview("/nonexistent", "no-such") {
 		t.Error("expected false for missing file")
+	}
+}
+
+// -- HasPendingQuestion tests --
+
+func TestHasPendingQuestion_Pending(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// AskUserQuestion followed by tool_result only → still pending
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Option A"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected pending question — tool_result is not a human response")
+	}
+}
+
+func TestHasPendingQuestion_Answered(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// AskUserQuestion → tool_result → human text → answered
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"A"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":"go with A"},"timestamp":"2026-03-28T10:00:02Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected no pending question — human answered")
+	}
+}
+
+func TestHasPendingQuestion_NoQuestion(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"All done!"}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected false for no AskUserQuestion")
+	}
+}
+
+func TestHasPendingQuestion_PlanDoesNotTrigger(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// ExitPlanMode should NOT trigger question detection
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected false — ExitPlanMode is not a question")
 	}
 }

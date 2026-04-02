@@ -224,8 +224,8 @@ func ApplyPinnedStates(sf *StateFile) {
 }
 
 // ApplyPlanOverrides checks each idle_prompt agent for a pending plan review
-// (ExitPlanMode with no user response) and overrides the state to "plan".
-// projDir is the base projects directory (e.g. ~/.claude/projects/).
+// (ExitPlanMode) or pending question (AskUserQuestion) and overrides the
+// state accordingly. Plan takes priority over question.
 func ApplyPlanOverrides(sf *StateFile, projectsDir string) {
 	for key, agent := range sf.Agents {
 		if agent.State != "idle_prompt" {
@@ -242,6 +242,9 @@ func ApplyPlanOverrides(sf *StateFile, projectsDir string) {
 		}
 		if HasPendingPlanReview(projDir, sessionID) {
 			agent.State = "plan"
+			sf.Agents[key] = agent
+		} else if HasPendingQuestion(projDir, sessionID) {
+			agent.State = "question"
 			sf.Agents[key] = agent
 		}
 	}
