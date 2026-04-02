@@ -25,13 +25,24 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 
 ## Install
 
+### 1. Install the Claude Code plugin
+
+In a Claude Code session, run:
+
+```
+/plugin add bjornjee/agent-dashboard
+```
+
+Or from a clone:
+
 ```bash
-# Clone into tmux plugins directory
 git clone https://github.com/bjornjee/agent-dashboard ~/.tmux/plugins/agent-dashboard
+~/.tmux/plugins/agent-dashboard/install.sh
+```
 
-# Build the binary (requires Go 1.26+)
-~/.tmux/plugins/agent-dashboard/scripts/install.sh
+### 2. Set up tmux integration
 
+```bash
 # Add to ~/.tmux.conf
 run-shell ~/.tmux/plugins/agent-dashboard/agent-dashboard.tmux
 
