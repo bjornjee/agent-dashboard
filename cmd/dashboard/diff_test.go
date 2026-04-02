@@ -138,14 +138,14 @@ func TestBuildDiffTreeEntries(t *testing.T) {
 
 	// cmd/dashboard/ dir header
 	e = m.diffTreeEntries[1]
-	if !e.isDir || e.label != "cmd/dashboard/" {
-		t.Fatalf("entry 1: expected dir cmd/dashboard/, got %+v", e)
+	if !e.isDir || e.label != "cmd/dashboard/" || e.dirKey != "cmd/dashboard/" {
+		t.Fatalf("entry 1: expected dir cmd/dashboard/ with dirKey, got %+v", e)
 	}
 
-	// Files under cmd/dashboard/
+	// Files under cmd/dashboard/ — should have matching dirKey
 	e = m.diffTreeEntries[2]
-	if e.isDir || e.fileIdx != 1 || e.label != "model.go" {
-		t.Fatalf("entry 2: expected file model.go (idx=1), got %+v", e)
+	if e.isDir || e.fileIdx != 1 || e.label != "model.go" || e.dirKey != "cmd/dashboard/" {
+		t.Fatalf("entry 2: expected file model.go (idx=1, dirKey=cmd/dashboard/), got %+v", e)
 	}
 	e = m.diffTreeEntries[3]
 	if e.isDir || e.fileIdx != 2 || e.label != "view.go" {
@@ -154,8 +154,8 @@ func TestBuildDiffTreeEntries(t *testing.T) {
 
 	// pkg/ dir header
 	e = m.diffTreeEntries[4]
-	if !e.isDir || e.label != "pkg/" {
-		t.Fatalf("entry 4: expected dir pkg/, got %+v", e)
+	if !e.isDir || e.label != "pkg/" || e.dirKey != "pkg/" {
+		t.Fatalf("entry 4: expected dir pkg/ with dirKey, got %+v", e)
 	}
 
 	// File under pkg/
@@ -165,7 +165,7 @@ func TestBuildDiffTreeEntries(t *testing.T) {
 	}
 }
 
-func TestDiffFileNavigation(t *testing.T) {
+func TestDiffCursorNavigation(t *testing.T) {
 	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
@@ -177,46 +177,55 @@ func TestDiffFileNavigation(t *testing.T) {
 		{OldName: "cmd/dashboard/view.go", NewName: "cmd/dashboard/view.go"},
 	}
 	m.buildDiffTreeEntries()
+	m.diffCursor = 0
 	m.selectedDiffFile = 0
 
-	// Next from first file should skip dir header and go to model.go (idx=1)
-	next, ok := m.nextDiffFile()
-	if !ok || next != 1 {
-		t.Fatalf("expected next=1, got next=%d ok=%v", next, ok)
+	// Visible entries: README.md(0), cmd/dashboard/(1), model.go(2), view.go(3)
+	vis := m.visibleDiffEntries()
+	if len(vis) != 4 {
+		t.Fatalf("expected 4 visible entries, got %d", len(vis))
 	}
 
-	// Set to model.go, next should be view.go (idx=2)
-	m.selectedDiffFile = 1
-	next, ok = m.nextDiffFile()
-	if !ok || next != 2 {
-		t.Fatalf("expected next=2, got next=%d ok=%v", next, ok)
+	// Move down from README.md → lands on cmd/dashboard/ dir (cursor=1)
+	m.moveDiffCursor(1)
+	if m.diffCursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", m.diffCursor)
+	}
+	// selectedDiffFile should not change when landing on dir
+	if m.selectedDiffFile != 0 {
+		t.Fatalf("expected selectedDiffFile=0 on dir, got %d", m.selectedDiffFile)
 	}
 
-	// From view.go, no next
-	m.selectedDiffFile = 2
-	_, ok = m.nextDiffFile()
-	if ok {
-		t.Fatal("expected no next from last file")
+	// Move down → model.go (cursor=2, selectedDiffFile=1)
+	m.moveDiffCursor(1)
+	if m.diffCursor != 2 || m.selectedDiffFile != 1 {
+		t.Fatalf("expected cursor=2 selected=1, got cursor=%d selected=%d", m.diffCursor, m.selectedDiffFile)
 	}
 
-	// Prev from view.go should be model.go
-	prev, ok := m.prevDiffFile()
-	if !ok || prev != 1 {
-		t.Fatalf("expected prev=1, got prev=%d ok=%v", prev, ok)
+	// Move down → view.go (cursor=3, selectedDiffFile=2)
+	m.moveDiffCursor(1)
+	if m.diffCursor != 3 || m.selectedDiffFile != 2 {
+		t.Fatalf("expected cursor=3 selected=2, got cursor=%d selected=%d", m.diffCursor, m.selectedDiffFile)
 	}
 
-	// Prev from model.go should skip dir header and go to README.md
-	m.selectedDiffFile = 1
-	prev, ok = m.prevDiffFile()
-	if !ok || prev != 0 {
-		t.Fatalf("expected prev=0, got prev=%d ok=%v", prev, ok)
+	// Move down past end — stays at 3
+	m.moveDiffCursor(1)
+	if m.diffCursor != 3 {
+		t.Fatalf("expected cursor to clamp at 3, got %d", m.diffCursor)
 	}
 
-	// No prev from first file
-	m.selectedDiffFile = 0
-	_, ok = m.prevDiffFile()
-	if ok {
-		t.Fatal("expected no prev from first file")
+	// Move up back to dir
+	m.moveDiffCursor(-1)
+	m.moveDiffCursor(-1)
+	if m.diffCursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", m.diffCursor)
+	}
+
+	// Move up past start — stays at 0
+	m.moveDiffCursor(-1)
+	m.moveDiffCursor(-1)
+	if m.diffCursor != 0 {
+		t.Fatalf("expected cursor to clamp at 0, got %d", m.diffCursor)
 	}
 }
 
@@ -240,6 +249,129 @@ func TestDiffTreeRootFilesNoHeader(t *testing.T) {
 		if e.isDir {
 			t.Fatalf("unexpected dir header for root files: %+v", e)
 		}
+	}
+}
+
+func TestToggleDiffDir(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "README.md", NewName: "README.md"},
+		{OldName: "cmd/main.go", NewName: "cmd/main.go"},
+		{OldName: "cmd/util.go", NewName: "cmd/util.go"},
+	}
+	m.buildDiffTreeEntries()
+
+	// Visible: README.md, cmd/, main.go, util.go = 4 entries
+	vis := m.visibleDiffEntries()
+	if len(vis) != 4 {
+		t.Fatalf("expected 4 visible entries, got %d", len(vis))
+	}
+
+	// Move cursor to dir entry (index 1) and toggle collapse
+	m.diffCursor = 1
+	m.toggleDiffDir()
+
+	// Now children of cmd/ should be hidden
+	vis = m.visibleDiffEntries()
+	if len(vis) != 2 {
+		t.Fatalf("expected 2 visible entries after collapse, got %d", len(vis))
+	}
+
+	// Toggle again to expand
+	m.diffCursor = 1
+	m.toggleDiffDir()
+	vis = m.visibleDiffEntries()
+	if len(vis) != 4 {
+		t.Fatalf("expected 4 visible entries after expand, got %d", len(vis))
+	}
+}
+
+func TestDiffFilterBasic(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "README.md", NewName: "README.md"},
+		{OldName: "cmd/main.go", NewName: "cmd/main.go"},
+		{NewName: "pkg/util.go", IsNew: true},
+	}
+	m.buildDiffTreeEntries()
+
+	// Filter for "main"
+	m.diffFilterText = "main"
+	m.applyTreeVisibility()
+
+	vis := m.visibleDiffEntries()
+	// Should show: cmd/ dir + main.go = 2 entries
+	if len(vis) != 2 {
+		names := make([]string, len(vis))
+		for i, idx := range vis {
+			names[i] = m.diffTreeEntries[idx].label
+		}
+		t.Fatalf("expected 2 visible entries with filter 'main', got %d: %v", len(vis), names)
+	}
+
+	// Clear filter
+	m.diffFilterText = ""
+	m.applyTreeVisibility()
+	vis = m.visibleDiffEntries()
+	if len(vis) != 5 { // README.md, cmd/, main.go, pkg/, util.go
+		t.Fatalf("expected 5 visible entries without filter, got %d", len(vis))
+	}
+}
+
+func TestDiffFileTreeContent_Chevrons(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "cmd/main.go", NewName: "cmd/main.go"},
+	}
+	m.diffVisible = true
+	m.buildDiffTreeEntries()
+
+	// Expanded by default — should show ▾
+	content := m.diffFileTreeContent()
+	plain := stripANSI(content)
+	if !strings.Contains(plain, "▾") {
+		t.Fatalf("expected expanded chevron ▾, got:\n%s", plain)
+	}
+
+	// Collapse the dir
+	m.diffCollapsedDirs["cmd/"] = true
+	m.applyTreeVisibility()
+	content = m.diffFileTreeContent()
+	plain = stripANSI(content)
+	if !strings.Contains(plain, "▸") {
+		t.Fatalf("expected collapsed chevron ▸, got:\n%s", plain)
+	}
+}
+
+func TestDiffDirFileCount(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "cmd/a.go", NewName: "cmd/a.go"},
+		{OldName: "cmd/b.go", NewName: "cmd/b.go"},
+		{OldName: "cmd/c.go", NewName: "cmd/c.go"},
+	}
+	m.buildDiffTreeEntries()
+
+	content := m.diffFileTreeContent()
+	plain := stripANSI(content)
+	if !strings.Contains(plain, "(3)") {
+		t.Fatalf("expected dir file count (3), got:\n%s", plain)
 	}
 }
 
