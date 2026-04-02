@@ -17,10 +17,11 @@ type diffMsg struct {
 
 // findMergeBase returns the merge-base commit between HEAD and main/master,
 // or "HEAD" as a fallback (which shows only uncommitted changes).
+// Prefers origin/ refs to avoid stale local branch refs.
 func findMergeBase(dir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, base := range []string{"main", "master"} {
+	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
 		out, err := exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "HEAD", base).Output()
 		if err == nil {
 			if s := bytes.TrimSpace(out); len(s) > 0 {
