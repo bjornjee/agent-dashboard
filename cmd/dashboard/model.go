@@ -455,12 +455,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if conversationEqual(m.conversation, msg.entries) {
 			return m, nil // nothing changed — skip re-render
 		}
-		prevLen := len(m.conversation)
 		m.conversation = msg.entries
 		m.renderedHistory = "" // invalidate cache (Layer 2)
 		m.updateRightContent()
-		// On first load, scroll history to end
-		if prevLen == 0 {
+		// Auto-scroll history to latest when user isn't focused on it
+		if m.focusedVP != focusHistory {
 			m.historyVP.GotoBottom()
 		}
 		return m, nil
@@ -623,6 +622,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case captureResultMsg:
 		m.capturedLines = msg.lines
 		m.updateRightContent()
+		// Auto-scroll live output to latest when user isn't focused on it
+		if m.focusedVP != focusMessage {
+			m.messageVP.GotoBottom()
+		}
 		return m, nil
 
 	case jumpResultMsg:

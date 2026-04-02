@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -1481,5 +1482,101 @@ func TestTickHandler_PeriodicStateReload(t *testing.T) {
 
 	if !hasStateReload {
 		t.Error("tick handler should trigger periodic loadState (stateUpdatedMsg) every 30 ticks, but none was found")
+	}
+}
+
+func testModelWithAgent(focus int) model {
+	m := newModel(testConfig(""), "", nil)
+	m.historyVP = viewport.New(40, 3)
+	m.messageVP = viewport.New(40, 3)
+	m.rightWidth = 44
+	m.agents = []Agent{{Target: "main:1.0", Window: 1, Pane: 0, State: "running"}}
+	m.buildTree()
+	m.focusedVP = focus
+	return m
+}
+
+func TestAutoScrollHistory_WhenUnfocused(t *testing.T) {
+	m := testModelWithAgent(focusAgentList) // not focused on history
+
+	// First load — populate with initial conversation
+	initial := []ConversationEntry{{Role: "assistant", Content: "init"}}
+	result, _ := m.Update(conversationMsg{entries: initial, sessionKey: "test"})
+	m = result.(model)
+
+	// Now deliver more messages (incremental update, prevLen > 0)
+	entries := make([]ConversationEntry, 20)
+	for i := range entries {
+		entries[i] = ConversationEntry{Role: "assistant", Content: fmt.Sprintf("message %d with enough text to wrap", i)}
+	}
+	result, _ = m.Update(conversationMsg{entries: entries, sessionKey: "test"})
+	m = result.(model)
+
+	if !m.historyVP.AtBottom() {
+		t.Error("history viewport should auto-scroll to bottom when unfocused")
+	}
+}
+
+func TestAutoScrollHistory_PreservesPositionWhenFocused(t *testing.T) {
+	m := testModelWithAgent(focusHistory) // focused on history
+
+	// First load
+	initial := []ConversationEntry{{Role: "assistant", Content: "init"}}
+	result, _ := m.Update(conversationMsg{entries: initial, sessionKey: "test"})
+	m = result.(model)
+
+	// Deliver more messages (incremental update)
+	entries := make([]ConversationEntry, 20)
+	for i := range entries {
+		entries[i] = ConversationEntry{Role: "assistant", Content: fmt.Sprintf("message %d with enough text to wrap", i)}
+	}
+	result, _ = m.Update(conversationMsg{entries: entries, sessionKey: "test"})
+	m = result.(model)
+
+	if m.historyVP.YOffset != 0 {
+		t.Error("history viewport should NOT auto-scroll when user is focused on it")
+	}
+}
+
+func TestAutoScrollLive_WhenUnfocused(t *testing.T) {
+	m := testModelWithAgent(focusAgentList) // not focused on message
+	m.tmuxAvailable = true
+
+	// First capture — populate viewport
+	result, _ := m.Update(captureResultMsg{lines: []string{"init"}})
+	m = result.(model)
+
+	// More output arrives (incremental)
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	result, _ = m.Update(captureResultMsg{lines: lines})
+	m = result.(model)
+
+	if !m.messageVP.AtBottom() {
+		t.Error("message viewport should auto-scroll to bottom when unfocused")
+	}
+}
+
+func TestAutoScrollLive_PreservesPositionWhenFocused(t *testing.T) {
+	m := testModelWithAgent(focusMessage) // focused on message
+	m.tmuxAvailable = true
+
+	// First capture
+	result, _ := m.Update(captureResultMsg{lines: []string{"init"}})
+	m = result.(model)
+	m.messageVP.GotoTop()
+
+	// More output arrives
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	result, _ = m.Update(captureResultMsg{lines: lines})
+	m = result.(model)
+
+	if m.messageVP.YOffset != 0 {
+		t.Error("message viewport should NOT auto-scroll when user is focused on it")
 	}
 }
