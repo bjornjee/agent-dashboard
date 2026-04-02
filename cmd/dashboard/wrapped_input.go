@@ -66,7 +66,12 @@ var (
 // renderWrappedInput renders an input value with soft wrapping, a cursor, and
 // slash-command highlighting. It replaces textinput.Model.View() for all input
 // fields in the dashboard.
-func renderWrappedInput(value string, cursorPos int, width int, focused bool, skills []string) string {
+func renderWrappedInput(value string, cursorPos int, width int, focused bool, skills []string, indent ...string) string {
+	prefix := ""
+	if len(indent) > 0 {
+		prefix = indent[0]
+	}
+
 	if width < 1 {
 		width = 1
 	}
@@ -176,6 +181,11 @@ func renderWrappedInput(value string, cursorPos int, width int, focused bool, sk
 		lines = append(lines, cursorStyle.Render(" "))
 	}
 
+	if prefix != "" {
+		for i := 1; i < len(lines); i++ {
+			lines[i] = prefix + lines[i]
+		}
+	}
 	return strings.Join(lines, "\n")
 }
 
