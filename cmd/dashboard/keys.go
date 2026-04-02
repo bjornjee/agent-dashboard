@@ -593,12 +593,18 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Cannot reply: tmux not detected"
 			return m, nil
 		}
-		if m.selectedAgent() != nil && m.selectedSubagent() == nil {
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
+			var cmds []tea.Cmd
+			// Plan state: send "3" (feedback option) before entering reply mode
+			if agent.State == "plan" {
+				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3"))
+			}
 			m.mode = modeReply
 			m.textInput.Focus()
 			m.updateRightContent()
 			m.messageVP.GotoBottom()
-			return m, textinput.Blink
+			cmds = append(cmds, textinput.Blink)
+			return m, tea.Batch(cmds...)
 		}
 	case "p":
 		if m.selectedAgent() != nil && m.selectedSubagent() == nil && m.planContent != "" {
@@ -683,7 +689,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {
-				return m, sendRawKey(agent.TmuxPaneID, key)
+				sendKey := key
+				// Plan state: y→"1" (approve+bypass), n stays as "n"
+				if es == "plan" && key == "y" {
+					sendKey = "1"
+				}
+				return m, sendRawKey(agent.TmuxPaneID, sendKey)
 			}
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":

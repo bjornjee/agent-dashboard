@@ -63,6 +63,7 @@ var (
 	doneColor       = themeGreen
 	prColor         = themeMauve
 	mergedColor     = themeTeal
+	planColor       = themeMauve
 	textInputColor  = themeYellow
 
 	helpStyle      = lipgloss.NewStyle().Foreground(themeOverlay1)
@@ -88,6 +89,7 @@ var stateIcons = map[string]stateIcon{
 	"done":        {"✓", doneColor},
 	"pr":          {"↑", prColor},
 	"merged":      {"⏏", mergedColor},
+	"plan":        {"☐", planColor},
 }
 
 var groupHeaders = map[int]struct {
@@ -104,7 +106,7 @@ var groupHeaders = map[int]struct {
 
 // isBlocked returns true when the agent needs a mechanical action (y/n) to continue.
 func isBlocked(state string) bool {
-	return state == "permission"
+	return state == "permission" || state == "plan"
 }
 
 // isWaiting returns true when the agent is stuck and needs user input or investigation.

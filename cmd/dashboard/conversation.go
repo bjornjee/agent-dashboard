@@ -612,6 +612,79 @@ func belongsToSession(jsonlPath, sessionID string) bool {
 	return false
 }
 
+// HasPendingPlanReview checks if the last assistant message contains an
+// ExitPlanMode tool_use with no subsequent user message. This indicates
+// the agent presented a plan and is waiting for user approval.
+func HasPendingPlanReview(projDir, sessionID string) bool {
+	path := filepath.Join(projDir, sessionID+".jsonl")
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	const tailSize = 32 * 1024
+	stat, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	if stat.Size() > tailSize {
+		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
+			return false
+		}
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, tailSize), tailSize)
+
+	hasExitPlan := false
+	userAfter := false
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		var entry jsonlEntry
+		if json.Unmarshal(line, &entry) != nil {
+			continue
+		}
+
+		switch entry.Type {
+		case "assistant":
+			var env messageEnvelope
+			if json.Unmarshal(entry.Message, &env) != nil {
+				continue
+			}
+			var blocks []toolUseBlock
+			if json.Unmarshal(env.Content, &blocks) != nil {
+				continue
+			}
+			found := false
+			for _, b := range blocks {
+				if b.Type == "tool_use" && b.Name == "ExitPlanMode" {
+					found = true
+					break
+				}
+			}
+			if found {
+				hasExitPlan = true
+				userAfter = false
+			} else {
+				hasExitPlan = false
+				userAfter = false
+			}
+		case "user":
+			if hasExitPlan {
+				userAfter = true
+			}
+		}
+	}
+
+	return hasExitPlan && !userAfter
+}
+
 // HasPendingToolUse checks if the last assistant message in the session JSONL
 // contains a tool_use block with no subsequent tool_result from the user.
 // This indicates the agent is waiting for permission approval.

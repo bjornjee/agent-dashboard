@@ -64,6 +64,7 @@ type StateFile struct {
 // PR and merged are user-driven (pinned) states set by the dashboard.
 var statePriority = map[string]int{
 	"permission":  1, // blocked — needs y/n approval
+	"plan":        1, // blocked — plan ready for review
 	"question":    2, // waiting — needs user reply
 	"error":       2, // waiting — needs investigation
 	"running":     3,
@@ -217,6 +218,30 @@ func ApplyPinnedStates(sf *StateFile) {
 	for key, agent := range sf.Agents {
 		if agent.PinnedState != "" {
 			agent.State = agent.PinnedState
+			sf.Agents[key] = agent
+		}
+	}
+}
+
+// ApplyPlanOverrides checks each idle_prompt agent for a pending plan review
+// (ExitPlanMode with no user response) and overrides the state to "plan".
+// projDir is the base projects directory (e.g. ~/.claude/projects/).
+func ApplyPlanOverrides(sf *StateFile, projectsDir string) {
+	for key, agent := range sf.Agents {
+		if agent.State != "idle_prompt" {
+			continue
+		}
+		cwd := agent.Cwd
+		if cwd == "" {
+			continue
+		}
+		projDir := filepath.Join(projectsDir, ProjectSlug(cwd))
+		sessionID := agent.SessionID
+		if sessionID == "" {
+			continue
+		}
+		if HasPendingPlanReview(projDir, sessionID) {
+			agent.State = "plan"
 			sf.Agents[key] = agent
 		}
 	}

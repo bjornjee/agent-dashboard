@@ -908,3 +908,61 @@ func TestParseUserEntry_SlashCommand(t *testing.T) {
 		t.Errorf("got %q, want %q", result.Content, want)
 	}
 }
+
+// -- HasPendingPlanReview tests --
+
+func TestHasPendingPlanReview_Pending(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// Last assistant turn has ExitPlanMode tool_use, no user response → pending
+	jsonl := `{"type":"user","message":{"role":"user","content":"plan it"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Here is the plan."},{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingPlanReview(projDir, sessionID) {
+		t.Error("expected pending plan review, but got false")
+	}
+}
+
+func TestHasPendingPlanReview_Approved(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// ExitPlanMode followed by user message → approved, not pending
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":"yes, go ahead"},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingPlanReview(projDir, sessionID) {
+		t.Error("expected no pending plan review after user response")
+	}
+}
+
+func TestHasPendingPlanReview_NoPlan(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// No ExitPlanMode at all
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"All done!"}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if HasPendingPlanReview(projDir, sessionID) {
+		t.Error("expected false for no ExitPlanMode")
+	}
+}
+
+func TestHasPendingPlanReview_MissingFile(t *testing.T) {
+	if HasPendingPlanReview("/nonexistent", "no-such") {
+		t.Error("expected false for missing file")
+	}
+}

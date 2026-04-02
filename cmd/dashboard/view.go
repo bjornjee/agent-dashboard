@@ -137,6 +137,11 @@ func (m *model) updateRightContent() {
 
 	effState := agent.State
 
+	// Auto-show plan when agent is in plan-review state
+	if effState == "plan" && m.renderedPlan != "" {
+		m.planVisible = true
+	}
+
 	if m.planVisible && m.renderedPlan != "" {
 		m.messageVP.SetContent(m.renderedPlan)
 	} else if isBlocked(effState) || isWaiting(effState) {
@@ -229,6 +234,13 @@ func (m model) agentListContent() string {
 				lines = append(lines, "")
 			}
 			hdr := groupHeaders[group]
+			// Use state-specific header for plan (shares priority 1 with permission)
+			if effState == "plan" {
+				hdr = struct {
+					label string
+					color lipgloss.Color
+				}{"PLAN", planColor}
+			}
 			lines = append(lines, " "+lipgloss.NewStyle().
 				Foreground(hdr.color).Bold(true).Render(hdr.label))
 			lastGroup = group
@@ -853,12 +865,20 @@ func (m model) renderRightPanel() string {
 			" " + helpStyle.Render(strings.Repeat("─", 18))
 
 		if m.planVisible && m.renderedPlan != "" {
-			messageLabel = " " + planLabelStyle.Render("── Plan (p to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 8))
+			label := "── Plan (p to close)"
+			if rpEffState == "plan" {
+				label = "── Plan ready (y approve, r feedback)"
+			}
+			messageLabel = " " + planLabelStyle.Render(label) + focusMarker(focusMessage) + scrollHint(m.messageVP)
 		} else if isBlocked(rpEffState) {
-			messageLabel = " " + lipgloss.NewStyle().Foreground(permissionColor).Bold(true).
-				Render("── Agent is blocked") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
-				" " + helpStyle.Render(strings.Repeat("─", 9))
+			blockColor := permissionColor
+			blockLabel := "── Agent is blocked"
+			if rpEffState == "plan" {
+				blockColor = planColor
+				blockLabel = "── Plan ready for review"
+			}
+			messageLabel = " " + lipgloss.NewStyle().Foreground(blockColor).Bold(true).
+				Render(blockLabel) + focusMarker(focusMessage) + scrollHint(m.messageVP)
 		} else if isWaiting(rpEffState) {
 			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
 				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
@@ -1012,6 +1032,15 @@ func (m model) renderHelpBar() string {
 	if m.mode == modeReply {
 		parts = append(parts, boldStyle.Render("enter")+" send")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	// Plan state: show plan-specific hints
+	if agent := m.selectedAgent(); agent != nil && agent.State == "plan" {
+		parts = append(parts, boldStyle.Render("y")+" approve")
+		parts = append(parts, boldStyle.Render("r")+" feedback")
+		parts = append(parts, boldStyle.Render("p")+" toggle plan")
+		parts = append(parts, boldStyle.Render("h")+" help")
 		return m.truncateHelpBar(parts)
 	}
 
