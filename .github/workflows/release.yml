@@ -2,20 +2,34 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  goreleaser:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
 
       - uses: actions/setup-go@v5
         with:
@@ -23,20 +37,6 @@ jobs:
 
       - name: Run tests
         run: go test -race ./cmd/dashboard/...
-
-      - name: Sync VERSION file
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          echo "$TAG_VERSION" > VERSION
-          if git diff --quiet VERSION; then
-            echo "VERSION already up to date"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add VERSION
-            git commit -m "release: sync VERSION to $TAG_VERSION [skip ci]"
-            git push origin main
-          fi
 
       - uses: goreleaser/goreleaser-action@v6
         with:
