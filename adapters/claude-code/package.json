@@ -1,0 +1,9 @@
+{
+  "name": "agent-dashboard-adapter",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Claude Code adapter for agent-dashboard",
+  "scripts": {
+    "test": "node --test packages/*/test.js scripts/hooks/*.test.js"
+  }
+}

@@ -17,6 +17,26 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/warn-destructive.js\""
+          }
+        ],
+        "description": "Block destructive shell commands (rm -rf, git reset --hard, DROP TABLE, etc.)"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/block-main-commit.js\""
+          }
+        ],
+        "description": "Block git commit on main/master — require a feature branch"
+      },
+      {
         "matcher": "*",
         "hooks": [
           {
@@ -26,10 +46,30 @@
             "timeout": 3
           }
         ],
-        "description": "Fast state sync for dashboard"
+        "description": "Fast state sync for dashboard (state, permission_mode, current_tool)"
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/commit-lint.js\""
+          }
+        ],
+        "description": "Validate conventional commit message format on git commit"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/test-gate.js\""
+          }
+        ],
+        "description": "Block git commit unless make test passes (set SKIP_TEST_GATE=1 to bypass)"
+      },
       {
         "matcher": "*",
         "hooks": [
@@ -96,7 +136,35 @@
             "timeout": 5
           }
         ],
-        "description": "Update dashboard on agent stop"
+        "description": "Desktop notification + agent state reporting; Blow sound when AskUserQuestion or ExitPlanMode detected"
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/desktop-notify.js\"",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Blow sound on permission prompt, idle prompt, or elicitation dialog"
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/desktop-notify.js\"",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Blow sound on rate limit errors"
       }
     ]
   }
