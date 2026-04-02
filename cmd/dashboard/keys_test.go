@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -605,5 +607,49 @@ func TestBuildPrompt(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("buildPrompt(%q, %q) = %q, want %q", tt.skill, tt.message, got, tt.want)
 		}
+	}
+}
+
+func TestGKeyPinsPRState_QuestionState(t *testing.T) {
+	// When agent is in "question" state (not review), pressing "g" should
+	// still pin to "pr" state — user intent to open PR is explicit.
+	tmpDir := t.TempDir()
+	agentsDir := filepath.Join(tmpDir, "agents")
+	os.MkdirAll(agentsDir, 0755)
+	os.WriteFile(filepath.Join(agentsDir, "sess1.json"), []byte(`{"state":"question"}`), 0644)
+
+	m := newModel(testConfig(tmpDir), "", nil)
+	m.statePath = tmpDir
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question",
+			SessionID: "sess1", Cwd: t.TempDir(), Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from 'g' key, got nil")
+	}
+
+	// Execute batch commands and check for pinStateMsg
+	var hasPinMsg bool
+	// tea.Batch returns a cmd that, when called, returns tea.BatchMsg (a []Cmd)
+	batchResult := cmd()
+	if batch, ok := batchResult.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			msg := c()
+			if _, ok := msg.(pinStateMsg); ok {
+				hasPinMsg = true
+			}
+		}
+	}
+
+	if !hasPinMsg {
+		t.Error("pressing 'g' in question state should pin agent to 'pr' state")
 	}
 }
