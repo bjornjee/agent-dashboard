@@ -487,6 +487,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
+		if m.tickCount%30 == 0 {
+			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
+		}
 		return m, tea.Batch(cmds...)
 
 	case spinner.TickMsg:
