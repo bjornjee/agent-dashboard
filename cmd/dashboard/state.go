@@ -201,8 +201,9 @@ func gitBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// isBranchMerged checks whether branch has been merged into the default branch.
-// Returns true if every commit on branch is reachable from the default branch.
+// isBranchMerged checks whether branch has been merged into origin's default branch.
+// Compares against origin/<default> (not local) because PRs are merged on the remote
+// and the local default branch may be stale.
 func isBranchMerged(dir, branch string) bool {
 	if branch == "" || dir == "" {
 		return false
@@ -211,23 +212,47 @@ func isBranchMerged(dir, branch string) bool {
 	if defaultBranch == "" || branch == defaultBranch {
 		return false
 	}
+	remoteRef := "origin/" + defaultBranch
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	// merge-base --is-ancestor exits 0 if branch is ancestor of default
 	err := exec.CommandContext(ctx, "git", "-C", dir,
-		"merge-base", "--is-ancestor", branch, defaultBranch).Run()
+		"merge-base", "--is-ancestor", branch, remoteRef).Run()
 	return err == nil
+}
+
+// gitFetch runs a quiet fetch of the default branch for a directory.
+func gitFetch(dir string) {
+	defaultBranch := gitDefaultBranch(dir)
+	if defaultBranch == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = exec.CommandContext(ctx, "git", "-C", dir,
+		"fetch", "--quiet", "origin", defaultBranch).Run()
 }
 
 // PromoteMerged promotes finished agents whose branch has been merged into the
 // default branch to the "merged" state. This is a dashboard-side derived state
 // — hooks don't know about PR merges.
+//
+// Fetches origin/<default> once per unique repo directory before checking, so
+// the remote ref is up to date.
 func PromoteMerged(sf *StateFile) {
+	fetched := make(map[string]bool)
 	for key, agent := range sf.Agents {
 		if !isFinished(agent.State) {
 			continue
 		}
 		dir := agent.EffectiveDir()
+		if dir == "" || agent.Branch == "" {
+			continue
+		}
+		// Fetch once per repo so origin/<default> is current
+		if !fetched[dir] {
+			gitFetch(dir)
+			fetched[dir] = true
+		}
 		if isBranchMerged(dir, agent.Branch) {
 			agent.State = "merged"
 			sf.Agents[key] = agent
