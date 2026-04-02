@@ -1,0 +1,19 @@
+{
+  "name": "agent-dashboard",
+  "owner": {
+    "name": "bjornjee"
+  },
+  "metadata": {
+    "description": "Multi-agent tmux dashboard for coding agents"
+  },
+  "plugins": [
+    {
+      "name": "agent-dashboard",
+      "source": "./",
+      "description": "Claude Code adapter hooks for agent-dashboard",
+      "version": "1.0.0",
+      "category": "workflow",
+      "strict": false
+    }
+  ]
+}

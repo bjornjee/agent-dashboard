@@ -4,7 +4,7 @@ A tmux-integrated TUI for monitoring Claude Code agents across sessions, built w
 
 https://github.com/user-attachments/assets/736b633f-93d7-4d83-8c9a-fd7ebc598a89
 
-Reads agent state from per-agent JSON files in `~/.claude/agent-dashboard/agents/` (written by the [bjornjee-skills](https://github.com/bjornjee/skills) Claude Code plugin).
+Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
 
 ## Features
 

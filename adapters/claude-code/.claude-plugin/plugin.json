@@ -1,0 +1,7 @@
+{
+  "name": "agent-dashboard",
+  "version": "1.0.0",
+  "description": "Multi-agent tmux dashboard — Claude Code adapter",
+  "hooks": "./hooks/hooks.json",
+  "repository": "https://github.com/bjornjee/agent-dashboard"
+}

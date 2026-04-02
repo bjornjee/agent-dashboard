@@ -69,8 +69,9 @@ func TestDefaultConfig_ProfilePaths(t *testing.T) {
 	if cfg.Profile.ConfigDir != base {
 		t.Errorf("ConfigDir = %q, want %q", cfg.Profile.ConfigDir, base)
 	}
-	if cfg.Profile.StateDir != filepath.Join(base, "agent-dashboard") {
-		t.Errorf("StateDir = %q, want %q", cfg.Profile.StateDir, filepath.Join(base, "agent-dashboard"))
+	wantStateDir := filepath.Join(home, ".agent-dashboard")
+	if cfg.Profile.StateDir != wantStateDir {
+		t.Errorf("StateDir = %q, want %q", cfg.Profile.StateDir, wantStateDir)
 	}
 	if cfg.Profile.ProjectsDir != filepath.Join(base, "projects") {
 		t.Errorf("ProjectsDir = %q, want %q", cfg.Profile.ProjectsDir, filepath.Join(base, "projects"))
