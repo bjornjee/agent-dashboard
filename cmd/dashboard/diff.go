@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
@@ -32,16 +33,43 @@ func findMergeBase(dir string) string {
 	return "HEAD"
 }
 
+// loadDiff runs git diff against the merge-base and also includes untracked
+// files so that newly created files appear in the diff viewer.
+func loadDiff(ctx context.Context, dir string) ([]*gitdiff.File, error) {
+	base := findMergeBase(dir)
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", base).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	// Also collect untracked files so new files show in the diff.
+	untrackedOut, err := exec.CommandContext(ctx, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").Output()
+	if err == nil && len(bytes.TrimSpace(untrackedOut)) > 0 {
+		// Generate a unified diff for each untracked file via git diff --no-index.
+		for _, name := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
+			if name == "" {
+				continue
+			}
+			// git diff --no-index /dev/null <file> exits 1 when there are diffs,
+			// so we ignore the exit code and just use stdout.
+			patch, _ := exec.CommandContext(ctx, "git", "-C", dir,
+				"diff", "--no-index", "--", "/dev/null", name).Output()
+			if len(patch) > 0 {
+				out = append(out, patch...)
+			}
+		}
+	}
+
+	files, _, err := gitdiff.Parse(bytes.NewReader(out))
+	return files, err
+}
+
 func loadDiffCmd(dir string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		base := findMergeBase(dir)
-		out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", base).Output()
-		if err != nil {
-			return diffMsg{err: err}
-		}
-		files, _, err := gitdiff.Parse(bytes.NewReader(out))
+		files, err := loadDiff(ctx, dir)
 		return diffMsg{files: files, err: err}
 	}
 }
