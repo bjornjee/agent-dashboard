@@ -320,7 +320,7 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 
 	q, a := pickQuote(db)
 
-	// Discover skills from bjornjee-skills plugin cache
+	// Discover skills from agent-dashboard plugin cache
 	rawSkills := discoverSkills(cfg.Profile.PluginCacheDir)
 	skillList := buildSkillList(rawSkills)
 	hasSkills := len(skillList) > 0 && strings.Contains(cfg.Profile.Command, "claude")
