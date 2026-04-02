@@ -61,11 +61,9 @@ var (
 	runningColor    = themeBlue
 	idlePromptColor = themeOverlay1
 	doneColor       = themeGreen
+	prColor         = themeMauve
 	mergedColor     = themeTeal
-
-	// Legacy aliases
-	inputColor = themeYellow
-	idleColor  = themeOverlay1
+	textInputColor  = themeYellow
 
 	helpStyle      = lipgloss.NewStyle().Foreground(themeOverlay1)
 	boldStyle      = lipgloss.NewStyle().Bold(true)
@@ -85,11 +83,10 @@ var stateIcons = map[string]stateIcon{
 	"permission":  {"⚿", permissionColor},
 	"question":    {"?", questionColor},
 	"error":       {"✗", errorColor},
-	"input":       {"!", inputColor}, // legacy
 	"running":     {"▶", runningColor},
 	"idle_prompt": {"○", idlePromptColor},
-	"idle":        {"○", idleColor}, // legacy
 	"done":        {"✓", doneColor},
+	"pr":          {"↑", prColor},
 	"merged":      {"⏏", mergedColor},
 }
 
@@ -98,27 +95,39 @@ var groupHeaders = map[int]struct {
 	color lipgloss.Color
 }{
 	1: {"BLOCKED", permissionColor},
-	2: {"RUNNING", runningColor},
-	3: {"FINISHED", doneColor},
-	4: {"MERGED", mergedColor},
+	2: {"WAITING", questionColor},
+	3: {"RUNNING", runningColor},
+	4: {"REVIEW", doneColor},
+	5: {"PR", prColor},
+	6: {"MERGED", mergedColor},
 }
 
-// isBlocked returns true when the agent needs user action to continue.
+// isBlocked returns true when the agent needs a mechanical action (y/n) to continue.
 func isBlocked(state string) bool {
+	return state == "permission"
+}
+
+// isWaiting returns true when the agent is stuck and needs user input or investigation.
+func isWaiting(state string) bool {
 	switch state {
-	case "permission", "question", "error", "input":
+	case "question", "error":
 		return true
 	}
 	return false
 }
 
-// isFinished returns true when the agent has completed or is idle at prompt.
-func isFinished(state string) bool {
+// isReview returns true when the agent has completed its turn and needs review.
+func isReview(state string) bool {
 	switch state {
-	case "done", "idle_prompt", "idle":
+	case "done", "idle_prompt":
 		return true
 	}
 	return false
+}
+
+// isPR returns true when the agent has a PR open and is waiting on GitHub.
+func isPR(state string) bool {
+	return state == "pr"
 }
 
 // isMerged returns true when the agent's branch has been merged and is safe to close.
@@ -131,10 +140,9 @@ var stateLabels = map[string]string{
 	"permission":  "Waiting for approval",
 	"question":    "Asked a question",
 	"error":       "Error",
-	"input":       "Waiting for input", // legacy
 	"running":     "Running",
 	"idle_prompt": "Idle at prompt",
-	"idle":        "Idle",  // legacy
+	"pr":          "PR open",
 	"merged":      "Branch merged",
 	"done":        "Done",
 }

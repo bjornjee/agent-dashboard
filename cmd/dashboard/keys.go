@@ -542,7 +542,24 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "g":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {
-			return m, openPR(agent.EffectiveDir(), agent.Branch)
+			cmds := []tea.Cmd{openPR(agent.EffectiveDir(), agent.Branch)}
+			// Promote to PR state when opening the PR page
+			if isReview(agent.State) {
+				cmds = append(cmds, pinAgentStateCmd(m.statePath, agent.SessionID, "pr"))
+			}
+			return m, tea.Batch(cmds...)
+		}
+	case "m":
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && m.tmuxAvailable {
+			if isPR(agent.State) || isReview(agent.State) {
+				cmds := []tea.Cmd{
+					pinAgentStateCmd(m.statePath, agent.SessionID, "merged"),
+					sendReply(agent.TmuxPaneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
+				}
+				m.statusMsg = "Marked as merged — cleanup sent"
+				m.statusMsgTick = 3
+				return m, tea.Batch(cmds...)
+			}
 		}
 	case "h":
 		m.helpVisible = true
@@ -575,14 +592,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "y", "n":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
-			if isBlocked(es) {
+			if isBlocked(es) || isWaiting(es) {
 				return m, sendRawKey(agent.TmuxPaneID, key)
 			}
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
-			if isBlocked(es) {
+			if isBlocked(es) || isWaiting(es) {
 				return m, sendRawKey(agent.TmuxPaneID, key)
 			}
 		}

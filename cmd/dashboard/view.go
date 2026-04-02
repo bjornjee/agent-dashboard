@@ -139,9 +139,9 @@ func (m *model) updateRightContent() {
 
 	if m.planVisible && m.renderedPlan != "" {
 		m.messageVP.SetContent(m.renderedPlan)
-	} else if isBlocked(effState) {
+	} else if isBlocked(effState) || isWaiting(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
-	} else if isFinished(effState) || isMerged(effState) {
+	} else if isReview(effState) || isPR(effState) || isMerged(effState) {
 		if m.mode == modeReply {
 			m.messageVP.SetContent(m.waitingMessageContent())
 		} else {
@@ -321,7 +321,7 @@ func (m model) filesContent(agent Agent) string {
 		case strings.HasPrefix(f, "-"):
 			color = errorColor
 		default:
-			color = inputColor
+			color = textInputColor
 		}
 		style := lipgloss.NewStyle().Foreground(color)
 		for _, wl := range wrapText(f, w) {
@@ -344,7 +344,7 @@ func renderHistoryEntry(entry ConversationEntry, w int) string {
 		role = "sub-agent"
 		rStyle = lipgloss.NewStyle().Foreground(doneColor)
 	} else if entry.Role == "human" {
-		rStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
+		rStyle = lipgloss.NewStyle().Foreground(textInputColor).Bold(true)
 	}
 
 	preview := strings.Split(entry.Content, "\n")[0]
@@ -425,7 +425,7 @@ func (m model) waitingMessageContent() string {
 
 	lines = append(lines, "")
 	if m.mode == modeReply {
-		lines = append(lines, " "+lipgloss.NewStyle().Foreground(inputColor).Bold(true).
+		lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
 			Render("Reply: ")+m.textInput.View())
 	} else {
 		lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
@@ -571,7 +571,7 @@ func (m model) subagentFilesContent() string {
 	}
 	w := m.rightWidth - 4
 	var lines []string
-	style := lipgloss.NewStyle().Foreground(inputColor)
+	style := lipgloss.NewStyle().Foreground(textInputColor)
 	for _, f := range files {
 		for _, wl := range wrapText(f, w) {
 			lines = append(lines, "  "+style.Render(wl))
@@ -607,7 +607,7 @@ func (m model) subagentActivityContent() string {
 		case "human":
 			header := fmt.Sprintf(" %s %s ",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(inputColor).Bold(true).Render("prompt:"))
+				lipgloss.NewStyle().Foreground(textInputColor).Bold(true).Render("prompt:"))
 			wrapped := wrapText(e.Content, w-indent-8)
 			for i, wl := range wrapped {
 				if i == 0 {
@@ -856,17 +856,24 @@ func (m model) renderRightPanel() string {
 			messageLabel = " " + planLabelStyle.Render("── Plan (p to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 8))
 		} else if isBlocked(rpEffState) {
-			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
+			messageLabel = " " + lipgloss.NewStyle().Foreground(permissionColor).Bold(true).
 				Render("── Agent is blocked") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
-		} else if isFinished(rpEffState) || isMerged(rpEffState) {
+		} else if isWaiting(rpEffState) {
+			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
+				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 9))
+		} else if isReview(rpEffState) || isPR(rpEffState) || isMerged(rpEffState) {
 			if m.mode == modeReply {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
 					Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 					" " + helpStyle.Render(strings.Repeat("─", 9))
 			} else if isMerged(rpEffState) {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(mergedColor).Bold(true).
-					Render("── Merged (x to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+					Render("── Merged (m to cleanup, x to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP)
+			} else if isPR(rpEffState) {
+				messageLabel = " " + lipgloss.NewStyle().Foreground(prColor).Bold(true).
+					Render("── PR open (m to merge)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 					" " + helpStyle.Render(strings.Repeat("─", 6))
 			} else {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(doneColor).Bold(true).

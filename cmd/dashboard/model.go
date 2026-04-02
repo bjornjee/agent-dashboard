@@ -316,7 +316,7 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 
 	s := spinner.New()
 	s.Spinner = spinner.Jump
-	s.Style = lipgloss.NewStyle().Foreground(inputColor)
+	s.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
 	q, a := pickQuote(db)
 
@@ -650,6 +650,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Opened PR page in browser"
 		}
 		m.statusMsgTick = m.tickCount
+		return m, nil
+
+	case pinStateMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Pin state failed: %v", msg.err)
+			m.statusMsgTick = m.tickCount
+		}
 		return m, nil
 
 	case sendResultMsg:
