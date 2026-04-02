@@ -426,7 +426,7 @@ func (m model) waitingMessageContent() string {
 	lines = append(lines, "")
 	if m.mode == modeReply {
 		lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
-			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, m.availableSkills, "         "))
+			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, m.availableSkills, "        "))
 	} else {
 		lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
 	}
