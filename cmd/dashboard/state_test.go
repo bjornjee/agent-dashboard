@@ -774,3 +774,89 @@ func TestSortedAgents_PRAndMergedGroups(t *testing.T) {
 		}
 	}
 }
+
+func TestIsBlocked_IncludesPlan(t *testing.T) {
+	if !isBlocked("permission") {
+		t.Error("permission should be blocked")
+	}
+	if !isBlocked("plan") {
+		t.Error("plan should be blocked")
+	}
+	if isBlocked("running") {
+		t.Error("running should not be blocked")
+	}
+	if isBlocked("idle_prompt") {
+		t.Error("idle_prompt should not be blocked")
+	}
+}
+
+// planTestSetup creates a temp directory structure that ApplyPlanOverrides can resolve.
+// Returns (projectsDir, cwd) where cwd is the agent's working directory and
+// projectsDir contains the JSONL at the path ApplyPlanOverrides expects.
+func planTestSetup(t *testing.T, sessionID, jsonl string) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	cwd := "/test/myproject"
+	slug := ProjectSlug(cwd)
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+	return dir, cwd
+}
+
+func TestApplyPlanOverrides_OverridesIdlePrompt(t *testing.T) {
+	sessionID := "sess-plan"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyPlanOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "plan" {
+		t.Errorf("expected state 'plan', got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyPlanOverrides_LeavesNonIdleAlone(t *testing.T) {
+	sessionID := "sess-running"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "running", Cwd: cwd},
+		},
+	}
+
+	ApplyPlanOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "running" {
+		t.Errorf("expected state 'running' unchanged, got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyPlanOverrides_NoOverrideWithoutPlan(t *testing.T) {
+	sessionID := "sess-idle"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyPlanOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "idle_prompt" {
+		t.Errorf("expected state 'idle_prompt' unchanged, got %q", sf.Agents[sessionID].State)
+	}
+}

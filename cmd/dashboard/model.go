@@ -380,6 +380,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateUpdatedMsg:
+		ApplyPlanOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
 		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Prune maps for agents no longer present
