@@ -9,13 +9,14 @@ import (
 
 // AgentProfile defines how the dashboard discovers and interacts with a coding agent.
 type AgentProfile struct {
-	Name        string // Display name: "Claude Code"
-	Command     string // Binary to launch: "claude"
-	ConfigDir   string // Base config dir: ~/.claude
-	StateDir    string // Dashboard state: ~/.claude/agent-dashboard
-	ProjectsDir string // Conversations: ~/.claude/projects
-	PlansDir    string // Plans: ~/.claude/plans
-	SessionsDir string // Session index: ~/.claude/sessions
+	Name           string // Display name: "Claude Code"
+	Command        string // Binary to launch: "claude"
+	ConfigDir      string // Base config dir: ~/.claude
+	StateDir       string // Dashboard state: ~/.claude/agent-dashboard
+	ProjectsDir    string // Conversations: ~/.claude/projects
+	PlansDir       string // Plans: ~/.claude/plans
+	SessionsDir    string // Session index: ~/.claude/sessions
+	PluginCacheDir string // Plugin cache: ~/.claude/plugins/cache
 }
 
 // Config holds all dashboard configuration.
@@ -66,12 +67,13 @@ func defaultClaudeProfile() AgentProfile {
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, ".claude")
 	return AgentProfile{
-		Name:        "Claude Code",
-		Command:     "claude",
-		ConfigDir:   base,
-		StateDir:    filepath.Join(base, "agent-dashboard"),
-		ProjectsDir: filepath.Join(base, "projects"),
-		PlansDir:    filepath.Join(base, "plans"),
-		SessionsDir: filepath.Join(base, "sessions"),
+		Name:           "Claude Code",
+		Command:        "claude",
+		ConfigDir:      base,
+		StateDir:       filepath.Join(base, "agent-dashboard"),
+		ProjectsDir:    filepath.Join(base, "projects"),
+		PlansDir:       filepath.Join(base, "plans"),
+		SessionsDir:    filepath.Join(base, "sessions"),
+		PluginCacheDir: filepath.Join(base, "plugins", "cache"),
 	}
 }

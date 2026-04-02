@@ -369,8 +369,28 @@ func validateFolder(path string) (string, error) {
 	return absFolder, nil
 }
 
-// createSession creates a new agent session in a tmux pane.
+// buildPrompt constructs the initial agent prompt from skill and message.
+// Returns "" if both are empty.
+func buildPrompt(skill, message string) string {
+	switch {
+	case skill != "" && message != "":
+		return "/" + skill + " " + message
+	case skill != "":
+		return "/" + skill
+	case message != "":
+		return message
+	default:
+		return ""
+	}
+}
+
+// createSession creates a new agent session in a tmux pane (no initial prompt).
 func createSession(folder string, agents []Agent, selfPaneID string, profile AgentProfile) tea.Cmd {
+	return createSessionWithPrompt(folder, agents, selfPaneID, profile, "", "")
+}
+
+// createSessionWithPrompt creates a new agent session with an optional skill and message.
+func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, profile AgentProfile, skill, message string) tea.Cmd {
 	return func() tea.Msg {
 		absFolder, err := validateFolder(folder)
 		if err != nil {
@@ -417,8 +437,13 @@ func createSession(folder string, agents []Agent, selfPaneID string, profile Age
 			return createSessionMsg{err: err}
 		}
 
-		// Launch the agent in the new pane
-		if sendErr := TmuxSendKeys(newTarget, profile.Command); sendErr != nil {
+		// Build the command with optional initial prompt
+		cmd := profile.Command
+		if prompt := buildPrompt(skill, message); prompt != "" {
+			cmd = profile.Command + " " + prompt
+		}
+
+		if sendErr := TmuxSendKeys(newTarget, cmd); sendErr != nil {
 			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 

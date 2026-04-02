@@ -20,7 +20,7 @@ func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
-	if m.mode == modeCreateFolder || (m.planVisible && m.renderedPlan != "") {
+	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") {
 		fullHeight := panelHeight - defaultHeaderLines - 1 // -1 for section label
 		if fullHeight < minMessageHeight {
 			fullHeight = minMessageHeight
@@ -53,6 +53,53 @@ func (m *model) updateRightContent() {
 			lines = append(lines, "")
 		}
 		lines = append(lines, "  "+helpStyle.Render("Enter to create │ Tab to accept │ ↑↓ cycle │ Esc to cancel"))
+		m.filesVP.SetContent("")
+		m.historyVP.SetContent("")
+		m.messageVP.SetContent(strings.Join(lines, "\n"))
+		return
+	}
+
+	// Create skill selection mode
+	if m.mode == modeCreateSkill {
+		var lines []string
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Folder: "+m.createFolder))
+		lines = append(lines, "")
+		lines = append(lines, "  "+boldStyle.Render("Select skill:"))
+		lines = append(lines, "")
+		for i, s := range m.availableSkills {
+			prefix := "  "
+			if i == m.selectedCreateSkill {
+				lines = append(lines, prefix+selectedStyle.Render(" "+s+" "))
+			} else {
+				lines = append(lines, prefix+helpStyle.Render(" "+s))
+			}
+		}
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc to cancel"))
+		m.filesVP.SetContent("")
+		m.historyVP.SetContent("")
+		m.messageVP.SetContent(strings.Join(lines, "\n"))
+		return
+	}
+
+	// Create message input mode
+	if m.mode == modeCreateMessage {
+		var lines []string
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Folder: "+m.createFolder))
+		if m.createSkillName != "" {
+			lines = append(lines, "  "+helpStyle.Render("Skill:  /"+m.createSkillName))
+		}
+		lines = append(lines, "")
+		lines = append(lines, "  "+boldStyle.Render("Message:"))
+		lines = append(lines, "  "+m.textInput.View())
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Enter to launch │ Esc to cancel"))
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
@@ -664,8 +711,8 @@ func (m model) renderLeftPanel() string {
 func (m model) renderRightPanel() string {
 	panelHeight := m.height - 5 - bannerHeight
 
-	// Create folder mode: simple form
-	if m.mode == modeCreateFolder {
+	// Create wizard modes: simple form
+	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage {
 		return borderStyle.
 			Width(m.rightWidth).
 			Height(panelHeight).
@@ -950,6 +997,19 @@ func (m model) renderHelpBar() string {
 
 	if m.mode == modeCreateFolder {
 		parts = append(parts, boldStyle.Render("enter")+" create")
+		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeCreateSkill {
+		parts = append(parts, boldStyle.Render("enter")+" select")
+		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
+		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeCreateMessage {
+		parts = append(parts, boldStyle.Render("enter")+" launch")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
 		return m.truncateHelpBar(parts)
 	}

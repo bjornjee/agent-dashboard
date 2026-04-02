@@ -49,6 +49,8 @@ const (
 	modeUsage
 	modeConfirmClose
 	modeCreateFolder
+	modeCreateSkill   // skill selection step of create wizard
+	modeCreateMessage // message input step of create wizard
 )
 
 // -- Viewport focus --
