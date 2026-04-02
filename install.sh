@@ -5,6 +5,56 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 ADAPTER="${1:-claude-code}"
 
+# ---------------------------------------------------------------------------
+# Adapter install functions
+# ---------------------------------------------------------------------------
+
+install_claude_code() {
+  local settings="$HOME/.claude/settings.json"
+  if [ ! -f "$settings" ]; then
+    echo "  WARNING: $settings not found. Is Claude Code installed?"
+    echo "  You may need to add the plugin manually via: /plugin add bjornjee/agent-dashboard"
+    return
+  fi
+
+  node -e "
+    const fs = require('fs');
+    const p = '$settings';
+    const s = JSON.parse(fs.readFileSync(p, 'utf8'));
+
+    // Register marketplace source
+    s.extraKnownMarketplaces = s.extraKnownMarketplaces || {};
+    if (!s.extraKnownMarketplaces['agent-dashboard']) {
+      s.extraKnownMarketplaces['agent-dashboard'] = {
+        source: { source: 'github', repo: 'bjornjee/agent-dashboard' }
+      };
+      console.log('  Registered agent-dashboard marketplace.');
+    } else {
+      console.log('  Marketplace already registered.');
+    }
+
+    // Enable the plugin
+    s.enabledPlugins = s.enabledPlugins || {};
+    if (!s.enabledPlugins['agent-dashboard@agent-dashboard']) {
+      s.enabledPlugins['agent-dashboard@agent-dashboard'] = true;
+      console.log('  Enabled agent-dashboard plugin.');
+    } else {
+      console.log('  Plugin already enabled.');
+    }
+
+    fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
+  "
+}
+
+install_generic() {
+  echo "  Adapter '$1' has no automatic registration step."
+  echo "  See adapters/$1/README.md for setup instructions."
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 echo "=== agent-dashboard installer ==="
 echo ""
 
@@ -30,45 +80,8 @@ echo "  Installed to $BIN_DIR/agent-dashboard"
 # 2. Install adapter
 echo "[2/2] Installing '$ADAPTER' adapter..."
 case "$ADAPTER" in
-  claude-code)
-    SETTINGS="$HOME/.claude/settings.json"
-    if [ ! -f "$SETTINGS" ]; then
-      echo "  WARNING: $SETTINGS not found. Is Claude Code installed?"
-      echo "  You may need to add the plugin manually via: /plugin add bjornjee/agent-dashboard"
-    else
-      node -e "
-        const fs = require('fs');
-        const p = '$SETTINGS';
-        const s = JSON.parse(fs.readFileSync(p, 'utf8'));
-
-        // Register marketplace source
-        s.extraKnownMarketplaces = s.extraKnownMarketplaces || {};
-        if (!s.extraKnownMarketplaces['agent-dashboard']) {
-          s.extraKnownMarketplaces['agent-dashboard'] = {
-            source: { source: 'github', repo: 'bjornjee/agent-dashboard' }
-          };
-          console.log('  Registered agent-dashboard marketplace.');
-        } else {
-          console.log('  Marketplace already registered.');
-        }
-
-        // Enable the plugin
-        s.enabledPlugins = s.enabledPlugins || {};
-        if (!s.enabledPlugins['agent-dashboard@agent-dashboard']) {
-          s.enabledPlugins['agent-dashboard@agent-dashboard'] = true;
-          console.log('  Enabled agent-dashboard plugin.');
-        } else {
-          console.log('  Plugin already enabled.');
-        }
-
-        fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
-      "
-    fi
-    ;;
-  *)
-    echo "  Adapter '$ADAPTER' has no automatic registration step."
-    echo "  See adapters/$ADAPTER/README.md for setup instructions."
-    ;;
+  claude-code) install_claude_code ;;
+  *)           install_generic "$ADAPTER" ;;
 esac
 
 echo ""
