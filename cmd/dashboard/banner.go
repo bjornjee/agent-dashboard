@@ -14,21 +14,21 @@ import (
 )
 
 var quotes = []string{
+	"Goals are dreams with deadlines.",
+	"Set an example for others to do better.",
+	"It is better to dare than fear.",
+	"Like the moon, come out from behind the clouds! Shine.",
+	"Don't be afraid of failure. This is the way to succeed.",
+	"No matter where you live, live with dignity.",
+	"We have to be bigger than the things we suffer.",
+	"Do it once and do it right and do it quickly.",
+	"Nothing happens unless first a dream.",
+	"If you don't ask, you don't get.",
+	"Every vision has its own rainbow.",
+	"Wherever you decide to go, proceed with your mind.",
+	"When you mess something up, you learn for the next time.",
+	"The secret of your success is determined by your daily agenda.",
 	"Be yourself; everyone else is already taken.",
-	"I'm selfish, impatient and a little insecure. I make mistakes, I am out of control and at times hard to handle. But if you can't handle me at my worst, then you sure as hell don't deserve me at my best.",
-	"Two things are infinite: the universe and human stupidity; and I'm not sure about the universe.",
-	"Be who you are and say what you feel, because those who mind don't matter, and those who matter don't mind.",
-	"You only live once, but if you do it right, once is enough.",
-	"Be the change that you wish to see in the world.",
-	"To live is the rarest thing in the world. Most people exist, that is all.",
-	"Without music, life would be a mistake.",
-	"It is better to be hated for what you are than to be loved for what you are not.",
-	"It is our choices, Harry, that show what we truly are, far more than our abilities.",
-	"There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.",
-	"For every minute you are angry you lose sixty seconds of happiness.",
-	"And, when you want something, all the universe conspires in helping you to achieve it.",
-	"You may say I'm a dreamer, but I'm not the only one. I hope someday you'll join us. And the world will live as one.",
-	"Who controls the past controls the future. Who controls the present controls the past.",
 }
 
 type apiNinjasQuote struct {
