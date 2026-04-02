@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -292,5 +294,134 @@ func TestFilterZSuggestions_NilPathExistsAcceptsAll(t *testing.T) {
 	results := filterZSuggestions("", entries, nil)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result with nil pathExists, got %d", len(results))
+	}
+}
+
+// --- Session-based fallback tests ---
+
+func writeSessionFile(t *testing.T, dir string, pid int, cwd string, startedAt int64) {
+	t.Helper()
+	sf := sessionFile{PID: pid, SessionID: "test-session", Cwd: cwd, StartedAt: startedAt}
+	data, err := json.Marshal(sf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.Join(dir, strings.Replace(strings.NewReplacer("/", "-").Replace(cwd), " ", "_", -1)+".json")
+	if err := os.WriteFile(name, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadSessionEntries_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, 1, "/Users/me/code/project-a", 1774000000000)
+	writeSessionFile(t, dir, 2, "/Users/me/code/project-b", 1773000000000)
+
+	entries := loadSessionEntries(dir)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+}
+
+func TestLoadSessionEntries_DeduplicatesByCwd(t *testing.T) {
+	dir := t.TempDir()
+	// Two sessions for same cwd — should deduplicate, keeping most recent
+	sf1 := sessionFile{PID: 1, SessionID: "s1", Cwd: "/Users/me/code/repo", StartedAt: 1773000000000}
+	sf2 := sessionFile{PID: 2, SessionID: "s2", Cwd: "/Users/me/code/repo", StartedAt: 1774000000000}
+	for i, sf := range []sessionFile{sf1, sf2} {
+		data, _ := json.Marshal(sf)
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.json", i)), data, 0644)
+	}
+
+	entries := loadSessionEntries(dir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 deduplicated entry, got %d", len(entries))
+	}
+	// Should keep the most recent timestamp (converted from ms to seconds)
+	if entries[0].Timestamp != 1774000000 {
+		t.Errorf("expected timestamp 1774000000, got %d", entries[0].Timestamp)
+	}
+}
+
+func TestLoadSessionEntries_SkipsEmptyCwd(t *testing.T) {
+	dir := t.TempDir()
+	sf := sessionFile{PID: 1, SessionID: "s1", Cwd: "", StartedAt: 1774000000000}
+	data, _ := json.Marshal(sf)
+	os.WriteFile(filepath.Join(dir, "1.json"), data, 0644)
+
+	entries := loadSessionEntries(dir)
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries for empty cwd, got %d", len(entries))
+	}
+}
+
+func TestLoadSessionEntries_MissingDir(t *testing.T) {
+	entries := loadSessionEntries("/nonexistent/sessions")
+	if entries != nil {
+		t.Errorf("expected nil for missing dir, got %v", entries)
+	}
+}
+
+func TestLoadSessionEntries_SkipsNonJSON(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, 1, "/Users/me/code/repo", 1774000000000)
+	os.WriteFile(filepath.Join(dir, "compaction-log.txt"), []byte("not json"), 0644)
+
+	entries := loadSessionEntries(dir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry (skipping .txt), got %d", len(entries))
+	}
+}
+
+func TestLoadSessionEntries_TimestampConversion(t *testing.T) {
+	dir := t.TempDir()
+	// startedAt is in milliseconds; zEntry.Timestamp should be in seconds
+	writeSessionFile(t, dir, 1, "/Users/me/code/repo", 1774000000000)
+
+	entries := loadSessionEntries(dir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Timestamp != 1774000000 {
+		t.Errorf("expected timestamp 1774000000 (seconds), got %d", entries[0].Timestamp)
+	}
+	if entries[0].Rank != 1 {
+		t.Errorf("expected rank 1, got %f", entries[0].Rank)
+	}
+}
+
+func TestLoadZEntries_FallsBackToSessions(t *testing.T) {
+	// Use a home dir without .z to trigger fallback
+	homeDir := t.TempDir()
+	sessDir := filepath.Join(homeDir, "sessions")
+	os.MkdirAll(sessDir, 0755)
+	writeSessionFile(t, sessDir, 1, "/Users/me/code/repo", 1774000000000)
+
+	entries := loadZEntriesWithHome(homeDir, sessDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 fallback entry, got %d", len(entries))
+	}
+	if entries[0].Path != "/Users/me/code/repo" {
+		t.Errorf("expected path /Users/me/code/repo, got %q", entries[0].Path)
+	}
+}
+
+func TestLoadZEntries_PrefersZFile(t *testing.T) {
+	homeDir := t.TempDir()
+	// Create a .z file
+	zContent := "/Users/me/code/from-z|100|1774000000\n"
+	os.WriteFile(filepath.Join(homeDir, ".z"), []byte(zContent), 0644)
+
+	// Also create sessions dir with different data
+	sessDir := filepath.Join(homeDir, "sessions")
+	os.MkdirAll(sessDir, 0755)
+	writeSessionFile(t, sessDir, 1, "/Users/me/code/from-session", 1774000000000)
+
+	entries := loadZEntriesWithHome(homeDir, sessDir)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry from .z, got %d", len(entries))
+	}
+	if entries[0].Path != "/Users/me/code/from-z" {
+		t.Errorf("expected z-sourced path, got %q", entries[0].Path)
 	}
 }
