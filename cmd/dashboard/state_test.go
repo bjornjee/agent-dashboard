@@ -882,3 +882,26 @@ func TestApplyPlanOverrides_QuestionOverride(t *testing.T) {
 		t.Errorf("expected state 'question', got %q", sf.Agents[sessionID].State)
 	}
 }
+
+func TestApplyPlanOverrides_PlanTakesPriorityOverQuestion(t *testing.T) {
+	sessionID := "sess-both"
+	// Both ExitPlanMode and AskUserQuestion present, no human response → plan wins
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"A"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:03Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyPlanOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "plan" {
+		t.Errorf("expected 'plan' to take priority over 'question', got %q", sf.Agents[sessionID].State)
+	}
+}
