@@ -49,18 +49,18 @@ type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
 }
 
-// State groups: blocked → running → finished → merged.
+// State groups: blocked → waiting → running → review → merged.
 // Legacy states (input, idle) are mapped to their new equivalents.
 var statePriority = map[string]int{
-	"permission":  1, // blocked — needs approval
-	"question":    1, // blocked — needs reply
-	"error":       1, // blocked — needs investigation
-	"input":       1, // legacy: treat as blocked
-	"running":     2,
-	"idle_prompt": 3, // finished turn, at prompt
-	"idle":        3, // legacy: treat as idle_prompt
-	"done":        3, // finished task
-	"merged":      4, // branch merged — safe to close
+	"permission":  1, // blocked — needs y/n approval
+	"question":    2, // waiting — needs user reply
+	"error":       2, // waiting — needs investigation
+	"input":       2, // legacy: treat as waiting
+	"running":     3,
+	"idle_prompt": 4, // review — finished turn, at prompt
+	"idle":        4, // legacy: treat as idle_prompt
+	"done":        4, // review — finished task
+	"merged":      5, // branch merged — safe to close
 }
 
 // agentsDir returns the agents subdirectory within the state directory.
@@ -241,7 +241,7 @@ func gitFetch(dir string) {
 func PromoteMerged(sf *StateFile) {
 	fetched := make(map[string]bool)
 	for key, agent := range sf.Agents {
-		if !isFinished(agent.State) {
+		if !isReview(agent.State) {
 			continue
 		}
 		dir := agent.EffectiveDir()

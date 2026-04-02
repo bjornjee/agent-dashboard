@@ -98,22 +98,28 @@ var groupHeaders = map[int]struct {
 	color lipgloss.Color
 }{
 	1: {"BLOCKED", permissionColor},
-	2: {"RUNNING", runningColor},
-	3: {"FINISHED", doneColor},
-	4: {"MERGED", mergedColor},
+	2: {"WAITING", questionColor},
+	3: {"RUNNING", runningColor},
+	4: {"REVIEW", doneColor},
+	5: {"MERGED", mergedColor},
 }
 
-// isBlocked returns true when the agent needs user action to continue.
+// isBlocked returns true when the agent needs a mechanical action (y/n) to continue.
 func isBlocked(state string) bool {
+	return state == "permission"
+}
+
+// isWaiting returns true when the agent is stuck and needs user input or investigation.
+func isWaiting(state string) bool {
 	switch state {
-	case "permission", "question", "error", "input":
+	case "question", "error", "input":
 		return true
 	}
 	return false
 }
 
-// isFinished returns true when the agent has completed or is idle at prompt.
-func isFinished(state string) bool {
+// isReview returns true when the agent has completed its turn and needs review.
+func isReview(state string) bool {
 	switch state {
 	case "done", "idle_prompt", "idle":
 		return true

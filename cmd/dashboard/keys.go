@@ -530,14 +530,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "y", "n":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
-			if isBlocked(es) {
+			if isBlocked(es) || isWaiting(es) {
 				return m, sendRawKey(agent.TmuxPaneID, key)
 			}
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
-			if isBlocked(es) {
+			if isBlocked(es) || isWaiting(es) {
 				return m, sendRawKey(agent.TmuxPaneID, key)
 			}
 		}

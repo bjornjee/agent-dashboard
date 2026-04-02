@@ -139,9 +139,9 @@ func (m *model) updateRightContent() {
 
 	if m.planVisible && m.renderedPlan != "" {
 		m.messageVP.SetContent(m.renderedPlan)
-	} else if isBlocked(effState) {
+	} else if isBlocked(effState) || isWaiting(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
-	} else if isFinished(effState) || isMerged(effState) {
+	} else if isReview(effState) || isMerged(effState) {
 		if m.mode == modeReply {
 			m.messageVP.SetContent(m.waitingMessageContent())
 		} else {
@@ -867,10 +867,14 @@ func (m model) renderRightPanel() string {
 			messageLabel = " " + planLabelStyle.Render("── Plan (p to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 8))
 		} else if isBlocked(rpEffState) {
-			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
+			messageLabel = " " + lipgloss.NewStyle().Foreground(permissionColor).Bold(true).
 				Render("── Agent is blocked") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
-		} else if isFinished(rpEffState) || isMerged(rpEffState) {
+		} else if isWaiting(rpEffState) {
+			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
+				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 9))
+		} else if isReview(rpEffState) || isMerged(rpEffState) {
 			if m.mode == modeReply {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
 					Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +

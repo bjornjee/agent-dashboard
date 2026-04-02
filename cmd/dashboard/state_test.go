@@ -94,9 +94,10 @@ func TestSortedAgents_Priority(t *testing.T) {
 
 	sorted := SortedAgents(sf, "")
 
-	// Group 1: blocked (permission, question, error) sorted by window
-	// Group 2: running
-	// Group 3: finished (idle_prompt, done) sorted by window
+	// Group 1: blocked (permission) sorted by window
+	// Group 2: waiting (question, error) sorted by window
+	// Group 3: running
+	// Group 4: review (idle_prompt, done) sorted by window
 	expected := []string{"permission", "question", "error", "running", "idle_prompt", "done"}
 
 	if len(sorted) != 6 {
@@ -600,13 +601,13 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestIsBlocked(t *testing.T) {
-	blocked := []string{"permission", "question", "error", "input"}
+	blocked := []string{"permission"}
 	for _, s := range blocked {
 		if !isBlocked(s) {
 			t.Errorf("expected isBlocked(%q) = true", s)
 		}
 	}
-	notBlocked := []string{"running", "done", "idle_prompt", "idle", "merged", "unknown"}
+	notBlocked := []string{"question", "error", "input", "running", "done", "idle_prompt", "idle", "merged", "unknown"}
 	for _, s := range notBlocked {
 		if isBlocked(s) {
 			t.Errorf("expected isBlocked(%q) = false", s)
@@ -614,17 +615,32 @@ func TestIsBlocked(t *testing.T) {
 	}
 }
 
-func TestIsFinished(t *testing.T) {
-	finished := []string{"done", "idle_prompt", "idle"}
-	for _, s := range finished {
-		if !isFinished(s) {
-			t.Errorf("expected isFinished(%q) = true", s)
+func TestIsWaiting(t *testing.T) {
+	waiting := []string{"question", "error", "input"}
+	for _, s := range waiting {
+		if !isWaiting(s) {
+			t.Errorf("expected isWaiting(%q) = true", s)
 		}
 	}
-	notFinished := []string{"permission", "question", "error", "input", "running", "merged", "unknown"}
-	for _, s := range notFinished {
-		if isFinished(s) {
-			t.Errorf("expected isFinished(%q) = false", s)
+	notWaiting := []string{"permission", "running", "done", "idle_prompt", "idle", "merged", "unknown"}
+	for _, s := range notWaiting {
+		if isWaiting(s) {
+			t.Errorf("expected isWaiting(%q) = false", s)
+		}
+	}
+}
+
+func TestIsReview(t *testing.T) {
+	review := []string{"done", "idle_prompt", "idle"}
+	for _, s := range review {
+		if !isReview(s) {
+			t.Errorf("expected isReview(%q) = true", s)
+		}
+	}
+	notReview := []string{"permission", "question", "error", "input", "running", "merged", "unknown"}
+	for _, s := range notReview {
+		if isReview(s) {
+			t.Errorf("expected isReview(%q) = false", s)
 		}
 	}
 }
