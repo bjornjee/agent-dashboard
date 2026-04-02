@@ -640,6 +640,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsgTick = m.tickCount
 		return m, nil
 
+	case pinStateMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Pin state failed: %v", msg.err)
+			m.statusMsgTick = m.tickCount
+		}
+		return m, nil
+
 	case sendResultMsg:
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Reply failed: %v", msg.err)

@@ -645,6 +645,17 @@ func TestIsReview(t *testing.T) {
 	}
 }
 
+func TestIsPR(t *testing.T) {
+	if !isPR("pr") {
+		t.Error("expected isPR(\"pr\") = true")
+	}
+	for _, s := range []string{"done", "idle_prompt", "running", "permission", "merged", "unknown"} {
+		if isPR(s) {
+			t.Errorf("expected isPR(%q) = false", s)
+		}
+	}
+}
+
 func TestIsMerged(t *testing.T) {
 	if !isMerged("merged") {
 		t.Error("expected isMerged(\"merged\") = true")
@@ -656,46 +667,94 @@ func TestIsMerged(t *testing.T) {
 	}
 }
 
-func TestPromoteMerged(t *testing.T) {
-	// Use the current repo — we're on a branch that may or may not be merged.
-	// Instead, test the logic with agents that have no valid git dir (won't promote).
+func TestApplyPinnedStates(t *testing.T) {
 	sf := StateFile{
 		Agents: map[string]Agent{
-			"done-no-dir":   {State: "done", Cwd: "/nonexistent"},
-			"idle-no-dir":   {State: "idle_prompt", Cwd: "/nonexistent"},
-			"running-agent": {State: "running", Cwd: "/nonexistent"},
+			"pinned-pr":     {State: "done", PinnedState: "pr"},
+			"pinned-merged": {State: "idle_prompt", PinnedState: "merged"},
+			"no-pin":        {State: "running"},
 		},
 	}
 
-	PromoteMerged(&sf)
+	ApplyPinnedStates(&sf)
 
-	// No agent should be promoted (invalid dirs)
-	if sf.Agents["done-no-dir"].State != "done" {
-		t.Errorf("expected done unchanged, got %s", sf.Agents["done-no-dir"].State)
+	if sf.Agents["pinned-pr"].State != "pr" {
+		t.Errorf("expected pr, got %s", sf.Agents["pinned-pr"].State)
 	}
-	if sf.Agents["idle-no-dir"].State != "idle_prompt" {
-		t.Errorf("expected idle_prompt unchanged, got %s", sf.Agents["idle-no-dir"].State)
+	if sf.Agents["pinned-merged"].State != "merged" {
+		t.Errorf("expected merged, got %s", sf.Agents["pinned-merged"].State)
 	}
-	if sf.Agents["running-agent"].State != "running" {
-		t.Errorf("expected running unchanged, got %s", sf.Agents["running-agent"].State)
+	if sf.Agents["no-pin"].State != "running" {
+		t.Errorf("expected running unchanged, got %s", sf.Agents["no-pin"].State)
 	}
 }
 
-func TestSortedAgents_MergedGroup(t *testing.T) {
+func TestPinAgentState(t *testing.T) {
+	tmp := t.TempDir()
+	writeAgentFile(t, tmp, "sess-a.json", Agent{SessionID: "sess-a", Target: "a:0.1", State: "done", TmuxPaneID: "%1"})
+
+	err := PinAgentState(tmp, "sess-a", "pr")
+	if err != nil {
+		t.Fatalf("PinAgentState failed: %v", err)
+	}
+
+	// Read back and verify
+	sf := ReadState(tmp)
+	agent := sf.Agents["sess-a"]
+	if agent.PinnedState != "pr" {
+		t.Errorf("expected pinned_state=pr, got %q", agent.PinnedState)
+	}
+	// Original state should be preserved
+	if agent.State != "done" {
+		t.Errorf("expected state=done preserved, got %q", agent.State)
+	}
+}
+
+func TestPinAgentState_NonExistent(t *testing.T) {
+	tmp := t.TempDir()
+	writeAgentFile(t, tmp, "sess-a.json", Agent{SessionID: "sess-a", Target: "a:0.1", State: "running"})
+
+	err := PinAgentState(tmp, "nonexistent", "pr")
+	if err == nil {
+		t.Error("expected error for nonexistent session_id")
+	}
+}
+
+func TestEffectiveState(t *testing.T) {
+	tests := []struct {
+		name  string
+		agent Agent
+		want  string
+	}{
+		{"pinned overrides", Agent{State: "running", PinnedState: "merged"}, "merged"},
+		{"no pin uses state", Agent{State: "done"}, "done"},
+		{"empty pin uses state", Agent{State: "idle_prompt", PinnedState: ""}, "idle_prompt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.agent.EffectiveState(); got != tt.want {
+				t.Errorf("EffectiveState() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSortedAgents_PRAndMergedGroups(t *testing.T) {
 	sf := StateFile{
 		Agents: map[string]Agent{
 			"s0": {Target: "a:0.0", State: "permission", Window: 0, Pane: 0, TmuxPaneID: "%0"},
 			"s1": {Target: "a:1.0", State: "running", Window: 1, Pane: 0, TmuxPaneID: "%1"},
 			"s2": {Target: "a:2.0", State: "done", Window: 2, Pane: 0, TmuxPaneID: "%2"},
-			"s3": {Target: "a:3.0", State: "merged", Window: 3, Pane: 0, TmuxPaneID: "%3"},
+			"s3": {Target: "a:3.0", State: "pr", Window: 3, Pane: 0, TmuxPaneID: "%3"},
+			"s4": {Target: "a:4.0", State: "merged", Window: 4, Pane: 0, TmuxPaneID: "%4"},
 		},
 	}
 
 	sorted := SortedAgents(sf, "")
-	expected := []string{"permission", "running", "done", "merged"}
+	expected := []string{"permission", "running", "done", "pr", "merged"}
 
-	if len(sorted) != 4 {
-		t.Fatalf("expected 4 agents, got %d", len(sorted))
+	if len(sorted) != 5 {
+		t.Fatalf("expected 5 agents, got %d", len(sorted))
 	}
 	for i, want := range expected {
 		if sorted[i].State != want {

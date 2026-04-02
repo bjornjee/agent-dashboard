@@ -33,6 +33,7 @@ type Agent struct {
 	LastHookEvent      string   `json:"last_hook_event"`
 	CurrentTool        string   `json:"current_tool"`
 	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
+	PinnedState        string   `json:"pinned_state,omitempty"`
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.
@@ -44,13 +45,24 @@ func (a Agent) EffectiveDir() string {
 	return a.Cwd
 }
 
+// EffectiveState returns the agent's display state. If a pinned state is set
+// (e.g. "pr" or "merged"), it overrides the hook-reported state so that
+// user-driven promotions survive while the agent continues working.
+func (a Agent) EffectiveState() string {
+	if a.PinnedState != "" {
+		return a.PinnedState
+	}
+	return a.State
+}
+
 // StateFile is the in-memory aggregate of all per-agent JSON files.
 type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
 }
 
-// State groups: blocked → waiting → running → review → merged.
+// State groups: blocked → waiting → running → review → pr → merged.
 // Legacy states (input, idle) are mapped to their new equivalents.
+// PR and merged are user-driven (pinned) states set by the dashboard.
 var statePriority = map[string]int{
 	"permission":  1, // blocked — needs y/n approval
 	"question":    2, // waiting — needs user reply
@@ -60,7 +72,8 @@ var statePriority = map[string]int{
 	"idle_prompt": 4, // review — finished turn, at prompt
 	"idle":        4, // legacy: treat as idle_prompt
 	"done":        4, // review — finished task
-	"merged":      5, // branch merged — safe to close
+	"pr":          5, // PR created — waiting on GitHub
+	"merged":      6, // branch merged — cleanup
 }
 
 // agentsDir returns the agents subdirectory within the state directory.
@@ -201,63 +214,40 @@ func gitBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// isBranchMerged checks whether branch has been merged into origin's default branch.
-// Compares against origin/<default> (not local) because PRs are merged on the remote
-// and the local default branch may be stale.
-func isBranchMerged(dir, branch string) bool {
-	if branch == "" || dir == "" {
-		return false
-	}
-	defaultBranch := gitDefaultBranch(dir)
-	if defaultBranch == "" || branch == defaultBranch {
-		return false
-	}
-	remoteRef := "origin/" + defaultBranch
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	err := exec.CommandContext(ctx, "git", "-C", dir,
-		"merge-base", "--is-ancestor", branch, remoteRef).Run()
-	return err == nil
-}
-
-// gitFetch runs a quiet fetch of the default branch for a directory.
-func gitFetch(dir string) {
-	defaultBranch := gitDefaultBranch(dir)
-	if defaultBranch == "" {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_ = exec.CommandContext(ctx, "git", "-C", dir,
-		"fetch", "--quiet", "origin", defaultBranch).Run()
-}
-
-// PromoteMerged promotes finished agents whose branch has been merged into the
-// default branch to the "merged" state. This is a dashboard-side derived state
-// — hooks don't know about PR merges.
-//
-// Fetches origin/<default> once per unique repo directory before checking, so
-// the remote ref is up to date.
-func PromoteMerged(sf *StateFile) {
-	fetched := make(map[string]bool)
+// ApplyPinnedStates overrides each agent's State with its PinnedState when set.
+// This ensures user-driven promotions (pr, merged) survive hook updates.
+func ApplyPinnedStates(sf *StateFile) {
 	for key, agent := range sf.Agents {
-		if !isReview(agent.State) {
-			continue
-		}
-		dir := agent.EffectiveDir()
-		if dir == "" || agent.Branch == "" {
-			continue
-		}
-		// Fetch once per repo so origin/<default> is current
-		if !fetched[dir] {
-			gitFetch(dir)
-			fetched[dir] = true
-		}
-		if isBranchMerged(dir, agent.Branch) {
-			agent.State = "merged"
+		if agent.PinnedState != "" {
+			agent.State = agent.PinnedState
 			sf.Agents[key] = agent
 		}
 	}
+}
+
+// PinAgentState writes a pinned_state field to the agent's JSON file.
+// Hook updates merge into the file and preserve this field, so the
+// dashboard-driven state survives while the agent continues working.
+func PinAgentState(dir, sessionID, pinnedState string) error {
+	files := agentFileMap(dir)
+	path, ok := files[sessionID]
+	if !ok {
+		return fmt.Errorf("agent %s not found", sessionID)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	raw["pinned_state"] = pinnedState
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0644)
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.

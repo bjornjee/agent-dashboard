@@ -61,6 +61,7 @@ var (
 	runningColor    = themeBlue
 	idlePromptColor = themeOverlay1
 	doneColor       = themeGreen
+	prColor         = themeMauve
 	mergedColor     = themeTeal
 
 	// Legacy aliases
@@ -90,6 +91,7 @@ var stateIcons = map[string]stateIcon{
 	"idle_prompt": {"○", idlePromptColor},
 	"idle":        {"○", idleColor}, // legacy
 	"done":        {"✓", doneColor},
+	"pr":          {"↑", prColor},
 	"merged":      {"⏏", mergedColor},
 }
 
@@ -101,7 +103,8 @@ var groupHeaders = map[int]struct {
 	2: {"WAITING", questionColor},
 	3: {"RUNNING", runningColor},
 	4: {"REVIEW", doneColor},
-	5: {"MERGED", mergedColor},
+	5: {"PR", prColor},
+	6: {"MERGED", mergedColor},
 }
 
 // isBlocked returns true when the agent needs a mechanical action (y/n) to continue.
@@ -127,6 +130,11 @@ func isReview(state string) bool {
 	return false
 }
 
+// isPR returns true when the agent has a PR open and is waiting on GitHub.
+func isPR(state string) bool {
+	return state == "pr"
+}
+
 // isMerged returns true when the agent's branch has been merged and is safe to close.
 func isMerged(state string) bool {
 	return state == "merged"
@@ -141,6 +149,7 @@ var stateLabels = map[string]string{
 	"running":     "Running",
 	"idle_prompt": "Idle at prompt",
 	"idle":        "Idle",  // legacy
+	"pr":          "PR open",
 	"merged":      "Branch merged",
 	"done":        "Done",
 }

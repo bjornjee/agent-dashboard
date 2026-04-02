@@ -235,6 +235,14 @@ func closePane(paneID, sessionID, stateDir string) tea.Cmd {
 	}
 }
 
+// pinAgentStateCmd writes a pinned_state to the agent's JSON file.
+func pinAgentStateCmd(stateDir, sessionID, pinnedState string) tea.Cmd {
+	return func() tea.Msg {
+		err := PinAgentState(stateDir, sessionID, pinnedState)
+		return pinStateMsg{err: err}
+	}
+}
+
 func loadUsage(agents []Agent, projectsDir, sessionsDir string) tea.Cmd {
 	agentsCopy := make([]Agent, len(agents))
 	copy(agentsCopy, agents)
@@ -253,7 +261,7 @@ func loadState(path string, tmuxAvailable bool) tea.Cmd {
 			paneCwds = TmuxListPaneCwds()
 		}
 		ResolveAgentBranches(&sf, paneCwds)
-		PromoteMerged(&sf)
+		ApplyPinnedStates(&sf)
 		return stateUpdatedMsg{state: sf}
 	}
 }
@@ -634,7 +642,7 @@ func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Wa
 							pc = TmuxListPaneCwds()
 						}
 						ResolveAgentBranches(&sf, pc)
-						PromoteMerged(&sf)
+						ApplyPinnedStates(&sf)
 						p.Send(stateUpdatedMsg{state: sf})
 					})
 				}
