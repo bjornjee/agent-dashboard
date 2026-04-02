@@ -609,7 +609,7 @@ func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Wa
 
 	watchDir := agentsDir(dir)
 	// Ensure the agents directory exists before watching
-	_ = os.MkdirAll(watchDir, 0755)
+	_ = os.MkdirAll(watchDir, 0700)
 	if err := watcher.Add(watchDir); err != nil {
 		watcher.Close()
 		return nil, fmt.Errorf("cannot watch %s: %w", watchDir, err)

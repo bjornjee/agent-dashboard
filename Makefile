@@ -7,7 +7,7 @@ build: ## Build the dashboard binary
 	go build $(LDFLAGS) -o bin/agent-dashboard ./cmd/dashboard/
 
 test: ## Run all tests
-	go test ./cmd/dashboard/...
+	go test -race ./cmd/dashboard/...
 
 install: build ## Install to ~/.local/bin
 	@mkdir -p ~/.local/bin

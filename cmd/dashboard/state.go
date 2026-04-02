@@ -277,7 +277,7 @@ func PinAgentState(dir, sessionID, pinnedState string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, out, 0644)
+	return os.WriteFile(path, out, 0600)
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.

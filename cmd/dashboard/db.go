@@ -52,7 +52,7 @@ type DB struct {
 // OpenDB opens (or creates) the SQLite database and runs migrations.
 func OpenDB(path string) (*DB, error) {
 	if path != ":memory:" {
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			return nil, err
 		}
 	}
