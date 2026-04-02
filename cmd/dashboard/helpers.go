@@ -247,6 +247,18 @@ func agentBadges(agent Agent) string {
 	return strings.Join(parts, " ")
 }
 
+// trimTrailingBlankLines removes trailing whitespace-only lines from a slice.
+func trimTrailingBlankLines(lines []string) []string {
+	i := len(lines)
+	for i > 0 && strings.TrimSpace(lines[i-1]) == "" {
+		i--
+	}
+	if i == 0 {
+		return nil
+	}
+	return lines[:i]
+}
+
 func hasContent(lines []string) bool {
 	for _, l := range lines {
 		if strings.TrimSpace(l) != "" {
