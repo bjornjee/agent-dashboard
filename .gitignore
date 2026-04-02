@@ -1,6 +1,7 @@
 # Build output
 bin/
 dist/
+dashboard
 
 # Go
 *.exe

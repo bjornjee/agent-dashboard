@@ -36,7 +36,7 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 
 ## Install
 
-### 1. Install the Claude Code plugin
+### Option A: Claude Code plugin (recommended)
 
 In a Claude Code session, run:
 
@@ -44,18 +44,24 @@ In a Claude Code session, run:
 /plugin add bjornjee/agent-dashboard
 ```
 
-Or from a clone:
+### Option B: From source
 
 ```bash
-git clone https://github.com/bjornjee/agent-dashboard ~/.tmux/plugins/agent-dashboard
-~/.tmux/plugins/agent-dashboard/install.sh
+git clone https://github.com/bjornjee/agent-dashboard
+cd agent-dashboard
+make install                        # defaults to claude-code adapter
+# make install ADAPTER=claude-code  # or specify explicitly
 ```
 
-### 2. Set up tmux integration
+The installer builds the binary to `~/.local/bin/` and registers the adapter's hooks with the host tool (e.g. Claude Code settings).
+
+### Optional: tmux keybinding
+
+The included `agent-dashboard.tmux` script binds `prefix + D` to switch to a dedicated dashboard session:
 
 ```bash
 # Add to ~/.tmux.conf
-run-shell ~/.tmux/plugins/agent-dashboard/agent-dashboard.tmux
+run-shell /path/to/agent-dashboard/agent-dashboard.tmux
 
 # Reload tmux config
 tmux source-file ~/.tmux.conf
@@ -63,13 +69,13 @@ tmux source-file ~/.tmux.conf
 
 ## Usage
 
-Press `prefix + D` to switch to the dashboard session. On first press it creates a dedicated `dashboard` tmux session; subsequent presses switch back to it.
-
-Or run directly:
+Run the dashboard directly:
 
 ```bash
-~/.tmux/plugins/agent-dashboard/bin/agent-dashboard
+agent-dashboard
 ```
+
+Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicated dashboard session.
 
 ### Keybindings
 
@@ -114,11 +120,12 @@ Or run directly:
 ## Development
 
 ```bash
-make build    # Build binary to bin/ (injects version from VERSION file)
-make test     # Run tests
-make install  # Copy to ~/.local/bin
-make seed     # Create fake agent state for testing
-make clean    # Remove build artifacts and state
+make build                        # Build binary to bin/ (injects version from VERSION file)
+make test                         # Run tests
+make install                      # Build + install binary + adapter (default: claude-code)
+make install ADAPTER=claude-code  # Specify adapter explicitly
+make seed                         # Create fake agent state for testing
+make clean                        # Remove build artifacts and state
 ```
 
 ### Versioning
@@ -133,8 +140,8 @@ To bump the version, edit `VERSION` and rebuild.
 agent-dashboard/
 ├── Makefile
 ├── VERSION
-├── install.sh                     # self-contained installer
-├── agent-dashboard.tmux           # tmux plugin binding (prefix + D)
+├── install.sh                     # installer (accepts adapter name, default: claude-code)
+├── agent-dashboard.tmux           # optional tmux keybinding (prefix + D)
 ├── cmd/
 │   ├── dashboard/
 │   │   ├── main.go                # entry point
