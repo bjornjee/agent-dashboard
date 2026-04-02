@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "agent-dashboard",
-      "source": "./",
+      "source": "./adapters/claude-code/",
       "description": "Claude Code adapter hooks for agent-dashboard",
       "version": "1.0.0",
       "category": "workflow",
