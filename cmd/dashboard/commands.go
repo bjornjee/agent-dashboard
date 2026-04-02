@@ -385,7 +385,7 @@ func buildPrompt(skill, message string) string {
 }
 
 // shellQuote wraps s in single quotes for safe shell interpolation.
-// Any embedded single quotes are escaped as '\'' (end quote, escaped quote, start quote).
+// Any embedded single quotes are escaped as '\” (end quote, escaped quote, start quote).
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

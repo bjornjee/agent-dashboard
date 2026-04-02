@@ -653,9 +653,9 @@ func TestIsSubagentCompleted_LargeFinalEntry(t *testing.T) {
 
 func TestCleanSlashCommand(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    string
+		name  string
+		input string
+		want  string
 	}{
 		{
 			name:  "slash command with args",

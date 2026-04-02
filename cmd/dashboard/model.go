@@ -420,7 +420,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildTree()
 		m.restoreSelection(prevTarget, prevSubID)
 		m.renderedHistory = "" // invalidate cache on state update
-		m.convFileOffset = 0  // reset offset — agent list may have changed
+		m.convFileOffset = 0   // reset offset — agent list may have changed
 		// Also invalidate the current agent's cached entry so restoreCurrentCache
 		// doesn't restore stale offsets after this reset.
 		if key := m.cacheKey(); key != "" {

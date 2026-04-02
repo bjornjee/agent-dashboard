@@ -1061,7 +1061,7 @@ func (m model) truncateHelpBar(parts []string) string {
 // renderHelpOverlay renders a full-screen help legend with all keybindings grouped by context.
 func (m model) renderHelpOverlay() string {
 	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
-	contentWidth := m.width - 4               // account for border
+	contentWidth := m.width - 4                // account for border
 
 	headerStyle := titleStyle
 	keyStyle := boldStyle

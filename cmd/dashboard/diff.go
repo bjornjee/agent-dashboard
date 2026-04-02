@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type diffMsg struct {
