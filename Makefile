@@ -2,6 +2,7 @@
 
 VERSION := $(shell cat VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
+ADAPTER ?= claude-code
 
 build: ## Build the dashboard binary
 	go build $(LDFLAGS) -o bin/agent-dashboard ./cmd/dashboard/
@@ -9,9 +10,8 @@ build: ## Build the dashboard binary
 test: ## Run all tests
 	go test -race ./cmd/dashboard/...
 
-install: build ## Install to ~/.local/bin
-	@mkdir -p ~/.local/bin
-	cp bin/agent-dashboard ~/.local/bin/agent-dashboard
+install: ## Build and install binary + adapter (ADAPTER=claude-code)
+	./install.sh $(ADAPTER)
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/
