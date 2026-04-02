@@ -65,6 +65,7 @@ Or run directly:
 | `a` | Create new agent session (z-plugin suggestions) |
 | `c` | Collapse/expand subagent tree |
 | `x` | Dismiss subagent or close agent pane |
+| `m` | Mark agent as merged and send cleanup |
 | `p` | Toggle plan view |
 | `u` | Toggle usage dashboard |
 | `h` | Show help overlay with all keybindings |

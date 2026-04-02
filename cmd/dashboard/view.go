@@ -1084,6 +1084,7 @@ func (m model) renderHelpOverlay() string {
 	lines = append(lines, line("e", "Open editor"))
 	lines = append(lines, line("a", "Create new session"))
 	lines = append(lines, line("x", "Close/dismiss agent"))
+	lines = append(lines, line("m", "Mark merged + send cleanup"))
 	lines = append(lines, line("c", "Collapse/expand subagents"))
 	lines = append(lines, "")
 
