@@ -311,17 +311,18 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "d", "q", "esc":
 			m.diffVisible = false
 			m.diffExpandedAll = false
+			m.diffTreeEntries = nil
 			return m, nil
 		case "up", "k":
-			if m.selectedDiffFile > 0 {
-				m.selectedDiffFile--
+			if prev, ok := m.prevDiffFile(); ok {
+				m.selectedDiffFile = prev
 				m.diffExpandedAll = false
 				m.updateDiffContent()
 			}
 			return m, nil
 		case "down", "j":
-			if m.selectedDiffFile < len(m.diffFiles)-1 {
-				m.selectedDiffFile++
+			if next, ok := m.nextDiffFile(); ok {
+				m.selectedDiffFile = next
 				m.diffExpandedAll = false
 				m.updateDiffContent()
 			}

@@ -84,17 +84,162 @@ func TestDiffFileTreeContent(t *testing.T) {
 	}
 	m.selectedDiffFile = 1
 	m.diffVisible = true
+	m.buildDiffTreeEntries()
 
 	content := m.diffFileTreeContent()
+	plain := stripANSI(content)
 
-	if !strings.Contains(content, "cmd/main.go") {
-		t.Fatal("expected file tree to contain cmd/main.go")
+	// Tree view should show dir header and basenames
+	if !strings.Contains(plain, "cmd/") {
+		t.Fatal("expected file tree to contain dir header cmd/")
 	}
-	if !strings.Contains(content, "new_file.go") {
+	if !strings.Contains(plain, "main.go") {
+		t.Fatal("expected file tree to contain main.go")
+	}
+	if !strings.Contains(plain, "new_file.go") {
 		t.Fatal("expected file tree to contain new_file.go")
 	}
-	if !strings.Contains(content, "old_file.go") {
+	if !strings.Contains(plain, "old_file.go") {
 		t.Fatal("expected file tree to contain old_file.go")
+	}
+}
+
+func TestBuildDiffTreeEntries(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "README.md", NewName: "README.md"},
+		{OldName: "cmd/dashboard/model.go", NewName: "cmd/dashboard/model.go"},
+		{OldName: "cmd/dashboard/view.go", NewName: "cmd/dashboard/view.go"},
+		{NewName: "pkg/util.go", IsNew: true},
+	}
+	m.buildDiffTreeEntries()
+
+	// Expected entries:
+	// 0: file README.md (root, no dir header)
+	// 1: dir  cmd/dashboard/
+	// 2: file model.go (fileIdx=1)
+	// 3: file view.go  (fileIdx=2)
+	// 4: dir  pkg/
+	// 5: file util.go  (fileIdx=3)
+
+	if len(m.diffTreeEntries) != 6 {
+		t.Fatalf("expected 6 tree entries, got %d: %+v", len(m.diffTreeEntries), m.diffTreeEntries)
+	}
+
+	// Root file — no dir header
+	e := m.diffTreeEntries[0]
+	if e.isDir || e.fileIdx != 0 || e.label != "README.md" {
+		t.Fatalf("entry 0: expected root file README.md, got %+v", e)
+	}
+
+	// cmd/dashboard/ dir header
+	e = m.diffTreeEntries[1]
+	if !e.isDir || e.label != "cmd/dashboard/" {
+		t.Fatalf("entry 1: expected dir cmd/dashboard/, got %+v", e)
+	}
+
+	// Files under cmd/dashboard/
+	e = m.diffTreeEntries[2]
+	if e.isDir || e.fileIdx != 1 || e.label != "model.go" {
+		t.Fatalf("entry 2: expected file model.go (idx=1), got %+v", e)
+	}
+	e = m.diffTreeEntries[3]
+	if e.isDir || e.fileIdx != 2 || e.label != "view.go" {
+		t.Fatalf("entry 3: expected file view.go (idx=2), got %+v", e)
+	}
+
+	// pkg/ dir header
+	e = m.diffTreeEntries[4]
+	if !e.isDir || e.label != "pkg/" {
+		t.Fatalf("entry 4: expected dir pkg/, got %+v", e)
+	}
+
+	// File under pkg/
+	e = m.diffTreeEntries[5]
+	if e.isDir || e.fileIdx != 3 || e.label != "util.go" {
+		t.Fatalf("entry 5: expected file util.go (idx=3), got %+v", e)
+	}
+}
+
+func TestDiffFileNavigation(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "README.md", NewName: "README.md"},
+		{OldName: "cmd/dashboard/model.go", NewName: "cmd/dashboard/model.go"},
+		{OldName: "cmd/dashboard/view.go", NewName: "cmd/dashboard/view.go"},
+	}
+	m.buildDiffTreeEntries()
+	m.selectedDiffFile = 0
+
+	// Next from first file should skip dir header and go to model.go (idx=1)
+	next, ok := m.nextDiffFile()
+	if !ok || next != 1 {
+		t.Fatalf("expected next=1, got next=%d ok=%v", next, ok)
+	}
+
+	// Set to model.go, next should be view.go (idx=2)
+	m.selectedDiffFile = 1
+	next, ok = m.nextDiffFile()
+	if !ok || next != 2 {
+		t.Fatalf("expected next=2, got next=%d ok=%v", next, ok)
+	}
+
+	// From view.go, no next
+	m.selectedDiffFile = 2
+	_, ok = m.nextDiffFile()
+	if ok {
+		t.Fatal("expected no next from last file")
+	}
+
+	// Prev from view.go should be model.go
+	prev, ok := m.prevDiffFile()
+	if !ok || prev != 1 {
+		t.Fatalf("expected prev=1, got prev=%d ok=%v", prev, ok)
+	}
+
+	// Prev from model.go should skip dir header and go to README.md
+	m.selectedDiffFile = 1
+	prev, ok = m.prevDiffFile()
+	if !ok || prev != 0 {
+		t.Fatalf("expected prev=0, got prev=%d ok=%v", prev, ok)
+	}
+
+	// No prev from first file
+	m.selectedDiffFile = 0
+	_, ok = m.prevDiffFile()
+	if ok {
+		t.Fatal("expected no prev from first file")
+	}
+}
+
+func TestDiffTreeRootFilesNoHeader(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	m.diffFiles = []*gitdiff.File{
+		{OldName: "main.go", NewName: "main.go"},
+		{NewName: "util.go", IsNew: true},
+	}
+	m.buildDiffTreeEntries()
+
+	// Should be 2 entries, no dir headers
+	if len(m.diffTreeEntries) != 2 {
+		t.Fatalf("expected 2 entries for root files, got %d: %+v", len(m.diffTreeEntries), m.diffTreeEntries)
+	}
+	for _, e := range m.diffTreeEntries {
+		if e.isDir {
+			t.Fatalf("unexpected dir header for root files: %+v", e)
+		}
 	}
 }
 

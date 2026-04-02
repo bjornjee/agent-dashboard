@@ -101,6 +101,7 @@ type model struct {
 	// Diff viewer
 	diffVisible      bool
 	diffFiles        []*gitdiff.File
+	diffTreeEntries  []diffTreeEntry
 	selectedDiffFile int
 	diffExpandedAll  bool // expand/collapse all context blocks
 	diffFileVP       viewport.Model
@@ -668,6 +669,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.diffFiles = msg.files
+		m.buildDiffTreeEntries()
 		m.selectedDiffFile = 0
 		m.diffVisible = true
 		m.updateDiffContent()

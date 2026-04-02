@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -33,7 +34,120 @@ var (
 	diffFileModIcon = lipgloss.NewStyle().Foreground(themeYellow).Render("~")
 	diffFileAddIcon = lipgloss.NewStyle().Foreground(themeGreen).Render("+")
 	diffFileDelIcon = lipgloss.NewStyle().Foreground(themeRed).Render("-")
+	diffDirStyle    = lipgloss.NewStyle().Foreground(themeOverlay1)
 )
+
+func diffFileName(f *gitdiff.File) string {
+	if f.IsDelete {
+		return f.OldName
+	}
+	return f.NewName
+}
+
+// diffTreeEntry represents a single row in the tree-view file list.
+type diffTreeEntry struct {
+	isDir   bool   // true for directory headers
+	label   string // display label (dir path with "/" or basename)
+	fileIdx int    // index into diffFiles; -1 for directory headers
+	indent  int    // indentation level (0=root, 1=under directory)
+}
+
+// buildDiffTreeEntries groups diffFiles by directory into an ordered tree.
+func (m *model) buildDiffTreeEntries() {
+	type dirGroup struct {
+		dir     string
+		indices []int
+	}
+
+	var rootIndices []int
+	var dirs []dirGroup
+	dirIndex := map[string]int{} // dir -> index in dirs slice
+
+	for i, f := range m.diffFiles {
+		name := diffFileName(f)
+		dir := path.Dir(name)
+		if dir == "." {
+			rootIndices = append(rootIndices, i)
+			continue
+		}
+		if idx, ok := dirIndex[dir]; ok {
+			dirs[idx].indices = append(dirs[idx].indices, i)
+		} else {
+			dirIndex[dir] = len(dirs)
+			dirs = append(dirs, dirGroup{dir: dir, indices: []int{i}})
+		}
+	}
+
+	m.diffTreeEntries = nil
+
+	// Root files first (no directory header)
+	for _, i := range rootIndices {
+		name := diffFileName(m.diffFiles[i])
+		m.diffTreeEntries = append(m.diffTreeEntries, diffTreeEntry{
+			label:   name,
+			fileIdx: i,
+		})
+	}
+
+	// Then each directory group
+	for _, dg := range dirs {
+		m.diffTreeEntries = append(m.diffTreeEntries, diffTreeEntry{
+			isDir:   true,
+			label:   dg.dir + "/",
+			fileIdx: -1,
+		})
+		for _, i := range dg.indices {
+			name := diffFileName(m.diffFiles[i])
+			m.diffTreeEntries = append(m.diffTreeEntries, diffTreeEntry{
+				label:   path.Base(name),
+				fileIdx: i,
+				indent:  1,
+			})
+		}
+	}
+}
+
+// prevDiffFile returns the file index of the previous file entry in the tree,
+// skipping directory headers.
+func (m *model) prevDiffFile() (int, bool) {
+	cur := -1
+	for i, e := range m.diffTreeEntries {
+		if !e.isDir && e.fileIdx == m.selectedDiffFile {
+			cur = i
+			break
+		}
+	}
+	if cur <= 0 {
+		return 0, false
+	}
+	for i := cur - 1; i >= 0; i-- {
+		if !m.diffTreeEntries[i].isDir {
+			return m.diffTreeEntries[i].fileIdx, true
+		}
+	}
+	return 0, false
+}
+
+// nextDiffFile returns the file index of the next file entry in the tree,
+// skipping directory headers.
+func (m *model) nextDiffFile() (int, bool) {
+	cur := -1
+	for i, e := range m.diffTreeEntries {
+		if !e.isDir && e.fileIdx == m.selectedDiffFile {
+			cur = i
+			break
+		}
+	}
+	if cur == -1 {
+		return 0, false
+	}
+	for i := cur + 1; i < len(m.diffTreeEntries); i++ {
+		if !m.diffTreeEntries[i].isDir {
+			return m.diffTreeEntries[i].fileIdx, true
+		}
+	}
+	return 0, false
+}
 
 // -- Syntax highlighting --
 
@@ -190,31 +304,35 @@ func wrapANSI(s string, width int) []string {
 // -- File tree --
 
 func (m model) diffFileTreeContent() string {
-	// Available width for text inside the panel (account for border + padding)
 	maxWidth := m.diffLeftWidth - 4
 	if maxWidth < 10 {
 		maxWidth = 10
 	}
 
 	var lines []string
-	for i, f := range m.diffFiles {
-		icon := diffFileModIcon
-		name := f.NewName
-		if f.IsNew {
-			icon = diffFileAddIcon
-			name = f.NewName
-		} else if f.IsDelete {
-			icon = diffFileDelIcon
-			name = f.OldName
+
+	for _, entry := range m.diffTreeEntries {
+		if entry.isDir {
+			line := " " + diffDirStyle.Render(entry.label)
+			lines = append(lines, line)
+			continue
 		}
 
-		prefix := fmt.Sprintf(" %s ", icon)
+		f := m.diffFiles[entry.fileIdx]
+		icon := diffFileModIcon
+		if f.IsNew {
+			icon = diffFileAddIcon
+		} else if f.IsDelete {
+			icon = diffFileDelIcon
+		}
+
+		indentStr := strings.Repeat("   ", entry.indent)
+		prefix := fmt.Sprintf("%s %s ", indentStr, icon)
 		prefixWidth := lipgloss.Width(prefix)
 		nameWidth := maxWidth - prefixWidth
 
-		// Wrap file path if too long
-		if len([]rune(name)) > nameWidth && nameWidth > 0 {
-			runes := []rune(name)
+		if len([]rune(entry.label)) > nameWidth && nameWidth > 0 {
+			runes := []rune(entry.label)
 			first := true
 			for len(runes) > 0 {
 				w := nameWidth
@@ -231,14 +349,14 @@ func (m model) diffFileTreeContent() string {
 				} else {
 					line = strings.Repeat(" ", prefixWidth) + chunk
 				}
-				if i == m.selectedDiffFile {
+				if entry.fileIdx == m.selectedDiffFile {
 					line = selectedStyle.Render(line)
 				}
 				lines = append(lines, line)
 			}
 		} else {
-			line := prefix + name
-			if i == m.selectedDiffFile {
+			line := prefix + entry.label
+			if entry.fileIdx == m.selectedDiffFile {
 				line = selectedStyle.Render(line)
 			}
 			lines = append(lines, line)
