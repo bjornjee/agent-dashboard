@@ -83,23 +83,48 @@ func TestReadState_FallbackToFilename(t *testing.T) {
 func TestSortedAgents_Priority(t *testing.T) {
 	sf := StateFile{
 		Agents: map[string]Agent{
-			"s3": {Target: "a:3.0", State: "done", Window: 3, Pane: 0, TmuxPaneID: "%3"},
-			"s1": {Target: "a:1.0", State: "input", Window: 1, Pane: 0, TmuxPaneID: "%1"},
-			"s2": {Target: "a:2.0", State: "running", Window: 2, Pane: 0, TmuxPaneID: "%2"},
-			"s0": {Target: "a:0.0", State: "error", Window: 0, Pane: 0, TmuxPaneID: "%0"},
-			"s4": {Target: "a:4.0", State: "idle", Window: 4, Pane: 0, TmuxPaneID: "%4"},
+			"s5": {Target: "a:5.0", State: "done", Window: 5, Pane: 0, TmuxPaneID: "%5"},
+			"s1": {Target: "a:1.0", State: "question", Window: 1, Pane: 0, TmuxPaneID: "%1"},
+			"s3": {Target: "a:3.0", State: "running", Window: 3, Pane: 0, TmuxPaneID: "%3"},
+			"s0": {Target: "a:0.0", State: "permission", Window: 0, Pane: 0, TmuxPaneID: "%0"},
+			"s4": {Target: "a:4.0", State: "idle_prompt", Window: 4, Pane: 0, TmuxPaneID: "%4"},
+			"s2": {Target: "a:2.0", State: "error", Window: 2, Pane: 0, TmuxPaneID: "%2"},
 		},
 	}
 
 	sorted := SortedAgents(sf, "")
 
-	// Group 1: needs attention (input, error) sorted by window
+	// Group 1: blocked (permission, question, error) sorted by window
 	// Group 2: running
-	// Group 3: completed (idle, done) sorted by window
-	expected := []string{"error", "input", "running", "done", "idle"}
+	// Group 3: finished (idle_prompt, done) sorted by window
+	expected := []string{"permission", "question", "error", "running", "idle_prompt", "done"}
 
-	if len(sorted) != 5 {
-		t.Fatalf("expected 5 agents, got %d", len(sorted))
+	if len(sorted) != 6 {
+		t.Fatalf("expected 6 agents, got %d", len(sorted))
+	}
+	for i, want := range expected {
+		if sorted[i].State != want {
+			t.Errorf("position %d: expected %s, got %s", i, want, sorted[i].State)
+		}
+	}
+}
+
+func TestSortedAgents_LegacyStates(t *testing.T) {
+	// Legacy states (input, idle) should still sort correctly
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"s2": {Target: "a:2.0", State: "done", Window: 2, Pane: 0, TmuxPaneID: "%2"},
+			"s0": {Target: "a:0.0", State: "input", Window: 0, Pane: 0, TmuxPaneID: "%0"},
+			"s1": {Target: "a:1.0", State: "running", Window: 1, Pane: 0, TmuxPaneID: "%1"},
+			"s3": {Target: "a:3.0", State: "idle", Window: 3, Pane: 0, TmuxPaneID: "%3"},
+		},
+	}
+
+	sorted := SortedAgents(sf, "")
+	expected := []string{"input", "running", "done", "idle"}
+
+	if len(sorted) != 4 {
+		t.Fatalf("expected 4 agents, got %d", len(sorted))
 	}
 	for i, want := range expected {
 		if sorted[i].State != want {
@@ -606,5 +631,94 @@ func TestFormatDuration(t *testing.T) {
 	result := FormatDuration("2020-01-01T00:00:00Z")
 	if result == "" {
 		t.Error("expected non-empty for valid old date")
+	}
+}
+
+func TestIsBlocked(t *testing.T) {
+	blocked := []string{"permission", "question", "error", "input"}
+	for _, s := range blocked {
+		if !isBlocked(s) {
+			t.Errorf("expected isBlocked(%q) = true", s)
+		}
+	}
+	notBlocked := []string{"running", "done", "idle_prompt", "idle", "merged", "unknown"}
+	for _, s := range notBlocked {
+		if isBlocked(s) {
+			t.Errorf("expected isBlocked(%q) = false", s)
+		}
+	}
+}
+
+func TestIsFinished(t *testing.T) {
+	finished := []string{"done", "idle_prompt", "idle"}
+	for _, s := range finished {
+		if !isFinished(s) {
+			t.Errorf("expected isFinished(%q) = true", s)
+		}
+	}
+	notFinished := []string{"permission", "question", "error", "input", "running", "merged", "unknown"}
+	for _, s := range notFinished {
+		if isFinished(s) {
+			t.Errorf("expected isFinished(%q) = false", s)
+		}
+	}
+}
+
+func TestIsMerged(t *testing.T) {
+	if !isMerged("merged") {
+		t.Error("expected isMerged(\"merged\") = true")
+	}
+	for _, s := range []string{"done", "idle_prompt", "running", "permission", "unknown"} {
+		if isMerged(s) {
+			t.Errorf("expected isMerged(%q) = false", s)
+		}
+	}
+}
+
+func TestPromoteMerged(t *testing.T) {
+	// Use the current repo — we're on a branch that may or may not be merged.
+	// Instead, test the logic with agents that have no valid git dir (won't promote).
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"done-no-dir":   {State: "done", Cwd: "/nonexistent"},
+			"idle-no-dir":   {State: "idle_prompt", Cwd: "/nonexistent"},
+			"running-agent": {State: "running", Cwd: "/nonexistent"},
+		},
+	}
+
+	PromoteMerged(&sf)
+
+	// No agent should be promoted (invalid dirs)
+	if sf.Agents["done-no-dir"].State != "done" {
+		t.Errorf("expected done unchanged, got %s", sf.Agents["done-no-dir"].State)
+	}
+	if sf.Agents["idle-no-dir"].State != "idle_prompt" {
+		t.Errorf("expected idle_prompt unchanged, got %s", sf.Agents["idle-no-dir"].State)
+	}
+	if sf.Agents["running-agent"].State != "running" {
+		t.Errorf("expected running unchanged, got %s", sf.Agents["running-agent"].State)
+	}
+}
+
+func TestSortedAgents_MergedGroup(t *testing.T) {
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"s0": {Target: "a:0.0", State: "permission", Window: 0, Pane: 0, TmuxPaneID: "%0"},
+			"s1": {Target: "a:1.0", State: "running", Window: 1, Pane: 0, TmuxPaneID: "%1"},
+			"s2": {Target: "a:2.0", State: "done", Window: 2, Pane: 0, TmuxPaneID: "%2"},
+			"s3": {Target: "a:3.0", State: "merged", Window: 3, Pane: 0, TmuxPaneID: "%3"},
+		},
+	}
+
+	sorted := SortedAgents(sf, "")
+	expected := []string{"permission", "running", "done", "merged"}
+
+	if len(sorted) != 4 {
+		t.Fatalf("expected 4 agents, got %d", len(sorted))
+	}
+	for i, want := range expected {
+		if sorted[i].State != want {
+			t.Errorf("position %d: expected %s, got %s", i, want, sorted[i].State)
+		}
 	}
 }

@@ -253,6 +253,7 @@ func loadState(path string, tmuxAvailable bool) tea.Cmd {
 			paneCwds = TmuxListPaneCwds()
 		}
 		ResolveAgentBranches(&sf, paneCwds)
+		PromoteMerged(&sf)
 		return stateUpdatedMsg{state: sf}
 	}
 }
@@ -633,6 +634,7 @@ func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Wa
 							pc = TmuxListPaneCwds()
 						}
 						ResolveAgentBranches(&sf, pc)
+						PromoteMerged(&sf)
 						p.Send(stateUpdatedMsg{state: sf})
 					})
 				}
