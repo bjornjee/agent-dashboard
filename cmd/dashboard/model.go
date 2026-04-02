@@ -405,7 +405,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildTree()
 		m.restoreSelection(prevTarget, prevSubID)
 		m.renderedHistory = "" // invalidate cache on state update
-		m.convFileOffset = 0  // reset offset — agent list may have changed
+		m.convFileOffset = 0   // reset offset — agent list may have changed
 		// Also invalidate the current agent's cached entry so restoreCurrentCache
 		// doesn't restore stale offsets after this reset.
 		if key := m.cacheKey(); key != "" {
@@ -471,6 +471,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
+		}
+		if m.tickCount%30 == 0 {
+			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
 		}
 		return m, tea.Batch(cmds...)
 

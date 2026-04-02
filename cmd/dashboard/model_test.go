@@ -1440,3 +1440,53 @@ func TestDismissedSubagentCachePruned(t *testing.T) {
 		t.Error("cache for dismissed subagent should have been pruned")
 	}
 }
+
+func TestTickHandler_PeriodicStateReload(t *testing.T) {
+	// Create a temp state dir with an agent file so loadState returns real data.
+	dir := t.TempDir()
+	agentsPath := dir + "/agents"
+	if err := os.MkdirAll(agentsPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	agentJSON := `{"target":"main:1.0","session":"main","window":1,"pane":0,"state":"running","session_id":"abc123","tmux_pane_id":"%5","updated_at":"2026-04-02T00:00:00Z"}`
+	if err := os.WriteFile(agentsPath+"/abc123.json", []byte(agentJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModel(testConfig(dir), "", nil)
+	m.width = 120
+	m.height = 40
+	m.tmuxAvailable = false // avoid real tmux calls
+	m.resizeViewports()
+
+	// Set tickCount so the next increment lands on the reload interval (30).
+	// The tick handler does m.tickCount++ first, so start at 29.
+	m.tickCount = 29
+	_, cmd := m.Update(tickMsg{})
+	if cmd == nil {
+		t.Fatal("expected commands from tick handler, got nil")
+	}
+
+	// Execute batch and check for stateUpdatedMsg.
+	// Filter out tickMsg (which sleeps 1s) by checking message types.
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatal("expected tea.BatchMsg from tick handler")
+	}
+
+	hasStateReload := false
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		result := c()
+		if _, ok := result.(stateUpdatedMsg); ok {
+			hasStateReload = true
+		}
+	}
+
+	if !hasStateReload {
+		t.Error("tick handler should trigger periodic loadState (stateUpdatedMsg) every 30 ticks, but none was found")
+	}
+}
