@@ -31,10 +31,11 @@ var (
 	diffAddStyle    = lipgloss.NewStyle().Foreground(themeGreen)
 	diffDelStyle    = lipgloss.NewStyle().Foreground(themeRed)
 	diffHunkStyle   = lipgloss.NewStyle().Foreground(themeMauve).Bold(true)
-	diffFileModIcon = lipgloss.NewStyle().Foreground(themeYellow).Render("~")
-	diffFileAddIcon = lipgloss.NewStyle().Foreground(themeGreen).Render("+")
-	diffFileDelIcon = lipgloss.NewStyle().Foreground(themeRed).Render("-")
+	diffFileModIcon = lipgloss.NewStyle().Foreground(themeYellow).Render("●")
+	diffFileAddIcon = lipgloss.NewStyle().Foreground(themeGreen).Render("●")
+	diffFileDelIcon = lipgloss.NewStyle().Foreground(themeRed).Render("●")
 	diffDirStyle    = lipgloss.NewStyle().Foreground(themeOverlay1)
+	diffCountStyle  = lipgloss.NewStyle().Foreground(themeOverlay1)
 )
 
 func diffFileName(f *gitdiff.File) string {
@@ -50,6 +51,8 @@ type diffTreeEntry struct {
 	label   string // display label (dir path with "/" or basename)
 	fileIdx int    // index into diffFiles; -1 for directory headers
 	indent  int    // indentation level (0=root, 1=under directory)
+	dirKey  string // unique dir path for collapse tracking (dirs only)
+	hidden  bool   // true when parent is collapsed or filtered out
 }
 
 // buildDiffTreeEntries groups diffFiles by directory into an ordered tree.
@@ -91,10 +94,12 @@ func (m *model) buildDiffTreeEntries() {
 
 	// Then each directory group
 	for _, dg := range dirs {
+		dk := dg.dir + "/"
 		m.diffTreeEntries = append(m.diffTreeEntries, diffTreeEntry{
 			isDir:   true,
-			label:   dg.dir + "/",
+			label:   dk,
 			fileIdx: -1,
+			dirKey:  dk,
 		})
 		for _, i := range dg.indices {
 			name := diffFileName(m.diffFiles[i])
@@ -102,52 +107,126 @@ func (m *model) buildDiffTreeEntries() {
 				label:   path.Base(name),
 				fileIdx: i,
 				indent:  1,
+				dirKey:  dk,
 			})
 		}
 	}
+	m.applyTreeVisibility()
 }
 
-// prevDiffFile returns the file index of the previous file entry in the tree,
-// skipping directory headers.
-func (m *model) prevDiffFile() (int, bool) {
-	cur := -1
-	for i, e := range m.diffTreeEntries {
-		if !e.isDir && e.fileIdx == m.selectedDiffFile {
-			cur = i
-			break
+// applyTreeVisibility sets hidden on entries based on collapsed dirs and filter.
+func (m *model) applyTreeVisibility() {
+	filter := strings.ToLower(m.diffFilterText)
+
+	for i := range m.diffTreeEntries {
+		e := &m.diffTreeEntries[i]
+		e.hidden = false
+
+		if e.isDir {
+			// If filter is active, hide dirs with no matching children
+			if filter != "" {
+				hasMatch := false
+				for j := i + 1; j < len(m.diffTreeEntries); j++ {
+					child := m.diffTreeEntries[j]
+					if child.isDir {
+						break
+					}
+					fullName := strings.ToLower(diffFileName(m.diffFiles[child.fileIdx]))
+					if strings.Contains(fullName, filter) {
+						hasMatch = true
+						break
+					}
+				}
+				e.hidden = !hasMatch
+			}
+			continue
+		}
+
+		// File entry
+		// Check filter
+		if filter != "" {
+			fullName := strings.ToLower(diffFileName(m.diffFiles[e.fileIdx]))
+			if !strings.Contains(fullName, filter) {
+				e.hidden = true
+				continue
+			}
+		}
+
+		// Check if parent dir is collapsed
+		if e.dirKey != "" && m.diffCollapsedDirs[e.dirKey] {
+			e.hidden = true
 		}
 	}
-	if cur <= 0 {
-		return 0, false
-	}
-	for i := cur - 1; i >= 0; i-- {
-		if !m.diffTreeEntries[i].isDir {
-			return m.diffTreeEntries[i].fileIdx, true
-		}
-	}
-	return 0, false
 }
 
-// nextDiffFile returns the file index of the next file entry in the tree,
-// skipping directory headers.
-func (m *model) nextDiffFile() (int, bool) {
-	cur := -1
+// visibleDiffEntries returns indices into diffTreeEntries that are not hidden.
+func (m model) visibleDiffEntries() []int {
+	var vis []int
 	for i, e := range m.diffTreeEntries {
-		if !e.isDir && e.fileIdx == m.selectedDiffFile {
-			cur = i
-			break
+		if !e.hidden {
+			vis = append(vis, i)
 		}
 	}
-	if cur == -1 {
-		return 0, false
-	}
-	for i := cur + 1; i < len(m.diffTreeEntries); i++ {
-		if !m.diffTreeEntries[i].isDir {
-			return m.diffTreeEntries[i].fileIdx, true
-		}
-	}
-	return 0, false
+	return vis
 }
+
+// moveDiffCursor moves the cursor by delta within visible entries.
+func (m *model) moveDiffCursor(delta int) {
+	vis := m.visibleDiffEntries()
+	if len(vis) == 0 {
+		return
+	}
+
+	newCursor := m.diffCursor + delta
+	if newCursor < 0 {
+		newCursor = 0
+	}
+	if newCursor >= len(vis) {
+		newCursor = len(vis) - 1
+	}
+	m.diffCursor = newCursor
+
+	// If landed on a file, update selected file
+	entry := m.diffTreeEntries[vis[newCursor]]
+	if !entry.isDir {
+		m.selectedDiffFile = entry.fileIdx
+		m.diffExpandedAll = false
+	}
+	m.updateDiffContent()
+}
+
+// toggleDiffDir toggles collapse for the directory under cursor.
+func (m *model) toggleDiffDir() {
+	vis := m.visibleDiffEntries()
+	if m.diffCursor >= len(vis) {
+		return
+	}
+	idx := vis[m.diffCursor]
+	entry := m.diffTreeEntries[idx]
+	if !entry.isDir {
+		return
+	}
+	m.diffCollapsedDirs[entry.dirKey] = !m.diffCollapsedDirs[entry.dirKey]
+	m.applyTreeVisibility()
+	// Clamp cursor if visible list shrank
+	vis = m.visibleDiffEntries()
+	if len(vis) > 0 && m.diffCursor >= len(vis) {
+		m.diffCursor = len(vis) - 1
+	}
+	m.updateDiffContent()
+}
+
+// dirFileCount returns the number of (non-hidden) file children for a dir entry.
+func (m model) dirFileCount(dirKey string) int {
+	count := 0
+	for _, e := range m.diffTreeEntries {
+		if !e.isDir && e.dirKey == dirKey && !e.hidden {
+			count++
+		}
+	}
+	return count
+}
+
 
 // -- Syntax highlighting --
 
@@ -309,11 +388,24 @@ func (m model) diffFileTreeContent() string {
 		maxWidth = 10
 	}
 
+	vis := m.visibleDiffEntries()
 	var lines []string
 
-	for _, entry := range m.diffTreeEntries {
+	for visIdx, entryIdx := range vis {
+		entry := m.diffTreeEntries[entryIdx]
+		isCursor := visIdx == m.diffCursor
+
 		if entry.isDir {
-			line := " " + diffDirStyle.Render(entry.label)
+			chevron := "▾"
+			if m.diffCollapsedDirs[entry.dirKey] {
+				chevron = "▸"
+			}
+			count := m.dirFileCount(entry.dirKey)
+			countStr := diffCountStyle.Render(fmt.Sprintf(" (%d)", count))
+			line := " " + chevron + " " + diffDirStyle.Render(entry.label) + countStr
+			if isCursor {
+				line = selectedStyle.Render(line)
+			}
 			lines = append(lines, line)
 			continue
 		}
@@ -349,14 +441,14 @@ func (m model) diffFileTreeContent() string {
 				} else {
 					line = strings.Repeat(" ", prefixWidth) + chunk
 				}
-				if entry.fileIdx == m.selectedDiffFile {
+				if isCursor {
 					line = selectedStyle.Render(line)
 				}
 				lines = append(lines, line)
 			}
 		} else {
 			line := prefix + entry.label
-			if entry.fileIdx == m.selectedDiffFile {
+			if isCursor {
 				line = selectedStyle.Render(line)
 			}
 			lines = append(lines, line)
@@ -368,7 +460,7 @@ func (m model) diffFileTreeContent() string {
 // -- Side-by-side content with syntax highlighting & collapsible blocks --
 
 func (m model) diffSideBySideContent() (string, []string) {
-	if m.selectedDiffFile >= len(m.diffFiles) {
+	if m.selectedDiffFile < 0 || m.selectedDiffFile >= len(m.diffFiles) {
 		return "", nil
 	}
 	file := m.diffFiles[m.selectedDiffFile]
@@ -622,7 +714,13 @@ func truncOrPad(s string, width int) string {
 func (m model) renderDiffFilePanel() string {
 	panelHeight := m.height - 5 - bannerHeight
 	header := titleStyle.Render(" FILES CHANGED")
-	content := header + "\n\n" + m.diffFileVP.View()
+
+	filterLine := ""
+	if m.diffFilterActive || m.diffFilterText != "" {
+		filterLine = "\n " + m.diffFilterInput.View()
+	}
+
+	content := header + filterLine + "\n\n" + m.diffFileVP.View()
 	return borderStyle.
 		Width(m.diffLeftWidth).
 		Height(panelHeight).

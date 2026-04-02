@@ -99,14 +99,19 @@ type model struct {
 	renderedPlan string // glamour-rendered plan markdown
 
 	// Diff viewer
-	diffVisible      bool
-	diffFiles        []*gitdiff.File
-	diffTreeEntries  []diffTreeEntry
-	selectedDiffFile int
-	diffExpandedAll  bool // expand/collapse all context blocks
-	diffFileVP       viewport.Model
-	diffContentVP    viewport.Model
-	diffFuncCtx      []string // per-row function context for sticky header
+	diffVisible       bool
+	diffFiles         []*gitdiff.File
+	diffTreeEntries   []diffTreeEntry
+	selectedDiffFile  int
+	diffCursor        int              // cursor position in visible tree entries
+	diffCollapsedDirs map[string]bool  // dirKey → collapsed
+	diffExpandedAll   bool             // expand/collapse all context blocks
+	diffFileVP        viewport.Model
+	diffContentVP     viewport.Model
+	diffFuncCtx       []string // per-row function context for sticky header
+	diffFilterInput   textinput.Model
+	diffFilterActive  bool
+	diffFilterText    string
 
 	// Help overlay
 	helpVisible bool
@@ -305,6 +310,10 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 	ti.Placeholder = "Type reply..."
 	ti.CharLimit = 4096
 
+	dfi := textinput.New()
+	dfi.Placeholder = "Filter files..."
+	dfi.CharLimit = 256
+
 	s := spinner.New()
 	s.Spinner = spinner.Jump
 	s.Style = lipgloss.NewStyle().Foreground(inputColor)
@@ -331,8 +340,10 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 		historyVP:       viewport.New(0, 0),
 		messageVP:       viewport.New(0, 0),
 		focusedVP:       focusAgentList,
-		diffFileVP:      viewport.New(0, 0),
-		diffContentVP:   viewport.New(0, 0),
+		diffFileVP:        viewport.New(0, 0),
+		diffContentVP:     viewport.New(0, 0),
+		diffCollapsedDirs: make(map[string]bool),
+		diffFilterInput:   dfi,
 		agentCaches:     make(map[string]*agentCache),
 		agentSubagents:  make(map[string][]SubagentInfo),
 		collapsed:       make(map[string]bool),
@@ -669,8 +680,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.diffFiles = msg.files
+		m.diffCollapsedDirs = make(map[string]bool)
+		m.diffFilterText = ""
+		m.diffFilterActive = false
+		m.diffFilterInput.Reset()
 		m.buildDiffTreeEntries()
 		m.selectedDiffFile = 0
+		m.diffCursor = 0
 		m.diffVisible = true
 		m.updateDiffContent()
 		return m, nil

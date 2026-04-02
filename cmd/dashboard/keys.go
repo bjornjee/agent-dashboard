@@ -307,26 +307,70 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Diff viewer mode
 	if m.diffVisible {
+		// Filter input active — forward keys to text input
+		if m.diffFilterActive {
+			switch key {
+			case "esc":
+				m.diffFilterActive = false
+				m.diffFilterText = ""
+				m.diffFilterInput.Reset()
+				m.diffFilterInput.Blur()
+				m.applyTreeVisibility()
+				m.diffCursor = 0
+				m.updateDiffContent()
+				return m, nil
+			case "enter":
+				m.diffFilterActive = false
+				m.diffFilterInput.Blur()
+				m.diffFilterText = m.diffFilterInput.Value()
+				m.applyTreeVisibility()
+				m.diffCursor = 0
+				// Select the first visible file
+				vis := m.visibleDiffEntries()
+				for _, idx := range vis {
+					e := m.diffTreeEntries[idx]
+					if !e.isDir {
+						m.selectedDiffFile = e.fileIdx
+						break
+					}
+				}
+				m.updateDiffContent()
+				return m, nil
+			case "ctrl+c":
+				return m, tea.Quit
+			default:
+				var cmd tea.Cmd
+				m.diffFilterInput, cmd = m.diffFilterInput.Update(msg)
+				m.diffFilterText = m.diffFilterInput.Value()
+				m.applyTreeVisibility()
+				m.diffCursor = 0
+				m.updateDiffContent()
+				return m, cmd
+			}
+		}
+
 		switch key {
 		case "d", "q", "esc":
 			m.diffVisible = false
 			m.diffExpandedAll = false
 			m.diffTreeEntries = nil
+			m.diffFilterText = ""
+			m.diffFilterActive = false
+			m.diffFilterInput.Reset()
 			return m, nil
 		case "up", "k":
-			if prev, ok := m.prevDiffFile(); ok {
-				m.selectedDiffFile = prev
-				m.diffExpandedAll = false
-				m.updateDiffContent()
-			}
+			m.moveDiffCursor(-1)
 			return m, nil
 		case "down", "j":
-			if next, ok := m.nextDiffFile(); ok {
-				m.selectedDiffFile = next
-				m.diffExpandedAll = false
-				m.updateDiffContent()
-			}
+			m.moveDiffCursor(1)
 			return m, nil
+		case "enter", " ":
+			m.toggleDiffDir()
+			return m, nil
+		case "/":
+			m.diffFilterActive = true
+			m.diffFilterInput.Focus()
+			return m, textinput.Blink
 		case "e":
 			m.diffExpandedAll = !m.diffExpandedAll
 			m.updateDiffContent()
