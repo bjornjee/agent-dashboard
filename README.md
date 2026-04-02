@@ -16,7 +16,7 @@ Reads agent state from per-agent JSON files in `~/.claude/agent-dashboard/agents
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete
-- **Quick reply** — send text, y/n, or numbered responses directly to agent panes
+- **Quick reply** — send free-text responses directly to agent panes
 - **GitHub PR shortcut** — open PR creation page in browser for the selected agent's branch
 - **Help overlay** — full-screen keybinding reference grouped by context
 - **Daily quote** — fetched from API Ninjas with fallback to embedded quotes
@@ -59,8 +59,6 @@ Or run directly:
 | `Tab/Shift+Tab` | Cycle focus between panels |
 | `Ctrl+U/D` | Scroll focused panel (half-page) |
 | `r` | Reply to agent (free-text) |
-| `y/n` | Quick answer (when agent awaits input) |
-| `1`-`9` | Send number (for numbered selections) |
 | `e` | Open VS Code in agent's directory |
 | `d` | Show git diff (merge-base vs HEAD, syntax highlighted) |
 | `g` | Open GitHub PR creation page in browser |
