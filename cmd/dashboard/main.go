@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,12 +15,14 @@ func ownPaneID() string {
 }
 
 func main() {
-	stateDir := DefaultStateDir()
+	cfg := DefaultConfig()
+	stateDir := cfg.Profile.StateDir
 
 	// Clean stale agents (>10 min since last update) on startup
 	CleanStale(stateDir, 10*60)
 
-	db, err := OpenDB(DefaultDBPath())
+	dbPath := filepath.Join(stateDir, "usage.db")
+	db, err := OpenDB(dbPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: usage DB not available: %v\n", err)
 	}
@@ -28,7 +31,7 @@ func main() {
 	}
 
 	selfPane := ownPaneID()
-	m := newModel(stateDir, selfPane, db)
+	m := newModel(cfg, selfPane, db)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// Start directory watcher for per-agent state files

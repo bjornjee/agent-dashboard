@@ -72,7 +72,7 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 func TestRenderHelpOverlayContainsSections(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.width = 100
 	m.height = 40
 
@@ -89,7 +89,7 @@ func TestRenderHelpOverlayContainsSections(t *testing.T) {
 func TestSlimHelpBarContainsHHelp(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.width = 120
 	m.tmuxAvailable = true
 
@@ -117,7 +117,7 @@ func TestSlimHelpBarContainsHHelp(t *testing.T) {
 func TestHelpBarWhenHelpVisible(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.width = 120
 	m.helpVisible = true
 

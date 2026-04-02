@@ -8,7 +8,7 @@ import (
 )
 
 func newTestModelWithAgents() model {
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.tmuxAvailable = true
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
@@ -238,7 +238,7 @@ func TestCreateFolderMode_EnterWithTextNoSuggestionsUsesText(t *testing.T) {
 }
 
 func TestUsageModeWorksWithNoAgents(t *testing.T) {
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.agents = nil // no agents
 	m.mode = modeUsage
 

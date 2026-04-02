@@ -81,7 +81,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if folder != "" {
 				m.statusMsg = "spawning"
 				m.statusMsgTick = -1 // don't auto-clear
-				return m, tea.Batch(createSession(folder, m.agents, m.selfPaneID), m.spawningSpinner.Tick)
+				return m, tea.Batch(createSession(folder, m.agents, m.selfPaneID, m.cfg.Profile), m.spawningSpinner.Tick)
 			}
 			return m, nil
 		case "esc":
@@ -365,7 +365,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "e":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
-			return m, openEditor(agent.EffectiveDir())
+			return m, openEditor(m.cfg.Editor, agent.EffectiveDir())
 		}
 	case "d":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {

@@ -8,8 +8,8 @@ import (
 
 func TestGreeting_Morning(t *testing.T) {
 	morning := time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
-	got := greeting(morning)
-	want := "Good Morning, Bjorn"
+	got := greeting(morning, "TestUser")
+	want := "Good Morning, TestUser"
 	if got != want {
 		t.Fatalf("greeting(9am) = %q, want %q", got, want)
 	}
@@ -17,8 +17,8 @@ func TestGreeting_Morning(t *testing.T) {
 
 func TestGreeting_Afternoon(t *testing.T) {
 	afternoon := time.Date(2026, 3, 29, 14, 0, 0, 0, time.Local)
-	got := greeting(afternoon)
-	want := "Good Afternoon, Bjorn"
+	got := greeting(afternoon, "TestUser")
+	want := "Good Afternoon, TestUser"
 	if got != want {
 		t.Fatalf("greeting(2pm) = %q, want %q", got, want)
 	}
@@ -26,8 +26,8 @@ func TestGreeting_Afternoon(t *testing.T) {
 
 func TestGreeting_Evening(t *testing.T) {
 	evening := time.Date(2026, 3, 29, 20, 0, 0, 0, time.Local)
-	got := greeting(evening)
-	want := "Good Evening, Bjorn"
+	got := greeting(evening, "TestUser")
+	want := "Good Evening, TestUser"
 	if got != want {
 		t.Fatalf("greeting(8pm) = %q, want %q", got, want)
 	}
@@ -38,17 +38,17 @@ func TestGreeting_Boundaries(t *testing.T) {
 		hour int
 		want string
 	}{
-		{0, "Good Morning, Bjorn"},
-		{11, "Good Morning, Bjorn"},
-		{12, "Good Afternoon, Bjorn"},
-		{16, "Good Afternoon, Bjorn"},
-		{17, "Good Evening, Bjorn"},
-		{23, "Good Evening, Bjorn"},
+		{0, "Good Morning, TestUser"},
+		{11, "Good Morning, TestUser"},
+		{12, "Good Afternoon, TestUser"},
+		{16, "Good Afternoon, TestUser"},
+		{17, "Good Evening, TestUser"},
+		{23, "Good Evening, TestUser"},
 	}
 	for _, tt := range tests {
 		t.Run(time.Date(2026, 1, 1, tt.hour, 0, 0, 0, time.Local).Format("15:04"), func(t *testing.T) {
 			now := time.Date(2026, 1, 1, tt.hour, 0, 0, 0, time.Local)
-			got := greeting(now)
+			got := greeting(now, "TestUser")
 			if got != tt.want {
 				t.Fatalf("greeting(hour=%d) = %q, want %q", tt.hour, got, tt.want)
 			}
@@ -78,20 +78,22 @@ func TestRandomQuote_NotEmpty(t *testing.T) {
 }
 
 func TestRenderBanner_ContainsGreeting(t *testing.T) {
-	m := newModel("", "", nil)
+	cfg := testConfig("")
+	cfg.Username = "TestUser"
+	m := newModel(cfg, "", nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
 	}
 	m.quote = "Test quote"
 	out := m.renderBanner()
-	if !strings.Contains(out, "Good Morning, Bjorn") {
+	if !strings.Contains(out, "Good Morning, TestUser") {
 		t.Fatalf("banner missing greeting, got:\n%s", out)
 	}
 }
 
 func TestRenderBanner_ContainsQuote(t *testing.T) {
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
@@ -104,7 +106,7 @@ func TestRenderBanner_ContainsQuote(t *testing.T) {
 }
 
 func TestRenderBanner_ContainsAxolotl(t *testing.T) {
-	m := newModel("", "", nil)
+	m := newModel(testConfig(""), "", nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)

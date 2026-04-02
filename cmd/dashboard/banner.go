@@ -210,15 +210,15 @@ func formatQuote(text, author string, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-func greeting(now time.Time) string {
+func greeting(now time.Time, username string) string {
 	hour := now.Hour()
 	switch {
 	case hour < 12:
-		return "Good Morning, Bjorn"
+		return "Good Morning, " + username
 	case hour < 17:
-		return "Good Afternoon, Bjorn"
+		return "Good Afternoon, " + username
 	default:
-		return "Good Evening, Bjorn"
+		return "Good Evening, " + username
 	}
 }
 
@@ -307,7 +307,7 @@ var quoteStyle = lipgloss.NewStyle().
 
 func (m model) renderBanner() string {
 	icon := renderAxolotl()
-	greet := greetingStyle.Render(greeting(m.nowFunc()))
+	greet := greetingStyle.Render(greeting(m.nowFunc(), m.cfg.Username))
 
 	// 1. Build the left side first to calculate its footprint
 	left := lipgloss.JoinHorizontal(lipgloss.Center, "  ", icon, "  ", greet)

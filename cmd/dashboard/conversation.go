@@ -852,15 +852,6 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
-// ConversationsDir returns the Claude projects base directory.
-func ConversationsDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp"
-	}
-	return filepath.Join(home, ".claude", "projects")
-}
-
 // sessionFile represents ~/.claude/sessions/{pid}.json
 type sessionFile struct {
 	PID       int    `json:"pid"`
@@ -869,16 +860,10 @@ type sessionFile struct {
 	StartedAt int64  `json:"startedAt"`
 }
 
-// FindSessionID finds the most recent session ID for a given cwd
-// by scanning ~/.claude/sessions/*.json. Used as fallback when
-// session_id is not yet in the agent state.
-func FindSessionID(cwd string) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	sessDir := filepath.Join(home, ".claude", "sessions")
-	entries, err := os.ReadDir(sessDir)
+// findSessionIDIn finds the most recent session ID for a given cwd
+// by scanning sessionsDir/*.json.
+func findSessionIDIn(sessionsDir, cwd string) string {
+	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
 		return ""
 	}
@@ -888,7 +873,7 @@ func FindSessionID(cwd string) string {
 		if !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(sessDir, e.Name()))
+		data, err := os.ReadFile(filepath.Join(sessionsDir, e.Name()))
 		if err != nil {
 			continue
 		}

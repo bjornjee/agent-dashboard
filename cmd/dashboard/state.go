@@ -58,15 +58,6 @@ var statePriority = map[string]int{
 	"done":    3, // completed
 }
 
-// DefaultStateDir returns ~/.claude/agent-dashboard.
-func DefaultStateDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp/agent-dashboard"
-	}
-	return filepath.Join(home, ".claude", "agent-dashboard")
-}
-
 // agentsDir returns the agents subdirectory within the state directory.
 func agentsDir(dir string) string {
 	return filepath.Join(dir, "agents")

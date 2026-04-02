@@ -9,7 +9,7 @@ import (
 )
 
 func TestDiffMsg_Success(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -34,7 +34,7 @@ func TestDiffMsg_Success(t *testing.T) {
 }
 
 func TestDiffMsg_Error(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -51,7 +51,7 @@ func TestDiffMsg_Error(t *testing.T) {
 }
 
 func TestDiffMsg_NoChanges(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -68,7 +68,7 @@ func TestDiffMsg_NoChanges(t *testing.T) {
 }
 
 func TestDiffFileTreeContent(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -95,7 +95,7 @@ func TestDiffFileTreeContent(t *testing.T) {
 }
 
 func TestDiffSideBySideContent(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -161,7 +161,7 @@ func TestApplyDiffBackground(t *testing.T) {
 }
 
 func TestCollapsibleContextBlocks(t *testing.T) {
-	m := newModel("/tmp/test-state.json", "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
