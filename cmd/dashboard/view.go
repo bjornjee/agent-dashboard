@@ -321,7 +321,7 @@ func (m model) filesContent(agent Agent) string {
 		case strings.HasPrefix(f, "-"):
 			color = errorColor
 		default:
-			color = inputColor
+			color = textInputColor
 		}
 		style := lipgloss.NewStyle().Foreground(color)
 		for _, wl := range wrapText(f, w) {
@@ -344,7 +344,7 @@ func renderHistoryEntry(entry ConversationEntry, w int) string {
 		role = "sub-agent"
 		rStyle = lipgloss.NewStyle().Foreground(doneColor)
 	} else if entry.Role == "human" {
-		rStyle = lipgloss.NewStyle().Foreground(inputColor).Bold(true)
+		rStyle = lipgloss.NewStyle().Foreground(textInputColor).Bold(true)
 	}
 
 	preview := strings.Split(entry.Content, "\n")[0]
@@ -436,7 +436,7 @@ func (m model) waitingMessageContent() string {
 
 	lines = append(lines, "")
 	if m.mode == modeReply {
-		lines = append(lines, " "+lipgloss.NewStyle().Foreground(inputColor).Bold(true).
+		lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
 			Render("Reply: ")+m.textInput.View())
 	} else {
 		lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
@@ -582,7 +582,7 @@ func (m model) subagentFilesContent() string {
 	}
 	w := m.rightWidth - 4
 	var lines []string
-	style := lipgloss.NewStyle().Foreground(inputColor)
+	style := lipgloss.NewStyle().Foreground(textInputColor)
 	for _, f := range files {
 		for _, wl := range wrapText(f, w) {
 			lines = append(lines, "  "+style.Render(wl))
@@ -618,7 +618,7 @@ func (m model) subagentActivityContent() string {
 		case "human":
 			header := fmt.Sprintf(" %s %s ",
 				helpStyle.Render("["+ts+"]"),
-				lipgloss.NewStyle().Foreground(inputColor).Bold(true).Render("prompt:"))
+				lipgloss.NewStyle().Foreground(textInputColor).Bold(true).Render("prompt:"))
 			wrapped := wrapText(e.Content, w-indent-8)
 			for i, wl := range wrapped {
 				if i == 0 {

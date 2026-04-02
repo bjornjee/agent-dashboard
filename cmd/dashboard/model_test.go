@@ -161,7 +161,7 @@ func TestWaitingMessage_ShowsTmuxCapture(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
 	m.tmuxAvailable = true
@@ -208,7 +208,7 @@ func TestWaitingMessage_FallsBackToConversation(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
 	m.tmuxAvailable = true
@@ -231,7 +231,7 @@ func TestReplyMode_ShowsInputBar(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
 	m.tmuxAvailable = true
@@ -261,7 +261,7 @@ func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
 	m.tmuxAvailable = true
@@ -293,7 +293,7 @@ func TestReplyMode_EscRestoresView(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "input", Cwd: "/tmp"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
 	m.tmuxAvailable = true
@@ -867,7 +867,7 @@ func TestSelectionPinnedOnReorder(t *testing.T) {
 
 	// Start with two agents: AgentA (running), AgentB (input/needs attention)
 	m.agents = []Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
 	}
 	m.buildTree()
@@ -879,14 +879,14 @@ func TestSelectionPinnedOnReorder(t *testing.T) {
 		t.Fatalf("expected selected target main:2.0, got %s", selectedTarget)
 	}
 
-	// Now AgentB changes to "input" — both agents are now in needs-attention group.
+	// Now AgentB changes to "question" — both agents are now in waiting group.
 	// The reorder might change positions. Simulate via stateUpdatedMsg.
 	// We'll directly call the identity-capture + rebuild logic.
 	prevTarget, prevSubID := m.selectedIdentity()
 
 	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "input"},
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question"},
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},
 	}
 	m.buildTree()
 	m.restoreSelection(prevTarget, prevSubID)
@@ -905,7 +905,7 @@ func TestSelectionPinned_SubagentPreserved(t *testing.T) {
 	m.resizeViewports()
 
 	m.agents = []Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
 	}
 	m.agentSubagents = map[string][]SubagentInfo{
@@ -924,8 +924,8 @@ func TestSelectionPinned_SubagentPreserved(t *testing.T) {
 
 	// Reorder: new agent enters needs-attention, shifting indices
 	m.agents = []Agent{
-		{Target: "main:3.0", Window: 3, Pane: 0, State: "input"},
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "input"},
+		{Target: "main:3.0", Window: 3, Pane: 0, State: "question"},
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
 	}
 	m.agentSubagents["main:3.0"] = nil

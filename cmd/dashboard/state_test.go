@@ -55,7 +55,7 @@ func TestReadState_InvalidJSON(t *testing.T) {
 func TestReadState_ValidState(t *testing.T) {
 	tmp := t.TempDir()
 	writeAgentFile(t, tmp, "sess-a.json", Agent{SessionID: "sess-a", Target: "a:0.1", State: "running", Session: "a", TmuxPaneID: "%1"})
-	writeAgentFile(t, tmp, "sess-b.json", Agent{SessionID: "sess-b", Target: "b:1.0", State: "input", Session: "b", TmuxPaneID: "%2"})
+	writeAgentFile(t, tmp, "sess-b.json", Agent{SessionID: "sess-b", Target: "b:1.0", State: "question", Session: "b", TmuxPaneID: "%2"})
 
 	sf := ReadState(tmp)
 	if len(sf.Agents) != 2 {
@@ -110,29 +110,6 @@ func TestSortedAgents_Priority(t *testing.T) {
 	}
 }
 
-func TestSortedAgents_LegacyStates(t *testing.T) {
-	// Legacy states (input, idle) should still sort correctly
-	sf := StateFile{
-		Agents: map[string]Agent{
-			"s2": {Target: "a:2.0", State: "done", Window: 2, Pane: 0, TmuxPaneID: "%2"},
-			"s0": {Target: "a:0.0", State: "input", Window: 0, Pane: 0, TmuxPaneID: "%0"},
-			"s1": {Target: "a:1.0", State: "running", Window: 1, Pane: 0, TmuxPaneID: "%1"},
-			"s3": {Target: "a:3.0", State: "idle", Window: 3, Pane: 0, TmuxPaneID: "%3"},
-		},
-	}
-
-	sorted := SortedAgents(sf, "")
-	expected := []string{"input", "running", "done", "idle"}
-
-	if len(sorted) != 4 {
-		t.Fatalf("expected 4 agents, got %d", len(sorted))
-	}
-	for i, want := range expected {
-		if sorted[i].State != want {
-			t.Errorf("position %d: expected %s, got %s", i, want, sorted[i].State)
-		}
-	}
-}
 
 func TestSortedAgents_ExcludesSelfByPaneID(t *testing.T) {
 	sf := StateFile{
@@ -169,7 +146,7 @@ func TestSortedAgents_SkipsEmptyState(t *testing.T) {
 func TestRemoveAgent(t *testing.T) {
 	tmp := t.TempDir()
 	writeAgentFile(t, tmp, "sess-a.json", Agent{SessionID: "sess-a", Target: "a:0.1", State: "running", TmuxPaneID: "%1"})
-	writeAgentFile(t, tmp, "sess-b.json", Agent{SessionID: "sess-b", Target: "b:1.0", State: "input", TmuxPaneID: "%2"})
+	writeAgentFile(t, tmp, "sess-b.json", Agent{SessionID: "sess-b", Target: "b:1.0", State: "question", TmuxPaneID: "%2"})
 
 	err := RemoveAgent(tmp, "sess-a")
 	if err != nil {
@@ -387,7 +364,7 @@ func TestResolveAgentTargets_DeadPane(t *testing.T) {
 	sf := StateFile{
 		Agents: map[string]Agent{
 			"alive": {Target: "tomoro:3.2", TmuxPaneID: "%90", Session: "tomoro", Window: 3, Pane: 2, State: "running"},
-			"dead":  {Target: "tomoro:2.1", TmuxPaneID: "%87", Session: "tomoro", Window: 2, Pane: 1, State: "input"},
+			"dead":  {Target: "tomoro:2.1", TmuxPaneID: "%87", Session: "tomoro", Window: 2, Pane: 1, State: "question"},
 		},
 	}
 
@@ -607,7 +584,7 @@ func TestIsBlocked(t *testing.T) {
 			t.Errorf("expected isBlocked(%q) = true", s)
 		}
 	}
-	notBlocked := []string{"question", "error", "input", "running", "done", "idle_prompt", "idle", "merged", "unknown"}
+	notBlocked := []string{"question", "error", "running", "done", "idle_prompt", "pr", "merged", "unknown"}
 	for _, s := range notBlocked {
 		if isBlocked(s) {
 			t.Errorf("expected isBlocked(%q) = false", s)
@@ -616,13 +593,13 @@ func TestIsBlocked(t *testing.T) {
 }
 
 func TestIsWaiting(t *testing.T) {
-	waiting := []string{"question", "error", "input"}
+	waiting := []string{"question", "error"}
 	for _, s := range waiting {
 		if !isWaiting(s) {
 			t.Errorf("expected isWaiting(%q) = true", s)
 		}
 	}
-	notWaiting := []string{"permission", "running", "done", "idle_prompt", "idle", "merged", "unknown"}
+	notWaiting := []string{"permission", "running", "done", "idle_prompt", "pr", "merged", "unknown"}
 	for _, s := range notWaiting {
 		if isWaiting(s) {
 			t.Errorf("expected isWaiting(%q) = false", s)
@@ -631,13 +608,13 @@ func TestIsWaiting(t *testing.T) {
 }
 
 func TestIsReview(t *testing.T) {
-	review := []string{"done", "idle_prompt", "idle"}
+	review := []string{"done", "idle_prompt"}
 	for _, s := range review {
 		if !isReview(s) {
 			t.Errorf("expected isReview(%q) = true", s)
 		}
 	}
-	notReview := []string{"permission", "question", "error", "input", "running", "merged", "unknown"}
+	notReview := []string{"permission", "question", "error", "running", "pr", "merged", "unknown"}
 	for _, s := range notReview {
 		if isReview(s) {
 			t.Errorf("expected isReview(%q) = false", s)

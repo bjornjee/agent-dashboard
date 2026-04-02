@@ -63,10 +63,7 @@ var (
 	doneColor       = themeGreen
 	prColor         = themeMauve
 	mergedColor     = themeTeal
-
-	// Legacy aliases
-	inputColor = themeYellow
-	idleColor  = themeOverlay1
+	textInputColor  = themeYellow
 
 	helpStyle      = lipgloss.NewStyle().Foreground(themeOverlay1)
 	boldStyle      = lipgloss.NewStyle().Bold(true)
@@ -86,10 +83,8 @@ var stateIcons = map[string]stateIcon{
 	"permission":  {"⚿", permissionColor},
 	"question":    {"?", questionColor},
 	"error":       {"✗", errorColor},
-	"input":       {"!", inputColor}, // legacy
 	"running":     {"▶", runningColor},
 	"idle_prompt": {"○", idlePromptColor},
-	"idle":        {"○", idleColor}, // legacy
 	"done":        {"✓", doneColor},
 	"pr":          {"↑", prColor},
 	"merged":      {"⏏", mergedColor},
@@ -115,7 +110,7 @@ func isBlocked(state string) bool {
 // isWaiting returns true when the agent is stuck and needs user input or investigation.
 func isWaiting(state string) bool {
 	switch state {
-	case "question", "error", "input":
+	case "question", "error":
 		return true
 	}
 	return false
@@ -124,7 +119,7 @@ func isWaiting(state string) bool {
 // isReview returns true when the agent has completed its turn and needs review.
 func isReview(state string) bool {
 	switch state {
-	case "done", "idle_prompt", "idle":
+	case "done", "idle_prompt":
 		return true
 	}
 	return false
@@ -145,10 +140,8 @@ var stateLabels = map[string]string{
 	"permission":  "Waiting for approval",
 	"question":    "Asked a question",
 	"error":       "Error",
-	"input":       "Waiting for input", // legacy
 	"running":     "Running",
 	"idle_prompt": "Idle at prompt",
-	"idle":        "Idle",  // legacy
 	"pr":          "PR open",
 	"merged":      "Branch merged",
 	"done":        "Done",

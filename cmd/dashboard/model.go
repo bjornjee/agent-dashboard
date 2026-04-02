@@ -306,7 +306,7 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 
 	s := spinner.New()
 	s.Spinner = spinner.Jump
-	s.Style = lipgloss.NewStyle().Foreground(inputColor)
+	s.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
 	q, a := pickQuote(db)
 

@@ -61,16 +61,13 @@ type StateFile struct {
 }
 
 // State groups: blocked → waiting → running → review → pr → merged.
-// Legacy states (input, idle) are mapped to their new equivalents.
 // PR and merged are user-driven (pinned) states set by the dashboard.
 var statePriority = map[string]int{
 	"permission":  1, // blocked — needs y/n approval
 	"question":    2, // waiting — needs user reply
 	"error":       2, // waiting — needs investigation
-	"input":       2, // legacy: treat as waiting
 	"running":     3,
 	"idle_prompt": 4, // review — finished turn, at prompt
-	"idle":        4, // legacy: treat as idle_prompt
 	"done":        4, // review — finished task
 	"pr":          5, // PR created — waiting on GitHub
 	"merged":      6, // branch merged — cleanup
