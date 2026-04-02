@@ -1,0 +1,36 @@
+version: 2
+
+builds:
+  - main: ./cmd/dashboard/
+    binary: agent-dashboard
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true
+
+# brews:
+#   - repository:
+#       owner: bjornjee
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+#     homepage: https://github.com/bjornjee/agent-dashboard
+#     description: A TUI dashboard for monitoring AI coding agents
+#     license: MIT
+#     install: |
+#       bin.install "agent-dashboard"
