@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -201,5 +205,71 @@ func TestCollapsibleContextBlocks(t *testing.T) {
 	expandedPlain := stripANSI(expanded)
 	if strings.Contains(expandedPlain, "lines hidden") {
 		t.Fatal("expected no collapsed placeholder when expanded")
+	}
+}
+
+func TestLoadDiff_IncludesUntrackedFiles(t *testing.T) {
+	// Set up a temporary git repo with a tracked change and an untracked file.
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	// Init repo with initial commit
+	run("git", "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("original\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("git", "add", "tracked.txt")
+	run("git", "commit", "-m", "initial")
+
+	// Create a feature branch with a tracked modification + an untracked new file
+	run("git", "checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("modified\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("git", "add", "tracked.txt")
+	run("git", "commit", "-m", "modify tracked")
+
+	// Create untracked files (simulates new files created by an agent)
+	if err := os.WriteFile(filepath.Join(dir, "new_service.py"), []byte("def run():\n    pass\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new_test.py"), []byte("def test_run():\n    pass\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	files, err := loadDiff(ctx, dir)
+	if err != nil {
+		t.Fatalf("loadDiff failed: %v", err)
+	}
+
+	// Should have 3 files: 1 tracked change + 2 untracked new files
+	if len(files) != 3 {
+		names := make([]string, len(files))
+		for i, f := range files {
+			names[i] = f.NewName
+		}
+		t.Fatalf("expected 3 diff files (1 tracked + 2 untracked), got %d: %v", len(files), names)
+	}
+
+	// Verify we can find the untracked files
+	found := map[string]bool{}
+	for _, f := range files {
+		found[filepath.Base(f.NewName)] = true
+	}
+	for _, want := range []string{"tracked.txt", "new_service.py", "new_test.py"} {
+		if !found[want] {
+			t.Errorf("expected diff to include %s", want)
+		}
 	}
 }
