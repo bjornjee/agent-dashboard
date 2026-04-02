@@ -384,6 +384,12 @@ func buildPrompt(skill, message string) string {
 	}
 }
 
+// shellQuote wraps s in single quotes for safe shell interpolation.
+// Any embedded single quotes are escaped as '\'' (end quote, escaped quote, start quote).
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 // createSession creates a new agent session in a tmux pane (no initial prompt).
 func createSession(folder string, agents []Agent, selfPaneID string, profile AgentProfile) tea.Cmd {
 	return createSessionWithPrompt(folder, agents, selfPaneID, profile, "", "")
@@ -437,10 +443,12 @@ func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, p
 			return createSessionMsg{err: err}
 		}
 
-		// Build the command with optional initial prompt
+		// Build the command with optional initial prompt.
+		// The prompt is shell-quoted so metacharacters (>, |, &, etc.)
+		// are passed literally to the claude CLI as a single argument.
 		cmd := profile.Command
 		if prompt := buildPrompt(skill, message); prompt != "" {
-			cmd = profile.Command + " " + prompt
+			cmd = profile.Command + " " + shellQuote(prompt)
 		}
 
 		if sendErr := TmuxSendKeys(newTarget, cmd); sendErr != nil {

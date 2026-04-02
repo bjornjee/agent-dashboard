@@ -512,6 +512,24 @@ func TestCreateWizard_MessageEmptyLaunch(t *testing.T) {
 	}
 }
 
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		input, want string
+	}{
+		{"hello world", "'hello world'"},
+		{"what does this do>", "'what does this do>'"},
+		{"it's a test", "'it'\\''s a test'"},
+		{"foo|bar&baz", "'foo|bar&baz'"},
+		{"", "''"},
+	}
+	for _, tt := range tests {
+		got := shellQuote(tt.input)
+		if got != tt.want {
+			t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestBuildPrompt(t *testing.T) {
 	tests := []struct {
 		skill, message, want string
