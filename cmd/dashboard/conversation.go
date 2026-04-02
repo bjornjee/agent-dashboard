@@ -272,7 +272,7 @@ func parseAssistantEntry(entry jsonlEntry) *ConversationEntry {
 	content := strings.Join(texts, "\n")
 	return &ConversationEntry{
 		Role:      "assistant",
-		Content:   truncate(content, 64000),
+		Content:   truncate(content, 32000),
 		Timestamp: entry.Timestamp,
 	}
 }
