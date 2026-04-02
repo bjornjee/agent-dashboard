@@ -49,13 +49,17 @@ type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
 }
 
-// State groups: needs attention → running → completed
+// State groups: blocked → running → finished.
+// Legacy states (input, idle) are mapped to their new equivalents.
 var statePriority = map[string]int{
-	"input":   1, // needs attention
-	"error":   1, // needs attention
-	"running": 2,
-	"idle":    3, // completed
-	"done":    3, // completed
+	"permission":  1, // blocked — needs approval
+	"question":    1, // blocked — needs reply
+	"error":       1, // blocked — needs investigation
+	"input":       1, // legacy: treat as blocked
+	"running":     2,
+	"idle_prompt": 3, // finished turn, at prompt
+	"idle":        3, // legacy: treat as idle_prompt
+	"done":        3, // finished task
 }
 
 // agentsDir returns the agents subdirectory within the state directory.

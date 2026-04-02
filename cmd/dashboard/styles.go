@@ -55,11 +55,16 @@ var (
 			Background(themeSurface1).
 			Foreground(themeText)
 
-	inputColor   = themeYellow
-	errorColor   = themeRed
-	runningColor = themeBlue
-	idleColor    = themeOverlay1
-	doneColor    = themeGreen
+	permissionColor = themePeach
+	questionColor   = themeYellow
+	errorColor      = themeRed
+	runningColor    = themeBlue
+	idlePromptColor = themeOverlay1
+	doneColor       = themeGreen
+
+	// Legacy aliases
+	inputColor = themeYellow
+	idleColor  = themeOverlay1
 
 	helpStyle      = lipgloss.NewStyle().Foreground(themeOverlay1)
 	boldStyle      = lipgloss.NewStyle().Bold(true)
@@ -76,18 +81,51 @@ type stateIcon struct {
 }
 
 var stateIcons = map[string]stateIcon{
-	"input":   {"!", inputColor},
-	"error":   {"✗", errorColor},
-	"running": {"▶", runningColor},
-	"idle":    {"○", idleColor},
-	"done":    {"✓", doneColor},
+	"permission":  {"⚿", permissionColor},
+	"question":    {"?", questionColor},
+	"error":       {"✗", errorColor},
+	"input":       {"!", inputColor}, // legacy
+	"running":     {"▶", runningColor},
+	"idle_prompt": {"○", idlePromptColor},
+	"idle":        {"○", idleColor}, // legacy
+	"done":        {"✓", doneColor},
 }
 
 var groupHeaders = map[int]struct {
 	label string
 	color lipgloss.Color
 }{
-	1: {"NEEDS ATTENTION", inputColor},
+	1: {"BLOCKED", permissionColor},
 	2: {"RUNNING", runningColor},
-	3: {"COMPLETED", doneColor},
+	3: {"FINISHED", doneColor},
+}
+
+// isBlocked returns true when the agent needs user action to continue.
+func isBlocked(state string) bool {
+	switch state {
+	case "permission", "question", "error", "input":
+		return true
+	}
+	return false
+}
+
+// isFinished returns true when the agent has completed or is idle at prompt.
+func isFinished(state string) bool {
+	switch state {
+	case "done", "idle_prompt", "idle":
+		return true
+	}
+	return false
+}
+
+// stateLabel returns a human-readable label for the agent state.
+var stateLabels = map[string]string{
+	"permission":  "Waiting for approval",
+	"question":    "Asked a question",
+	"error":       "Error",
+	"input":       "Waiting for input", // legacy
+	"running":     "Running",
+	"idle_prompt": "Idle at prompt",
+	"idle":        "Idle",  // legacy
+	"done":        "Done",
 }

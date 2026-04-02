@@ -136,14 +136,12 @@ func (m *model) updateRightContent() {
 	m.historyVP.SetContent(m.historyContent())
 
 	effState := agent.State
-	needsAttention := effState == "input" || effState == "error"
-	isDone := effState == "done" || effState == "idle"
 
 	if m.planVisible && m.renderedPlan != "" {
 		m.messageVP.SetContent(m.renderedPlan)
-	} else if needsAttention {
+	} else if isBlocked(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
-	} else if isDone {
+	} else if isFinished(effState) {
 		if m.mode == modeReply {
 			m.messageVP.SetContent(m.waitingMessageContent())
 		} else {
@@ -238,7 +236,7 @@ func (m model) agentListContent() string {
 
 		si := stateIcons[effState]
 		if si.icon == "" {
-			si = stateIcons["idle"]
+			si = stateIcons["idle_prompt"]
 		}
 
 		paneID := fmt.Sprintf("%d.%d", agent.Window, agent.Pane)
@@ -765,14 +763,11 @@ func (m model) renderRightPanel() string {
 		effState := agent.State
 		si := stateIcons[effState]
 		if si.icon == "" {
-			si = stateIcons["idle"]
+			si = stateIcons["idle_prompt"]
 		}
-		stateLabel := map[string]string{
-			"input": "Waiting for input", "error": "Error",
-			"running": "Running", "done": "Done", "idle": "Idle",
-		}[effState]
+		stateLabel := stateLabels[effState]
 		if stateLabel == "" {
-			stateLabel = agent.State
+			stateLabel = effState
 		}
 		stateStr := lipgloss.NewStyle().Foreground(si.color).Bold(true).
 			Render(fmt.Sprintf("%s %s", si.icon, stateLabel))
@@ -863,8 +858,6 @@ func (m model) renderRightPanel() string {
 			" " + helpStyle.Render(strings.Repeat("─", 19))
 	} else {
 		rpEffState := agent.State
-		needsAttention := rpEffState == "input" || rpEffState == "error"
-		isDone := rpEffState == "done" || rpEffState == "idle"
 
 		filesLabel = " " + boldStyle.Render("Files:") + focusMarker(focusFiles) + scrollHint(m.filesVP)
 		historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
@@ -873,13 +866,13 @@ func (m model) renderRightPanel() string {
 		if m.planVisible && m.renderedPlan != "" {
 			messageLabel = " " + planLabelStyle.Render("── Plan (p to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 8))
-		} else if needsAttention {
-			messageLabel = " " + lipgloss.NewStyle().Foreground(inputColor).Bold(true).
-				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+		} else if isBlocked(rpEffState) {
+			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
+				Render("── Agent is blocked") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
-		} else if isDone {
+		} else if isFinished(rpEffState) {
 			if m.mode == modeReply {
-				messageLabel = " " + lipgloss.NewStyle().Foreground(inputColor).Bold(true).
+				messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
 					Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 					" " + helpStyle.Render(strings.Repeat("─", 9))
 			} else {
