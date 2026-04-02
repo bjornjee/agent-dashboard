@@ -842,7 +842,7 @@ func ReadPlanContent(plansDir, slug string) string {
 	if err != nil {
 		return ""
 	}
-	return truncate(string(data), 8000)
+	return truncate(string(data), 32000)
 }
 
 func truncate(s string, maxLen int) string {

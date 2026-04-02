@@ -615,11 +615,11 @@ func TestReadPlanContent_MissingFile(t *testing.T) {
 func TestReadPlanContent_TruncatesLarge(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "plans"), 0755)
-	large := strings.Repeat("x", 10000)
+	large := strings.Repeat("x", 40000)
 	os.WriteFile(filepath.Join(dir, "plans", "big.md"), []byte(large), 0644)
 
 	content := ReadPlanContent(filepath.Join(dir, "plans"), "big")
-	if len(content) > 8003 { // truncate adds "…" (3 bytes UTF-8)
+	if len(content) > 32003 { // truncate adds "…" (3 bytes UTF-8)
 		t.Errorf("expected truncated content, got length %d", len(content))
 	}
 }
