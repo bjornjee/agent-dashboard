@@ -18,8 +18,9 @@ func main() {
 	cfg := DefaultConfig()
 	stateDir := cfg.Profile.StateDir
 
-	// Clean stale agents (>10 min since last update) on startup
-	CleanStale(stateDir, 10*60)
+	// Clean stale agents (>10 min since last update) on startup,
+	// but keep agents whose tmux panes are still alive.
+	CleanStale(stateDir, 10*60, TmuxListLivePaneIDs())
 
 	dbPath := filepath.Join(stateDir, "usage.db")
 	db, err := OpenDB(dbPath)

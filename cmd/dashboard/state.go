@@ -233,7 +233,10 @@ func SortedAgents(sf StateFile, selfPaneID string) []Agent {
 }
 
 // CleanStale removes agent files that haven't been updated within maxAgeSecs.
-func CleanStale(dir string, maxAgeSecs int) {
+// Agents whose tmux panes are still alive (present in livePaneIDs) are kept
+// regardless of age — an idle agent waiting for input generates no hook events
+// but should not be evicted from the dashboard.
+func CleanStale(dir string, maxAgeSecs int, livePaneIDs map[string]bool) {
 	now := time.Now()
 	entries, err := os.ReadDir(agentsDir(dir))
 	if err != nil {
@@ -251,6 +254,10 @@ func CleanStale(dir string, maxAgeSecs int) {
 		var agent Agent
 		if err := json.Unmarshal(data, &agent); err != nil || agent.UpdatedAt == "" {
 			_ = os.Remove(path)
+			continue
+		}
+		// Keep agents whose tmux pane is still alive
+		if agent.TmuxPaneID != "" && livePaneIDs[agent.TmuxPaneID] {
 			continue
 		}
 		t, err := time.Parse(time.RFC3339, agent.UpdatedAt)

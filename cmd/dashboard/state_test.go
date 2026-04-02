@@ -559,6 +559,41 @@ func TestEffectiveDir(t *testing.T) {
 	}
 }
 
+func TestCleanStale_SkipsLivePanes(t *testing.T) {
+	dir := t.TempDir()
+	staleTime := "2020-01-01T00:00:00Z" // very old
+
+	// Agent with a live tmux pane — should NOT be cleaned even if stale
+	writeAgentFile(t, dir, "live-agent.json", Agent{
+		SessionID:  "live-agent",
+		TmuxPaneID: "%42",
+		State:      "input",
+		UpdatedAt:  staleTime,
+	})
+
+	// Agent with a dead tmux pane — SHOULD be cleaned because stale + dead
+	writeAgentFile(t, dir, "dead-agent.json", Agent{
+		SessionID:  "dead-agent",
+		TmuxPaneID: "%99",
+		State:      "input",
+		UpdatedAt:  staleTime,
+	})
+
+	livePaneIDs := map[string]bool{"%42": true}
+	CleanStale(dir, 10*60, livePaneIDs)
+
+	// Live agent should survive
+	agentsPath := filepath.Join(dir, "agents")
+	if _, err := os.Stat(filepath.Join(agentsPath, "live-agent.json")); err != nil {
+		t.Error("live agent was incorrectly cleaned: pane is still alive")
+	}
+
+	// Dead agent should be removed
+	if _, err := os.Stat(filepath.Join(agentsPath, "dead-agent.json")); err == nil {
+		t.Error("dead stale agent was not cleaned")
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration("") != "" {
 		t.Error("expected empty for empty input")
