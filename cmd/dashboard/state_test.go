@@ -420,9 +420,9 @@ func TestResolveAgentBranches(t *testing.T) {
 
 	sf := StateFile{
 		Agents: map[string]Agent{
-			"with-cwd":    {Cwd: cwd, Branch: "stale-branch", State: "running"},
-			"no-cwd":      {Cwd: "", Branch: "should-stay", State: "running"},
-			"bad-cwd":     {Cwd: "/nonexistent/path", Branch: "should-stay", State: "running"},
+			"with-cwd": {Cwd: cwd, Branch: "stale-branch", State: "running"},
+			"no-cwd":   {Cwd: "", Branch: "should-stay", State: "running"},
+			"bad-cwd":  {Cwd: "/nonexistent/path", Branch: "should-stay", State: "running"},
 		},
 	}
 

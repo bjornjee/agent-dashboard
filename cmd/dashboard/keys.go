@@ -73,17 +73,35 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(m.suggestions) > 0 && m.selectedSugg < len(m.suggestions) {
 				folder = m.suggestions[m.selectedSugg]
 			}
-			m.mode = modeNormal
-			m.textInput.Reset()
-			m.textInput.Placeholder = "Type reply..."
 			m.suggestions = nil
 			m.selectedSugg = 0
-			if folder != "" {
-				m.statusMsg = "spawning"
-				m.statusMsgTick = -1 // don't auto-clear
-				return m, tea.Batch(createSession(folder, m.agents, m.selfPaneID, m.cfg.Profile), m.spawningSpinner.Tick)
+
+			if folder == "" {
+				m.mode = modeNormal
+				m.textInput.Reset()
+				m.textInput.Placeholder = "Type reply..."
+				return m, nil
 			}
-			return m, nil
+
+			m.createFolder = folder
+
+			if m.skillsAvailable {
+				// Advance to skill selection
+				m.mode = modeCreateSkill
+				m.selectedCreateSkill = 0
+				m.textInput.Reset()
+				m.updateRightContent()
+				return m, nil
+			}
+
+			// Skip skill, advance to message input
+			m.createSkillName = ""
+			m.mode = modeCreateMessage
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
+			m.textInput.Focus()
+			m.updateRightContent()
+			return m, textinput.Blink
 		case "esc":
 			m.mode = modeNormal
 			m.textInput.Reset()
@@ -118,6 +136,112 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textInput, cmd = m.textInput.Update(msg)
 			m.suggestions = filterZSuggestions(m.textInput.Value(), m.zEntries, m.pathExists)
 			m.selectedSugg = 0
+			m.updateRightContent()
+			return m, cmd
+		}
+	}
+
+	// Create skill selection mode
+	if m.mode == modeCreateSkill {
+		switch key {
+		case "enter":
+			if m.selectedCreateSkill == 0 || m.selectedCreateSkill >= len(m.availableSkills) {
+				m.createSkillName = "" // "(none)" or out of bounds
+			} else {
+				m.createSkillName = m.availableSkills[m.selectedCreateSkill]
+			}
+			m.mode = modeCreateMessage
+			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
+			m.textInput.Focus()
+			m.updateRightContent()
+			return m, textinput.Blink
+		case "esc":
+			// Back to folder selection
+			m.mode = modeCreateFolder
+			m.selectedCreateSkill = 0
+			m.textInput.SetValue(m.createFolder)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			m.suggestions = filterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
+			m.selectedSugg = 0
+			m.updateRightContent()
+			return m, textinput.Blink
+		case "ctrl+c":
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.selectedCreateSkill = 0
+			m.updateRightContent()
+			return m, nil
+		case "down":
+			if m.selectedCreateSkill < len(m.availableSkills)-1 {
+				m.selectedCreateSkill++
+				m.updateRightContent()
+			}
+			return m, nil
+		case "up":
+			if m.selectedCreateSkill > 0 {
+				m.selectedCreateSkill--
+				m.updateRightContent()
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Create message input mode
+	if m.mode == modeCreateMessage {
+		switch key {
+		case "enter":
+			message := m.textInput.Value()
+			folder := m.createFolder
+			skill := m.createSkillName
+
+			// Reset wizard state
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.createSkillName = ""
+			m.selectedCreateSkill = 0
+
+			m.statusMsg = "spawning"
+			m.statusMsgTick = -1 // don't auto-clear
+			return m, tea.Batch(
+				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, skill, message),
+				m.spawningSpinner.Tick,
+			)
+		case "esc":
+			// Back to skill selection (if available) or folder selection
+			m.textInput.Reset()
+			if m.skillsAvailable {
+				m.mode = modeCreateSkill
+				m.createSkillName = ""
+				m.updateRightContent()
+				return m, nil
+			}
+			// No skills — back to folder selection
+			m.mode = modeCreateFolder
+			m.textInput.SetValue(m.createFolder)
+			m.textInput.CursorEnd()
+			m.textInput.Focus()
+			m.suggestions = filterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
+			m.selectedSugg = 0
+			m.updateRightContent()
+			return m, textinput.Blink
+		case "ctrl+c":
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.createSkillName = ""
+			m.selectedCreateSkill = 0
+			m.updateRightContent()
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.textInput, cmd = m.textInput.Update(msg)
 			m.updateRightContent()
 			return m, cmd
 		}
@@ -184,7 +308,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Diff viewer mode
 	if m.diffVisible {
 		switch key {
-		case "d", "esc":
+		case "d", "q", "esc":
 			m.diffVisible = false
 			m.diffExpandedAll = false
 			return m, nil
@@ -218,7 +342,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "K":
 			m.diffContentVP.LineUp(1)
 			return m, nil
-		case "q", "ctrl+c":
+		case "ctrl+c":
 			return m, tea.Quit
 		}
 		return m, nil

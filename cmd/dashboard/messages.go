@@ -49,6 +49,8 @@ const (
 	modeUsage
 	modeConfirmClose
 	modeCreateFolder
+	modeCreateSkill   // skill selection step of create wizard
+	modeCreateMessage // message input step of create wizard
 )
 
 // -- Viewport focus --
@@ -64,9 +66,9 @@ const (
 // Layout constants for the right panel viewports.
 // Heights are computed proportionally via panelHeights().
 const (
-	defaultHeaderLines = 9  // estimate for mouse routing & initial sizing; render overrides
-	sectionGaps        = 5  // 3 section labels + 2 blank-line buffers between sections
-	bannerHeight       = 6  // top banner: 11 pixel rows rendered via half-blocks
+	defaultHeaderLines = 9 // estimate for mouse routing & initial sizing; render overrides
+	sectionGaps        = 5 // 3 section labels + 2 blank-line buffers between sections
+	bannerHeight       = 6 // top banner: 11 pixel rows rendered via half-blocks
 
 	minFilesHeight   = 3
 	minHistoryHeight = 5

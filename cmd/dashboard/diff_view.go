@@ -15,8 +15,8 @@ import (
 
 // Diff background RGB values (subtle tints on Catppuccin Frappé base #303446).
 const (
-	diffAddBgR, diffAddBgG, diffAddBgB = 40, 56, 40  // greenish tint
-	diffDelBgR, diffDelBgG, diffDelBgB = 56, 36, 36  // reddish tint
+	diffAddBgR, diffAddBgG, diffAddBgB = 40, 56, 40 // greenish tint
+	diffDelBgR, diffDelBgG, diffDelBgB = 56, 36, 36 // reddish tint
 )
 
 // collapsibleThreshold is the minimum number of consecutive context lines

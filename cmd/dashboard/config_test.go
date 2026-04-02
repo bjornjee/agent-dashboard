@@ -7,8 +7,10 @@ import (
 )
 
 // testConfig returns a Config suitable for tests, with the given stateDir.
+// Uses a non-existent PluginCacheDir so skill discovery is deterministic.
 func testConfig(stateDir string) Config {
 	cfg := DefaultConfig()
+	cfg.Profile.PluginCacheDir = "/nonexistent/plugin/cache"
 	if stateDir != "" {
 		cfg.Profile.StateDir = stateDir
 	}

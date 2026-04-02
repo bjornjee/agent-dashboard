@@ -119,6 +119,13 @@ type model struct {
 	suggestions  []string // filtered suggestions for current input
 	selectedSugg int      // index of highlighted suggestion
 
+	// Skill-aware create wizard state
+	availableSkills     []string // display list: ["(none)", "chore", "feature", ...]
+	skillsAvailable     bool     // true if skills found AND agent is Claude
+	createFolder        string   // folder selected in step 1
+	selectedCreateSkill int      // index into availableSkills
+	createSkillName     string   // selected skill name ("" if none)
+
 	// Banner
 	quote       string           // random quote text selected at startup
 	quoteAuthor string           // quote author (empty for fallback quotes)
@@ -302,6 +309,12 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 	s.Style = lipgloss.NewStyle().Foreground(inputColor)
 
 	q, a := pickQuote(db)
+
+	// Discover skills from bjornjee-skills plugin cache
+	rawSkills := discoverSkills(cfg.Profile.PluginCacheDir)
+	skillList := buildSkillList(rawSkills)
+	hasSkills := len(skillList) > 0 && strings.Contains(cfg.Profile.Command, "claude")
+
 	return model{
 		cfg:             cfg,
 		agents:          nil,
@@ -327,6 +340,8 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 		quoteAuthor:     a,
 		nowFunc:         time.Now,
 		pathExists:      dirExists,
+		availableSkills: skillList,
+		skillsAvailable: hasSkills,
 	}
 }
 
@@ -405,7 +420,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildTree()
 		m.restoreSelection(prevTarget, prevSubID)
 		m.renderedHistory = "" // invalidate cache on state update
-		m.convFileOffset = 0  // reset offset — agent list may have changed
+		m.convFileOffset = 0   // reset offset — agent list may have changed
 		// Also invalidate the current agent's cached entry so restoreCurrentCache
 		// doesn't restore stale offsets after this reset.
 		if key := m.cacheKey(); key != "" {
