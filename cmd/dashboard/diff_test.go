@@ -86,7 +86,7 @@ func TestDiffFileTreeContent(t *testing.T) {
 	m.diffVisible = true
 	m.buildDiffTreeEntries()
 
-	content := m.diffFileTreeContent()
+	content, _ := m.diffFileTreeContent()
 	plain := stripANSI(content)
 
 	// Tree view should show dir header and basenames
@@ -339,7 +339,7 @@ func TestDiffFileTreeContent_Chevrons(t *testing.T) {
 	m.buildDiffTreeEntries()
 
 	// Expanded by default — should show ▾
-	content := m.diffFileTreeContent()
+	content, _ := m.diffFileTreeContent()
 	plain := stripANSI(content)
 	if !strings.Contains(plain, "▾") {
 		t.Fatalf("expected expanded chevron ▾, got:\n%s", plain)
@@ -348,7 +348,7 @@ func TestDiffFileTreeContent_Chevrons(t *testing.T) {
 	// Collapse the dir
 	m.diffCollapsedDirs["cmd/"] = true
 	m.applyTreeVisibility()
-	content = m.diffFileTreeContent()
+	content, _ = m.diffFileTreeContent()
 	plain = stripANSI(content)
 	if !strings.Contains(plain, "▸") {
 		t.Fatalf("expected collapsed chevron ▸, got:\n%s", plain)
@@ -368,7 +368,7 @@ func TestDiffDirFileCount(t *testing.T) {
 	}
 	m.buildDiffTreeEntries()
 
-	content := m.diffFileTreeContent()
+	content, _ := m.diffFileTreeContent()
 	plain := stripANSI(content)
 	if !strings.Contains(plain, "(3)") {
 		t.Fatalf("expected dir file count (3), got:\n%s", plain)

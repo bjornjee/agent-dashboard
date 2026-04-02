@@ -18,6 +18,54 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		leftBorderEnd := m.diffLeftWidth + 2
 		var cmd tea.Cmd
 		if msg.X < leftBorderEnd {
+			// Left-click selects a file/dir entry in the file list panel.
+			if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+				// Calculate which visible entry was clicked.
+				// Panel layout: 1 border + 1 header + (1 filter if active) + 1 blank = offset rows
+				headerRows := 3 // border + "FILES CHANGED" + blank line
+				if m.diffFilterActive || m.diffFilterText != "" {
+					headerRows++ // filter input line
+				}
+				clickedLine := msg.Y - bannerHeight - headerRows + m.diffFileVP.YOffset
+				if clickedLine >= 0 {
+					vis := m.visibleDiffEntries()
+					// Map clickedLine to a visible entry index, accounting for
+					// multi-line wrapped entries.
+					lineCount := 0
+					for visIdx, entryIdx := range vis {
+						entry := m.diffTreeEntries[entryIdx]
+						entryLines := 1
+						if !entry.isDir {
+							// Count wrapped lines for long file names.
+							maxWidth := m.diffLeftWidth - 4
+							if maxWidth < 10 {
+								maxWidth = 10
+							}
+							// Must match render path: prefix = indentStr + " icon "
+							// where icon is 1 visible char = indent*3 + 3
+							prefixWidth := entry.indent*3 + 3
+							nameWidth := maxWidth - prefixWidth
+							if nameWidth > 0 && len([]rune(entry.label)) > nameWidth {
+								entryLines = (len([]rune(entry.label)) + nameWidth - 1) / nameWidth
+							}
+						}
+						if clickedLine < lineCount+entryLines {
+							m.diffCursor = visIdx
+							if entry.isDir {
+								m.toggleDiffDir()
+							} else {
+								m.selectedDiffFile = entry.fileIdx
+								m.diffExpandedAll = false
+								m.updateDiffContent()
+							}
+							return m, nil
+						}
+						lineCount += entryLines
+					}
+				}
+				return m, nil
+			}
+			// Scroll wheel events still handled by viewport.
 			m.diffFileVP, cmd = m.diffFileVP.Update(msg)
 		} else {
 			m.diffContentVP, cmd = m.diffContentVP.Update(msg)
@@ -363,6 +411,48 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "down", "j":
 			m.moveDiffCursor(1)
+			return m, nil
+		case "g":
+			// Jump to first visible entry.
+			vis := m.visibleDiffEntries()
+			if len(vis) > 0 {
+				m.diffCursor = 0
+				entry := m.diffTreeEntries[vis[0]]
+				if !entry.isDir {
+					m.selectedDiffFile = entry.fileIdx
+					m.diffExpandedAll = false
+				}
+				m.updateDiffContent()
+			}
+			return m, nil
+		case "G":
+			// Jump to last visible entry.
+			vis := m.visibleDiffEntries()
+			if len(vis) > 0 {
+				m.diffCursor = len(vis) - 1
+				entry := m.diffTreeEntries[vis[m.diffCursor]]
+				if !entry.isDir {
+					m.selectedDiffFile = entry.fileIdx
+					m.diffExpandedAll = false
+				}
+				m.updateDiffContent()
+			}
+			return m, nil
+		case "{":
+			// Move cursor up by half viewport height.
+			half := m.diffFileVP.Height / 2
+			if half < 1 {
+				half = 1
+			}
+			m.moveDiffCursor(-half)
+			return m, nil
+		case "}":
+			// Move cursor down by half viewport height.
+			half := m.diffFileVP.Height / 2
+			if half < 1 {
+				half = 1
+			}
+			m.moveDiffCursor(half)
 			return m, nil
 		case "enter", " ":
 			m.toggleDiffDir()
