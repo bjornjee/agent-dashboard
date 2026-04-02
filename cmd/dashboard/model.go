@@ -38,6 +38,7 @@ type agentCache struct {
 // -- Model --
 
 type model struct {
+	cfg             Config
 	agents          []Agent
 	selected        int // index into treeNodes
 	treeNodes       []treeNode
@@ -291,7 +292,7 @@ func (m *model) restoreCurrentCache() {
 	}
 }
 
-func newModel(statePath, selfPaneID string, db *DB) model {
+func newModel(cfg Config, selfPaneID string, db *DB) model {
 	ti := textinput.New()
 	ti.Placeholder = "Type reply..."
 	ti.CharLimit = 4096
@@ -302,8 +303,9 @@ func newModel(statePath, selfPaneID string, db *DB) model {
 
 	q, a := pickQuote(db)
 	return model{
+		cfg:             cfg,
 		agents:          nil,
-		statePath:       statePath,
+		statePath:       cfg.Profile.StateDir,
 		selfPaneID:      selfPaneID,
 		tmuxAvailable:   TmuxIsAvailable(),
 		textInput:       ti,
@@ -333,7 +335,7 @@ func (m model) Init() tea.Cmd {
 		loadState(m.statePath, m.tmuxAvailable),
 		tickEvery(),
 		m.captureSelected(),
-		loadUsage(m.agents),
+		loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir),
 	}
 	if m.db != nil {
 		cmds = append(cmds, loadDBCost(m.db))
@@ -413,7 +415,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateLeftContent()
 		m.updateRightContent()
-		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan()}
+		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir), m.loadPlan()}
 		cmds = append(cmds, m.loadAllSubagents()...)
 		return m, tea.Batch(cmds...)
 
@@ -468,7 +470,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.loadPlan())
 		}
 		if m.tickCount%10 == 0 {
-			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents))
+			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -606,7 +608,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Editor failed: %v", msg.err)
 		} else {
-			m.statusMsg = "Opened VS Code"
+			m.statusMsg = fmt.Sprintf("Opened %s", m.cfg.Editor)
 		}
 		m.statusMsgTick = m.tickCount
 		return m, nil

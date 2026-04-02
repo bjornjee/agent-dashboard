@@ -44,9 +44,10 @@ func (m model) loadConversation() tea.Cmd {
 		return nil
 	}
 	slug := ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(ConversationsDir(), slug)
+	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
 	sessionID := agent.SessionID
 	cwd := agent.Cwd
+	sessionsDir := m.cfg.Profile.SessionsDir
 
 	// Capture offset state for incremental reading
 	sessionKey := projDir + ":" + sessionID
@@ -60,7 +61,7 @@ func (m model) loadConversation() tea.Cmd {
 
 	return func() tea.Msg {
 		if sessionID == "" {
-			sessionID = FindSessionID(cwd)
+			sessionID = findSessionIDIn(sessionsDir, cwd)
 		}
 		if sessionID == "" {
 			return conversationMsg{entries: nil}
@@ -90,14 +91,15 @@ func (m model) loadSubagentActivity() tea.Cmd {
 		return nil
 	}
 	slug := ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(ConversationsDir(), slug)
+	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
 	sessionID := agent.SessionID
 	cwd := agent.Cwd
 	agentID := sub.AgentID
+	sessionsDir := m.cfg.Profile.SessionsDir
 
 	return func() tea.Msg {
 		if sessionID == "" {
-			sessionID = FindSessionID(cwd)
+			sessionID = findSessionIDIn(sessionsDir, cwd)
 		}
 		if sessionID == "" {
 			return activityMsg{entries: nil}
@@ -110,6 +112,8 @@ func (m model) loadSubagentActivity() tea.Cmd {
 
 // loadAllSubagents loads subagent info for all agents.
 func (m model) loadAllSubagents() []tea.Cmd {
+	projectsDir := m.cfg.Profile.ProjectsDir
+	sessionsDir := m.cfg.Profile.SessionsDir
 	var cmds []tea.Cmd
 	for _, agent := range m.agents {
 		if agent.Cwd == "" {
@@ -119,13 +123,13 @@ func (m model) loadAllSubagents() []tea.Cmd {
 		cmds = append(cmds, func() tea.Msg {
 			sid := a.SessionID
 			if sid == "" {
-				sid = FindSessionID(a.Cwd)
+				sid = findSessionIDIn(sessionsDir, a.Cwd)
 			}
 			if sid == "" {
 				return subagentsMsg{parentTarget: a.Target, agents: nil}
 			}
 			slug := ProjectSlug(a.Cwd)
-			projDir := filepath.Join(ConversationsDir(), slug)
+			projDir := filepath.Join(projectsDir, slug)
 			subs := FindSubagents(projDir, sid)
 			return subagentsMsg{parentTarget: a.Target, agents: subs}
 		})
@@ -231,11 +235,11 @@ func closePane(paneID, sessionID, stateDir string) tea.Cmd {
 	}
 }
 
-func loadUsage(agents []Agent) tea.Cmd {
+func loadUsage(agents []Agent, projectsDir, sessionsDir string) tea.Cmd {
 	agentsCopy := make([]Agent, len(agents))
 	copy(agentsCopy, agents)
 	return func() tea.Msg {
-		perAgent, total := ReadAllUsage(agentsCopy)
+		perAgent, total := ReadAllUsage(agentsCopy, projectsDir, sessionsDir)
 		return usageMsg{perAgent: perAgent, total: total}
 	}
 }
@@ -365,8 +369,8 @@ func validateFolder(path string) (string, error) {
 	return absFolder, nil
 }
 
-// createSession creates a new Claude Code session in a tmux pane.
-func createSession(folder string, agents []Agent, selfPaneID string) tea.Cmd {
+// createSession creates a new agent session in a tmux pane.
+func createSession(folder string, agents []Agent, selfPaneID string, profile AgentProfile) tea.Cmd {
 	return func() tea.Msg {
 		absFolder, err := validateFolder(folder)
 		if err != nil {
@@ -378,7 +382,7 @@ func createSession(folder string, agents []Agent, selfPaneID string) tea.Cmd {
 		dashboardSW := extractSessionWindow(selfTarget)
 		repoName := sanitizeWindowName(repoFromCwd(absFolder))
 		if repoName == "" {
-			repoName = "claude"
+			repoName = profile.Command
 		}
 
 		var newTarget string
@@ -413,22 +417,13 @@ func createSession(folder string, agents []Agent, selfPaneID string) tea.Cmd {
 			return createSessionMsg{err: err}
 		}
 
-		// Launch Claude in the new pane
-		if sendErr := TmuxSendKeys(newTarget, "claude"); sendErr != nil {
-			return createSessionMsg{err: fmt.Errorf("failed to launch claude: %w", sendErr)}
+		// Launch the agent in the new pane
+		if sendErr := TmuxSendKeys(newTarget, profile.Command); sendErr != nil {
+			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 
 		return createSessionMsg{target: newTarget}
 	}
-}
-
-// PlansDir returns the Claude plans directory (~/.claude/plans).
-func PlansDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp"
-	}
-	return filepath.Join(home, ".claude", "plans")
 }
 
 func (m model) loadPlan() tea.Cmd {
@@ -437,13 +432,15 @@ func (m model) loadPlan() tea.Cmd {
 		return nil
 	}
 	slug := ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(ConversationsDir(), slug)
+	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
 	sessionID := agent.SessionID
 	cwd := agent.Cwd
+	plansDir := m.cfg.Profile.PlansDir
+	sessionsDir := m.cfg.Profile.SessionsDir
 
 	return func() tea.Msg {
 		if sessionID == "" {
-			sessionID = FindSessionID(cwd)
+			sessionID = findSessionIDIn(sessionsDir, cwd)
 		}
 		if sessionID == "" {
 			return planMsg{content: ""}
@@ -452,14 +449,14 @@ func (m model) loadPlan() tea.Cmd {
 		if planSlug == "" {
 			return planMsg{content: ""}
 		}
-		content := ReadPlanContent(PlansDir(), planSlug)
+		content := ReadPlanContent(plansDir, planSlug)
 		return planMsg{content: content}
 	}
 }
 
-func openEditor(dir string) tea.Cmd {
+func openEditor(editor, dir string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("code", dir)
+		cmd := exec.Command(editor, dir)
 		return openEditorMsg{err: cmd.Start()}
 	}
 }

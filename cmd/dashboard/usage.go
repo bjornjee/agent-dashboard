@@ -109,7 +109,7 @@ func ReadUsage(projDir, sessionID string) Usage {
 }
 
 // ReadAllUsage reads usage for all agents and returns per-agent + total.
-func ReadAllUsage(agents []Agent) (map[string]Usage, Usage) {
+func ReadAllUsage(agents []Agent, projectsDir, sessionsDir string) (map[string]Usage, Usage) {
 	perAgent := make(map[string]Usage)
 	var total Usage
 
@@ -118,11 +118,11 @@ func ReadAllUsage(agents []Agent) (map[string]Usage, Usage) {
 			continue
 		}
 		slug := ProjectSlug(agent.Cwd)
-		projDir := filepath.Join(ConversationsDir(), slug)
+		projDir := filepath.Join(projectsDir, slug)
 
 		sessionID := agent.SessionID
 		if sessionID == "" {
-			sessionID = FindSessionID(agent.Cwd)
+			sessionID = findSessionIDIn(sessionsDir, agent.Cwd)
 		}
 		if sessionID == "" {
 			continue

@@ -49,15 +49,6 @@ type DB struct {
 	conn *sqlx.DB
 }
 
-// DefaultDBPath returns ~/.claude/agent-dashboard/usage.db.
-func DefaultDBPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp/agent-dashboard/usage.db"
-	}
-	return filepath.Join(home, ".claude", "agent-dashboard", "usage.db")
-}
-
 // OpenDB opens (or creates) the SQLite database and runs migrations.
 func OpenDB(path string) (*DB, error) {
 	if path != ":memory:" {
