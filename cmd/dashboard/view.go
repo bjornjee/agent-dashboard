@@ -137,12 +137,12 @@ func (m *model) updateRightContent() {
 
 	effState := agent.State
 
-	// Auto-show plan when agent is in plan-review state
-	if effState == "plan" && m.renderedPlan != "" {
+	// Auto-show plan when agent is in plan-review state (but not in reply mode)
+	if effState == "plan" && m.renderedPlan != "" && m.mode != modeReply {
 		m.planVisible = true
 	}
 
-	if m.planVisible && m.renderedPlan != "" {
+	if m.planVisible && m.renderedPlan != "" && m.mode != modeReply {
 		m.messageVP.SetContent(m.renderedPlan)
 	} else if isBlocked(effState) || isWaiting(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
