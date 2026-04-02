@@ -677,7 +677,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textInput.Placeholder = "Git folder path (e.g. ~/code/myrepo)..."
 		m.textInput.Focus()
 		if m.zEntries == nil {
-			m.zEntries = loadZEntries()
+			m.zEntries = loadZEntries(m.cfg.Profile.SessionsDir)
 		}
 		m.suggestions = filterZSuggestions("", m.zEntries, m.pathExists)
 		m.selectedSugg = 0

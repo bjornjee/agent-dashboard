@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -57,13 +58,61 @@ func loadZEntriesFromFile(path string) []zEntry {
 	return entries
 }
 
-// loadZEntries reads from the default ~/.z file.
-func loadZEntries() []zEntry {
-	home, err := os.UserHomeDir()
+// loadSessionEntries reads Claude Code session files and returns unique
+// project directories as zEntry values, suitable for the suggestion pipeline.
+func loadSessionEntries(sessionsDir string) []zEntry {
+	dirEntries, err := os.ReadDir(sessionsDir)
 	if err != nil {
 		return nil
 	}
-	return loadZEntriesFromFile(filepath.Join(home, ".z"))
+
+	// Deduplicate by cwd, keeping the most recent startedAt.
+	best := make(map[string]int64)
+	for _, e := range dirEntries {
+		if !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(sessionsDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var sf sessionFile
+		if json.Unmarshal(data, &sf) != nil || sf.Cwd == "" {
+			continue
+		}
+		if sf.StartedAt > best[sf.Cwd] {
+			best[sf.Cwd] = sf.StartedAt
+		}
+	}
+
+	entries := make([]zEntry, 0, len(best))
+	for cwd, startedAt := range best {
+		entries = append(entries, zEntry{
+			Path:      cwd,
+			Rank:      1,
+			Timestamp: startedAt / 1000, // ms → seconds
+		})
+	}
+	return entries
+}
+
+// loadZEntriesWithHome loads directory suggestions, trying ~/.z first and
+// falling back to Claude Code session history.
+func loadZEntriesWithHome(homeDir, sessionsDir string) []zEntry {
+	entries := loadZEntriesFromFile(filepath.Join(homeDir, ".z"))
+	if len(entries) > 0 {
+		return entries
+	}
+	return loadSessionEntries(sessionsDir)
+}
+
+// loadZEntries reads from the default ~/.z file, falling back to session entries.
+func loadZEntries(sessionsDir string) []zEntry {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return loadSessionEntries(sessionsDir)
+	}
+	return loadZEntriesWithHome(home, sessionsDir)
 }
 
 // frecency computes a frecency score combining rank and recency.
