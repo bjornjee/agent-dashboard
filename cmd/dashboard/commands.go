@@ -27,11 +27,11 @@ func (m model) captureSelected() tea.Cmd {
 		if target == "" {
 			return captureResultMsg{lines: nil}
 		}
-		lines, err := TmuxCapture(target, 15)
+		lines, err := TmuxCapture(target, 20)
 		if err != nil {
 			return captureResultMsg{lines: nil}
 		}
-		return captureResultMsg{lines: lines}
+		return captureResultMsg{lines: trimTrailingBlankLines(lines)}
 	}
 }
 

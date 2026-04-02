@@ -644,3 +644,50 @@ func TestHighlightLine(t *testing.T) {
 		}
 	})
 }
+
+func TestTrimTrailingBlankLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  []string
+	}{
+		{
+			name:  "no trailing blanks",
+			input: []string{"hello", "world"},
+			want:  []string{"hello", "world"},
+		},
+		{
+			name:  "trailing blanks",
+			input: []string{"hello", "world", "", "  ", ""},
+			want:  []string{"hello", "world"},
+		},
+		{
+			name:  "all blanks",
+			input: []string{"", "  ", ""},
+			want:  nil,
+		},
+		{
+			name:  "nil input",
+			input: nil,
+			want:  nil,
+		},
+		{
+			name:  "blanks in middle preserved",
+			input: []string{"hello", "", "world", ""},
+			want:  []string{"hello", "", "world"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := trimTrailingBlankLines(tt.input)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d lines, want %d", len(got), len(tt.want))
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("line %d: got %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
