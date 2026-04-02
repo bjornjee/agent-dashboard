@@ -950,3 +950,45 @@ func TestApplyIdleOverrides_PlanTakesPriorityOverQuestion(t *testing.T) {
 		t.Errorf("expected 'plan' to take priority over 'question', got %q", sf.Agents[sessionID].State)
 	}
 }
+
+func TestApplyIdleOverrides_OverridesPermissionWithPendingPlan(t *testing.T) {
+	sessionID := "sess-perm-plan"
+	// Agent called ExitPlanMode, hook reported "permission" because the plan
+	// selection menu looks like a permission prompt.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted for review"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "permission", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "plan" {
+		t.Errorf("expected state 'plan' (permission agent with pending ExitPlanMode), got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyIdleOverrides_LeavesPermissionAloneWhenNoPlan(t *testing.T) {
+	sessionID := "sess-perm-real"
+	// Real permission prompt — no ExitPlanMode in JSONL.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Write","input":{"path":"foo.txt"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "permission", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "permission" {
+		t.Errorf("expected state 'permission' unchanged (real permission, no plan), got %q", sf.Agents[sessionID].State)
+	}
+}
