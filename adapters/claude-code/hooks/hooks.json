@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "async": true,
+            "timeout": 5
+          }
+        ],
+        "description": "Register agent in dashboard on session start"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js\"",
+            "async": true,
+            "timeout": 3
+          }
+        ],
+        "description": "Fast state sync for dashboard"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js\"",
+            "async": true,
+            "timeout": 3
+          }
+        ],
+        "description": "Fast state sync for dashboard"
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js\"",
+            "async": true,
+            "timeout": 3
+          }
+        ],
+        "description": "Instant needs-attention detection for dashboard"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "async": true,
+            "timeout": 5
+          }
+        ],
+        "description": "Track subagent spawn in dashboard"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "async": true,
+            "timeout": 5
+          }
+        ],
+        "description": "Track subagent completion in dashboard"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "async": true,
+            "timeout": 5
+          }
+        ],
+        "description": "Update dashboard on agent stop"
+      }
+    ]
+  }
+}

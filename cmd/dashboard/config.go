@@ -12,7 +12,7 @@ type AgentProfile struct {
 	Name           string // Display name: "Claude Code"
 	Command        string // Binary to launch: "claude"
 	ConfigDir      string // Base config dir: ~/.claude
-	StateDir       string // Dashboard state: ~/.claude/agent-dashboard
+	StateDir       string // Dashboard state: ~/.agent-dashboard
 	ProjectsDir    string // Conversations: ~/.claude/projects
 	PlansDir       string // Plans: ~/.claude/plans
 	SessionsDir    string // Session index: ~/.claude/sessions
@@ -66,11 +66,17 @@ func detectEditor() string {
 func defaultClaudeProfile() AgentProfile {
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, ".claude")
+
+	stateDir := filepath.Join(home, ".agent-dashboard")
+	if env := os.Getenv("AGENT_DASHBOARD_DIR"); env != "" {
+		stateDir = env
+	}
+
 	return AgentProfile{
 		Name:           "Claude Code",
 		Command:        "claude",
 		ConfigDir:      base,
-		StateDir:       filepath.Join(base, "agent-dashboard"),
+		StateDir:       stateDir,
 		ProjectsDir:    filepath.Join(base, "projects"),
 		PlansDir:       filepath.Join(base, "plans"),
 		SessionsDir:    filepath.Join(base, "sessions"),
