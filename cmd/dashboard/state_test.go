@@ -825,9 +825,54 @@ func TestApplyIdleOverrides_OverridesIdlePrompt(t *testing.T) {
 	}
 }
 
-func TestApplyIdleOverrides_LeavesNonIdleAlone(t *testing.T) {
-	sessionID := "sess-running"
+func TestApplyIdleOverrides_OverridesRunningWithPendingPlan(t *testing.T) {
+	sessionID := "sess-running-plan"
+	// Agent called ExitPlanMode, PostToolUse hook set state to "running" (race with Stop hook).
+	// The system-generated tool_result should not count as human input.
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted for review"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "running", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "plan" {
+		t.Errorf("expected state 'plan' (running agent with pending ExitPlanMode), got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyIdleOverrides_OverridesRunningWithPendingQuestion(t *testing.T) {
+	sessionID := "sess-running-question"
+	// Agent called AskUserQuestion, PostToolUse hook set state to "running".
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":""}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := StateFile{
+		Agents: map[string]Agent{
+			sessionID: {SessionID: sessionID, State: "running", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "question" {
+		t.Errorf("expected state 'question' (running agent with pending AskUserQuestion), got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyIdleOverrides_LeavesRunningAloneWhenNoBlocker(t *testing.T) {
+	sessionID := "sess-running-ok"
+	// Agent is genuinely running — no pending plan or question.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"file.txt"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
 	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
 

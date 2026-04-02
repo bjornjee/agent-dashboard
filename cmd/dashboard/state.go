@@ -223,12 +223,16 @@ func ApplyPinnedStates(sf *StateFile) {
 	}
 }
 
-// ApplyIdleOverrides checks each idle_prompt agent for a pending plan review
-// (ExitPlanMode) or pending question (AskUserQuestion) and overrides the
-// state accordingly. Plan takes priority over question.
+// ApplyIdleOverrides checks each idle_prompt or running agent for a pending
+// plan review (ExitPlanMode) or pending question (AskUserQuestion) and
+// overrides the state accordingly. Plan takes priority over question.
+// Running agents are included because async hooks can race: PostToolUse
+// (which sets "running") may fire after the Stop hook (which sets
+// "idle_prompt"), leaving the agent stuck at "running" when it is actually
+// waiting at the prompt.
 func ApplyIdleOverrides(sf *StateFile, projectsDir string) {
 	for key, agent := range sf.Agents {
-		if agent.State != "idle_prompt" {
+		if agent.State != "idle_prompt" && agent.State != "running" {
 			continue
 		}
 		cwd := agent.Cwd
