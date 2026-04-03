@@ -3,7 +3,25 @@
     ".": {
       "release-type": "go",
       "extra-files": [
-        "VERSION"
+        {
+          "type": "generic",
+          "path": "VERSION"
+        },
+        {
+          "type": "json",
+          "path": "adapters/claude-code/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "adapters/claude-code/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".claude-plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
+        }
       ]
     }
   }
