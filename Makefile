@@ -1,4 +1,4 @@
-.PHONY: build test install clean seed help
+.PHONY: build fmt vet test install clean seed help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || cat VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -7,7 +7,19 @@ ADAPTER ?= claude-code
 build: ## Build the dashboard binary
 	go build $(LDFLAGS) -o bin/agent-dashboard ./cmd/dashboard/
 
-test: ## Run all tests
+fmt: ## Auto-format Go source files
+	gofmt -w .
+
+vet: ## Run go vet (checks formatting + vets)
+	@unformatted=$$(gofmt -l .); \
+	  if [ -n "$$unformatted" ]; then \
+	    echo "Unformatted files (run make fmt):"; \
+	    echo "$$unformatted"; \
+	    exit 1; \
+	  fi
+	go vet ./...
+
+test: vet ## Run all tests (vets first)
 	go test -race ./cmd/dashboard/...
 
 install: ## Build and install binary + adapter (ADAPTER=claude-code)

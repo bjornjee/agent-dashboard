@@ -107,9 +107,9 @@ type model struct {
 	diffFiles         []*gitdiff.File
 	diffTreeEntries   []diffTreeEntry
 	selectedDiffFile  int
-	diffCursor        int              // cursor position in visible tree entries
-	diffCollapsedDirs map[string]bool  // dirKey → collapsed
-	diffExpandedAll   bool             // expand/collapse all context blocks
+	diffCursor        int             // cursor position in visible tree entries
+	diffCollapsedDirs map[string]bool // dirKey → collapsed
+	diffExpandedAll   bool            // expand/collapse all context blocks
 	diffFileVP        viewport.Model
 	diffContentVP     viewport.Model
 	diffFuncCtx       []string // per-row function context for sticky header
@@ -332,37 +332,37 @@ func newModel(cfg Config, db *DB) model {
 	hasSkills := len(skillList) > 0 && strings.Contains(cfg.Profile.Command, "claude")
 
 	return model{
-		cfg:             cfg,
-		agents:          nil,
-		statePath:       cfg.Profile.StateDir,
-		selfPaneID:      "",
-		tmuxAvailable:   false,
-		tmuxReady:       &atomic.Bool{},
-		textInput:       ti,
-		spawningSpinner: s,
-		startupSpinner:  ss,
-		startupDone:     false,
-		mode:            modeNormal,
-		db:              db,
-		agentListVP:     viewport.New(0, 0),
-		filesVP:         viewport.New(0, 0),
-		historyVP:       viewport.New(0, 0),
-		messageVP:       viewport.New(0, 0),
-		focusedVP:       focusAgentList,
+		cfg:               cfg,
+		agents:            nil,
+		statePath:         cfg.Profile.StateDir,
+		selfPaneID:        "",
+		tmuxAvailable:     false,
+		tmuxReady:         &atomic.Bool{},
+		textInput:         ti,
+		spawningSpinner:   s,
+		startupSpinner:    ss,
+		startupDone:       false,
+		mode:              modeNormal,
+		db:                db,
+		agentListVP:       viewport.New(0, 0),
+		filesVP:           viewport.New(0, 0),
+		historyVP:         viewport.New(0, 0),
+		messageVP:         viewport.New(0, 0),
+		focusedVP:         focusAgentList,
 		diffFileVP:        viewport.New(0, 0),
 		diffContentVP:     viewport.New(0, 0),
 		diffCollapsedDirs: make(map[string]bool),
 		diffFilterInput:   dfi,
-		agentCaches:     make(map[string]*agentCache),
-		agentSubagents:  make(map[string][]SubagentInfo),
-		collapsed:       make(map[string]bool),
-		dismissed:       make(map[string]bool),
-		quote:           "",
-		quoteAuthor:     "",
-		nowFunc:         time.Now,
-		pathExists:      dirExists,
-		availableSkills: skillList,
-		skillsAvailable: hasSkills,
+		agentCaches:       make(map[string]*agentCache),
+		agentSubagents:    make(map[string][]SubagentInfo),
+		collapsed:         make(map[string]bool),
+		dismissed:         make(map[string]bool),
+		quote:             "",
+		quoteAuthor:       "",
+		nowFunc:           time.Now,
+		pathExists:        dirExists,
+		availableSkills:   skillList,
+		skillsAvailable:   hasSkills,
 	}
 }
 

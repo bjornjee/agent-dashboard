@@ -227,7 +227,6 @@ func (m model) dirFileCount(dirKey string) int {
 	return count
 }
 
-
 // -- Syntax highlighting --
 
 // syntaxHighlightLine applies chroma syntax highlighting to a single line of code.
