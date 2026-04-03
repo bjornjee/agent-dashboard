@@ -533,28 +533,6 @@ func TestLaunchHealthMsg_Warning(t *testing.T) {
 	}
 }
 
-func TestLaunchHealthMsg_HealthyTriggersLoadState(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), nil)
-	m.selfPaneID = "%0"
-	m.width = 120
-	m.height = 40
-	m.resizeViewports()
-	m.tmuxAvailable = true
-	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning"},
-	}
-	m.buildTree()
-
-	// Healthy launch (no warning) should still return a command (loadState)
-	// so the spawning placeholder gets replaced by real agent data.
-	_, cmd := m.Update(launchHealthMsg{
-		target: "main:2.0",
-	})
-	if cmd == nil {
-		t.Error("healthy launchHealthMsg should return a loadState command, got nil")
-	}
-}
-
 func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
 	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.selfPaneID = "%0"
@@ -598,8 +576,8 @@ func TestStateUpdate_ExpiresSpawningAfterTimeout(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.tmuxAvailable = true
-	m.tickCount = 25
-	m.spawningTicks["main:2.0"] = 5 // spawned 20 ticks ago (> 15s timeout)
+	m.tickCount = 55
+	m.spawningTicks["main:2.0"] = 5 // spawned 50 ticks ago (> 45s timeout)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/existing"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/new-project"},

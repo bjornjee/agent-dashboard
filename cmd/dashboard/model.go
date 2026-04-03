@@ -428,8 +428,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		prevTarget, prevSubID := m.selectedIdentity()
 		newAgents := SortedAgents(msg.state, m.selfPaneID)
 		// Preserve spawning placeholders that don't yet have a state file,
-		// but expire them after 15 seconds to avoid zombies.
-		const maxSpawningTicks = 15
+		// but expire them after enough time for loadState to run (every 30s).
+		const maxSpawningTicks = 45
 		newTargets := make(map[string]bool, len(newAgents))
 		for _, a := range newAgents {
 			newTargets[a.Target] = true
@@ -588,7 +588,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
-		if m.tickCount%30 == 0 || len(m.spawningTicks) > 0 {
+		if m.tickCount%30 == 0 {
 			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
 		}
 		return m, tea.Batch(cmds...)
@@ -727,9 +727,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
 			m.statusMsgTick = m.tickCount
 		}
-		// Trigger loadState so the spawning placeholder gets replaced
-		// by real agent data once the state file appears.
-		return m, loadState(m.statePath, m.tmuxAvailable)
+		return m, nil
 
 	case closeResultMsg:
 		if msg.err != nil {
