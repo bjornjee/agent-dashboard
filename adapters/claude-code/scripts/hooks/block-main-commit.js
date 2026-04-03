@@ -8,6 +8,10 @@
 'use strict';
 
 const { execSync } = require('node:child_process');
+const path = require('node:path');
+
+const pluginRoot = path.resolve(__dirname, '..', '..');
+const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
 function isCommitOnMain(command, branch) {
   if (branch !== 'main' && branch !== 'master') return false;
@@ -38,13 +42,13 @@ if (require.main === module && !process.stdin.isTTY) {
         return;
       }
 
-      // Get current branch
+      // Get current branch — use cwd from command's cd prefix if present (worktree support)
+      const effectiveCwd = extractCwdFromCommand(command);
       let branch;
       try {
-        branch = execSync('git branch --show-current', {
-          encoding: 'utf8',
-          timeout: 3000,
-        }).trim();
+        const opts = { encoding: 'utf8', timeout: 3000 };
+        if (effectiveCwd) opts.cwd = effectiveCwd;
+        branch = execSync('git branch --show-current', opts).trim();
       } catch {
         // Can't determine branch — let it through
         process.stdout.write(data);
