@@ -305,6 +305,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			if text != "" {
 				if agent := m.selectedAgent(); agent != nil {
+					delete(m.pendingReplies, agent.TmuxPaneID)
 					return m, sendReply(agent.TmuxPaneID, text)
 				}
 			}
@@ -312,6 +313,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.mode = modeNormal
 			m.textInput.Reset()
+			if agent := m.selectedAgent(); agent != nil {
+				delete(m.pendingReplies, agent.TmuxPaneID)
+			}
 			m.updateRightContent()
 			return m, nil
 		default:
@@ -364,9 +368,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			cmds := []tea.Cmd{
 				pinAgentStateCmd(m.statePath, sessionID, "merged"),
-				sendReply(paneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
 			}
-			m.statusMsg = "Marked as merged — cleanup sent"
+			m.pendingReplies[paneID] = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
+			m.statusMsg = "Marked as merged — press r to send cleanup"
 			m.statusMsgTick = m.tickCount
 			return m, tea.Batch(cmds...)
 		case "n", "esc":
@@ -682,6 +686,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3"))
 			}
 			m.mode = modeReply
+			// Pre-fill with pending reply if one exists for this agent
+			if pending, ok := m.pendingReplies[agent.TmuxPaneID]; ok {
+				m.textInput.SetValue(pending)
+				m.textInput.CursorEnd()
+			}
 			m.textInput.Focus()
 			m.updateRightContent()
 			m.messageVP.GotoBottom()
