@@ -713,6 +713,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		m.updateLeftContent()
 		m.updateRightContent()
 		return m, tea.Batch(
 			loadState(m.statePath, m.tmuxAvailable),
