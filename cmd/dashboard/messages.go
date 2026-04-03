@@ -52,8 +52,9 @@ type closeResultMsg struct {
 	err error
 }
 type createSessionMsg struct {
-	target string
-	err    error
+	target   string
+	err      error
+	shellErr error // non-fatal shell startup error (zsh upgrade, compinit, etc.)
 }
 
 // -- Modes --

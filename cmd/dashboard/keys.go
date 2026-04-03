@@ -256,6 +256,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			m.statusMsg = "spawning"
 			m.statusMsgTick = -1 // don't auto-clear
+			m.spawningTickStart = 0
 			return m, tea.Batch(
 				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, skill, message),
 				m.spawningSpinner.Tick,

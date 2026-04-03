@@ -460,3 +460,80 @@ func TestExtractSessionWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestDetectShellError(t *testing.T) {
+	tests := []struct {
+		name    string
+		lines   []string
+		wantErr bool
+		wantMsg string
+	}{
+		{
+			name:    "clean startup",
+			lines:   []string{"$ claude --prompt 'hello'", ""},
+			wantErr: false,
+		},
+		{
+			name:    "empty pane",
+			lines:   []string{"", ""},
+			wantErr: false,
+		},
+		{
+			name:    "zsh compinit error",
+			lines:   []string{"zsh compinit: insecure directories, run compaudit for list.", "$ "},
+			wantErr: true,
+			wantMsg: "zsh compinit",
+		},
+		{
+			name:    "zsh command not found",
+			lines:   []string{"zsh: command not found: claude", "$ "},
+			wantErr: true,
+			wantMsg: "zsh:",
+		},
+		{
+			name:    "compdef error",
+			lines:   []string{"compdef: unknown command or service: git", "$ "},
+			wantErr: true,
+			wantMsg: "compdef:",
+		},
+		{
+			name:    "oh-my-zsh upgrade prompt",
+			lines:   []string{"[Oh My Zsh] Would you like to update? [Y/n]", ""},
+			wantErr: true,
+			wantMsg: "Oh My Zsh",
+		},
+		{
+			name:    "p10k instant prompt error",
+			lines:   []string{"[WARNING]: Console output during zsh initialization detected.", ""},
+			wantErr: true,
+			wantMsg: "Console output during zsh initialization",
+		},
+		{
+			name:    "bash syntax error",
+			lines:   []string{"/Users/user/.bashrc: line 42: syntax error near unexpected token", "$ "},
+			wantErr: true,
+			wantMsg: "syntax error",
+		},
+		{
+			name:    "permission denied on rc file",
+			lines:   []string{"/Users/user/.zshrc: permission denied", "$ "},
+			wantErr: true,
+			wantMsg: "permission denied",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := detectShellError(tt.lines)
+			if tt.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), tt.wantMsg) {
+				t.Errorf("error %q should contain %q", err.Error(), tt.wantMsg)
+			}
+		})
+	}
+}

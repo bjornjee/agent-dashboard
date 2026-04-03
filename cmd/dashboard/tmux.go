@@ -447,3 +447,50 @@ func extractSessionWindow(target string) string {
 	}
 	return target[:lastDot]
 }
+
+// shellErrorPatterns are substrings that indicate a shell initialization error
+// which would prevent the spawned command from executing. Patterns are matched
+// case-insensitively against the start of each line to reduce false positives.
+var shellErrorPrefixes = []string{
+	"zsh compinit:",
+	"zsh:",
+	"compdef:",
+	"[oh my zsh]",
+	"[warning]: console output during zsh initialization",
+}
+
+// shellErrorSubstrings are broader patterns matched anywhere in the line,
+// but only for lines that look like shell errors (contain : or path-like prefixes).
+var shellErrorSubstrings = []string{
+	"syntax error near unexpected token",
+}
+
+// detectShellError checks captured pane lines for common shell startup errors.
+// Returns an error describing the issue if one is found, nil otherwise.
+func detectShellError(lines []string) error {
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		for _, prefix := range shellErrorPrefixes {
+			if strings.HasPrefix(lower, prefix) {
+				return fmt.Errorf("shell error: %s", trimmed)
+			}
+		}
+		// Check broader patterns only for lines that look like shell output
+		// (e.g. "/path/to/.zshrc: permission denied")
+		if strings.Contains(lower, "rc:") || strings.Contains(lower, "profile:") {
+			if strings.Contains(lower, "permission denied") {
+				return fmt.Errorf("shell error: %s", trimmed)
+			}
+		}
+		for _, sub := range shellErrorSubstrings {
+			if strings.Contains(lower, sub) {
+				return fmt.Errorf("shell error: %s", trimmed)
+			}
+		}
+	}
+	return nil
+}

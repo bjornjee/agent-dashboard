@@ -39,34 +39,36 @@ type agentCache struct {
 // -- Model --
 
 type model struct {
-	cfg             Config
-	agents          []Agent
-	selected        int // index into treeNodes
-	treeNodes       []treeNode
-	width, height   int
-	mode            int
-	textInput       textinput.Model
-	tmuxAvailable   bool
-	ghAvailable     bool
-	openPRSessionID string       // stored for deferred pin in openPRMsg handler
-	mergeSessionID  string       // stored for async merge callback
-	mergePaneID     string       // stored for async merge callback
-	tmuxReady       *atomic.Bool // shared with watcher goroutine
-	statePath       string
-	selfPaneID      string
-	statusMsg       string
-	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
-	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
-	startupDone     bool          // set true when startupMsg arrives
-	startupSpinner  spinner.Model // shown in agent list until startupMsg
-	capturedLines   []string
-	conversation    []ConversationEntry
-	tickCount       int
-	agentUsage      map[string]Usage
-	totalUsage      Usage
-	db              *DB
-	dbTotalCost     float64
-	dbTodayCost     float64
+	cfg               Config
+	agents            []Agent
+	selected          int // index into treeNodes
+	treeNodes         []treeNode
+	width, height     int
+	mode              int
+	textInput         textinput.Model
+	tmuxAvailable     bool
+	ghAvailable       bool
+	openPRSessionID   string       // stored for deferred pin in openPRMsg handler
+	mergeSessionID    string       // stored for async merge callback
+	mergePaneID       string       // stored for async merge callback
+	tmuxReady         *atomic.Bool // shared with watcher goroutine
+	statePath         string
+	selfPaneID        string
+	statusMsg         string
+	statusMsgTick     int           // tick when statusMsg was set; clears after 3s
+	spawningSpinner   spinner.Model // bouncing-ball spinner for "Spawning agent..."
+	spawningTarget    string        // target being spawned; cleared when it appears in state
+	spawningTickStart int           // tick counter for spawning timeout
+	startupDone       bool          // set true when startupMsg arrives
+	startupSpinner    spinner.Model // shown in agent list until startupMsg
+	capturedLines     []string
+	conversation      []ConversationEntry
+	tickCount         int
+	agentUsage        map[string]Usage
+	totalUsage        Usage
+	db                *DB
+	dbTotalCost       float64
+	dbTodayCost       float64
 
 	// History render cache (Layers 2+3)
 	renderedHistory   string // cached output of historyContent()
@@ -425,6 +427,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
 		m.agents = SortedAgents(msg.state, m.selfPaneID)
+		// Clear spawning spinner once the spawned agent appears in state
+		if m.spawningTarget != "" {
+			for _, a := range m.agents {
+				if a.Target == m.spawningTarget {
+					m.spawningTarget = ""
+					m.statusMsg = ""
+					break
+				}
+			}
+		}
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
 		for _, a := range m.agents {
@@ -520,6 +532,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.tickCount++
+		// Spawning spinner timeout: if agent hasn't appeared in state after 30s, give up
+		if m.spawningTarget != "" && m.statusMsg == "spawning" && m.statusMsgTick == -1 {
+			m.spawningTickStart++
+			if m.spawningTickStart >= 30 {
+				m.spawningTarget = ""
+				m.statusMsg = ""
+				m.spawningTickStart = 0
+			}
+		}
 		// Auto-clear status message: errors get 6s, others 3s
 		if m.statusMsg != "" && m.statusMsgTick >= 0 {
 			ttl := 3
@@ -605,10 +626,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Create failed: %v", msg.err)
 			m.statusMsgTick = m.tickCount
+			m.spawningTarget = ""
 			m.mode = modeNormal
 			return m, nil
 		}
-		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
+		if msg.shellErr != nil {
+			// Shell had startup errors — show warning, don't wait for agent
+			m.statusMsg = fmt.Sprintf("Shell warning: %v", msg.shellErr)
+			m.statusMsgTick = m.tickCount
+		} else {
+			m.spawningTarget = msg.target
+			m.statusMsgTick = -1 // don't auto-clear; cleared when agent appears in state
+		}
 
 		// Insert a placeholder agent immediately so the panel doesn't jump
 		// when the state file appears on the next tick. The placeholder is

@@ -515,6 +515,14 @@ func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, p
 			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 
+		// Brief pause to let the shell initialize, then check for startup errors
+		time.Sleep(500 * time.Millisecond)
+		if lines, captureErr := TmuxCapture(newTarget, 10); captureErr == nil {
+			if shellErr := detectShellError(lines); shellErr != nil {
+				return createSessionMsg{target: newTarget, shellErr: shellErr}
+			}
+		}
+
 		return createSessionMsg{target: newTarget}
 	}
 }

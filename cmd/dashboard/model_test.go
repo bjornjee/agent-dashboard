@@ -1730,3 +1730,102 @@ func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
 		t.Error("message viewport should NOT auto-scroll when plan is visible — user may be reading the plan")
 	}
 }
+
+func TestSpawningSpinner_PersistsUntilAgentAppears(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.startupDone = true
+
+	// Simulate the spawning state set by keys.go when user presses Enter
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	// Simulate createSessionMsg arriving — sets spawningTarget
+	result, _ := m.Update(createSessionMsg{target: "main:3.0"})
+	m = result.(model)
+
+	if m.spawningTarget != "main:3.0" {
+		t.Fatalf("expected spawningTarget=main:3.0, got %q", m.spawningTarget)
+	}
+	if m.statusMsg != "spawning" {
+		t.Fatalf("expected statusMsg=spawning, got %q", m.statusMsg)
+	}
+
+	// Simulate 10 ticks (10 seconds) — spinner should NOT be cleared
+	// because agent hasn't appeared yet
+	for i := 0; i < 10; i++ {
+		result, _ = m.Update(tickMsg{})
+		m = result.(model)
+	}
+
+	if m.statusMsg != "spawning" {
+		t.Error("spawning spinner should persist until agent appears in state, got cleared after ticks")
+	}
+
+	// Now simulate stateUpdatedMsg with the target present
+	result, _ = m.Update(stateUpdatedMsg{state: StateFile{Agents: map[string]Agent{
+		"main:3.0": {Target: "main:3.0", Window: 3, Pane: 0, State: "running", Cwd: "/tmp/project"},
+	}}})
+	m = result.(model)
+
+	if m.spawningTarget != "" {
+		t.Errorf("spawningTarget should be cleared after agent appears, got %q", m.spawningTarget)
+	}
+	if m.statusMsg == "spawning" {
+		t.Error("spawning status should be cleared after agent appears")
+	}
+}
+
+func TestSpawningSpinner_ClearsOnTimeout(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.startupDone = true
+
+	// Simulate the spawning state set by keys.go
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	// Simulate createSessionMsg
+	result, _ := m.Update(createSessionMsg{target: "main:3.0"})
+	m = result.(model)
+
+	// Simulate 30 ticks (30 seconds) — should eventually timeout
+	for i := 0; i < 30; i++ {
+		result, _ = m.Update(tickMsg{})
+		m = result.(model)
+	}
+
+	if m.statusMsg == "spawning" {
+		t.Error("spawning spinner should timeout after 30 seconds")
+	}
+}
+
+func TestSpawningSpinner_ClearsOnError(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.startupDone = true
+
+	// Simulate the spawning state set by keys.go
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	// Simulate createSessionMsg with error
+	result, _ := m.Update(createSessionMsg{err: fmt.Errorf("zsh: command not found: claude")})
+	m = result.(model)
+
+	if m.spawningTarget != "" {
+		t.Errorf("spawningTarget should be empty on error, got %q", m.spawningTarget)
+	}
+	if m.statusMsg == "spawning" {
+		t.Error("spawning status should be replaced with error message")
+	}
+	if !strings.Contains(m.statusMsg, "Create failed") {
+		t.Errorf("expected error status message, got %q", m.statusMsg)
+	}
+}
