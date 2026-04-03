@@ -8,6 +8,29 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// debugLogKey writes a line to the debug key log file (if open).
+// Format: timestamp | mode | key_string | key_type | runes_hex | mouse_age | phantom
+func (m model) debugLogKey(msg tea.KeyMsg) {
+	if m.debugKeyLog == nil {
+		return
+	}
+	var mouseAge string
+	if m.lastMouseAt.IsZero() {
+		mouseAge = "never"
+	} else {
+		mouseAge = fmt.Sprintf("%dms", time.Since(m.lastMouseAt).Milliseconds())
+	}
+	runeHex := ""
+	for i, r := range msg.Runes {
+		if i > 0 {
+			runeHex += ","
+		}
+		runeHex += fmt.Sprintf("0x%04x", r)
+	}
+	fmt.Fprintf(m.debugKeyLog, "%s | mode=%d | key=%q | type=%d | runes=[%s] | mouse_age=%s | phantom=%v\n",
+		time.Now().Format("15:04:05.000"), m.mode, msg.String(), msg.Type, runeHex, mouseAge, m.isPhantomKey())
+}
+
 // confirmCooldown is the minimum time between entering a confirmation mode
 // and accepting a confirmation key. Phantom keystrokes from terminal escape
 // sequences arrive within microseconds; real users take at least 200-300ms.
@@ -27,6 +50,10 @@ func (m model) isPhantomKey() bool {
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	m.lastMouseAt = time.Now()
+	if m.debugKeyLog != nil {
+		fmt.Fprintf(m.debugKeyLog, "%s | MOUSE | button=%d action=%d x=%d y=%d\n",
+			time.Now().Format("15:04:05.000"), msg.Button, msg.Action, msg.X, msg.Y)
+	}
 
 	// Help overlay: swallow mouse events
 	if m.helpVisible {
@@ -128,6 +155,7 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.debugLogKey(msg)
 	key := msg.String()
 
 	// Create folder mode

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -150,6 +151,10 @@ type model struct {
 	// Key events arriving within mouseKeyCooldown of a mouse event are
 	// treated as phantom keystrokes from fragmented escape sequences.
 	lastMouseAt time.Time
+
+	// debugKeyLog is an open file for logging raw key events.
+	// Set to nil to disable. Written by debugLogKey in keys.go.
+	debugKeyLog *os.File
 
 	// Z-plugin suggestions for create folder mode
 	zEntries     []zEntry // cached z entries from ~/.z
@@ -814,6 +819,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffCursor = 0
 		m.diffVisible = true
 		m.updateDiffContent()
+		return m, nil
+
+	case tea.FocusMsg:
+		if m.debugKeyLog != nil {
+			fmt.Fprintf(m.debugKeyLog, "%s | FOCUS_IN\n", time.Now().Format("15:04:05.000"))
+		}
+		return m, nil
+
+	case tea.BlurMsg:
+		if m.debugKeyLog != nil {
+			fmt.Fprintf(m.debugKeyLog, "%s | FOCUS_OUT\n", time.Now().Format("15:04:05.000"))
+		}
 		return m, nil
 
 	case tea.MouseMsg:
