@@ -14,6 +14,15 @@ func TestDefaultSettings(t *testing.T) {
 	if !s.Banner.ShowQuote {
 		t.Error("ShowQuote should default to true")
 	}
+	if s.Notifications.Enabled {
+		t.Error("Notifications.Enabled should default to false")
+	}
+	if s.Notifications.Sound {
+		t.Error("Notifications.Sound should default to false")
+	}
+	if s.Notifications.SilentEvents {
+		t.Error("Notifications.SilentEvents should default to false")
+	}
 }
 
 func TestLoadSettings_MissingFile(t *testing.T) {
@@ -28,6 +37,11 @@ func TestLoadSettings_ValidTOML(t *testing.T) {
 	content := `[banner]
 show_mascot = false
 show_quote = false
+
+[notifications]
+enabled       = true
+sound         = true
+silent_events = true
 `
 	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -39,6 +53,15 @@ show_quote = false
 	}
 	if s.Banner.ShowQuote {
 		t.Error("ShowQuote should be false")
+	}
+	if !s.Notifications.Enabled {
+		t.Error("Notifications.Enabled should be true")
+	}
+	if !s.Notifications.Sound {
+		t.Error("Notifications.Sound should be true")
+	}
+	if !s.Notifications.SilentEvents {
+		t.Error("Notifications.SilentEvents should be true")
 	}
 }
 

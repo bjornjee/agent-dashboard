@@ -14,17 +14,30 @@ type BannerSettings struct {
 	ShowQuote  bool `toml:"show_quote"`
 }
 
-// Settings holds all user-facing configuration loaded from settings.toml.
-type Settings struct {
-	Banner BannerSettings `toml:"banner"`
+// NotificationSettings controls desktop notifications sent by adapter hooks.
+type NotificationSettings struct {
+	Enabled      bool `toml:"enabled"`
+	Sound        bool `toml:"sound"`
+	SilentEvents bool `toml:"silent_events"`
 }
 
-// DefaultSettings returns settings with everything enabled.
+// Settings holds all user-facing configuration loaded from settings.toml.
+type Settings struct {
+	Banner        BannerSettings       `toml:"banner"`
+	Notifications NotificationSettings `toml:"notifications"`
+}
+
+// DefaultSettings returns settings with sensible defaults.
 func DefaultSettings() Settings {
 	return Settings{
 		Banner: BannerSettings{
 			ShowMascot: true,
 			ShowQuote:  true,
+		},
+		Notifications: NotificationSettings{
+			Enabled:      false,
+			Sound:        false,
+			SilentEvents: false,
 		},
 	}
 }

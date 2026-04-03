@@ -90,6 +90,11 @@ if [ ! -f "$SETTINGS_FILE" ]; then
 [banner]
 show_mascot = true   # show the axolotl pixel art
 show_quote  = true   # show the daily quote
+
+[notifications]
+enabled       = false  # enable desktop notifications
+sound         = false  # play alert sound on attention events
+silent_events = false  # show notification for non-alerting stops
 TOML
   echo "  Created $SETTINGS_FILE"
 else
