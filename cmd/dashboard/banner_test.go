@@ -165,6 +165,22 @@ func TestFormatQuote_FallbackFitsOneLine(t *testing.T) {
 	}
 }
 
+func TestRenderBanner_ContainsVersion(t *testing.T) {
+	Version = "1.2.3"
+	defer func() { Version = "dev" }()
+
+	m := newModel(testConfig(""), "", nil)
+	m.width = 120
+	m.nowFunc = func() time.Time {
+		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
+	}
+	m.quote = "Test"
+	out := m.renderBanner()
+	if !strings.Contains(out, "v1.2.3") {
+		t.Fatalf("banner missing version label, got:\n%s", out)
+	}
+}
+
 func TestRenderAxolotl_CorrectHeight(t *testing.T) {
 	art := renderAxolotl()
 	lines := strings.Split(art, "\n")
