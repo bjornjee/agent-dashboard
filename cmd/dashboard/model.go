@@ -48,9 +48,9 @@ type model struct {
 	textInput       textinput.Model
 	tmuxAvailable   bool
 	ghAvailable     bool
-	openPRSessionID string // stored for deferred pin in openPRMsg handler
-	mergeSessionID  string // stored for async merge callback
-	mergePaneID     string // stored for async merge callback
+	openPRSessionID string       // stored for deferred pin in openPRMsg handler
+	mergeSessionID  string       // stored for async merge callback
+	mergePaneID     string       // stored for async merge callback
 	tmuxReady       *atomic.Bool // shared with watcher goroutine
 	statePath       string
 	selfPaneID      string
