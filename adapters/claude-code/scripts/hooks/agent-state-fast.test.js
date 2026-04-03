@@ -266,6 +266,32 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update, null);
   });
 
+  it('preserves pinned_state "pr" even when state differs', () => {
+    // Dashboard pins set pinned_state but state may have been overwritten.
+    // The guard should check pinned_state too.
+    const existing = {
+      target: 'main:1.0',
+      state: 'idle_prompt',
+      pinned_state: 'pr',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'should not overwrite when pinned_state is pr');
+    assert.equal(update, null);
+  });
+
   it('allows "permission" to override "pr" state', () => {
     const existing = {
       target: 'main:1.0',

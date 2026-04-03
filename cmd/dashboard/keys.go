@@ -639,21 +639,34 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {
 			cmds := []tea.Cmd{openPR(agent.EffectiveDir(), agent.Branch)}
-			// Always pin to PR state — pressing "g" is explicit user intent
-			cmds = append(cmds, pinAgentStateCmd(m.statePath, agent.SessionID, "pr"))
+			if m.ghAvailable {
+				// Defer pinning to openPRMsg handler — only pin when PR actually exists
+				m.openPRSessionID = agent.SessionID
+			} else {
+				// No gh: pin immediately (manual workflow, backward compat)
+				cmds = append(cmds, pinAgentStateCmd(m.statePath, agent.SessionID, "pr"))
+			}
 			return m, tea.Batch(cmds...)
 		}
 	case "m":
-		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && m.tmuxAvailable {
-			if isPR(agent.State) || isReview(agent.State) {
-				cmds := []tea.Cmd{
-					pinAgentStateCmd(m.statePath, agent.SessionID, "merged"),
-					sendReply(agent.TmuxPaneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
-				}
-				m.statusMsg = "Marked as merged — cleanup sent"
-				m.statusMsgTick = 3
-				return m, tea.Batch(cmds...)
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && m.tmuxAvailable &&
+			isPR(agent.State) && agent.EffectiveDir() != "" && agent.Branch != "" {
+			if m.ghAvailable {
+				// Merge via gh CLI — defer pin to mergePRMsg handler
+				m.mergeSessionID = agent.SessionID
+				m.mergePaneID = agent.TmuxPaneID
+				m.statusMsg = "Merging PR..."
+				m.statusMsgTick = m.tickCount
+				return m, mergePR(agent.EffectiveDir(), agent.Branch)
 			}
+			// No gh: pin immediately + send cleanup (manual workflow)
+			cmds := []tea.Cmd{
+				pinAgentStateCmd(m.statePath, agent.SessionID, "merged"),
+				sendReply(agent.TmuxPaneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
+			}
+			m.statusMsg = "Marked as merged — cleanup sent"
+			m.statusMsgTick = 3
+			return m, tea.Batch(cmds...)
 		}
 	case "h":
 		m.helpVisible = true

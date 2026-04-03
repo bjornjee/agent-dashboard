@@ -895,7 +895,7 @@ func (m model) renderRightPanel() string {
 					" " + helpStyle.Render(strings.Repeat("─", 9))
 			} else if isMerged(rpEffState) {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(mergedColor).Bold(true).
-					Render("── Merged (m to cleanup, x to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP)
+					Render("── Merged (x to close)") + focusMarker(focusMessage) + scrollHint(m.messageVP)
 			} else if isPR(rpEffState) {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(prColor).Bold(true).
 					Render("── PR open (m to merge)") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
@@ -1118,7 +1118,11 @@ func (m model) renderHelpOverlay() string {
 	lines = append(lines, line("e", "Open editor"))
 	lines = append(lines, line("a", "Create new session"))
 	lines = append(lines, line("x", "Close/dismiss agent"))
-	lines = append(lines, line("m", "Mark merged + send cleanup"))
+	if m.ghAvailable {
+		lines = append(lines, line("m", "Merge PR (squash) + cleanup"))
+	} else {
+		lines = append(lines, line("m", "Mark merged + send cleanup"))
+	}
 	lines = append(lines, line("c", "Collapse/expand subagents"))
 	lines = append(lines, "")
 

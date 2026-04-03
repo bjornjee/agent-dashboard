@@ -31,7 +31,12 @@ type subagentsMsg struct {
 }
 type planMsg struct{ content string }
 type openEditorMsg struct{ err error }
-type openPRMsg struct{ err error }
+type openPRMsg struct {
+	err   error
+	hasPR bool // true when an existing PR was found (vs compare URL)
+}
+type mergePRMsg struct{ err error }
+type ghAvailableMsg struct{ available bool }
 type pinStateMsg struct{ err error }
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {

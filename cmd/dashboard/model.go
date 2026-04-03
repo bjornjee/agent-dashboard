@@ -46,6 +46,10 @@ type model struct {
 	mode            int
 	textInput       textinput.Model
 	tmuxAvailable   bool
+	ghAvailable     bool
+	openPRSessionID string // stored for deferred pin in openPRMsg handler
+	mergeSessionID  string // stored for async merge callback
+	mergePaneID     string // stored for async merge callback
 	statePath       string
 	selfPaneID      string
 	statusMsg       string
@@ -366,6 +370,7 @@ func (m model) Init() tea.Cmd {
 		tickEvery(),
 		m.captureSelected(),
 		loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir),
+		checkGHAvailable(),
 	}
 	if m.db != nil {
 		cmds = append(cmds, loadDBCost(m.db))
@@ -651,13 +656,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case openPRMsg:
+		sessionID := m.openPRSessionID
+		m.openPRSessionID = ""
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("PR link failed: %v", msg.err)
-		} else {
+			m.statusMsgTick = m.tickCount
+			return m, nil
+		}
+		// Deferred pin: when gh detected an existing PR, pin to "pr" now
+		if sessionID != "" && msg.hasPR {
 			m.statusMsg = "Opened PR page in browser"
+			m.statusMsgTick = m.tickCount
+			return m, pinAgentStateCmd(m.statePath, sessionID, "pr")
+		}
+		if msg.hasPR {
+			m.statusMsg = "Opened PR page in browser"
+		} else {
+			m.statusMsg = "Opened compare page in browser"
 		}
 		m.statusMsgTick = m.tickCount
 		return m, nil
+
+	case ghAvailableMsg:
+		m.ghAvailable = msg.available
+		return m, nil
+
+	case mergePRMsg:
+		sessionID := m.mergeSessionID
+		paneID := m.mergePaneID
+		m.mergeSessionID = ""
+		m.mergePaneID = ""
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Merge failed: %v", msg.err)
+			m.statusMsgTick = m.tickCount
+			return m, nil
+		}
+		m.statusMsg = "PR merged — cleanup sent"
+		m.statusMsgTick = m.tickCount
+		cmds := []tea.Cmd{
+			pinAgentStateCmd(m.statePath, sessionID, "merged"),
+		}
+		if paneID != "" {
+			cmds = append(cmds, sendReply(paneID,
+				"The PR has been merged. Please clean up: remove any worktrees and temporary branches."))
+		}
+		return m, tea.Batch(cmds...)
 
 	case pinStateMsg:
 		if msg.err != nil {

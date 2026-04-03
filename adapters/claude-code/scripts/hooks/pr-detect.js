@@ -56,8 +56,10 @@ function buildPRUpdate(detection) {
   const update = {};
   if (detection.action === 'created') {
     update.state = 'pr';
+    update.pinned_state = 'pr';
   } else if (detection.action === 'merged') {
     update.state = 'merged';
+    update.pinned_state = 'merged';
   }
   if (detection.prUrl) {
     update.pr_url = detection.prUrl;

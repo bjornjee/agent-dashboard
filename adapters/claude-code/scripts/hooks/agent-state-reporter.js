@@ -138,6 +138,13 @@ function report(input) {
 
   const existing = readAgentState(sessionId) || {};
 
+  // On Stop events, preserve PR/merged states — these are set by pr-detect or
+  // dashboard pinning and must not be overwritten by detectState().
+  // SubagentStart/Stop events are allowed through so subagent_count stays accurate.
+  const hookEvent = input.hook_event_name;
+  const PR_STATES = new Set(['pr', 'merged']);
+  if (hookEvent === 'Stop' && PR_STATES.has(existing.pinned_state)) return;
+
   const cwd = input.cwd || process.cwd();
   const hookEvent = input.hook_event_name;
   const lastMessage = input.last_assistant_message || null;

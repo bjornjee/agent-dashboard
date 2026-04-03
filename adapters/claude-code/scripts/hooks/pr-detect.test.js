@@ -68,21 +68,24 @@ describe('detectPR', () => {
 });
 
 describe('buildPRUpdate', () => {
-  it('returns state "pr" for created action', () => {
+  it('returns state "pr" and pinned_state "pr" for created action', () => {
     const update = buildPRUpdate({ action: 'created', prUrl: 'https://github.com/a/b/pull/1' });
     assert.equal(update.state, 'pr');
+    assert.equal(update.pinned_state, 'pr');
     assert.equal(update.pr_url, 'https://github.com/a/b/pull/1');
   });
 
-  it('returns state "merged" for merged action', () => {
+  it('returns state "merged" and pinned_state "merged" for merged action', () => {
     const update = buildPRUpdate({ action: 'merged', prUrl: 'https://github.com/a/b/pull/1' });
     assert.equal(update.state, 'merged');
+    assert.equal(update.pinned_state, 'merged');
     assert.equal(update.pr_url, 'https://github.com/a/b/pull/1');
   });
 
   it('omits pr_url when null', () => {
     const update = buildPRUpdate({ action: 'created', prUrl: null });
     assert.equal(update.state, 'pr');
+    assert.equal(update.pinned_state, 'pr');
     assert.equal(update.pr_url, undefined);
   });
 });

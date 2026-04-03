@@ -1580,3 +1580,49 @@ func TestAutoScrollLive_PreservesPositionWhenFocused(t *testing.T) {
 		t.Error("message viewport should NOT auto-scroll when user is focused on it")
 	}
 }
+
+func TestMergePRMsg_Success_PinsAndCleanup(t *testing.T) {
+	tmpDir := t.TempDir()
+	agentsDir := os.MkdirAll(tmpDir+"/agents", 0755)
+	_ = agentsDir
+	os.MkdirAll(tmpDir+"/agents", 0755)
+	os.WriteFile(tmpDir+"/agents/sess1.json", []byte(`{"state":"pr","pinned_state":"pr"}`), 0644)
+
+	m := newModel(testConfig(tmpDir), "", nil)
+	m.statePath = tmpDir
+	m.tmuxAvailable = true
+	m.mergeSessionID = "sess1"
+	m.mergePaneID = "%5"
+
+	result, cmd := m.Update(mergePRMsg{})
+	updated := result.(model)
+
+	if !strings.Contains(updated.statusMsg, "PR merged") {
+		t.Errorf("expected status 'PR merged', got %q", updated.statusMsg)
+	}
+	if updated.mergeSessionID != "" {
+		t.Error("mergeSessionID should be cleared after handling")
+	}
+	if cmd == nil {
+		t.Fatal("expected cmd for pin + cleanup, got nil")
+	}
+}
+
+func TestMergePRMsg_Error_ShowsStatus(t *testing.T) {
+	m := newModel(testConfig(""), "", nil)
+	m.mergeSessionID = "sess1"
+	m.mergePaneID = "%5"
+
+	result, cmd := m.Update(mergePRMsg{err: fmt.Errorf("merge conflict")})
+	updated := result.(model)
+
+	if !strings.Contains(updated.statusMsg, "Merge failed") {
+		t.Errorf("expected status 'Merge failed', got %q", updated.statusMsg)
+	}
+	if updated.mergeSessionID != "" {
+		t.Error("mergeSessionID should be cleared after error")
+	}
+	if cmd != nil {
+		t.Error("expected no cmd on merge error")
+	}
+}
