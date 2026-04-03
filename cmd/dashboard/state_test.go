@@ -323,6 +323,44 @@ func TestPruneDead_DedupSamePane(t *testing.T) {
 	}
 }
 
+func TestPruneDead_DedupOnDeadPane(t *testing.T) {
+	tmp := t.TempDir()
+	recentTime := time.Now().UTC().Format(time.RFC3339)
+	staleTime := "2020-01-01T00:00:00Z"
+
+	// Two agents sharing pane %42 which is dead (not in livePaneIDs).
+	// The dedup removal of the older agent should still happen even though
+	// the safety net prevents removing all dead agents at once.
+	writeAgentFile(t, tmp, "old-session.json", Agent{
+		SessionID:  "old-session",
+		TmuxPaneID: "%42",
+		State:      "running",
+		UpdatedAt:  staleTime,
+	})
+	writeAgentFile(t, tmp, "new-session.json", Agent{
+		SessionID:  "new-session",
+		TmuxPaneID: "%42",
+		State:      "running",
+		UpdatedAt:  recentTime,
+	})
+
+	livePaneIDs := map[string]bool{} // pane %42 is dead
+	removed := PruneDead(tmp, livePaneIDs)
+	if removed != 1 {
+		t.Errorf("expected 1 removed (dedup of older agent on dead pane), got %d", removed)
+	}
+
+	agentsPath := filepath.Join(tmp, "agents")
+	// Old duplicate should always be cleaned (dedup is unconditional)
+	if _, err := os.Stat(filepath.Join(agentsPath, "old-session.json")); err == nil {
+		t.Error("old duplicate-pane agent was not cleaned by PruneDead dedup")
+	}
+	// Newest agent is kept by the safety net (sole remaining dead agent)
+	if _, err := os.Stat(filepath.Join(agentsPath, "new-session.json")); err != nil {
+		t.Error("newest agent was incorrectly removed")
+	}
+}
+
 func TestResolveAgentTargets(t *testing.T) {
 	sf := StateFile{
 		Agents: map[string]Agent{

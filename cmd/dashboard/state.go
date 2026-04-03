@@ -425,29 +425,42 @@ func PruneDead(dir string, livePaneIDs map[string]bool) int {
 		}
 	}
 
-	var toRemove []string
+	// Classify removals into two buckets: dedup (always safe) and dead-pane
+	// (subject to the safety net). Keeping them separate ensures the safety
+	// net only fires when every agent appears dead — not when dedup removals
+	// inflate the count.
+	var dedupPaths, deadPaths []string
 	for _, f := range files {
 		// Dedup: when multiple agents share a pane, remove all but the newest.
 		if f.agent.TmuxPaneID != "" && f.updatedAt.Before(newestPerPane[f.agent.TmuxPaneID]) {
-			toRemove = append(toRemove, f.path)
+			dedupPaths = append(dedupPaths, f.path)
 			continue
 		}
 		// Dead: pane no longer exists
 		if f.agent.TmuxPaneID == "" || !livePaneIDs[f.agent.TmuxPaneID] {
-			toRemove = append(toRemove, f.path)
+			deadPaths = append(deadPaths, f.path)
 		}
 	}
 
 	// Safety net: refuse to wipe all agents at once — almost certainly
 	// a transient tmux issue. CleanStale handles truly dead agents.
-	if len(toRemove) == len(files) && len(files) > 0 {
-		return 0
+	// Only dead-pane removals are gated; dedup removals are always applied.
+	applyDead := true
+	if len(deadPaths)+len(dedupPaths) == len(files) && len(files) > 0 && len(deadPaths) > 0 {
+		applyDead = false
 	}
 
 	removed := 0
-	for _, path := range toRemove {
+	for _, path := range dedupPaths {
 		if os.Remove(path) == nil {
 			removed++
+		}
+	}
+	if applyDead {
+		for _, path := range deadPaths {
+			if os.Remove(path) == nil {
+				removed++
+			}
 		}
 	}
 	return removed
