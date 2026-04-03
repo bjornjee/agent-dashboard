@@ -55,6 +55,8 @@ describe('DESTRUCTIVE_PATTERNS integration', () => {
     it('DROP TABLE users', () => assert.equal(isBlocked('DROP TABLE users'), true));
     it('drop database mydb', () => assert.equal(isBlocked('drop database mydb'), true));
     it('TRUNCATE TABLE logs', () => assert.equal(isBlocked('TRUNCATE TABLE logs'), true));
+    it('tmux send-keys', () => assert.equal(isBlocked('tmux send-keys -t %5 "hello" Enter'), true));
+    it('tmux send-keys piped', () => assert.equal(isBlocked('echo foo | tmux send-keys -t %5 "hello"'), true));
   });
 
   describe('should not block', () => {
@@ -62,5 +64,7 @@ describe('DESTRUCTIVE_PATTERNS integration', () => {
     it('git push origin main', () => assert.equal(isBlocked('git push origin main'), false));
     it('git checkout main', () => assert.equal(isBlocked('git checkout main'), false));
     it('SELECT * FROM table', () => assert.equal(isBlocked('SELECT * FROM table'), false));
+    it('tmux list-panes', () => assert.equal(isBlocked('tmux list-panes'), false));
+    it('tmux display-message', () => assert.equal(isBlocked('tmux display-message -p'), false));
   });
 });
