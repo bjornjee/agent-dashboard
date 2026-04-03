@@ -15,12 +15,13 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
-- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection
+- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr)
 - **Quick reply** — send free-text responses directly to agent panes
 - **GitHub PR workflow** — open existing PR diff, create new PR, or merge via `gh` CLI (falls back to browser)
 - **Help overlay** — full-screen keybinding reference grouped by context
 - **Daily quote** — fetched from API Ninjas with fallback to embedded quotes
 - **Pixel art banner** — axolotl rendered with half-block Unicode characters
+- **Singleton lock** — prevents multiple dashboard instances from running simultaneously
 - **Semantic versioning** — version injected at build time via `-ldflags`
 
 ## Prerequisites
@@ -156,6 +157,7 @@ silent_events = true  # suppress event-level notifications (default: false)
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `AGENT_DASHBOARD_DIR` | Override default state directory (`~/.agent-dashboard`) | No |
+| `EDITOR` | Editor command for opening agent directories (default: `code`) | No |
 | `API_NINJAS_KEY` | API key for quote-of-the-day | No (falls back to built-in quotes) |
 
 ## Development
