@@ -904,6 +904,32 @@ func TestReplyEsc_ClearsPendingReply(t *testing.T) {
 	}
 }
 
+func TestReplyEnter_EmptyText_ClearsPendingReply(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "idle", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+	m.pendingReplies["%5"] = "cleanup message"
+	m.mode = modeReply
+	// textInput is empty (user cleared pre-filled text)
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := result.(model)
+
+	if updated.mode != modeNormal {
+		t.Fatalf("expected modeNormal, got %d", updated.mode)
+	}
+	if _, ok := updated.pendingReplies["%5"]; ok {
+		t.Error("expected pending reply to be cleared on enter with empty text")
+	}
+	if cmd != nil {
+		t.Error("expected no cmd when sending empty text")
+	}
+}
+
 func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 	m := newModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true

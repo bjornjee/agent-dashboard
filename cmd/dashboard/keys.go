@@ -303,9 +303,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.textInput.Reset()
 			m.updateRightContent()
-			if text != "" {
-				if agent := m.selectedAgent(); agent != nil {
-					delete(m.pendingReplies, agent.TmuxPaneID)
+			if agent := m.selectedAgent(); agent != nil {
+				delete(m.pendingReplies, agent.TmuxPaneID)
+				if text != "" {
 					return m, sendReply(agent.TmuxPaneID, text)
 				}
 			}
@@ -366,13 +366,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.statusMsgTick = m.tickCount
 				return m, mergePR(dir, branch)
 			}
-			cmds := []tea.Cmd{
-				pinAgentStateCmd(m.statePath, sessionID, "merged"),
-			}
 			m.pendingReplies[paneID] = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
 			m.statusMsg = "Marked as merged — press r to send cleanup"
 			m.statusMsgTick = m.tickCount
-			return m, tea.Batch(cmds...)
+			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 		case "n", "esc":
 			m.confirmMergeSessionID = ""
 			m.confirmMergePaneID = ""
