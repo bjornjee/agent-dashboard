@@ -1793,14 +1793,14 @@ func TestSpawningSpinner_ClearsOnTimeout(t *testing.T) {
 	result, _ := m.Update(createSessionMsg{target: "main:3.0"})
 	m = result.(model)
 
-	// Simulate 30 ticks (30 seconds) — should eventually timeout
-	for i := 0; i < 30; i++ {
+	// Simulate 15 ticks (15 seconds) — should eventually timeout
+	for i := 0; i < 15; i++ {
 		result, _ = m.Update(tickMsg{})
 		m = result.(model)
 	}
 
 	if m.statusMsg == "spawning" {
-		t.Error("spawning spinner should timeout after 30 seconds")
+		t.Error("spawning spinner should timeout after 15 seconds")
 	}
 }
 

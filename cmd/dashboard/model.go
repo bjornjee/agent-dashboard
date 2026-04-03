@@ -532,10 +532,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.tickCount++
-		// Spawning spinner timeout: if agent hasn't appeared in state after 30s, give up
+		// Spawning spinner timeout: if agent hasn't appeared in state after 15s, give up
 		if m.spawningTarget != "" && m.statusMsg == "spawning" && m.statusMsgTick == -1 {
 			m.spawningTickStart++
-			if m.spawningTickStart >= 30 {
+			if m.spawningTickStart >= 15 {
 				m.spawningTarget = ""
 				m.statusMsg = ""
 				m.spawningTickStart = 0
@@ -562,7 +562,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
-		if m.tickCount%30 == 0 {
+		// Poll state more frequently while waiting for a spawned agent
+		if m.spawningTarget != "" && m.tickCount%2 == 0 {
+			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
+		} else if m.tickCount%30 == 0 {
 			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
 		}
 		return m, tea.Batch(cmds...)
