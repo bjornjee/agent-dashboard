@@ -2,10 +2,16 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// confirmCooldown is the minimum time between entering a confirmation mode
+// and accepting a confirmation key. Phantom keystrokes from terminal escape
+// sequences arrive within microseconds; real users take at least 200-300ms.
+const confirmCooldown = 300 * time.Millisecond
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Help overlay: swallow mouse events
@@ -326,6 +332,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmClose {
 		switch key {
 		case "y":
+			if time.Since(m.confirmEnteredAt) < confirmCooldown {
+				return m, nil // ignore phantom keystroke
+			}
 			paneID := m.confirmPaneID
 			sessionID := m.confirmSessionID
 			m.confirmPaneID = ""
@@ -346,6 +355,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmMerge {
 		switch key {
 		case "y":
+			if time.Since(m.confirmEnteredAt) < confirmCooldown {
+				return m, nil // ignore phantom keystroke
+			}
 			sessionID := m.confirmMergeSessionID
 			paneID := m.confirmMergePaneID
 			dir := m.confirmMergeDir
@@ -385,6 +397,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmSend {
 		switch key {
 		case "enter":
+			if time.Since(m.confirmEnteredAt) < confirmCooldown {
+				return m, nil // ignore phantom keystroke
+			}
 			paneID := m.confirmSendPaneID
 			sendKey := m.confirmSendKey
 			m.confirmSendPaneID = ""
@@ -406,6 +421,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmJump {
 		switch key {
 		case "y", "enter":
+			if time.Since(m.confirmEnteredAt) < confirmCooldown {
+				return m, nil // ignore phantom keystroke
+			}
 			paneID := m.confirmJumpPaneID
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
@@ -616,6 +634,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if agent := m.selectedAgent(); agent != nil && m.tmuxAvailable {
 			// Parent agent: confirm close
 			m.mode = modeConfirmClose
+			m.confirmEnteredAt = time.Now()
 			m.confirmPaneID = agent.TmuxPaneID
 			m.confirmSessionID = agent.SessionID
 			m.statusMsg = fmt.Sprintf("Close pane %s? (y/n)", agent.Target)
@@ -665,6 +684,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if agent := m.selectedAgent(); agent != nil {
 			m.mode = modeConfirmJump
+			m.confirmEnteredAt = time.Now()
 			m.confirmJumpPaneID = agent.TmuxPaneID
 			m.statusMsg = "Jump to agent? (y/Enter to confirm, Esc to cancel)"
 			m.statusMsgTick = -1 // pinned
@@ -734,6 +754,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && m.tmuxAvailable &&
 			isPR(agent.State) && agent.EffectiveDir() != "" && agent.Branch != "" {
 			m.mode = modeConfirmMerge
+			m.confirmEnteredAt = time.Now()
 			m.confirmMergeSessionID = agent.SessionID
 			m.confirmMergePaneID = agent.TmuxPaneID
 			m.confirmMergeDir = agent.EffectiveDir()
@@ -780,6 +801,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					sendKey = "1"
 				}
 				m.mode = modeConfirmSend
+				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
 				m.confirmSendKey = sendKey
 				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
@@ -792,6 +814,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {
 				m.mode = modeConfirmSend
+				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
 				m.confirmSendKey = key
 				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
