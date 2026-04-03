@@ -17,7 +17,7 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete
 - **Quick reply** — send free-text responses directly to agent panes
-- **GitHub PR shortcut** — open PR creation page in browser for the selected agent's branch
+- **GitHub PR shortcut** — open existing PR diff or create new PR in browser (uses `gh` when available)
 - **Help overlay** — full-screen keybinding reference grouped by context
 - **Daily quote** — fetched from API Ninjas with fallback to embedded quotes
 - **Pixel art banner** — axolotl rendered with half-block Unicode characters
@@ -32,6 +32,7 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 | [Go 1.21+](https://go.dev/dl/) | Yes | Building the dashboard binary |
 | [Node.js 18+](https://nodejs.org/) | Yes | Claude Code adapter hooks |
 | [git](https://git-scm.com/) | Yes | Diff viewer, branch detection |
+| [GitHub CLI (`gh`)](https://cli.github.com/) | No | Detects existing PRs so `g` opens the diff page instead of creating a new PR |
 | [z (zsh plugin)](https://github.com/agkozak/zsh-z) | No | Frecency-ranked directory suggestions when creating sessions |
 
 ## Install
@@ -89,7 +90,7 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `r` | Reply to agent (free-text) |
 | `e` | Open VS Code in agent's directory |
 | `d` | Show git diff (merge-base vs HEAD, syntax highlighted) |
-| `g` | Open GitHub PR creation page in browser |
+| `g` | Open existing PR diff or create new PR in browser |
 | `a` | Create new agent session (z-plugin suggestions) |
 | `c` | Collapse/expand subagent tree |
 | `x` | Dismiss subagent or close agent pane |
