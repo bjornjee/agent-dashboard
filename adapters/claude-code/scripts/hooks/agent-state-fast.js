@@ -78,6 +78,13 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
   const permissionMode = input.permission_mode || '';
 
   const state = resolveState(hookEvent, toolName);
+
+  // Preserve PR states set by pr-detect — only permission/question can override them.
+  const PR_STATES = new Set(['pr', 'merged']);
+  if (PR_STATES.has(existing.state) && state === 'running') {
+    return { changed: false, update: null };
+  }
+
   const currentTool = hookEvent === 'PostToolUse' ? '' : toolName;
 
   const changed = existing.state !== state
@@ -117,6 +124,12 @@ function fastUpdate(input) {
   if (!target) return;
 
   const existing = readAgentState(sessionId) || {};
+
+  // Yield to pr-detect for gh pr create/merge commands — it owns those state transitions.
+  if (input.hook_event_name === 'PostToolUse' && (input.tool_name || '') === 'Bash') {
+    const cmd = (input.tool_input || {}).command || '';
+    if (/\bgh\s+pr\s+(create|merge)\b/.test(cmd)) return;
+  }
 
   // Detect worktree cd from Bash PostToolUse commands.
   // Pattern: cd /path/to/worktrees/<app>/<feature> && ...

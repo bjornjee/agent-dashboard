@@ -218,6 +218,78 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.worktree_cwd, undefined);
   });
 
+  it('preserves "pr" state when resolveState returns "running"', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'pr',
+      pr_url: 'https://github.com/bjornjee/agent-dashboard/pull/86',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'should not overwrite pr state');
+    assert.equal(update, null);
+  });
+
+  it('preserves "merged" state when resolveState returns "running"', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'merged',
+      pr_url: 'https://github.com/bjornjee/agent-dashboard/pull/86',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'should not overwrite merged state');
+    assert.equal(update, null);
+  });
+
+  it('allows "permission" to override "pr" state', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'pr',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'Bash',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'permission');
+  });
+
   it('preserves existing fields not updated by fast hook', () => {
     writeState('main:1.0', {
       target: 'main:1.0',
