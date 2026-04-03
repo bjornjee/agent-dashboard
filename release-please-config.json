@@ -3,10 +3,7 @@
     ".": {
       "release-type": "go",
       "extra-files": [
-        {
-          "type": "plain",
-          "path": "VERSION"
-        }
+        "VERSION"
       ]
     }
   }
