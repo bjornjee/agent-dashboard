@@ -21,10 +21,16 @@ type NotificationSettings struct {
 	SilentEvents bool `toml:"silent_events"`
 }
 
+// DebugSettings controls debug/diagnostic features.
+type DebugSettings struct {
+	KeyLog bool `toml:"key_log"` // write key/mouse/focus events to debug-keys.log
+}
+
 // Settings holds all user-facing configuration loaded from settings.toml.
 type Settings struct {
 	Banner        BannerSettings       `toml:"banner"`
 	Notifications NotificationSettings `toml:"notifications"`
+	Debug         DebugSettings        `toml:"debug"`
 }
 
 // DefaultSettings returns settings with sensible defaults.

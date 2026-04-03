@@ -33,12 +33,14 @@ func main() {
 	m := newModel(cfg, db)
 
 	// Debug key log — writes raw key/mouse events for diagnosing phantom keystrokes.
-	// Log file: <stateDir>/debug-keys.log
-	debugLogPath := filepath.Join(stateDir, "debug-keys.log")
-	if debugLog, err := os.OpenFile(debugLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); err == nil {
-		m.debugKeyLog = debugLog
-		defer debugLog.Close()
-		fmt.Fprintf(debugLog, "=== dashboard key debug log started %s ===\n", time.Now().Format(time.RFC3339))
+	// Enable with [debug] key_log = true in settings.toml.
+	if cfg.Settings.Debug.KeyLog {
+		debugLogPath := filepath.Join(stateDir, "debug-keys.log")
+		if debugLog, err := os.OpenFile(debugLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); err == nil {
+			m.debugKeyLog = debugLog
+			defer debugLog.Close()
+			fmt.Fprintf(debugLog, "=== dashboard key debug log started %s ===\n", time.Now().Format(time.RFC3339))
+		}
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
