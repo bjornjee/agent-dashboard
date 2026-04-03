@@ -3,7 +3,10 @@
     ".": {
       "release-type": "go",
       "extra-files": [
-        "VERSION",
+        {
+          "type": "generic",
+          "path": "VERSION"
+        },
         {
           "type": "json",
           "path": "adapters/claude-code/package.json",
