@@ -141,6 +141,11 @@ type model struct {
 	confirmMergeDir       string
 	confirmMergeBranch    string
 
+	// Confirmation cooldown — reject confirmations arriving within 300ms of
+	// entering a confirm mode. Phantom keystrokes from escape sequences arrive
+	// within microseconds; real users take at least 200-300ms.
+	confirmEnteredAt time.Time
+
 	// Z-plugin suggestions for create folder mode
 	zEntries     []zEntry // cached z entries from ~/.z
 	suggestions  []string // filtered suggestions for current input

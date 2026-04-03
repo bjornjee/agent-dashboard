@@ -5,9 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// pastConfirmTime returns a time far enough in the past to bypass the cooldown.
+var pastConfirmTime = time.Now().Add(-time.Second)
 
 func newTestModelWithAgents() model {
 	m := newModel(testConfig(""), nil)
@@ -746,6 +750,7 @@ func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
 	m.tmuxAvailable = true
 	m.ghAvailable = true
 	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
 	m.confirmMergeSessionID = "sess1"
 	m.confirmMergePaneID = "%5"
 	m.confirmMergeDir = t.TempDir()
@@ -771,6 +776,7 @@ func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
 func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
 	m := newModel(testConfig(t.TempDir()), nil)
 	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
 	m.confirmMergeSessionID = "sess1"
 	m.statusMsg = "Merge feat/test? (y/n)"
 
@@ -817,6 +823,7 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 	}
 
 	// Step 2: confirm with 'y' — should execute merge
+	m.confirmEnteredAt = pastConfirmTime // bypass cooldown for test
 	result, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming merge")
@@ -915,6 +922,7 @@ func TestNumKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 func TestConfirmSend_Enter_Sends(t *testing.T) {
 	m := newModel(testConfig(t.TempDir()), nil)
 	m.mode = modeConfirmSend
+	m.confirmEnteredAt = pastConfirmTime
 	m.confirmSendPaneID = "%5"
 	m.confirmSendKey = "y"
 
@@ -997,6 +1005,7 @@ func TestEnterKey_EntersConfirmJump(t *testing.T) {
 func TestConfirmJump_Y_Jumps(t *testing.T) {
 	m := newModel(testConfig(t.TempDir()), nil)
 	m.mode = modeConfirmJump
+	m.confirmEnteredAt = pastConfirmTime
 	m.confirmJumpPaneID = "%5"
 
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
@@ -1017,6 +1026,7 @@ func TestConfirmJump_Enter_Jumps(t *testing.T) {
 	// Enter should also confirm the jump (natural UX).
 	m := newModel(testConfig(t.TempDir()), nil)
 	m.mode = modeConfirmJump
+	m.confirmEnteredAt = pastConfirmTime
 	m.confirmJumpPaneID = "%5"
 
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1078,5 +1088,69 @@ func TestConfirmMerge_PhantomKey_Swallowed(t *testing.T) {
 	updated := result.(model)
 	if updated.mode != modeConfirmMerge {
 		t.Errorf("expected to stay in modeConfirmMerge, got %d", updated.mode)
+	}
+}
+
+func TestConfirmCooldown_RejectsPhantomConfirmation(t *testing.T) {
+	// A confirmation arriving within the cooldown period should be ignored.
+	// This guards against phantom keystrokes from escape sequences.
+	tests := []struct {
+		name string
+		mode int
+		key  tea.KeyMsg
+	}{
+		{"merge_y", modeConfirmMerge, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}},
+		{"close_y", modeConfirmClose, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}},
+		{"send_enter", modeConfirmSend, tea.KeyMsg{Type: tea.KeyEnter}},
+		{"jump_y", modeConfirmJump, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}},
+		{"jump_enter", modeConfirmJump, tea.KeyMsg{Type: tea.KeyEnter}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newModel(testConfig(t.TempDir()), nil)
+			m.mode = tt.mode
+			m.confirmEnteredAt = time.Now() // just entered — within cooldown
+			m.confirmMergeSessionID = "sess1"
+			m.confirmMergePaneID = "%5"
+			m.confirmMergeDir = t.TempDir()
+			m.confirmMergeBranch = "feat/test"
+			m.confirmSendPaneID = "%5"
+			m.confirmSendKey = "y"
+			m.confirmJumpPaneID = "%5"
+			m.confirmPaneID = "%5"
+			m.confirmSessionID = "sess1"
+
+			result, cmd := m.handleKey(tt.key)
+			if cmd != nil {
+				t.Fatal("expected nil cmd — confirmation should be rejected during cooldown")
+			}
+			updated := result.(model)
+			if updated.mode != tt.mode {
+				t.Errorf("expected to stay in %d, got %d", tt.mode, updated.mode)
+			}
+		})
+	}
+}
+
+func TestConfirmCooldown_AcceptsAfterCooldown(t *testing.T) {
+	// A confirmation arriving after the cooldown should be accepted.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = time.Now().Add(-time.Second) // well past cooldown
+	m.tmuxAvailable = true
+	m.ghAvailable = true
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeDir = t.TempDir()
+	m.confirmMergeBranch = "feat/test"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd == nil {
+		t.Fatal("expected cmd after cooldown period")
+	}
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal, got %d", updated.mode)
 	}
 }

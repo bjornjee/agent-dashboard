@@ -12,6 +12,14 @@ func main() {
 	cfg := DefaultConfig()
 	stateDir := cfg.Profile.StateDir
 
+	// Singleton lock — only one dashboard instance at a time.
+	lockFile, err := acquireLock(stateDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	defer lockFile.Close()
+
 	dbPath := filepath.Join(stateDir, "usage.db")
 	db, err := OpenDB(dbPath)
 	if err != nil {
