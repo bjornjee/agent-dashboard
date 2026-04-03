@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0](https://github.com/bjornjee/agent-dashboard/compare/v0.3.0...v0.4.0) (2026-04-03)
+
+
+### Features
+
+* increase max panes per window from 4 to 8 ([#96](https://github.com/bjornjee/agent-dashboard/issues/96)) ([44cd61e](https://github.com/bjornjee/agent-dashboard/commit/44cd61eca3e457215a743cce9e568b7573449252))
+* optimize startup time with concurrent deferred initialization ([#94](https://github.com/bjornjee/agent-dashboard/issues/94)) ([cca58b6](https://github.com/bjornjee/agent-dashboard/commit/cca58b6b67c59275e02823f37fd1277b1e1ef5a6))
+* rework PR/merge UX with gh CLI integration ([#97](https://github.com/bjornjee/agent-dashboard/issues/97)) ([26fbacd](https://github.com/bjornjee/agent-dashboard/commit/26fbacdad7e797eee41fc39e677c97701735e370))
+
+
+### Bug Fixes
+
+* add fmt/vet Makefile targets and fix go vet error in banner_test ([#98](https://github.com/bjornjee/agent-dashboard/issues/98)) ([b674b3b](https://github.com/bjornjee/agent-dashboard/commit/b674b3b6692bbf8b9cf731209b7ddf383f0dc18a))
+* disable auto-scroll on message viewport when plan is visible ([#92](https://github.com/bjornjee/agent-dashboard/issues/92)) ([f3a2466](https://github.com/bjornjee/agent-dashboard/commit/f3a246601faec9c74fd6048370ac06b2e2656fe6))
+* dynamically compute banner height so panels fit snugly ([#93](https://github.com/bjornjee/agent-dashboard/issues/93)) ([1b00eec](https://github.com/bjornjee/agent-dashboard/commit/1b00eec2715fb3f0abd4acc51395469df5ad437e))
+* guard destructive keys against phantom keystrokes from mouse escape sequences ([#101](https://github.com/bjornjee/agent-dashboard/issues/101)) ([d1718a7](https://github.com/bjornjee/agent-dashboard/commit/d1718a72d2a0e1b8b63e9e84d9484b8f66440067))
+* install.sh now registers plugin in Claude Code plugin system ([#91](https://github.com/bjornjee/agent-dashboard/issues/91)) ([1c8c051](https://github.com/bjornjee/agent-dashboard/commit/1c8c051db64303dd1a3e89ebfd3a8b39d6845fd3))
+* prevent premature "Reply sent" status in plan mode reply flow ([#95](https://github.com/bjornjee/agent-dashboard/issues/95)) ([132d3ff](https://github.com/bjornjee/agent-dashboard/commit/132d3ff5aa7b8c37306b54c9725a31b40c3cd96f))
+* read plugin version from plugin.json instead of VERSION file ([#100](https://github.com/bjornjee/agent-dashboard/issues/100)) ([31fd5f1](https://github.com/bjornjee/agent-dashboard/commit/31fd5f1de63ebf1ec4e36356408df9f30963ee71))
+* resolve pane ID in tmux popups where TMUX_PANE is unset ([#84](https://github.com/bjornjee/agent-dashboard/issues/84)) ([7567c0e](https://github.com/bjornjee/agent-dashboard/commit/7567c0e0438f2fa7c755f644a06c420ce8bba887))
+
 ## [0.3.0](https://github.com/bjornjee/agent-dashboard/compare/v0.2.0...v0.3.0) (2026-04-03)
 
 
