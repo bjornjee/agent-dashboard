@@ -9,9 +9,10 @@ import (
 )
 
 // ownPaneID returns the dashboard's own tmux pane ID (%N format)
-// so we can exclude it from the agent list.
+// so we can exclude it from the agent list. Falls back to querying
+// tmux directly for popup contexts where TMUX_PANE is unset.
 func ownPaneID() string {
-	return os.Getenv("TMUX_PANE")
+	return TmuxResolvePaneID()
 }
 
 func main() {

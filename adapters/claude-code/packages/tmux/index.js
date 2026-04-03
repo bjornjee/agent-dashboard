@@ -135,4 +135,18 @@ function getTarget(paneId) {
   return result.stdout.trim();
 }
 
-module.exports = { isAvailable, capture, jump, sendKeys, listPanes, getTarget, extractSessionWindow, parseTarget };
+/**
+ * Get the current pane ID. Checks TMUX_PANE first, then falls back to
+ * querying tmux directly (needed in popups where TMUX_PANE is unset).
+ * @returns {string|null} pane ID (e.g. '%5') or null
+ */
+function getPaneId() {
+  const envPaneId = process.env.TMUX_PANE;
+  if (envPaneId) return envPaneId;
+
+  const result = tmux(['display-message', '-p', '#{pane_id}']);
+  if (!result || result.status !== 0 || !result.stdout) return null;
+  return result.stdout.trim() || null;
+}
+
+module.exports = { isAvailable, capture, jump, sendKeys, listPanes, getTarget, getPaneId, extractSessionWindow, parseTarget };
