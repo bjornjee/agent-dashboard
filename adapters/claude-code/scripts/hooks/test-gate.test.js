@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { mkdtempSync, writeFileSync, rmSync } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { isGitCommit, shouldSkip, hasMakefile, getTestTarget, runMakeTest } = require('./test-gate');
+const { isGitCommit, shouldSkip, hasMakefile, getTestTarget, runMakeTest, getRepoRoot } = require('./test-gate');
 
 describe('isGitCommit', () => {
   it('matches simple git commit', () => {
@@ -111,6 +111,29 @@ describe('getTestTarget', () => {
     writeFileSync(path.join(tmp, 'Makefile'), 'test-fast:\n\techo ok\n');
     assert.equal(getTestTarget(tmp), 'test-fast');
     rmSync(tmp, { recursive: true });
+  });
+});
+
+describe('getRepoRoot', () => {
+  it('uses provided cwd to resolve repo root', () => {
+    // When given a valid git repo cwd, should return a path (not throw)
+    const root = getRepoRoot(process.cwd());
+    assert.ok(typeof root === 'string');
+    assert.ok(root.length > 0);
+  });
+
+  it('falls back to provided cwd when git fails', () => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'test-gate-'));
+    // tmp is not a git repo, so git rev-parse will fail
+    const root = getRepoRoot(tmp);
+    assert.equal(root, tmp);
+    rmSync(tmp, { recursive: true });
+  });
+
+  it('falls back to process.cwd() when no cwd provided', () => {
+    const root = getRepoRoot();
+    assert.ok(typeof root === 'string');
+    assert.ok(root.length > 0);
   });
 });
 

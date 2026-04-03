@@ -15,6 +15,9 @@ const { execSync } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
 
+const pluginRoot = path.resolve(__dirname, '..', '..');
+const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
+
 function isGitCommit(command) {
   return /\bgit\s+commit\b/.test(command);
 }
@@ -23,11 +26,13 @@ function shouldSkip() {
   return process.env.SKIP_TEST_GATE === '1';
 }
 
-function getRepoRoot() {
+function getRepoRoot(cwd) {
   try {
-    return execSync('git rev-parse --show-toplevel', { encoding: 'utf8', stdio: 'pipe' }).trim();
+    const opts = { encoding: 'utf8', stdio: 'pipe' };
+    if (cwd) opts.cwd = cwd;
+    return execSync('git rev-parse --show-toplevel', opts).trim();
   } catch {
-    return process.cwd();
+    return cwd || process.cwd();
   }
 }
 
@@ -89,7 +94,8 @@ if (require.main === module && !process.stdin.isTTY) {
         return;
       }
 
-      const repoRoot = getRepoRoot();
+      const effectiveCwd = extractCwdFromCommand(command);
+      const repoRoot = getRepoRoot(effectiveCwd);
       const testTarget = getTestTarget(repoRoot);
 
       if (!testTarget) {
