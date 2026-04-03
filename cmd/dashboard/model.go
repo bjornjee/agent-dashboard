@@ -588,7 +588,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
-		if m.tickCount%30 == 0 {
+		if m.tickCount%30 == 0 || len(m.spawningTicks) > 0 {
 			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
 		}
 		return m, tea.Batch(cmds...)
@@ -727,7 +727,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
 			m.statusMsgTick = m.tickCount
 		}
-		return m, nil
+		// Trigger loadState so the spawning placeholder gets replaced
+		// by real agent data once the state file appears.
+		return m, loadState(m.statePath, m.tmuxAvailable)
 
 	case closeResultMsg:
 		if msg.err != nil {

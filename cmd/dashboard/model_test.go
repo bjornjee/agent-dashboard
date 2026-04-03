@@ -533,6 +533,28 @@ func TestLaunchHealthMsg_Warning(t *testing.T) {
 	}
 }
 
+func TestLaunchHealthMsg_HealthyTriggersLoadState(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning"},
+	}
+	m.buildTree()
+
+	// Healthy launch (no warning) should still return a command (loadState)
+	// so the spawning placeholder gets replaced by real agent data.
+	_, cmd := m.Update(launchHealthMsg{
+		target: "main:2.0",
+	})
+	if cmd == nil {
+		t.Error("healthy launchHealthMsg should return a loadState command, got nil")
+	}
+}
+
 func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
 	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.selfPaneID = "%0"
