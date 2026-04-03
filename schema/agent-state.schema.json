@@ -89,6 +89,10 @@
     "branch": {
       "type": "string",
       "description": "Current git branch name"
+    },
+    "pr_url": {
+      "type": "string",
+      "description": "GitHub pull request URL when state is pr or merged"
     }
   },
   "additionalProperties": true

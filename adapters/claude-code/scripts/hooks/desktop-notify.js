@@ -21,7 +21,8 @@
 
 const { spawnSync } = require('child_process');
 const { readFileSync } = require('fs');
-const { basename, resolve } = require('path');
+const { basename, resolve, join } = require('path');
+const { homedir } = require('os');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || resolve(__dirname, '..', '..');
 const tmuxPkg = require(resolve(pluginRoot, 'packages', 'tmux'));
@@ -29,6 +30,33 @@ const tmuxPkg = require(resolve(pluginRoot, 'packages', 'tmux'));
 const TITLE = 'Claude Code';
 const SOUND = 'Blow';
 const MAX_BODY = 100;
+
+/**
+ * Read a boolean value from settings.toml using simple regex matching.
+ * Returns the parsed value, or defaultVal if the key is absent or the file
+ * is unreadable.
+ */
+function readSettingsBool(key, defaultVal) {
+  try {
+    const stateDir = process.env.AGENT_DASHBOARD_DIR || join(homedir(), '.agent-dashboard');
+    const raw = readFileSync(join(stateDir, 'settings.toml'), 'utf8');
+    const match = raw.match(new RegExp(`^\\s*${key}\\s*=\\s*(true|false)`, 'm'));
+    if (match) return match[1] === 'true';
+  } catch { /* file missing or unreadable */ }
+  return defaultVal;
+}
+
+/**
+ * Load notification settings from ~/.agent-dashboard/settings.toml.
+ * All three default to false (opt-in).
+ */
+function loadNotificationSettings() {
+  return {
+    enabled:      readSettingsBool('enabled', false),
+    sound:        readSettingsBool('sound', false),
+    silentEvents: readSettingsBool('silent_events', false),
+  };
+}
 
 // Notification types that require user attention.
 const ALERTING_NOTIFICATION_TYPES = new Set([
@@ -223,7 +251,7 @@ function notify(title, subtitle, body, sound) {
 
 // Export for testing
 if (typeof module !== 'undefined') {
-  module.exports = { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, buildBody, ALERTING_NOTIFICATION_TYPES, ALERTING_TOOL_NAMES, ALERTING_ERRORS };
+  module.exports = { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, buildBody, readSettingsBool, loadNotificationSettings, ALERTING_NOTIFICATION_TYPES, ALERTING_TOOL_NAMES, ALERTING_ERRORS };
 }
 
 // Only run stdin reader when executed directly (not when require()'d by tests)
@@ -237,8 +265,16 @@ if (require.main === module) {
   });
   process.stdin.on('end', () => {
     try {
+      const settings = loadNotificationSettings();
+      if (!settings.enabled) return;
+
       const input = data.trim() ? JSON.parse(data) : {};
-      const sound = shouldAlert(input) ? SOUND : undefined;
+      const isAlert = shouldAlert(input);
+
+      // Skip non-alerting events when silent_events is disabled
+      if (!isAlert && !settings.silentEvents) return;
+
+      const sound = (isAlert && settings.sound) ? SOUND : undefined;
       const body = buildBody(input);
       const subtitle = getSubtitle(input.cwd);
       notify(TITLE, subtitle, body, sound);
