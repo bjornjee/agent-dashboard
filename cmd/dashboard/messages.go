@@ -65,6 +65,7 @@ const (
 	modeConfirmClose
 	modeConfirmMerge // confirm before merging a PR
 	modeConfirmSend  // confirm before sending a key to an agent pane
+	modeConfirmJump  // confirm before jumping to an agent pane
 	modeCreateFolder
 	modeCreateSkill   // skill selection step of create wizard
 	modeCreateMessage // message input step of create wizard
