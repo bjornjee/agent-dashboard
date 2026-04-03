@@ -31,8 +31,6 @@ func (m model) debugLogKey(msg tea.KeyMsg) {
 		time.Now().Format("15:04:05.000"), m.mode, msg.String(), msg.Type, runeHex, mouseAge, m.isPhantomKey())
 }
 
-const mergeCleanupMsg = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
-
 // confirmCooldown is the minimum time between entering a confirmation mode
 // and accepting a confirmation key. Phantom keystrokes from terminal escape
 // sequences arrive within microseconds; real users take at least 200-300ms.
@@ -355,7 +353,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			if text != "" {
 				if agent := m.selectedAgent(); agent != nil {
-					delete(m.pendingReplies, agent.SessionID)
 					return m, sendReply(agent.TmuxPaneID, text, m.selfPaneID)
 				}
 			}
@@ -364,9 +361,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			m.textInput.Reset()
 			m.updateRightContent()
-			if agent := m.selectedAgent(); agent != nil {
-				delete(m.pendingReplies, agent.SessionID)
-			}
 			return m, nil
 		default:
 			var cmd tea.Cmd
@@ -422,8 +416,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.statusMsgTick = m.tickCount
 				return m, mergePR(dir, branch)
 			}
-			m.pendingReplies[sessionID] = mergeCleanupMsg
-			m.statusMsg = "Marked as merged — press r to send cleanup"
+			m.statusMsg = "Marked as merged"
 			m.statusMsgTick = m.tickCount
 			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 		case "n", "esc":
@@ -756,11 +749,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3"))
 			}
 			m.mode = modeReply
-			// Pre-fill with pending reply if one exists for this agent
-			if pending, ok := m.pendingReplies[agent.SessionID]; ok {
-				m.textInput.SetValue(pending)
-				m.textInput.CursorEnd()
-			}
 			m.textInput.Focus()
 			m.updateRightContent()
 			m.messageVP.GotoBottom()

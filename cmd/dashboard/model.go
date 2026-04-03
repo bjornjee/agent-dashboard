@@ -147,12 +147,6 @@ type model struct {
 	// within microseconds; real users take at least 200-300ms.
 	confirmEnteredAt time.Time
 
-	// pendingReplies stores queued messages keyed by session ID.
-	// Instead of injecting text directly into agent panes via tmux send-keys
-	// (which races with user typing), we queue the message here and pre-fill
-	// the reply textinput when the user presses 'r'.
-	pendingReplies map[string]string
-
 	// lastEscapeAt records when the last terminal escape sequence event
 	// (mouse or focus) was received. Key events arriving within
 	// escapeKeyCooldown are treated as phantom keystrokes from fragmented
@@ -402,7 +396,6 @@ func newModel(cfg Config, db *DB) model {
 		pathExists:        dirExists,
 		availableSkills:   skillList,
 		skillsAvailable:   hasSkills,
-		pendingReplies:    make(map[string]string),
 	}
 }
 
@@ -493,16 +486,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Prune dismissed subagent caches
 			if m.dismissed[key] {
 				delete(m.agentCaches, key)
-			}
-		}
-		// Prune pending replies for agents no longer present
-		liveSessions := make(map[string]bool, len(m.agents))
-		for _, a := range m.agents {
-			liveSessions[a.SessionID] = true
-		}
-		for sid := range m.pendingReplies {
-			if !liveSessions[sid] {
-				delete(m.pendingReplies, sid)
 			}
 		}
 		m.buildTree()
@@ -768,11 +751,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsgTick = m.tickCount
 			return m, nil
 		}
-		m.statusMsg = "PR merged — press r to send cleanup"
+		m.statusMsg = "PR merged"
 		m.statusMsgTick = m.tickCount
-		if sessionID != "" {
-			m.pendingReplies[sessionID] = mergeCleanupMsg
-		}
 		return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 
 	case pinStateMsg:
