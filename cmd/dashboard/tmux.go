@@ -182,6 +182,22 @@ func ResolveTarget(paneID string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// TmuxPaneIDFromTarget resolves a tmux target (session:window.pane) to its
+// stable pane ID (%N format). Returns "" on error or if the pane doesn't exist.
+func TmuxPaneIDFromTarget(target string) string {
+	if err := ValidateTarget(target); err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", target,
+		"#{pane_id}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // TmuxPaneCwd returns the current working directory of a tmux pane by its
 // pane ID (%N format). Returns "" if the pane doesn't exist or on error.
 func TmuxPaneCwd(paneID string) string {

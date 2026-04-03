@@ -53,7 +53,12 @@ type closeResultMsg struct {
 }
 type createSessionMsg struct {
 	target string
+	paneID string
 	err    error
+}
+type shellErrorMsg struct {
+	paneID string
+	output string
 }
 
 // -- Modes --

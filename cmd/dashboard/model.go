@@ -158,6 +158,9 @@ type model struct {
 	selectedCreateSkill int      // index into availableSkills
 	createSkillName     string   // selected skill name ("" if none)
 
+	// Pending pane monitoring (shell error capture)
+	pendingPanes map[string]time.Time // paneID (%N) → creation time
+
 	// Banner
 	quote       string           // random quote text selected at startup
 	quoteAuthor string           // quote author (empty for fallback quotes)
@@ -383,6 +386,7 @@ func newModel(cfg Config, db *DB) model {
 		quoteAuthor:       "",
 		nowFunc:           time.Now,
 		pathExists:        dirExists,
+		pendingPanes:      make(map[string]time.Time),
 		availableSkills:   skillList,
 		skillsAvailable:   hasSkills,
 	}
@@ -428,6 +432,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stateUpdatedMsg:
 		ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
+		// Clear pending panes that now have state files (agent registered via hooks)
+		for _, a := range msg.state.Agents {
+			if a.TmuxPaneID != "" {
+				delete(m.pendingPanes, a.TmuxPaneID)
+			}
+		}
 		prevTarget, prevSubID := m.selectedIdentity()
 		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Prune maps for agents no longer present
@@ -528,7 +538,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-clear status message: errors get 6s, others 3s
 		if m.statusMsg != "" && m.statusMsgTick >= 0 {
 			ttl := 3
-			if strings.HasPrefix(m.statusMsg, "Create failed") || strings.HasPrefix(m.statusMsg, "Close failed") {
+			if strings.HasPrefix(m.statusMsg, "Create failed") || strings.HasPrefix(m.statusMsg, "Close failed") || strings.HasPrefix(m.statusMsg, "Shell error") {
 				ttl = 6
 			}
 			if m.tickCount-m.statusMsgTick >= ttl {
@@ -536,6 +546,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation()}
+		// Check pending panes for shell errors every 3 ticks (~3s)
+		if m.tickCount%3 == 0 && len(m.pendingPanes) > 0 {
+			cmds = append(cmds, checkPendingPanes(m.pendingPanes))
+		}
 		if m.selectedSubagent() != nil {
 			cmds = append(cmds, m.loadSubagentActivity())
 		}
@@ -615,6 +629,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
 
+		// Track newly spawned pane for shell error monitoring
+		if msg.paneID != "" {
+			m.pendingPanes[msg.paneID] = time.Now()
+		}
+
 		// Insert a placeholder agent immediately so the panel doesn't jump
 		// when the state file appears on the next tick. The placeholder is
 		// naturally replaced when loadState returns with real data.
@@ -629,11 +648,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !already {
 				prevTarget, prevSubID := m.selectedIdentity()
 				m.agents = append(m.agents, Agent{
-					Target:  msg.target,
-					Session: sess,
-					Window:  win,
-					Pane:    pane,
-					State:   "running",
+					Target:     msg.target,
+					Session:    sess,
+					Window:     win,
+					Pane:       pane,
+					State:      "running",
+					TmuxPaneID: msg.paneID,
 				})
 				// Re-sort so placeholder appears in correct position
 				sort.Slice(m.agents, func(i, j int) bool {
@@ -661,6 +681,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.updateRightContent()
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
+
+	case shellErrorMsg:
+		delete(m.pendingPanes, msg.paneID)
+		// Update matching placeholder agent to error state
+		for i := range m.agents {
+			if m.agents[i].TmuxPaneID == msg.paneID {
+				m.agents[i].State = "error"
+				m.agents[i].ShellError = msg.output
+				break
+			}
+		}
+		m.statusMsg = fmt.Sprintf("Shell error: %s", msg.output)
+		m.statusMsgTick = m.tickCount
+		m.buildTree()
+		m.updateLeftContent()
+		m.updateRightContent()
+		return m, nil
 
 	case closeResultMsg:
 		if msg.err != nil {

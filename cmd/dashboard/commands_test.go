@@ -229,3 +229,36 @@ func TestValidateFolder_TildeExpansion(t *testing.T) {
 		t.Errorf("expected %q, got %q", home, absPath)
 	}
 }
+
+func TestMatchShellError(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		want  bool
+	}{
+		{"command not found", []string{"zsh: command not found: claude"}, true},
+		{"npm ERR!", []string{"npm ERR! code EACCES"}, true},
+		{"npm error", []string{"npm error could not determine executable"}, true},
+		{"TypeError", []string{"TypeError: Cannot read properties of undefined"}, true},
+		{"ReferenceError", []string{"ReferenceError: require is not defined"}, true},
+		{"permission denied", []string{"bash: /usr/local/bin/claude: Permission denied"}, true},
+		{"EACCES", []string{"EACCES: permission denied, access '/usr/local/lib'"}, true},
+		{"SyntaxError", []string{"SyntaxError: Unexpected token '<'"}, true},
+		{"Cannot find module", []string{"Cannot find module '@anthropic-ai/claude-code'"}, true},
+		{"oh my zsh update", []string{"[Oh My Zsh] Would you like to update?"}, true},
+		{"omz update", []string{"omz update available"}, true},
+		{"shell prompt returned", []string{"~ %"}, false},             // not matched (ambiguous)
+		{"normal startup", []string{"Loading Claude...", ">"}, false}, // no error
+		{"empty output", []string{""}, false},
+		{"blank lines", []string{"", "", ""}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchShellError(tt.lines)
+			if (got != "") != tt.want {
+				t.Errorf("matchShellError(%v) = %q, wantMatch=%v", tt.lines, got, tt.want)
+			}
+		})
+	}
+}

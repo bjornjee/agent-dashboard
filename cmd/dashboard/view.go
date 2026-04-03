@@ -152,6 +152,19 @@ func (m *model) updateRightContent() {
 		} else {
 			m.messageVP.SetContent(m.finalMessageContent())
 		}
+	} else if agent != nil && agent.ShellError != "" {
+		w := m.rightWidth - 4
+		errStyle := lipgloss.NewStyle().Foreground(themeRed)
+		header := errStyle.Render("Shell error during startup:")
+		var lines []string
+		lines = append(lines, " "+header)
+		lines = append(lines, "")
+		for _, l := range strings.Split(agent.ShellError, "\n") {
+			for _, wl := range wrapText(l, w) {
+				lines = append(lines, " "+errStyle.Render(wl))
+			}
+		}
+		m.messageVP.SetContent(strings.Join(lines, "\n"))
 	} else if m.tmuxAvailable && hasContent(m.capturedLines) {
 		w := m.rightWidth - 4
 		var lines []string

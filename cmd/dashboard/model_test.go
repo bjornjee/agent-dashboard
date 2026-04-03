@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -1728,5 +1729,133 @@ func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
 
 	if m.messageVP.YOffset != 0 {
 		t.Error("message viewport should NOT auto-scroll when plan is visible — user may be reading the plan")
+	}
+}
+
+func TestShellErrorMsg_SetsErrorState(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	// Create a placeholder agent (as createSessionMsg would)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.pendingPanes = map[string]time.Time{"%5": time.Now().Add(-5 * time.Second)}
+	m.buildTree()
+
+	result, _ := m.Update(shellErrorMsg{paneID: "%5", output: "zsh: command not found: claude"})
+	rm := result.(model)
+
+	// Pane should be removed from pending
+	if _, ok := rm.pendingPanes["%5"]; ok {
+		t.Error("expected pane to be removed from pendingPanes")
+	}
+
+	// Agent state should be updated to error
+	found := false
+	for _, a := range rm.agents {
+		if a.TmuxPaneID == "%5" {
+			found = true
+			if a.State != "error" {
+				t.Errorf("expected agent state 'error', got %q", a.State)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected to find agent with paneID %5")
+	}
+
+	// Status message should show the error
+	if !strings.Contains(rm.statusMsg, "command not found") {
+		t.Errorf("expected error in statusMsg, got %q", rm.statusMsg)
+	}
+}
+
+func TestShellErrorMsg_StoresOutputForDisplay(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.pendingPanes = map[string]time.Time{"%5": time.Now().Add(-5 * time.Second)}
+	m.buildTree()
+
+	errorOutput := "npm ERR! code EACCES\nnpm ERR! permission denied"
+	result, _ := m.Update(shellErrorMsg{paneID: "%5", output: errorOutput})
+	rm := result.(model)
+
+	// The captured error output should be stored on the agent
+	for _, a := range rm.agents {
+		if a.TmuxPaneID == "%5" {
+			if a.ShellError != errorOutput {
+				t.Errorf("expected ShellError=%q, got %q", errorOutput, a.ShellError)
+			}
+		}
+	}
+}
+
+func TestPendingPanes_ClearedOnStateUpdate(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	// Pane is pending
+	m.pendingPanes = map[string]time.Time{"%5": time.Now()}
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	// State update arrives with the agent now having a tmux_pane_id
+	sf := StateFile{
+		Agents: map[string]Agent{
+			"session-123": {
+				Target:     "main:1.0",
+				Window:     1,
+				Pane:       0,
+				State:      "running",
+				TmuxPaneID: "%5",
+				SessionID:  "session-123",
+			},
+		},
+	}
+	result, _ := m.Update(stateUpdatedMsg{state: sf})
+	rm := result.(model)
+
+	if _, ok := rm.pendingPanes["%5"]; ok {
+		t.Error("expected pending pane to be cleared when state file reports the agent")
+	}
+}
+
+func TestCreateSessionMsg_AddsToPendingPanes(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	m.statusMsg = "spawning"
+	result, _ := m.Update(createSessionMsg{target: "main:2.0", paneID: "%10"})
+	rm := result.(model)
+
+	if _, ok := rm.pendingPanes["%10"]; !ok {
+		t.Error("expected paneID to be added to pendingPanes")
 	}
 }

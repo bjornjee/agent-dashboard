@@ -515,7 +515,10 @@ func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, p
 			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 
-		return createSessionMsg{target: newTarget}
+		// Resolve stable pane ID for shell error monitoring
+		paneID := TmuxPaneIDFromTarget(newTarget)
+
+		return createSessionMsg{target: newTarget, paneID: paneID}
 	}
 }
 
@@ -769,4 +772,90 @@ func watchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotif
 	}()
 
 	return watcher, nil
+}
+
+// pendingPaneGrace is how long to wait after spawning before checking for errors.
+const pendingPaneGrace = 3 * time.Second
+
+// pendingPaneTimeout is the maximum time to monitor a pending pane.
+const pendingPaneTimeout = 60 * time.Second
+
+// checkPendingPanes polls tmux panes that were recently spawned but haven't
+// registered via hooks yet. Detects shell errors and dead panes.
+// Returns at most one shellErrorMsg per invocation; remaining errors are
+// caught on subsequent ticks (~3s apart).
+func checkPendingPanes(pending map[string]time.Time) tea.Cmd {
+	if len(pending) == 0 {
+		return nil
+	}
+	// Snapshot the map so the closure is safe
+	snapshot := make(map[string]time.Time, len(pending))
+	for k, v := range pending {
+		snapshot[k] = v
+	}
+	return func() tea.Msg {
+		now := time.Now()
+		for paneID, created := range snapshot {
+			age := now.Sub(created)
+
+			// Expire old entries silently
+			if age > pendingPaneTimeout {
+				return shellErrorMsg{paneID: paneID, output: "agent startup timed out"}
+			}
+
+			// Wait for grace period before checking
+			if age < pendingPaneGrace {
+				continue
+			}
+
+			// Check if pane is still alive
+			target := ResolveTarget(paneID)
+			if target == "" {
+				return shellErrorMsg{paneID: paneID, output: "agent process exited unexpectedly"}
+			}
+
+			// Capture pane output and check for errors
+			lines, err := TmuxCapture(target, 30)
+			if err != nil {
+				continue
+			}
+			if match := matchShellError(lines); match != "" {
+				return shellErrorMsg{paneID: paneID, output: match}
+			}
+		}
+		return nil
+	}
+}
+
+// shellErrorPatterns are substrings that indicate a shell-level failure
+// during agent startup (command not found, npm errors, permission issues, etc.).
+var shellErrorPatterns = []string{
+	"command not found",
+	"npm ERR!",
+	"npm error",
+	"Permission denied",
+	"EACCES",
+	"SyntaxError",
+	"TypeError:",
+	"ReferenceError:",
+	"Cannot find module",
+	"[Oh My Zsh]",
+	"omz update",
+}
+
+// matchShellError scans captured pane lines for known shell error patterns.
+// Returns the matching line if found, or "" if no error detected.
+func matchShellError(lines []string) string {
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		for _, pattern := range shellErrorPatterns {
+			if strings.Contains(trimmed, pattern) {
+				return trimmed
+			}
+		}
+	}
+	return ""
 }

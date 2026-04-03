@@ -34,6 +34,7 @@ type Agent struct {
 	CurrentTool        string   `json:"current_tool"`
 	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
 	PinnedState        string   `json:"pinned_state,omitempty"`
+	ShellError         string   `json:"-"` // transient: shell error output captured during startup
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.
