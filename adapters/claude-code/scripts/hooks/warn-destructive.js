@@ -37,6 +37,7 @@ const DESTRUCTIVE_PATTERNS = [
   { pattern: /\bdrop\s+table\b/i,                     label: 'DROP TABLE' },
   { pattern: /\bdrop\s+database\b/i,                  label: 'DROP DATABASE' },
   { pattern: /\btruncate\s+table\b/i,                 label: 'TRUNCATE TABLE' },
+  { pattern: /\btmux\s+send-keys\b/,                  label: 'tmux send-keys (cross-pane injection)' },
 ];
 
 module.exports = { hasRmRF, DESTRUCTIVE_PATTERNS };
