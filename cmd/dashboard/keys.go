@@ -342,6 +342,66 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Confirm merge mode
+	if m.mode == modeConfirmMerge {
+		switch key {
+		case "y":
+			sessionID := m.confirmMergeSessionID
+			paneID := m.confirmMergePaneID
+			dir := m.confirmMergeDir
+			branch := m.confirmMergeBranch
+			m.confirmMergeSessionID = ""
+			m.confirmMergePaneID = ""
+			m.confirmMergeDir = ""
+			m.confirmMergeBranch = ""
+			m.mode = modeNormal
+			if m.ghAvailable {
+				m.mergeSessionID = sessionID
+				m.mergePaneID = paneID
+				m.statusMsg = "Merging PR..."
+				m.statusMsgTick = m.tickCount
+				return m, mergePR(dir, branch)
+			}
+			cmds := []tea.Cmd{
+				pinAgentStateCmd(m.statePath, sessionID, "merged"),
+				sendReply(paneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
+			}
+			m.statusMsg = "Marked as merged — cleanup sent"
+			m.statusMsgTick = m.tickCount
+			return m, tea.Batch(cmds...)
+		case "n", "esc":
+			m.confirmMergeSessionID = ""
+			m.confirmMergePaneID = ""
+			m.confirmMergeDir = ""
+			m.confirmMergeBranch = ""
+			m.mode = modeNormal
+			m.statusMsg = ""
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Confirm send-key mode
+	if m.mode == modeConfirmSend {
+		switch key {
+		case "enter":
+			paneID := m.confirmSendPaneID
+			sendKey := m.confirmSendKey
+			m.confirmSendPaneID = ""
+			m.confirmSendKey = ""
+			m.mode = modeNormal
+			m.statusMsg = ""
+			return m, sendRawKey(paneID, sendKey)
+		case "esc":
+			m.confirmSendPaneID = ""
+			m.confirmSendKey = ""
+			m.mode = modeNormal
+			m.statusMsg = ""
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Help overlay
 	if m.helpVisible {
 		switch key {
@@ -651,22 +711,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "m":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && m.tmuxAvailable &&
 			isPR(agent.State) && agent.EffectiveDir() != "" && agent.Branch != "" {
-			if m.ghAvailable {
-				// Merge via gh CLI — defer pin to mergePRMsg handler
-				m.mergeSessionID = agent.SessionID
-				m.mergePaneID = agent.TmuxPaneID
-				m.statusMsg = "Merging PR..."
-				m.statusMsgTick = m.tickCount
-				return m, mergePR(agent.EffectiveDir(), agent.Branch)
-			}
-			// No gh: pin immediately + send cleanup (manual workflow)
-			cmds := []tea.Cmd{
-				pinAgentStateCmd(m.statePath, agent.SessionID, "merged"),
-				sendReply(agent.TmuxPaneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
-			}
-			m.statusMsg = "Marked as merged — cleanup sent"
-			m.statusMsgTick = 3
-			return m, tea.Batch(cmds...)
+			m.mode = modeConfirmMerge
+			m.confirmMergeSessionID = agent.SessionID
+			m.confirmMergePaneID = agent.TmuxPaneID
+			m.confirmMergeDir = agent.EffectiveDir()
+			m.confirmMergeBranch = agent.Branch
+			m.statusMsg = fmt.Sprintf("Merge %s? (y/n)", agent.Branch)
+			m.statusMsgTick = -1 // pinned
+			return m, nil
 		}
 	case "h":
 		m.helpVisible = true
@@ -705,14 +757,24 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if es == "plan" && key == "y" {
 					sendKey = "1"
 				}
-				return m, sendRawKey(agent.TmuxPaneID, sendKey)
+				m.mode = modeConfirmSend
+				m.confirmSendPaneID = agent.TmuxPaneID
+				m.confirmSendKey = sendKey
+				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
+				m.statusMsgTick = -1 // pinned
+				return m, nil
 			}
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {
-				return m, sendRawKey(agent.TmuxPaneID, key)
+				m.mode = modeConfirmSend
+				m.confirmSendPaneID = agent.TmuxPaneID
+				m.confirmSendKey = key
+				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
+				m.statusMsgTick = -1 // pinned
+				return m, nil
 			}
 		}
 	}
