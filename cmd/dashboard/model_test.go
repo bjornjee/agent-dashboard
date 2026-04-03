@@ -550,6 +550,41 @@ func TestLaunchHealthMsg_NoWarning(t *testing.T) {
 	}
 }
 
+func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	// Simulate a spawning placeholder already in the agent list
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/existing"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/new-project"},
+	}
+	m.buildTree()
+
+	// Simulate a state update that only knows about the existing agent
+	result, _ := m.Update(stateUpdatedMsg{
+		state: StateFile{Agents: map[string]Agent{
+			"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/existing"},
+		}},
+	})
+	rm := result.(model)
+
+	// The spawning placeholder should be preserved
+	found := false
+	for _, a := range rm.agents {
+		if a.Target == "main:2.0" && a.State == "spawning" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("stateUpdatedMsg should preserve spawning placeholders not yet in state")
+	}
+}
+
 func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
 	m := newModel(testConfig(""), nil)
 	m.width = 120

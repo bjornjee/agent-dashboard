@@ -424,7 +424,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateUpdatedMsg:
 		ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
-		m.agents = SortedAgents(msg.state, m.selfPaneID)
+		newAgents := SortedAgents(msg.state, m.selfPaneID)
+		// Preserve spawning placeholders that don't yet have a state file.
+		newTargets := make(map[string]bool, len(newAgents))
+		for _, a := range newAgents {
+			newTargets[a.Target] = true
+		}
+		hasSpawning := false
+		for _, a := range m.agents {
+			if a.State == "spawning" && !newTargets[a.Target] {
+				newAgents = append(newAgents, a)
+				hasSpawning = true
+			}
+		}
+		if hasSpawning {
+			sort.Slice(newAgents, func(i, j int) bool {
+				pi := statePriority[newAgents[i].State]
+				pj := statePriority[newAgents[j].State]
+				if pi == 0 {
+					pi = 99
+				}
+				if pj == 0 {
+					pj = 99
+				}
+				if pi != pj {
+					return pi < pj
+				}
+				if newAgents[i].Window != newAgents[j].Window {
+					return newAgents[i].Window < newAgents[j].Window
+				}
+				return newAgents[i].Pane < newAgents[j].Pane
+			})
+		}
+		m.agents = newAgents
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
 		for _, a := range m.agents {
