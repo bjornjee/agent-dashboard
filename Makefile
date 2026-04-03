@@ -1,6 +1,6 @@
 .PHONY: build test install clean seed help
 
-VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || cat VERSION)
+VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || cat VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
 ADAPTER ?= claude-code
 
