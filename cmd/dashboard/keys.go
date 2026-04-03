@@ -31,6 +31,8 @@ func (m model) debugLogKey(msg tea.KeyMsg) {
 		time.Now().Format("15:04:05.000"), m.mode, msg.String(), msg.Type, runeHex, mouseAge, m.isPhantomKey())
 }
 
+const mergeCleanupMsg = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
+
 // confirmCooldown is the minimum time between entering a confirmation mode
 // and accepting a confirmation key. Phantom keystrokes from terminal escape
 // sequences arrive within microseconds; real users take at least 200-300ms.
@@ -420,7 +422,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.statusMsgTick = m.tickCount
 				return m, mergePR(dir, branch)
 			}
-			m.pendingReplies[sessionID] = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
+			m.pendingReplies[sessionID] = mergeCleanupMsg
 			m.statusMsg = "Marked as merged — press r to send cleanup"
 			m.statusMsgTick = m.tickCount
 			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")

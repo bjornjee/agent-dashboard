@@ -494,6 +494,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				delete(m.agentCaches, key)
 			}
 		}
+		// Prune pending replies for agents no longer present
+		liveSessions := make(map[string]bool, len(m.agents))
+		for _, a := range m.agents {
+			liveSessions[a.SessionID] = true
+		}
+		for sid := range m.pendingReplies {
+			if !liveSessions[sid] {
+				delete(m.pendingReplies, sid)
+			}
+		}
 		m.buildTree()
 		m.restoreSelection(prevTarget, prevSubID)
 		m.renderedHistory = "" // invalidate cache on state update
@@ -760,7 +770,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = "PR merged — press r to send cleanup"
 		m.statusMsgTick = m.tickCount
 		if sessionID != "" {
-			m.pendingReplies[sessionID] = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
+			m.pendingReplies[sessionID] = mergeCleanupMsg
 		}
 		return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 
