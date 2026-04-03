@@ -15,10 +15,10 @@ func (m model) debugLogKey(msg tea.KeyMsg) {
 		return
 	}
 	var mouseAge string
-	if m.lastMouseAt.IsZero() {
+	if m.lastEscapeAt.IsZero() {
 		mouseAge = "never"
 	} else {
-		mouseAge = fmt.Sprintf("%dms", time.Since(m.lastMouseAt).Milliseconds())
+		mouseAge = fmt.Sprintf("%dms", time.Since(m.lastEscapeAt).Milliseconds())
 	}
 	runeHex := ""
 	for i, r := range msg.Runes {
@@ -38,20 +38,20 @@ const mergeCleanupMsg = "The PR has been merged. Please clean up: remove any wor
 // sequences arrive within microseconds; real users take at least 200-300ms.
 const confirmCooldown = 300 * time.Millisecond
 
-// mouseKeyCooldown is the minimum gap between a mouse event and a key event
-// for the key to be treated as genuine. Fragmented mouse escape sequences
-// produce phantom key events within ~1ms of the mouse event. 50ms is
-// conservative — real mouse-to-keyboard transitions take 150ms+.
-const mouseKeyCooldown = 50 * time.Millisecond
+// escapeKeyCooldown is the minimum gap between a terminal escape sequence
+// event (mouse, focus) and a key event for the key to be treated as genuine.
+// Fragmented escape sequences produce phantom key events within ~1ms.
+// 50ms is conservative — real transitions take 150ms+.
+const escapeKeyCooldown = 50 * time.Millisecond
 
 // isPhantomKey returns true if the key event likely originated from a
-// fragmented mouse escape sequence rather than a real keypress.
+// fragmented terminal escape sequence (mouse or focus) rather than a real keypress.
 func (m model) isPhantomKey() bool {
-	return !m.lastMouseAt.IsZero() && time.Since(m.lastMouseAt) < mouseKeyCooldown
+	return !m.lastEscapeAt.IsZero() && time.Since(m.lastEscapeAt) < escapeKeyCooldown
 }
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	m.lastMouseAt = time.Now()
+	m.lastEscapeAt = time.Now()
 	if m.debugKeyLog != nil {
 		fmt.Fprintf(m.debugKeyLog, "%s | MOUSE | button=%d action=%d x=%d y=%d\n",
 			time.Now().Format("15:04:05.000"), msg.Button, msg.Action, msg.X, msg.Y)

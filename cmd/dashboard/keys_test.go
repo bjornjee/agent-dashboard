@@ -1157,7 +1157,7 @@ func TestPhantomKey_EnterRejected(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now() // mouse event just happened
+	m.lastEscapeAt = time.Now() // mouse event just happened
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := result.(model)
@@ -1175,7 +1175,7 @@ func TestPhantomKey_MergeRejected(t *testing.T) {
 			Cwd: t.TempDir(), Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now()
+	m.lastEscapeAt = time.Now()
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	updated := result.(model)
@@ -1192,7 +1192,7 @@ func TestPhantomKey_CloseRejected(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now()
+	m.lastEscapeAt = time.Now()
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	updated := result.(model)
@@ -1209,7 +1209,7 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
+	m.lastEscapeAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := result.(model)
@@ -1218,10 +1218,10 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 	}
 }
 
-func TestHandleMouse_SetsLastMouseAt(t *testing.T) {
+func TestHandleMouse_SetsLastEscapeAt(t *testing.T) {
 	m := newModel(testConfig(t.TempDir()), nil)
-	if !m.lastMouseAt.IsZero() {
-		t.Fatal("lastMouseAt should be zero initially")
+	if !m.lastEscapeAt.IsZero() {
+		t.Fatal("lastEscapeAt should be zero initially")
 	}
 
 	before := time.Now()
@@ -1229,8 +1229,37 @@ func TestHandleMouse_SetsLastMouseAt(t *testing.T) {
 	after := time.Now()
 
 	updated := result.(model)
-	if updated.lastMouseAt.Before(before) || updated.lastMouseAt.After(after) {
-		t.Errorf("lastMouseAt should be between before and after; got %v", updated.lastMouseAt)
+	if updated.lastEscapeAt.Before(before) || updated.lastEscapeAt.After(after) {
+		t.Errorf("lastEscapeAt should be between before and after; got %v", updated.lastEscapeAt)
+	}
+}
+
+func TestFocusEvent_SetsLastEscapeAt(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	if !m.lastEscapeAt.IsZero() {
+		t.Fatal("lastEscapeAt should be zero initially")
+	}
+
+	before := time.Now()
+	result, _ := m.Update(tea.FocusMsg{})
+	after := time.Now()
+
+	updated := result.(model)
+	if updated.lastEscapeAt.Before(before) || updated.lastEscapeAt.After(after) {
+		t.Errorf("lastEscapeAt should be set by focus event; got %v", updated.lastEscapeAt)
+	}
+}
+
+func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.lastEscapeAt = time.Now() // focus event just happened
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeNormal {
+		t.Errorf("enter should be rejected as phantom after focus event, got mode %d", rm.mode)
 	}
 }
 

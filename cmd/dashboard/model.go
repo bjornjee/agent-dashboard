@@ -153,10 +153,11 @@ type model struct {
 	// the reply textinput when the user presses 'r'.
 	pendingReplies map[string]string
 
-	// lastMouseAt records when the last mouse event was received.
-	// Key events arriving within mouseKeyCooldown of a mouse event are
-	// treated as phantom keystrokes from fragmented escape sequences.
-	lastMouseAt time.Time
+	// lastEscapeAt records when the last terminal escape sequence event
+	// (mouse or focus) was received. Key events arriving within
+	// escapeKeyCooldown are treated as phantom keystrokes from fragmented
+	// escape sequences.
+	lastEscapeAt time.Time
 
 	// debugKeyLog is an open file for logging raw key events.
 	// Set to nil to disable. Written by debugLogKey in keys.go.
@@ -834,12 +835,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.FocusMsg:
+		m.lastEscapeAt = time.Now()
 		if m.debugKeyLog != nil {
 			fmt.Fprintf(m.debugKeyLog, "%s | FOCUS_IN\n", time.Now().Format("15:04:05.000"))
 		}
 		return m, nil
 
 	case tea.BlurMsg:
+		m.lastEscapeAt = time.Now()
 		if m.debugKeyLog != nil {
 			fmt.Fprintf(m.debugKeyLog, "%s | FOCUS_OUT\n", time.Now().Format("15:04:05.000"))
 		}
