@@ -55,8 +55,10 @@ install_claude_code() {
   "
 
   # --- 3. Install adapter to plugin cache ---
+  # Read version from the adapter's plugin.json (authoritative for Claude plugin),
+  # falling back to the VERSION file and then 0.0.0.
   local version
-  version=$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo "0.0.0")
+  version=$(node -e "console.log(require('$REPO_DIR/adapters/$ADAPTER/.claude-plugin/plugin.json').version)" 2>/dev/null || cat "$REPO_DIR/VERSION" 2>/dev/null || echo "0.0.0")
   local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$version"
   mkdir -p "$cache_dir"
   # Copy the adapter contents into the cache
