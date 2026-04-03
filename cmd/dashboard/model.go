@@ -710,7 +710,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
 			m.statusMsgTick = m.tickCount
 		}
-		return m, nil
+		// Transition spawning → running so the placeholder is no longer
+		// preserved across state refreshes and gets replaced by real data.
+		for i := range m.agents {
+			if m.agents[i].Target == msg.target && m.agents[i].State == "spawning" {
+				m.agents[i].State = "running"
+				break
+			}
+		}
+		m.updateLeftContent()
+		return m, loadState(m.statePath, m.tmuxAvailable)
 
 	case closeResultMsg:
 		if msg.err != nil {

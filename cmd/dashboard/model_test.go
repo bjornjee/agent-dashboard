@@ -531,22 +531,42 @@ func TestLaunchHealthMsg_Warning(t *testing.T) {
 	if !strings.Contains(rm.statusMsg, "command not found") {
 		t.Errorf("expected 'command not found' in statusMsg, got %q", rm.statusMsg)
 	}
+	// Spawning placeholder should transition to running
+	for _, a := range rm.agents {
+		if a.Target == "main:2.0" && a.State == "spawning" {
+			t.Error("expected spawning agent to transition to running after health check")
+		}
+	}
 }
 
-func TestLaunchHealthMsg_NoWarning(t *testing.T) {
+func TestLaunchHealthMsg_TransitionsSpawningToRunning(t *testing.T) {
 	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
 	m.tmuxAvailable = true
-	m.statusMsg = ""
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/project"},
+	}
+	m.buildTree()
 
 	result, _ := m.Update(launchHealthMsg{target: "main:2.0"})
 	rm := result.(model)
 
-	if rm.statusMsg != "" {
-		t.Errorf("expected empty statusMsg for clean launch, got %q", rm.statusMsg)
+	// Agent should now be "running", not "spawning"
+	var agent *Agent
+	for i := range rm.agents {
+		if rm.agents[i].Target == "main:2.0" {
+			agent = &rm.agents[i]
+			break
+		}
+	}
+	if agent == nil {
+		t.Fatal("expected agent to still exist after health check")
+	}
+	if agent.State != "running" {
+		t.Errorf("expected state=running after health check, got %q", agent.State)
 	}
 }
 
