@@ -29,6 +29,26 @@ func DefaultSettings() Settings {
 	}
 }
 
+// defaultSettingsTOML is the initial settings.toml content written on first run.
+const defaultSettingsTOML = `# Agent Dashboard settings
+# See https://github.com/bjornjee/agent-dashboard for documentation.
+
+[banner]
+show_mascot = true   # show the axolotl pixel art
+show_quote  = true   # show the daily quote
+`
+
+// EnsureSettings creates a default settings.toml in stateDir if one does not
+// already exist. The stateDir itself is created if needed.
+func EnsureSettings(stateDir string) {
+	path := filepath.Join(stateDir, "settings.toml")
+	if _, err := os.Stat(path); err == nil {
+		return // already exists
+	}
+	_ = os.MkdirAll(stateDir, 0o755)
+	_ = os.WriteFile(path, []byte(defaultSettingsTOML), 0o644)
+}
+
 // LoadSettings reads settings.toml from stateDir, falling back to defaults
 // if the file is missing or malformed.
 func LoadSettings(stateDir string) Settings {
