@@ -320,12 +320,27 @@ func SortedAgents(sf StateFile, selfPaneID string) []Agent {
 // Agents whose tmux panes are still alive (present in livePaneIDs) are kept
 // regardless of age — an idle agent waiting for input generates no hook events
 // but should not be evicted from the dashboard.
+//
+// When multiple agents share the same pane ID (e.g. a pane was reused for a
+// different process), only the most recently updated agent is kept; older
+// duplicates are removed regardless of pane liveness.
 func CleanStale(dir string, maxAgeSecs int, livePaneIDs map[string]bool) {
 	now := time.Now()
 	entries, err := os.ReadDir(agentsDir(dir))
 	if err != nil {
 		return
 	}
+
+	type agentFile struct {
+		path      string
+		agent     Agent
+		updatedAt time.Time
+	}
+
+	// First pass: read all agent files and track the newest per pane.
+	var files []agentFile
+	newestPerPane := make(map[string]time.Time) // paneID → newest updatedAt
+
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
@@ -340,13 +355,30 @@ func CleanStale(dir string, maxAgeSecs int, livePaneIDs map[string]bool) {
 			_ = os.Remove(path)
 			continue
 		}
-		// Keep agents whose tmux pane is still alive
-		if agent.TmuxPaneID != "" && livePaneIDs[agent.TmuxPaneID] {
+		t, err := time.Parse(time.RFC3339, agent.UpdatedAt)
+		if err != nil {
+			_ = os.Remove(path)
 			continue
 		}
-		t, err := time.Parse(time.RFC3339, agent.UpdatedAt)
-		if err != nil || now.Sub(t).Seconds() > float64(maxAgeSecs) {
-			_ = os.Remove(path)
+		files = append(files, agentFile{path: path, agent: agent, updatedAt: t})
+		if agent.TmuxPaneID != "" && t.After(newestPerPane[agent.TmuxPaneID]) {
+			newestPerPane[agent.TmuxPaneID] = t
+		}
+	}
+
+	// Second pass: remove stale and duplicate-pane agents.
+	for _, f := range files {
+		// When multiple agents share a pane, remove all but the newest.
+		if f.agent.TmuxPaneID != "" && f.updatedAt.Before(newestPerPane[f.agent.TmuxPaneID]) {
+			_ = os.Remove(f.path)
+			continue
+		}
+		// Keep agents whose tmux pane is still alive
+		if f.agent.TmuxPaneID != "" && livePaneIDs[f.agent.TmuxPaneID] {
+			continue
+		}
+		if now.Sub(f.updatedAt).Seconds() > float64(maxAgeSecs) {
+			_ = os.Remove(f.path)
 		}
 	}
 }
