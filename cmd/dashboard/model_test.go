@@ -1764,6 +1764,26 @@ func TestSpawningSpinner_PersistsUntilAgentAppears(t *testing.T) {
 		t.Error("spawning spinner should persist until agent appears in state, got cleared after ticks")
 	}
 
+	// Simulate stateUpdatedMsg WITHOUT the target — placeholder should be re-injected
+	result, _ = m.Update(stateUpdatedMsg{state: StateFile{Agents: map[string]Agent{
+		"other-session": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}}})
+	m = result.(model)
+
+	if m.spawningTarget != "main:3.0" {
+		t.Errorf("spawningTarget should still be set when agent not in state, got %q", m.spawningTarget)
+	}
+	// Placeholder should be re-injected into agents list
+	hasPlaceholder := false
+	for _, a := range m.agents {
+		if a.Target == "main:3.0" {
+			hasPlaceholder = true
+		}
+	}
+	if !hasPlaceholder {
+		t.Error("placeholder agent should be re-injected when spawning target not in state")
+	}
+
 	// Now simulate stateUpdatedMsg with the target present
 	result, _ = m.Update(stateUpdatedMsg{state: StateFile{Agents: map[string]Agent{
 		"main:3.0": {Target: "main:3.0", Window: 3, Pane: 0, State: "running", Cwd: "/tmp/project"},

@@ -429,11 +429,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Clear spawning spinner once the spawned agent appears in state
 		if m.spawningTarget != "" {
+			found := false
 			for _, a := range m.agents {
 				if a.Target == m.spawningTarget {
-					m.spawningTarget = ""
-					m.statusMsg = ""
+					found = true
 					break
+				}
+			}
+			if found {
+				m.spawningTarget = ""
+				m.statusMsg = ""
+			} else {
+				// Agent hasn't written its state file yet — re-inject the
+				// placeholder so it stays visible in the left panel.
+				if sess, win, pane, ok := parseTarget(m.spawningTarget); ok {
+					m.agents = append(m.agents, Agent{
+						Target:  m.spawningTarget,
+						Session: sess,
+						Window:  win,
+						Pane:    pane,
+						State:   "running",
+					})
 				}
 			}
 		}
