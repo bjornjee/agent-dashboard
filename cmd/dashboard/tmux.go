@@ -84,6 +84,34 @@ func TmuxCapture(target string, lines int) ([]string, error) {
 	return strings.Split(cleaned, "\n"), nil
 }
 
+// launchErrorPatterns are shell error patterns that indicate a command
+// failed to start in a newly created tmux pane.
+var launchErrorPatterns = []string{
+	"command not found",
+	"permission denied",
+	"no such file or directory",
+	"compinit: insecure directories",
+	"Would you like to update",
+	"Segmentation fault",
+	"Killed",
+	"Abort trap",
+	"Bus error",
+}
+
+// detectLaunchError checks captured pane lines for shell errors that indicate
+// the launched command failed to start. Returns the matching error line or "".
+func detectLaunchError(lines []string) string {
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		for _, pat := range launchErrorPatterns {
+			if strings.Contains(lower, strings.ToLower(pat)) {
+				return strings.TrimSpace(line)
+			}
+		}
+	}
+	return ""
+}
+
 // TmuxJump switches to the tmux window and pane of the given target.
 func TmuxJump(target string) error {
 	sw := extractSessionWindow(target)

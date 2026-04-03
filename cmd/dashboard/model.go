@@ -608,7 +608,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			return m, nil
 		}
-		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
+		if msg.warning != "" {
+			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
+		}
+		m.statusMsgTick = m.tickCount
 
 		// Insert a placeholder agent immediately so the panel doesn't jump
 		// when the state file appears on the next tick. The placeholder is

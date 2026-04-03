@@ -470,6 +470,44 @@ func TestCreateSessionMsg_Error(t *testing.T) {
 	}
 }
 
+func TestCreateSessionMsg_Warning(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	result, _ := m.Update(createSessionMsg{
+		target:  "main:2.0",
+		warning: "zsh: command not found: claude",
+	})
+	rm := result.(model)
+
+	// Pane should still be created (not treated as hard error)
+	found := false
+	for _, a := range rm.agents {
+		if a.Target == "main:2.0" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected placeholder agent to be inserted despite warning")
+	}
+	// Warning should appear in status message
+	if !strings.Contains(rm.statusMsg, "Launch warning") {
+		t.Errorf("expected launch warning in statusMsg, got %q", rm.statusMsg)
+	}
+	if !strings.Contains(rm.statusMsg, "command not found") {
+		t.Errorf("expected 'command not found' in statusMsg, got %q", rm.statusMsg)
+	}
+}
+
 func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
 	m := newModel(testConfig(""), nil)
 	m.width = 120

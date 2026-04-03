@@ -52,8 +52,9 @@ type closeResultMsg struct {
 	err error
 }
 type createSessionMsg struct {
-	target string
-	err    error
+	target  string
+	err     error
+	warning string // shell error detected after launch (e.g. "command not found")
 }
 
 // -- Modes --

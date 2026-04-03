@@ -441,6 +441,88 @@ func TestTmuxKillPane_AppliesEvenLayout(t *testing.T) {
 	}
 }
 
+func TestDetectLaunchError(t *testing.T) {
+	tests := []struct {
+		name    string
+		lines   []string
+		wantErr bool
+		wantSub string // substring expected in error
+	}{
+		{
+			name:    "clean launch no error",
+			lines:   []string{"$ claude", "Loading..."},
+			wantErr: false,
+		},
+		{
+			name:    "empty pane",
+			lines:   []string{"", ""},
+			wantErr: false,
+		},
+		{
+			name:    "command not found",
+			lines:   []string{"$ claude", "zsh: command not found: claude", "$ "},
+			wantErr: true,
+			wantSub: "command not found",
+		},
+		{
+			name:    "bash command not found",
+			lines:   []string{"$ claude", "bash: claude: command not found", "$ "},
+			wantErr: true,
+			wantSub: "command not found",
+		},
+		{
+			name:    "zsh compinit insecure directories",
+			lines:   []string{"zsh compinit: insecure directories, run compaudit for list.", "$ "},
+			wantErr: true,
+			wantSub: "compinit",
+		},
+		{
+			name:    "permission denied",
+			lines:   []string{"$ claude", "zsh: permission denied: claude"},
+			wantErr: true,
+			wantSub: "permission denied",
+		},
+		{
+			name:    "oh my zsh upgrade prompt",
+			lines:   []string{"[Oh My Zsh] Would you like to update? [Y/n]"},
+			wantErr: true,
+			wantSub: "update",
+		},
+		{
+			name:    "no such file or directory",
+			lines:   []string{"zsh: no such file or directory: /usr/local/bin/claude"},
+			wantErr: true,
+			wantSub: "no such file",
+		},
+		{
+			name:    "segfault",
+			lines:   []string{"$ claude", "Segmentation fault"},
+			wantErr: true,
+			wantSub: "Segmentation fault",
+		},
+		{
+			name:    "normal output with prompt char should not match",
+			lines:   []string{"❯ some output", "working..."},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := detectLaunchError(tt.lines)
+			if tt.wantErr && got == "" {
+				t.Error("expected an error but got empty string")
+			}
+			if !tt.wantErr && got != "" {
+				t.Errorf("expected no error but got: %q", got)
+			}
+			if tt.wantSub != "" && !strings.Contains(got, tt.wantSub) {
+				t.Errorf("expected error to contain %q, got: %q", tt.wantSub, got)
+			}
+		})
+	}
+}
+
 func TestExtractSessionWindow(t *testing.T) {
 	tests := []struct {
 		input string

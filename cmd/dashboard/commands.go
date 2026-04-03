@@ -515,6 +515,15 @@ func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, p
 			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 
+		// Give the shell a moment to process the command, then check
+		// for startup errors (e.g. "command not found", zsh upgrade prompts).
+		time.Sleep(1500 * time.Millisecond)
+		if lines, captureErr := TmuxCapture(newTarget, 20); captureErr == nil {
+			if errLine := detectLaunchError(lines); errLine != "" {
+				return createSessionMsg{target: newTarget, warning: errLine}
+			}
+		}
+
 		return createSessionMsg{target: newTarget}
 	}
 }
