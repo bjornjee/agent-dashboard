@@ -1663,7 +1663,7 @@ func TestAutoScrollLive_PreservesPositionWhenFocused(t *testing.T) {
 	}
 }
 
-func TestMergePRMsg_Success_PinsAndQueuesPendingReply(t *testing.T) {
+func TestMergePRMsg_Success_PinsAndCleanup(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.MkdirAll(tmpDir+"/agents", 0755)
 	os.WriteFile(tmpDir+"/agents/sess1.json", []byte(`{"state":"pr","pinned_state":"pr"}`), 0644)
@@ -1684,13 +1684,7 @@ func TestMergePRMsg_Success_PinsAndQueuesPendingReply(t *testing.T) {
 		t.Error("mergeSessionID should be cleared after handling")
 	}
 	if cmd == nil {
-		t.Fatal("expected cmd for pin, got nil")
-	}
-	// Cleanup reply should be queued, not sent via tmux
-	if pending, ok := updated.pendingReplies["%5"]; !ok {
-		t.Error("expected pending reply for pane %5")
-	} else if !strings.Contains(pending, "merged") {
-		t.Errorf("expected pending reply to mention 'merged', got %q", pending)
+		t.Fatal("expected cmd for pin + cleanup, got nil")
 	}
 }
 

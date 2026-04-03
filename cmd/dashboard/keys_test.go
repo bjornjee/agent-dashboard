@@ -827,106 +827,23 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 		t.Errorf("expected status to contain 'Marked as merged', got %q", updated.statusMsg)
 	}
 
-	// Should produce a pinStateMsg (single cmd, no longer a batch)
-	msg := cmd()
-	if _, ok := msg.(pinStateMsg); !ok {
-		t.Errorf("confirming merge without gh should pin to 'merged', got %T", msg)
+	// Should have pinStateMsg in the batch
+	var hasPinMsg bool
+	batchResult := cmd()
+	if batch, ok := batchResult.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			msg := c()
+			if _, ok := msg.(pinStateMsg); ok {
+				hasPinMsg = true
+			}
+		}
 	}
 
-	// Cleanup reply should be queued, not sent via tmux
-	if pending, ok := updated.pendingReplies["%5"]; !ok {
-		t.Error("expected pending reply for pane %5")
-	} else if !strings.Contains(pending, "merged") {
-		t.Errorf("expected pending reply to mention 'merged', got %q", pending)
-	}
-}
-
-func TestRKey_PrefillsPendingReply(t *testing.T) {
-	m := newModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "idle", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	m.selected = 0
-	m.pendingReplies["%5"] = "cleanup message"
-
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	updated := result.(model)
-
-	if updated.mode != modeReply {
-		t.Fatalf("expected modeReply, got %d", updated.mode)
-	}
-	if updated.textInput.Value() != "cleanup message" {
-		t.Errorf("expected textInput pre-filled with pending reply, got %q", updated.textInput.Value())
-	}
-}
-
-func TestRKey_NoPendingReply_EmptyInput(t *testing.T) {
-	m := newModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "idle", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	m.selected = 0
-
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
-	updated := result.(model)
-
-	if updated.mode != modeReply {
-		t.Fatalf("expected modeReply, got %d", updated.mode)
-	}
-	if updated.textInput.Value() != "" {
-		t.Errorf("expected empty textInput without pending reply, got %q", updated.textInput.Value())
-	}
-}
-
-func TestReplyEsc_ClearsPendingReply(t *testing.T) {
-	m := newModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "idle", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	m.selected = 0
-	m.pendingReplies["%5"] = "cleanup message"
-	m.mode = modeReply
-
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
-	updated := result.(model)
-
-	if updated.mode != modeNormal {
-		t.Fatalf("expected modeNormal, got %d", updated.mode)
-	}
-	if _, ok := updated.pendingReplies["%5"]; ok {
-		t.Error("expected pending reply to be cleared on esc")
-	}
-}
-
-func TestReplyEnter_EmptyText_ClearsPendingReply(t *testing.T) {
-	m := newModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "idle", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	m.selected = 0
-	m.pendingReplies["%5"] = "cleanup message"
-	m.mode = modeReply
-	// textInput is empty (user cleared pre-filled text)
-
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	updated := result.(model)
-
-	if updated.mode != modeNormal {
-		t.Fatalf("expected modeNormal, got %d", updated.mode)
-	}
-	if _, ok := updated.pendingReplies["%5"]; ok {
-		t.Error("expected pending reply to be cleared on enter with empty text")
-	}
-	if cmd != nil {
-		t.Error("expected no cmd when sending empty text")
+	if !hasPinMsg {
+		t.Error("confirming merge without gh should pin to 'merged'")
 	}
 }
 

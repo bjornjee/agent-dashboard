@@ -158,13 +158,6 @@ type model struct {
 	quoteAuthor string           // quote author (empty for fallback quotes)
 	nowFunc     func() time.Time // injectable clock for testability
 
-	// Pending replies: queued text to send to a pane (keyed by TmuxPaneID).
-	// Instead of injecting text into a tmux pane via send-keys (which races
-	// with the user if they are typing in that pane), background operations
-	// store the reply here.  When the user selects the agent and presses 'r',
-	// the textInput is pre-filled so they can review and send.
-	pendingReplies map[string]string
-
 	// Path validation for z suggestions (injectable for testing)
 	pathExists func(string) bool
 }
@@ -381,7 +374,6 @@ func newModel(cfg Config, db *DB) model {
 		agentSubagents:    make(map[string][]SubagentInfo),
 		collapsed:         make(map[string]bool),
 		dismissed:         make(map[string]bool),
-		pendingReplies:    make(map[string]string),
 		quote:             "",
 		quoteAuthor:       "",
 		nowFunc:           time.Now,
@@ -435,12 +427,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
-		livePanes := make(map[string]bool, len(m.agents))
 		for _, a := range m.agents {
 			live[a.Target] = true
-			if a.TmuxPaneID != "" {
-				livePanes[a.TmuxPaneID] = true
-			}
 		}
 		for target := range m.agentSubagents {
 			if !live[target] {
@@ -462,11 +450,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !live[parentTarget] {
 				delete(m.dismissed, key)
-			}
-		}
-		for paneID := range m.pendingReplies {
-			if !livePanes[paneID] {
-				delete(m.pendingReplies, paneID)
 			}
 		}
 		for key := range m.agentCaches {
@@ -753,12 +736,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsgTick = m.tickCount
 			return m, nil
 		}
-		m.statusMsg = "PR merged — press r to send cleanup"
+		m.statusMsg = "PR merged — cleanup sent"
 		m.statusMsgTick = m.tickCount
-		if paneID != "" {
-			m.pendingReplies[paneID] = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
+		cmds := []tea.Cmd{
+			pinAgentStateCmd(m.statePath, sessionID, "merged"),
 		}
-		return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
+		if paneID != "" {
+			cmds = append(cmds, sendReply(paneID,
+				"The PR has been merged. Please clean up: remove any worktrees and temporary branches."))
+		}
+		return m, tea.Batch(cmds...)
 
 	case pinStateMsg:
 		if msg.err != nil {

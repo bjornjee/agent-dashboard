@@ -445,11 +445,7 @@ func (m model) waitingMessageContent() string {
 			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, m.availableSkills, "        "))
 	} else {
 		agent := m.selectedAgent()
-		hasPending := agent != nil && m.pendingReplies[agent.TmuxPaneID] != ""
-		if hasPending {
-			lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
-				Render("Reply queued — press r to review and send"))
-		} else if agent != nil && agent.State == "question" {
+		if agent != nil && agent.State == "question" {
 			lines = append(lines, " "+helpStyle.Render("Press r to reply, enter to jump to agent"))
 		} else {
 			lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
