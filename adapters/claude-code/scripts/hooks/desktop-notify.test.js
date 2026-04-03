@@ -4,7 +4,9 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, ALERTING_NOTIFICATION_TYPES, ALERTING_ERRORS } = require('./desktop-notify');
+const fs = require('fs');
+const os = require('os');
+const { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, readSettingsBool, loadNotificationSettings, ALERTING_NOTIFICATION_TYPES, ALERTING_ERRORS } = require('./desktop-notify');
 const { extractSessionWindow } = require(path.resolve(__dirname, '..', '..', 'packages', 'tmux'));
 
 describe('stripMarkdown', () => {
@@ -133,6 +135,96 @@ describe('shouldAlert', () => {
   it('returns false for Stop without transcript_path', () => {
     assert.equal(shouldAlert({ hook_event_name: 'Stop' }), false);
     assert.equal(shouldAlert({ hook_event_name: 'Stop', transcript_path: null }), false);
+  });
+});
+
+describe('readSettingsBool', () => {
+  it('reads true value from TOML', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
+    fs.writeFileSync(path.join(dir, 'settings.toml'), '[notifications]\nenabled = true\n');
+    const orig = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = dir;
+    try {
+      assert.equal(readSettingsBool('enabled', false), true);
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+      else process.env.AGENT_DASHBOARD_DIR = orig;
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('reads false value from TOML', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
+    fs.writeFileSync(path.join(dir, 'settings.toml'), '[notifications]\nenabled = false\n');
+    const orig = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = dir;
+    try {
+      assert.equal(readSettingsBool('enabled', true), false);
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+      else process.env.AGENT_DASHBOARD_DIR = orig;
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('returns default when file is missing', () => {
+    const orig = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = '/nonexistent/path';
+    try {
+      assert.equal(readSettingsBool('enabled', false), false);
+      assert.equal(readSettingsBool('enabled', true), true);
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+      else process.env.AGENT_DASHBOARD_DIR = orig;
+    }
+  });
+
+  it('returns default when key is absent', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
+    fs.writeFileSync(path.join(dir, 'settings.toml'), '[banner]\nshow_mascot = true\n');
+    const orig = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = dir;
+    try {
+      assert.equal(readSettingsBool('enabled', false), false);
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+      else process.env.AGENT_DASHBOARD_DIR = orig;
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe('loadNotificationSettings', () => {
+  it('returns all false when file is missing', () => {
+    const orig = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = '/nonexistent/path';
+    try {
+      const s = loadNotificationSettings();
+      assert.equal(s.enabled, false);
+      assert.equal(s.sound, false);
+      assert.equal(s.silentEvents, false);
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+      else process.env.AGENT_DASHBOARD_DIR = orig;
+    }
+  });
+
+  it('reads all three settings', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
+    fs.writeFileSync(path.join(dir, 'settings.toml'),
+      '[notifications]\nenabled = true\nsound = true\nsilent_events = true\n');
+    const orig = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = dir;
+    try {
+      const s = loadNotificationSettings();
+      assert.equal(s.enabled, true);
+      assert.equal(s.sound, true);
+      assert.equal(s.silentEvents, true);
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+      else process.env.AGENT_DASHBOARD_DIR = orig;
+      fs.rmSync(dir, { recursive: true });
+    }
   });
 });
 

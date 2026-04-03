@@ -71,6 +71,18 @@
         "description": "Block git commit unless make test passes (set SKIP_TEST_GATE=1 to bypass)"
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-detect.js\"",
+            "async": true,
+            "timeout": 3
+          }
+        ],
+        "description": "Detect gh pr create/merge and update agent state to pr/merged"
+      },
+      {
         "matcher": "*",
         "hooks": [
           {

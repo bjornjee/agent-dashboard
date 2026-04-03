@@ -11,6 +11,7 @@ import (
 func testConfig(stateDir string) Config {
 	cfg := DefaultConfig()
 	cfg.Profile.PluginCacheDir = "/nonexistent/plugin/cache"
+	cfg.Settings = DefaultSettings() // pin to known state, ignore real filesystem
 	if stateDir != "" {
 		cfg.Profile.StateDir = stateDir
 	}

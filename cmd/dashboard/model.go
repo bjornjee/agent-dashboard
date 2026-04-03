@@ -318,7 +318,10 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 	s.Spinner = spinner.Jump
 	s.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
-	q, a := pickQuote(db)
+	var q, a string
+	if cfg.Settings.Banner.ShowQuote {
+		q, a = pickQuote(db)
+	}
 
 	// Discover skills from agent-dashboard plugin cache
 	rawSkills := discoverSkills(cfg.Profile.PluginCacheDir)

@@ -165,6 +165,41 @@ func TestFormatQuote_FallbackFitsOneLine(t *testing.T) {
 	}
 }
 
+func TestRenderBanner_HidesMascot(t *testing.T) {
+	cfg := testConfig("")
+	cfg.Settings.Banner.ShowMascot = false
+	m := newModel(cfg, "", nil)
+	m.width = 120
+	m.nowFunc = func() time.Time {
+		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
+	}
+	m.quote = "Test quote"
+	out := m.renderBanner()
+	hasBlocks := strings.Contains(out, "▀") || strings.Contains(out, "▄") || strings.Contains(out, "█")
+	if hasBlocks {
+		t.Fatalf("banner should not contain axolotl pixel art when ShowMascot=false, got:\n%s", out)
+	}
+	// Greeting should still be present
+	if !strings.Contains(out, "Good Morning") {
+		t.Fatalf("banner should still contain greeting when mascot hidden, got:\n%s", out)
+	}
+}
+
+func TestRenderBanner_HidesQuote(t *testing.T) {
+	cfg := testConfig("")
+	cfg.Settings.Banner.ShowQuote = false
+	m := newModel(cfg, "", nil)
+	m.width = 120
+	m.nowFunc = func() time.Time {
+		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
+	}
+	m.quote = "Should not appear"
+	out := m.renderBanner()
+	if strings.Contains(out, "Should not appear") {
+		t.Fatalf("banner should not contain quote when ShowQuote=false, got:\n%s", out)
+	}
+}
+
 func TestRenderAxolotl_CorrectHeight(t *testing.T) {
 	art := renderAxolotl()
 	lines := strings.Split(art, "\n")
