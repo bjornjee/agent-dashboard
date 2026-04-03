@@ -68,7 +68,6 @@ var statePriority = map[string]int{
 	"question":    2, // waiting — needs user reply
 	"error":       2, // waiting — needs investigation
 	"running":     3,
-	"spawning":    3, // same group as running
 	"idle_prompt": 4, // review — finished turn, at prompt
 	"done":        4, // review — finished task
 	"pr":          5, // PR created — waiting on GitHub

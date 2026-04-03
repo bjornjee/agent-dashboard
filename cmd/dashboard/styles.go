@@ -85,7 +85,6 @@ var stateIcons = map[string]stateIcon{
 	"question":    {"?", questionColor},
 	"error":       {"✗", errorColor},
 	"running":     {"▶", runningColor},
-	"spawning":    {"◌", runningColor}, // placeholder; view uses spinner frame
 	"idle_prompt": {"○", idlePromptColor},
 	"done":        {"✓", doneColor},
 	"pr":          {"↑", prColor},
@@ -144,7 +143,6 @@ var stateLabels = map[string]string{
 	"question":    "Asked a question",
 	"error":       "Error",
 	"running":     "Running",
-	"spawning":    "Spawning...",
 	"idle_prompt": "Idle at prompt",
 	"pr":          "PR open",
 	"merged":      "Branch merged",

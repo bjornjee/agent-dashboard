@@ -55,11 +55,10 @@ type model struct {
 	statePath       string
 	selfPaneID      string
 	statusMsg       string
-	statusMsgTick   int            // tick when statusMsg was set; clears after 3s
-	spawningSpinner spinner.Model  // bouncing-ball spinner for "Spawning agent..."
-	spawningTicks   map[string]int // target → tickCount when spawning started
-	startupDone     bool           // set true when startupMsg arrives
-	startupSpinner  spinner.Model  // shown in agent list until startupMsg
+	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
+	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
+	startupDone     bool          // set true when startupMsg arrives
+	startupSpinner  spinner.Model // shown in agent list until startupMsg
 	capturedLines   []string
 	conversation    []ConversationEntry
 	tickCount       int
@@ -358,7 +357,6 @@ func newModel(cfg Config, db *DB) model {
 		tmuxReady:         &atomic.Bool{},
 		textInput:         ti,
 		spawningSpinner:   s,
-		spawningTicks:     make(map[string]int),
 		startupSpinner:    ss,
 		startupDone:       false,
 		mode:              modeNormal,
@@ -426,52 +424,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateUpdatedMsg:
 		ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
-		newAgents := SortedAgents(msg.state, m.selfPaneID)
-		// Preserve spawning placeholders that don't yet have a state file,
-		// but expire them after enough time for loadState to run (every 30s).
-		const maxSpawningTicks = 45
-		newTargets := make(map[string]bool, len(newAgents))
-		for _, a := range newAgents {
-			newTargets[a.Target] = true
-		}
-		hasSpawning := false
-		for _, a := range m.agents {
-			if a.State == "spawning" && !newTargets[a.Target] {
-				age := m.tickCount - m.spawningTicks[a.Target]
-				if age <= maxSpawningTicks {
-					newAgents = append(newAgents, a)
-					hasSpawning = true
-				} else {
-					delete(m.spawningTicks, a.Target)
-				}
-			}
-		}
-		// Clean up spawningTicks for targets that now have real data
-		for target := range m.spawningTicks {
-			if newTargets[target] {
-				delete(m.spawningTicks, target)
-			}
-		}
-		if hasSpawning {
-			sort.Slice(newAgents, func(i, j int) bool {
-				pi := statePriority[newAgents[i].State]
-				pj := statePriority[newAgents[j].State]
-				if pi == 0 {
-					pi = 99
-				}
-				if pj == 0 {
-					pj = 99
-				}
-				if pi != pj {
-					return pi < pj
-				}
-				if newAgents[i].Window != newAgents[j].Window {
-					return newAgents[i].Window < newAgents[j].Window
-				}
-				return newAgents[i].Pane < newAgents[j].Pane
-			})
-		}
-		m.agents = newAgents
+		m.agents = SortedAgents(msg.state, m.selfPaneID)
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
 		for _, a := range m.agents {
@@ -595,20 +548,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		var cmds []tea.Cmd
-		hasSpawning := m.statusMsg == "spawning"
-		if !hasSpawning {
-			for _, a := range m.agents {
-				if a.State == "spawning" {
-					hasSpawning = true
-					break
-				}
-			}
-		}
-		if hasSpawning {
+		if m.statusMsg == "spawning" {
 			var cmd tea.Cmd
 			m.spawningSpinner, cmd = m.spawningSpinner.Update(msg)
 			cmds = append(cmds, cmd)
-			m.updateLeftContent()
 		}
 		if !m.startupDone {
 			var cmd tea.Cmd
@@ -668,8 +611,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsgTick = m.tickCount
 
 		// Insert a placeholder agent immediately so the panel doesn't jump
-		// when the state file appears on the next tick. The placeholder uses
-		// "spawning" state to show a spinner until real data arrives.
+		// when the state file appears on the next tick. The placeholder is
+		// naturally replaced when loadState returns with real data.
 		if sess, win, pane, ok := parseTarget(msg.target); ok {
 			already := false
 			for _, a := range m.agents {
@@ -685,10 +628,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Session: sess,
 					Window:  win,
 					Pane:    pane,
-					State:   "spawning",
+					State:   "running",
 					Cwd:     msg.folder,
 				})
-				m.spawningTicks[msg.target] = m.tickCount
 				// Re-sort so placeholder appears in correct position
 				sort.Slice(m.agents, func(i, j int) bool {
 					pi := statePriority[m.agents[i].State]
@@ -709,7 +651,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 				m.buildTree()
 				m.restoreSelection(prevTarget, prevSubID)
-				m.resizeViewports() // recalculate viewport dimensions for new agent count
+				m.resizeViewports()
 			}
 		}
 
@@ -719,7 +661,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			loadState(m.statePath, m.tmuxAvailable),
 			selectPane(msg.target),
 			checkLaunchHealth(msg.target),
-			m.spawningSpinner.Tick,
 		)
 
 	case launchHealthMsg:
