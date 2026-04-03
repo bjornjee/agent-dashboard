@@ -775,7 +775,8 @@ func watchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotif
 }
 
 // pendingPaneGrace is how long to wait after spawning before checking for errors.
-const pendingPaneGrace = 3 * time.Second
+// Must be long enough for the agent to start and register via SessionStart hook.
+const pendingPaneGrace = 8 * time.Second
 
 // pendingPaneTimeout is the maximum time to monitor a pending pane.
 const pendingPaneTimeout = 60 * time.Second
@@ -784,7 +785,7 @@ const pendingPaneTimeout = 60 * time.Second
 // registered via hooks yet. Detects shell errors and dead panes.
 // Returns at most one shellErrorMsg per invocation; remaining errors are
 // caught on subsequent ticks (~3s apart).
-func checkPendingPanes(pending map[string]time.Time) tea.Cmd {
+func checkPendingPanes(pending map[string]time.Time, statePath string) tea.Cmd {
 	if len(pending) == 0 {
 		return nil
 	}
@@ -794,8 +795,24 @@ func checkPendingPanes(pending map[string]time.Time) tea.Cmd {
 		snapshot[k] = v
 	}
 	return func() tea.Msg {
+		// Read current state to avoid false positives: if the agent already
+		// registered via hooks, skip it even if pendingPanes hasn't been
+		// cleared yet (stateUpdatedMsg may still be in flight).
+		sf := ReadState(statePath)
+		registered := make(map[string]bool, len(sf.Agents))
+		for _, a := range sf.Agents {
+			if a.TmuxPaneID != "" {
+				registered[a.TmuxPaneID] = true
+			}
+		}
+
 		now := time.Now()
 		for paneID, created := range snapshot {
+			// Skip panes that have registered since the snapshot was taken
+			if registered[paneID] {
+				continue
+			}
+
 			age := now.Sub(created)
 
 			// Expire old entries silently

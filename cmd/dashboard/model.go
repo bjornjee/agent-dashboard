@@ -548,7 +548,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation()}
 		// Check pending panes for shell errors every 3 ticks (~3s)
 		if m.tickCount%3 == 0 && len(m.pendingPanes) > 0 {
-			cmds = append(cmds, checkPendingPanes(m.pendingPanes))
+			cmds = append(cmds, checkPendingPanes(m.pendingPanes, m.statePath))
 		}
 		if m.selectedSubagent() != nil {
 			cmds = append(cmds, m.loadSubagentActivity())
@@ -683,6 +683,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
 
 	case shellErrorMsg:
+		// If the pane was already resolved (state file arrived while check was
+		// in flight), discard the stale error — the agent started successfully.
+		if _, pending := m.pendingPanes[msg.paneID]; !pending {
+			return m, nil
+		}
 		delete(m.pendingPanes, msg.paneID)
 		// Update matching placeholder agent to error state
 		for i := range m.agents {

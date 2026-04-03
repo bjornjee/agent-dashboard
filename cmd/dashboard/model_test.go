@@ -1859,3 +1859,34 @@ func TestCreateSessionMsg_AddsToPendingPanes(t *testing.T) {
 		t.Error("expected paneID to be added to pendingPanes")
 	}
 }
+
+func TestShellErrorMsg_DiscardedWhenPaneAlreadyResolved(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	// Agent is present but pane is NOT in pendingPanes (already cleared by stateUpdate)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	// pendingPanes is empty — pane was already resolved
+	m.buildTree()
+
+	result, _ := m.Update(shellErrorMsg{paneID: "%5", output: "npm ERR! fake error"})
+	rm := result.(model)
+
+	// Agent state should NOT be changed to error
+	for _, a := range rm.agents {
+		if a.TmuxPaneID == "%5" && a.State == "error" {
+			t.Error("expected stale shellErrorMsg to be discarded, but agent state was set to error")
+		}
+	}
+
+	// Status message should NOT show the error
+	if strings.Contains(rm.statusMsg, "Shell error") {
+		t.Errorf("expected no status message for stale error, got %q", rm.statusMsg)
+	}
+}
