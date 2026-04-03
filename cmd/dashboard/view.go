@@ -974,7 +974,11 @@ func (m model) statusLine() string {
 			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
 	}
 	if m.statusMsg != "" {
-		return " " + lipgloss.NewStyle().Foreground(errorColor).Render(m.statusMsg)
+		color := themeGreen
+		if m.statusIsError {
+			color = errorColor
+		}
+		return " " + lipgloss.NewStyle().Foreground(color).Render(m.statusMsg)
 	}
 	return ""
 }
