@@ -128,6 +128,16 @@ type model struct {
 	confirmPaneID    string // tmux pane ID (%N) pending close
 	confirmSessionID string // session_id of agent pending close
 
+	// Send-key confirmation (guards against phantom keystrokes from mouse escape sequences)
+	confirmSendPaneID string // tmux pane ID for pending key send
+	confirmSendKey    string // key to send (y, n, 1-9)
+
+	// Merge confirmation
+	confirmMergeSessionID string
+	confirmMergePaneID    string
+	confirmMergeDir       string
+	confirmMergeBranch    string
+
 	// Z-plugin suggestions for create folder mode
 	zEntries     []zEntry // cached z entries from ~/.z
 	suggestions  []string // filtered suggestions for current input

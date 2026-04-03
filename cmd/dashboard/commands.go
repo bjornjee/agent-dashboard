@@ -550,7 +550,7 @@ func (m model) loadPlan() tea.Cmd {
 func openEditor(editor, dir string) tea.Cmd {
 	return func() tea.Msg {
 		cmd := exec.Command(editor, dir)
-		return openEditorMsg{err: cmd.Start()}
+		return openEditorMsg{err: silentStart(cmd)}
 	}
 }
 
@@ -621,7 +621,7 @@ func buildPRURL(owner, repo, base, branch string) string {
 func GHIsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, "gh", "auth", "status").Run() == nil
+	return silentRun(exec.CommandContext(ctx, "gh", "auth", "status")) == nil
 }
 
 // checkGHAvailable returns a command that asynchronously checks gh auth status
@@ -681,7 +681,7 @@ func openPR(dir, branch string) tea.Cmd {
 			return openPRMsg{err: fmt.Errorf("refusing to open unexpected URL: %s", prURL)}
 		}
 		cmd := exec.Command("open", prURL)
-		return openPRMsg{err: cmd.Start(), hasPR: existing != ""}
+		return openPRMsg{err: silentStart(cmd), hasPR: existing != ""}
 	}
 }
 

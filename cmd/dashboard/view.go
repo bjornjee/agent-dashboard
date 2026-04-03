@@ -1017,6 +1017,18 @@ func (m model) renderHelpBar() string {
 		return helpStyle.Render("  " + strings.Join(parts, "  "))
 	}
 
+	if m.mode == modeConfirmMerge {
+		parts = append(parts, boldStyle.Render("y")+" merge")
+		parts = append(parts, boldStyle.Render("n/esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeConfirmSend {
+		parts = append(parts, boldStyle.Render("enter")+" confirm")
+		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
 	if m.mode == modeCreateFolder {
 		parts = append(parts, boldStyle.Render("enter")+" create")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")

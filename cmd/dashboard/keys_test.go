@@ -704,9 +704,9 @@ func TestGKeyDefersPin_WithGH(t *testing.T) {
 	}
 }
 
-func TestMKey_WithGH_StoresMergeContext(t *testing.T) {
+func TestMKey_WithGH_EntersConfirmMode(t *testing.T) {
 	// When gh is available and agent is in "pr" state, pressing "m" should
-	// store merge context and return a mergePR command (no immediate pin).
+	// enter modeConfirmMerge instead of merging immediately.
 	tmpDir := t.TempDir()
 	agentsDir := filepath.Join(tmpDir, "agents")
 	os.MkdirAll(agentsDir, 0755)
@@ -724,25 +724,72 @@ func TestMKey_WithGH_StoresMergeContext(t *testing.T) {
 	m.selected = 0
 
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
-	if cmd == nil {
-		t.Fatal("expected cmd from 'm' key, got nil")
+	if cmd != nil {
+		t.Fatal("expected nil cmd from 'm' key (should enter confirm mode, not execute)")
 	}
 
 	updated := result.(model)
+	if updated.mode != modeConfirmMerge {
+		t.Errorf("expected modeConfirmMerge, got %d", updated.mode)
+	}
+	if updated.confirmMergeSessionID != "sess1" {
+		t.Errorf("expected confirmMergeSessionID='sess1', got %q", updated.confirmMergeSessionID)
+	}
+	if !strings.Contains(updated.statusMsg, "Merge") {
+		t.Errorf("expected status to contain 'Merge', got %q", updated.statusMsg)
+	}
+}
+
+func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
+	// Confirming with 'y' in modeConfirmMerge should execute the merge.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.ghAvailable = true
+	m.mode = modeConfirmMerge
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeDir = t.TempDir()
+	m.confirmMergeBranch = "feat/test"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd == nil {
+		t.Fatal("expected cmd after confirming merge")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after confirm, got %d", updated.mode)
+	}
 	if updated.mergeSessionID != "sess1" {
 		t.Errorf("expected mergeSessionID='sess1', got %q", updated.mergeSessionID)
-	}
-	if updated.mergePaneID != "%5" {
-		t.Errorf("expected mergePaneID='%%5', got %q", updated.mergePaneID)
 	}
 	if !strings.Contains(updated.statusMsg, "Merging") {
 		t.Errorf("expected status to contain 'Merging', got %q", updated.statusMsg)
 	}
 }
 
-func TestMKey_NoGH_ImmediatePin(t *testing.T) {
-	// When gh is not available, pressing "m" should immediately pin to "merged"
-	// and send cleanup message (old behavior).
+func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmMerge
+	m.confirmMergeSessionID = "sess1"
+	m.statusMsg = "Merge feat/test? (y/n)"
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
+	}
+	if updated.confirmMergeSessionID != "" {
+		t.Error("expected confirmMergeSessionID to be cleared")
+	}
+	if updated.statusMsg != "" {
+		t.Errorf("expected empty status after cancel, got %q", updated.statusMsg)
+	}
+}
+
+func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
+	// When gh is not available, pressing "m" should enter confirm mode.
+	// Confirming with 'y' should pin to "merged" and send cleanup message.
 	tmpDir := t.TempDir()
 	agentsDir := filepath.Join(tmpDir, "agents")
 	os.MkdirAll(agentsDir, 0755)
@@ -759,9 +806,20 @@ func TestMKey_NoGH_ImmediatePin(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
+	// Step 1: press 'm' — should enter confirm mode
 	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd from 'm' (confirm mode)")
+	}
+	m = result.(model)
+	if m.mode != modeConfirmMerge {
+		t.Fatalf("expected modeConfirmMerge, got %d", m.mode)
+	}
+
+	// Step 2: confirm with 'y' — should execute merge
+	result, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	if cmd == nil {
-		t.Fatal("expected cmd from 'm' key, got nil")
+		t.Fatal("expected cmd after confirming merge")
 	}
 
 	updated := result.(model)
@@ -785,6 +843,144 @@ func TestMKey_NoGH_ImmediatePin(t *testing.T) {
 	}
 
 	if !hasPinMsg {
-		t.Error("pressing 'm' without gh should immediately pin to 'merged'")
+		t.Error("confirming merge without gh should pin to 'merged'")
+	}
+}
+
+func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd from 'y' (should enter confirm mode)")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Errorf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendKey != "y" {
+		t.Errorf("expected confirmSendKey='y', got %q", updated.confirmSendKey)
+	}
+	if updated.confirmSendPaneID != "%5" {
+		t.Errorf("expected confirmSendPaneID='%%5', got %q", updated.confirmSendPaneID)
+	}
+}
+
+func TestYKey_PlanAgent_MapsTo1(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	updated := result.(model)
+	if updated.confirmSendKey != "1" {
+		t.Errorf("expected plan 'y' to map to '1', got %q", updated.confirmSendKey)
+	}
+}
+
+func TestNumKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd from '3' (should enter confirm mode)")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Errorf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendKey != "3" {
+		t.Errorf("expected confirmSendKey='3', got %q", updated.confirmSendKey)
+	}
+}
+
+func TestConfirmSend_Enter_Sends(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected cmd after confirming send")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after confirm, got %d", updated.mode)
+	}
+	if updated.confirmSendPaneID != "" {
+		t.Error("expected confirmSendPaneID to be cleared")
+	}
+}
+
+func TestConfirmSend_Esc_Cancels(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+	m.statusMsg = "Send 'y' to agent?"
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
+	}
+	if updated.confirmSendPaneID != "" {
+		t.Error("expected confirmSendPaneID to be cleared")
+	}
+	if updated.statusMsg != "" {
+		t.Errorf("expected empty status after cancel, got %q", updated.statusMsg)
+	}
+}
+
+func TestConfirmSend_PhantomKey_Swallowed(t *testing.T) {
+	// A phantom key like 'm' arriving during modeConfirmSend should be swallowed.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd for unrecognized key in confirm mode")
+	}
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Errorf("expected to stay in modeConfirmSend, got %d", updated.mode)
+	}
+}
+
+func TestConfirmMerge_PhantomKey_Swallowed(t *testing.T) {
+	// A phantom key arriving during modeConfirmMerge should be swallowed.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmMerge
+	m.confirmMergeSessionID = "sess1"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd for unrecognized key in confirm merge mode")
+	}
+	updated := result.(model)
+	if updated.mode != modeConfirmMerge {
+		t.Errorf("expected to stay in modeConfirmMerge, got %d", updated.mode)
 	}
 }
