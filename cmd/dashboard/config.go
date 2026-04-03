@@ -22,16 +22,19 @@ type AgentProfile struct {
 // Config holds all dashboard configuration.
 type Config struct {
 	Profile  AgentProfile
-	Username string // Greeting name
-	Editor   string // Editor command
+	Username string   // Greeting name
+	Editor   string   // Editor command
+	Settings Settings // User-facing settings from settings.toml
 }
 
 // DefaultConfig returns a fully populated config with auto-detected values.
 func DefaultConfig() Config {
+	profile := defaultClaudeProfile()
 	return Config{
-		Profile:  defaultClaudeProfile(),
+		Profile:  profile,
 		Username: detectUsername(),
 		Editor:   detectEditor(),
+		Settings: LoadSettings(profile.StateDir),
 	}
 }
 

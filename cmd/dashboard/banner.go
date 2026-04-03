@@ -306,39 +306,42 @@ var quoteStyle = lipgloss.NewStyle().
 	Italic(true)
 
 func (m model) renderBanner() string {
-	icon := renderAxolotl()
 	greet := greetingStyle.Render(greeting(m.nowFunc(), m.cfg.Username))
 
-	// 1. Build the left side first to calculate its footprint
-	left := lipgloss.JoinHorizontal(lipgloss.Center, "  ", icon, "  ", greet)
+	// 1. Build the left side — include axolotl only if enabled.
+	var left string
+	if m.cfg.Settings.Banner.ShowMascot {
+		icon := renderAxolotl()
+		left = lipgloss.JoinHorizontal(lipgloss.Center, "  ", icon, "  ", greet)
+	} else {
+		left = lipgloss.JoinHorizontal(lipgloss.Center, "  ", greet)
+	}
 	leftWidth := lipgloss.Width(left)
 
 	// 2. Calculate remaining space.
-	// We want the right side to take up every single pixel left.
 	rightWidth := m.width - leftWidth
 	if rightWidth < 0 {
 		rightWidth = 0
 	}
 
-	// 3. Define a max width for the quote text itself so it doesn't
-	// wrap awkwardly if the terminal is huge.
-	maxQuoteWidth := m.width / 3
-
-	// 4. Format the quote with wrapping awareness, then style it
-	q := quoteStyle.Render(formatQuote(m.quote, m.quoteAuthor, maxQuoteWidth))
-
-	// 4b. Version label
+	// 3. Version label (always shown).
 	ver := helpStyle.Render("v" + Version)
 
-	// 5. Wrap that quote + version in a container that fills the remaining width
-	// and pushes the content to the Right.
-	rightContent := lipgloss.JoinVertical(lipgloss.Right, ver, "", q)
+	// 4. Build right content — include quote only if enabled.
+	var rightContent string
+	if m.cfg.Settings.Banner.ShowQuote {
+		maxQuoteWidth := m.width / 3
+		q := quoteStyle.Render(formatQuote(m.quote, m.quoteAuthor, maxQuoteWidth))
+		rightContent = lipgloss.JoinVertical(lipgloss.Right, ver, "", q)
+	} else {
+		rightContent = ver
+	}
+
+	// 5. Wrap in a container that fills the remaining width.
 	right := lipgloss.NewStyle().
 		Width(rightWidth).
 		Align(lipgloss.Right).
 		Render(rightContent)
 
-	// 6. Join them. No extra spacers needed here because 'right'
-	// already fills the gap.
 	return lipgloss.JoinHorizontal(lipgloss.Center, left, right)
 }
