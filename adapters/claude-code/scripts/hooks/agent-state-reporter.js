@@ -17,7 +17,7 @@ const os = require('os');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
-const { getTarget, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
 function findSessionId() {
@@ -124,7 +124,7 @@ if (require.main === module) {
 }
 
 function report(input) {
-  const tmuxPane = process.env.TMUX_PANE;
+  const tmuxPane = getPaneId();
   if (!tmuxPane) return;
 
   const target = getTarget(tmuxPane);

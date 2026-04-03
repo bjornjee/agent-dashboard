@@ -254,6 +254,29 @@ func TestParsePaneTargetsOutput(t *testing.T) {
 	}
 }
 
+func TestTmuxResolvePaneID_EnvSet(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%42")
+	got := TmuxResolvePaneID()
+	if got != "%42" {
+		t.Errorf("TmuxResolvePaneID() = %q, want %%42", got)
+	}
+}
+
+func TestTmuxResolvePaneID_EnvEmpty(t *testing.T) {
+	if !TmuxIsAvailable() {
+		t.Skip("tmux not available")
+	}
+	t.Setenv("TMUX_PANE", "")
+	got := TmuxResolvePaneID()
+	// In a real tmux session, should resolve to a pane ID like %N
+	if got == "" {
+		t.Error("TmuxResolvePaneID() returned empty when tmux is available")
+	}
+	if got != "" && got[0] != '%' {
+		t.Errorf("TmuxResolvePaneID() = %q, expected %%N format", got)
+	}
+}
+
 func TestTmuxNewWindow_MultipleWindows(t *testing.T) {
 	if !TmuxIsAvailable() {
 		t.Skip("tmux not available")

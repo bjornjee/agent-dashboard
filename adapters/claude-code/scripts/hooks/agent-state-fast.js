@@ -18,7 +18,7 @@ const path = require('path');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
-const { getTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
 /**
@@ -114,7 +114,7 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
 }
 
 function fastUpdate(input) {
-  const tmuxPane = process.env.TMUX_PANE;
+  const tmuxPane = getPaneId();
   if (!tmuxPane) return;
 
   const sessionId = input.session_id;

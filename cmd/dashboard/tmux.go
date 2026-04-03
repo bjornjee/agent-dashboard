@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -31,6 +32,22 @@ func TmuxIsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
 	defer cancel()
 	return exec.CommandContext(ctx, "tmux", "list-sessions").Run() == nil
+}
+
+// TmuxResolvePaneID returns the current pane's ID (%N format).
+// It first checks TMUX_PANE (set in regular panes) and falls back to
+// querying tmux directly (needed in popups where TMUX_PANE is unset).
+func TmuxResolvePaneID() string {
+	if pane := os.Getenv("TMUX_PANE"); pane != "" {
+		return pane
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "#{pane_id}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // TmuxCapture captures the last N lines from a tmux pane.

@@ -288,6 +288,58 @@ describe('packages/tmux', () => {
     });
   });
 
+  describe('getPaneId', () => {
+    it('returns TMUX_PANE when set', () => {
+      const orig = process.env.TMUX_PANE;
+      process.env.TMUX_PANE = '%42';
+
+      delete require.cache[require.resolve('./index')];
+      const { getPaneId } = require('./index');
+
+      assert.equal(getPaneId(), '%42');
+
+      if (orig !== undefined) process.env.TMUX_PANE = orig;
+      else delete process.env.TMUX_PANE;
+      delete require.cache[require.resolve('./index')];
+    });
+
+    it('falls back to tmux display-message when TMUX_PANE is empty', () => {
+      const orig = process.env.TMUX_PANE;
+      process.env.TMUX_PANE = '';
+
+      const cp = require('child_process');
+      const origSpawn = cp.spawnSync;
+      cp.spawnSync = () => ({ status: 0, stdout: '%99\n' });
+
+      delete require.cache[require.resolve('./index')];
+      const { getPaneId } = require('./index');
+
+      assert.equal(getPaneId(), '%99');
+
+      process.env.TMUX_PANE = orig;
+      cp.spawnSync = origSpawn;
+      delete require.cache[require.resolve('./index')];
+    });
+
+    it('returns null when TMUX_PANE is empty and tmux fails', () => {
+      const orig = process.env.TMUX_PANE;
+      process.env.TMUX_PANE = '';
+
+      const cp = require('child_process');
+      const origSpawn = cp.spawnSync;
+      cp.spawnSync = () => ({ status: 1, stdout: '' });
+
+      delete require.cache[require.resolve('./index')];
+      const { getPaneId } = require('./index');
+
+      assert.equal(getPaneId(), null);
+
+      process.env.TMUX_PANE = orig;
+      cp.spawnSync = origSpawn;
+      delete require.cache[require.resolve('./index')];
+    });
+  });
+
   describe('parseTarget', () => {
     it('parses simple target', () => {
       delete require.cache[require.resolve('./index')];
