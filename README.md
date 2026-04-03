@@ -110,6 +110,31 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `e` | Expand/collapse all context |
 | `d` or `Esc` | Exit diff viewer |
 
+## User Settings
+
+The dashboard supports a TOML configuration file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
+
+Example `settings.toml`:
+
+```toml
+[banner]
+show_mascot = false   # hide the axolotl pixel art (default: true)
+show_quote  = false   # hide the daily quote (default: true)
+
+[notifications]
+enabled       = true  # enable desktop notifications from adapter hooks (default: false)
+sound         = true  # play a sound with notifications (default: false)
+silent_events = true  # suppress event-level notifications (default: false)
+```
+
+| Section | Key | Default | Description |
+|---------|-----|---------|-------------|
+| `banner` | `show_mascot` | `true` | Show the axolotl pixel art in the banner |
+| `banner` | `show_quote` | `true` | Show the daily quote in the banner |
+| `notifications` | `enabled` | `false` | Enable desktop notifications from adapter hooks |
+| `notifications` | `sound` | `false` | Play a sound with notifications |
+| `notifications` | `silent_events` | `false` | Suppress event-level notifications |
+
 ## Environment Variables
 
 | Variable | Description | Required |
