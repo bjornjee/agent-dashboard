@@ -70,15 +70,34 @@ if [ ! -d "$REPO_DIR/adapters/$ADAPTER" ]; then
 fi
 
 # 1. Build the Go binary
-echo "[1/2] Building agent-dashboard binary..."
+echo "[1/3] Building agent-dashboard binary..."
 cd "$REPO_DIR"
 make build
 mkdir -p "$BIN_DIR"
 cp bin/agent-dashboard "$BIN_DIR/agent-dashboard"
 echo "  Installed to $BIN_DIR/agent-dashboard"
 
-# 2. Install adapter
-echo "[2/2] Installing '$ADAPTER' adapter..."
+# 2. Bootstrap default settings
+STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
+SETTINGS_FILE="$STATE_DIR/settings.toml"
+echo "[2/3] Bootstrapping settings..."
+if [ ! -f "$SETTINGS_FILE" ]; then
+  mkdir -p "$STATE_DIR"
+  cat > "$SETTINGS_FILE" <<'TOML'
+# Agent Dashboard settings
+# See https://github.com/bjornjee/agent-dashboard for documentation.
+
+[banner]
+show_mascot = true   # show the axolotl pixel art
+show_quote  = true   # show the daily quote
+TOML
+  echo "  Created $SETTINGS_FILE"
+else
+  echo "  $SETTINGS_FILE already exists, skipping."
+fi
+
+# 3. Install adapter
+echo "[3/3] Installing '$ADAPTER' adapter..."
 case "$ADAPTER" in
   claude-code) install_claude_code ;;
   *)           install_generic "$ADAPTER" ;;

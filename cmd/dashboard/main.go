@@ -17,7 +17,6 @@ func ownPaneID() string {
 func main() {
 	cfg := DefaultConfig()
 	stateDir := cfg.Profile.StateDir
-	EnsureSettings(stateDir)
 
 	// Clean stale agents (>10 min since last update) on startup,
 	// but keep agents whose tmux panes are still alive.
