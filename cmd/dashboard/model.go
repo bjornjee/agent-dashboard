@@ -53,6 +53,8 @@ type model struct {
 	statusMsg       string
 	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
 	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
+	startupDone     bool          // set true when startupMsg arrives
+	startupSpinner  spinner.Model // shown in agent list until startupMsg
 	capturedLines   []string
 	conversation    []ConversationEntry
 	tickCount       int
@@ -320,6 +322,10 @@ func newModel(cfg Config, db *DB) model {
 	s.Spinner = spinner.Jump
 	s.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
+	ss := spinner.New()
+	ss.Spinner = spinner.Dot
+	ss.Style = lipgloss.NewStyle().Foreground(textInputColor)
+
 	// Discover skills from agent-dashboard plugin cache
 	rawSkills := discoverSkills(cfg.Profile.PluginCacheDir)
 	skillList := buildSkillList(rawSkills)
@@ -334,6 +340,8 @@ func newModel(cfg Config, db *DB) model {
 		tmuxReady:       &atomic.Bool{},
 		textInput:       ti,
 		spawningSpinner: s,
+		startupSpinner:  ss,
+		startupDone:     false,
 		mode:            modeNormal,
 		db:              db,
 		agentListVP:     viewport.New(0, 0),
@@ -363,6 +371,7 @@ func (m model) Init() tea.Cmd {
 		deferredStartup(m.statePath, m.db, m.cfg),
 		deferredQuote(m.db, m.cfg.Settings.Banner.ShowQuote),
 		tickEvery(),
+		m.startupSpinner.Tick,
 	)
 }
 
@@ -370,6 +379,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case startupMsg:
+		m.startupDone = true
 		m.tmuxAvailable = msg.tmuxAvailable
 		m.selfPaneID = msg.selfPaneID
 		m.tmuxReady.Store(msg.tmuxAvailable)
@@ -519,10 +529,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case spinner.TickMsg:
+		var cmds []tea.Cmd
 		if m.statusMsg == "spawning" {
 			var cmd tea.Cmd
 			m.spawningSpinner, cmd = m.spawningSpinner.Update(msg)
-			return m, cmd
+			cmds = append(cmds, cmd)
+		}
+		if !m.startupDone {
+			var cmd tea.Cmd
+			m.startupSpinner, cmd = m.startupSpinner.Update(msg)
+			m.updateLeftContent()
+			cmds = append(cmds, cmd)
+		}
+		if len(cmds) > 0 {
+			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 
