@@ -303,6 +303,14 @@ func (m model) agentListContent() string {
 
 		// Metadata badges
 		badges := agentBadges(agent)
+		if _, hasPending := m.pendingReplies[agent.SessionID]; hasPending {
+			pendingBadge := lipgloss.NewStyle().Foreground(textInputColor).Render("[pending reply]")
+			if badges != "" {
+				badges += " " + pendingBadge
+			} else {
+				badges = pendingBadge
+			}
+		}
 		if badges != "" {
 			lines = append(lines, "       "+badges)
 		}
@@ -445,8 +453,14 @@ func (m model) waitingMessageContent() string {
 			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, m.availableSkills, "        "))
 	} else {
 		agent := m.selectedAgent()
-		if agent != nil && agent.State == "question" {
-			lines = append(lines, " "+helpStyle.Render("Press r to reply, enter to jump to agent"))
+		if agent != nil {
+			if _, hasPending := m.pendingReplies[agent.SessionID]; hasPending {
+				lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Render("Press r to send pending cleanup message"))
+			} else if agent.State == "question" {
+				lines = append(lines, " "+helpStyle.Render("Press r to reply, enter to jump to agent"))
+			} else {
+				lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
+			}
 		} else {
 			lines = append(lines, " "+helpStyle.Render("Press r to reply, y/n for quick answer"))
 		}

@@ -795,7 +795,7 @@ func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
 
 func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 	// When gh is not available, pressing "m" should enter confirm mode.
-	// Confirming with 'y' should pin to "merged" and send cleanup message.
+	// Confirming with 'y' should pin to "merged" and queue a pending reply.
 	tmpDir := t.TempDir()
 	agentsDir := filepath.Join(tmpDir, "agents")
 	os.MkdirAll(agentsDir, 0755)
@@ -822,7 +822,7 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 		t.Fatalf("expected modeConfirmMerge, got %d", m.mode)
 	}
 
-	// Step 2: confirm with 'y' — should execute merge
+	// Step 2: confirm with 'y' — should pin and queue pending reply
 	m.confirmEnteredAt = pastConfirmTime // bypass cooldown for test
 	result, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	if cmd == nil {
@@ -834,23 +834,16 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 		t.Errorf("expected status to contain 'Marked as merged', got %q", updated.statusMsg)
 	}
 
-	// Should have pinStateMsg in the batch
-	var hasPinMsg bool
-	batchResult := cmd()
-	if batch, ok := batchResult.(tea.BatchMsg); ok {
-		for _, c := range batch {
-			if c == nil {
-				continue
-			}
-			msg := c()
-			if _, ok := msg.(pinStateMsg); ok {
-				hasPinMsg = true
-			}
-		}
+	// Should have a pending reply queued (not sent directly)
+	pending, ok := updated.pendingReplies["sess1"]
+	if !ok || pending == "" {
+		t.Error("confirming merge without gh should queue a pending reply")
 	}
 
-	if !hasPinMsg {
-		t.Error("confirming merge without gh should pin to 'merged'")
+	// The returned cmd should be pinAgentStateCmd (single cmd, not batch)
+	pinMsg := cmd()
+	if _, ok := pinMsg.(pinStateMsg); !ok {
+		t.Errorf("expected pinStateMsg from cmd, got %T", pinMsg)
 	}
 }
 
@@ -1270,5 +1263,126 @@ func TestSendReply_AllowsDifferentPane(t *testing.T) {
 	// Error is expected (no tmux), but it should NOT be the self-pane error.
 	if result.err != nil && strings.Contains(result.err.Error(), "dashboard pane") {
 		t.Errorf("should not reject different pane; got: %v", result.err)
+	}
+}
+
+// -- Pending reply queue tests --
+
+func TestMergeNoGH_QueuesPendingReply(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.agents[0].State = "pr"
+	m.agents[0].Branch = "feat/test"
+	m.agents[0].Cwd = "/tmp/test"
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].SessionID = "sess-123"
+	m.buildTree()
+
+	// Enter merge confirm mode
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmMergeSessionID = "sess-123"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeDir = "/tmp/test"
+	m.confirmMergeBranch = "feat/test"
+	m.ghAvailable = false
+
+	// Confirm merge
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	// Should queue pending reply instead of sending directly
+	pending, ok := rm.pendingReplies["sess-123"]
+	if !ok || pending == "" {
+		t.Errorf("expected pending reply for sess-123, got %v", rm.pendingReplies)
+	}
+}
+
+func TestReplyMode_PrefillsPendingReply(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].SessionID = "sess-123"
+	m.buildTree()
+	m.selected = 0
+
+	// Set a pending reply
+	m.pendingReplies = map[string]string{
+		"sess-123": "The PR has been merged. Please clean up: remove any worktrees and temporary branches.",
+	}
+
+	// Press 'r' to enter reply mode
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeReply {
+		t.Fatalf("expected modeReply, got %d", rm.mode)
+	}
+	if rm.textInput.Value() != "The PR has been merged. Please clean up: remove any worktrees and temporary branches." {
+		t.Errorf("expected textInput pre-filled with pending reply, got %q", rm.textInput.Value())
+	}
+}
+
+func TestReplyMode_ClearsPendingReplyOnSend(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].SessionID = "sess-123"
+	m.buildTree()
+	m.selected = 0
+
+	m.pendingReplies = map[string]string{
+		"sess-123": "The PR has been merged. Please clean up: remove any worktrees and temporary branches.",
+	}
+
+	// Enter reply mode and send
+	m.mode = modeReply
+	m.textInput.SetValue("The PR has been merged. Please clean up: remove any worktrees and temporary branches.")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if _, ok := rm.pendingReplies["sess-123"]; ok {
+		t.Error("expected pending reply to be cleared after sending")
+	}
+}
+
+func TestReplyMode_ClearsPendingReplyOnEsc(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].SessionID = "sess-123"
+	m.buildTree()
+	m.selected = 0
+
+	m.pendingReplies = map[string]string{
+		"sess-123": "cleanup message",
+	}
+
+	// Enter reply mode then escape
+	m.mode = modeReply
+	m.textInput.SetValue("cleanup message")
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if _, ok := rm.pendingReplies["sess-123"]; ok {
+		t.Error("expected pending reply to be cleared on esc")
+	}
+}
+
+func TestMergeGH_QueuesPendingReply(t *testing.T) {
+	// When gh merge succeeds (mergePRMsg), it should queue a pending reply
+	// instead of calling sendReply directly.
+	m := newTestModelWithAgents()
+	m.mergeSessionID = "sess-456"
+	m.mergePaneID = "%7"
+
+	result, _ := m.Update(mergePRMsg{})
+	rm := result.(model)
+
+	pending, ok := rm.pendingReplies["sess-456"]
+	if !ok || pending == "" {
+		t.Errorf("expected pending reply for sess-456, got %v", rm.pendingReplies)
 	}
 }

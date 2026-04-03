@@ -147,6 +147,12 @@ type model struct {
 	// within microseconds; real users take at least 200-300ms.
 	confirmEnteredAt time.Time
 
+	// pendingReplies stores queued messages keyed by session ID.
+	// Instead of injecting text directly into agent panes via tmux send-keys
+	// (which races with user typing), we queue the message here and pre-fill
+	// the reply textinput when the user presses 'r'.
+	pendingReplies map[string]string
+
 	// lastMouseAt records when the last mouse event was received.
 	// Key events arriving within mouseKeyCooldown of a mouse event are
 	// treated as phantom keystrokes from fragmented escape sequences.
@@ -395,6 +401,7 @@ func newModel(cfg Config, db *DB) model {
 		pathExists:        dirExists,
 		availableSkills:   skillList,
 		skillsAvailable:   hasSkills,
+		pendingReplies:    make(map[string]string),
 	}
 }
 
@@ -743,7 +750,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mergePRMsg:
 		sessionID := m.mergeSessionID
-		paneID := m.mergePaneID
 		m.mergeSessionID = ""
 		m.mergePaneID = ""
 		if msg.err != nil {
@@ -751,16 +757,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsgTick = m.tickCount
 			return m, nil
 		}
-		m.statusMsg = "PR merged — cleanup sent"
+		m.statusMsg = "PR merged — press r to send cleanup"
 		m.statusMsgTick = m.tickCount
-		cmds := []tea.Cmd{
-			pinAgentStateCmd(m.statePath, sessionID, "merged"),
+		if sessionID != "" {
+			m.pendingReplies[sessionID] = "The PR has been merged. Please clean up: remove any worktrees and temporary branches."
 		}
-		if paneID != "" {
-			cmds = append(cmds, sendReply(paneID,
-				"The PR has been merged. Please clean up: remove any worktrees and temporary branches.", m.selfPaneID))
-		}
-		return m, tea.Batch(cmds...)
+		return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 
 	case pinStateMsg:
 		if msg.err != nil {
