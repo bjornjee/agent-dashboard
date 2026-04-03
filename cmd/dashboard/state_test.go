@@ -110,7 +110,6 @@ func TestSortedAgents_Priority(t *testing.T) {
 	}
 }
 
-
 func TestSortedAgents_ExcludesSelfByPaneID(t *testing.T) {
 	sf := StateFile{
 		Agents: map[string]Agent{

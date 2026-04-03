@@ -78,9 +78,9 @@ const (
 const (
 	defaultHeaderLines = 9 // estimate for mouse routing & initial sizing; render overrides
 	sectionGaps        = 5 // 3 section labels + 2 blank-line buffers between sections
-	minFilesHeight   = 3
-	minHistoryHeight = 5
-	minMessageHeight = 5
+	minFilesHeight     = 3
+	minHistoryHeight   = 5
+	minMessageHeight   = 5
 )
 
 // panelHeights computes proportional heights for the three right-panel
