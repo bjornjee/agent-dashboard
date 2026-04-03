@@ -615,6 +615,23 @@ func buildPRURL(owner, repo, base, branch string) string {
 	)
 }
 
+// GHIsAvailable checks if the gh CLI is installed and authenticated.
+// Runs `gh auth status` with a 3-second timeout to verify both binary
+// existence and valid authentication (token not expired).
+func GHIsAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "gh", "auth", "status").Run() == nil
+}
+
+// checkGHAvailable returns a command that asynchronously checks gh auth status
+// and sends a ghAvailableMsg. This avoids blocking the TUI at startup.
+func checkGHAvailable() tea.Cmd {
+	return func() tea.Msg {
+		return ghAvailableMsg{available: GHIsAvailable()}
+	}
+}
+
 // ghExistingPRURL uses `gh pr view` to check if a PR already exists for the
 // given branch.  Returns the PR URL if one exists, or "" if not (or if gh is
 // not installed).
@@ -664,7 +681,27 @@ func openPR(dir, branch string) tea.Cmd {
 			return openPRMsg{err: fmt.Errorf("refusing to open unexpected URL: %s", prURL)}
 		}
 		cmd := exec.Command("open", prURL)
-		return openPRMsg{err: cmd.Start()}
+		return openPRMsg{err: cmd.Start(), hasPR: existing != ""}
+	}
+}
+
+// mergePR runs `gh pr merge <branch> --squash --delete-branch` in the given
+// directory. Returns mergePRMsg with error details on failure.
+func mergePR(dir, branch string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "gh", "pr", "merge", branch, "--squash", "--delete-branch")
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail != "" {
+				return mergePRMsg{err: fmt.Errorf("gh pr merge: %s: %w", detail, err)}
+			}
+			return mergePRMsg{err: fmt.Errorf("gh pr merge: %w", err)}
+		}
+		return mergePRMsg{}
 	}
 }
 

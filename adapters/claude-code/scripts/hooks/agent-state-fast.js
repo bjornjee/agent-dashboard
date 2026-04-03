@@ -79,9 +79,9 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
 
   const state = resolveState(hookEvent, toolName);
 
-  // Preserve PR states set by pr-detect — only permission/question can override them.
+  // Preserve PR states set by pr-detect or dashboard pinning.
   const PR_STATES = new Set(['pr', 'merged']);
-  if (PR_STATES.has(existing.state) && state === 'running') {
+  if ((PR_STATES.has(existing.state) || PR_STATES.has(existing.pinned_state)) && state === 'running') {
     return { changed: false, update: null };
   }
 

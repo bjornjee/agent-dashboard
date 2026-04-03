@@ -610,9 +610,9 @@ func TestBuildPrompt(t *testing.T) {
 	}
 }
 
-func TestGKeyPinsPRState_QuestionState(t *testing.T) {
-	// When agent is in "question" state (not review), pressing "g" should
-	// still pin to "pr" state — user intent to open PR is explicit.
+func TestGKeyPinsPRState_NoGH(t *testing.T) {
+	// When gh is not available, pressing "g" should still immediately pin
+	// to "pr" state (backward compat — manual workflow).
 	tmpDir := t.TempDir()
 	agentsDir := filepath.Join(tmpDir, "agents")
 	os.MkdirAll(agentsDir, 0755)
@@ -621,6 +621,7 @@ func TestGKeyPinsPRState_QuestionState(t *testing.T) {
 	m := newModel(testConfig(tmpDir), nil)
 	m.statePath = tmpDir
 	m.tmuxAvailable = true
+	m.ghAvailable = false
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "question",
 			SessionID: "sess1", Cwd: t.TempDir(), Branch: "feat/test"},
@@ -635,7 +636,6 @@ func TestGKeyPinsPRState_QuestionState(t *testing.T) {
 
 	// Execute batch commands and check for pinStateMsg
 	var hasPinMsg bool
-	// tea.Batch returns a cmd that, when called, returns tea.BatchMsg (a []Cmd)
 	batchResult := cmd()
 	if batch, ok := batchResult.(tea.BatchMsg); ok {
 		for _, c := range batch {
@@ -650,6 +650,141 @@ func TestGKeyPinsPRState_QuestionState(t *testing.T) {
 	}
 
 	if !hasPinMsg {
-		t.Error("pressing 'g' in question state should pin agent to 'pr' state")
+		t.Error("pressing 'g' without gh should immediately pin agent to 'pr' state")
+	}
+}
+
+func TestGKeyDefersPin_WithGH(t *testing.T) {
+	// When gh is available, pressing "g" should NOT immediately pin —
+	// pinning is deferred to the openPRMsg handler based on whether a PR exists.
+	tmpDir := t.TempDir()
+	agentsDir := filepath.Join(tmpDir, "agents")
+	os.MkdirAll(agentsDir, 0755)
+	os.WriteFile(filepath.Join(agentsDir, "sess1.json"), []byte(`{"state":"question"}`), 0644)
+
+	m := newModel(testConfig(tmpDir), nil)
+	m.statePath = tmpDir
+	m.tmuxAvailable = true
+	m.ghAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question",
+			SessionID: "sess1", Cwd: t.TempDir(), Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from 'g' key, got nil")
+	}
+
+	// Should store session ID for deferred pinning
+	updated := result.(model)
+	if updated.openPRSessionID != "sess1" {
+		t.Errorf("expected openPRSessionID='sess1', got %q", updated.openPRSessionID)
+	}
+
+	// Should NOT have pinStateMsg in the batch — pinning is deferred
+	var hasPinMsg bool
+	batchResult := cmd()
+	if batch, ok := batchResult.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			msg := c()
+			if _, ok := msg.(pinStateMsg); ok {
+				hasPinMsg = true
+			}
+		}
+	}
+
+	if hasPinMsg {
+		t.Error("pressing 'g' with gh available should NOT immediately pin — defer to openPRMsg")
+	}
+}
+
+func TestMKey_WithGH_StoresMergeContext(t *testing.T) {
+	// When gh is available and agent is in "pr" state, pressing "m" should
+	// store merge context and return a mergePR command (no immediate pin).
+	tmpDir := t.TempDir()
+	agentsDir := filepath.Join(tmpDir, "agents")
+	os.MkdirAll(agentsDir, 0755)
+	os.WriteFile(filepath.Join(agentsDir, "sess1.json"), []byte(`{"state":"pr","pinned_state":"pr"}`), 0644)
+
+	m := newModel(testConfig(tmpDir), nil)
+	m.statePath = tmpDir
+	m.tmuxAvailable = true
+	m.ghAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "pr",
+			SessionID: "sess1", TmuxPaneID: "%5", Cwd: t.TempDir(), Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from 'm' key, got nil")
+	}
+
+	updated := result.(model)
+	if updated.mergeSessionID != "sess1" {
+		t.Errorf("expected mergeSessionID='sess1', got %q", updated.mergeSessionID)
+	}
+	if updated.mergePaneID != "%5" {
+		t.Errorf("expected mergePaneID='%%5', got %q", updated.mergePaneID)
+	}
+	if !strings.Contains(updated.statusMsg, "Merging") {
+		t.Errorf("expected status to contain 'Merging', got %q", updated.statusMsg)
+	}
+}
+
+func TestMKey_NoGH_ImmediatePin(t *testing.T) {
+	// When gh is not available, pressing "m" should immediately pin to "merged"
+	// and send cleanup message (old behavior).
+	tmpDir := t.TempDir()
+	agentsDir := filepath.Join(tmpDir, "agents")
+	os.MkdirAll(agentsDir, 0755)
+	os.WriteFile(filepath.Join(agentsDir, "sess1.json"), []byte(`{"state":"pr","pinned_state":"pr"}`), 0644)
+
+	m := newModel(testConfig(tmpDir), nil)
+	m.statePath = tmpDir
+	m.tmuxAvailable = true
+	m.ghAvailable = false
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "pr",
+			SessionID: "sess1", TmuxPaneID: "%5", Cwd: t.TempDir(), Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd == nil {
+		t.Fatal("expected cmd from 'm' key, got nil")
+	}
+
+	updated := result.(model)
+	if !strings.Contains(updated.statusMsg, "Marked as merged") {
+		t.Errorf("expected status to contain 'Marked as merged', got %q", updated.statusMsg)
+	}
+
+	// Should have pinStateMsg in the batch
+	var hasPinMsg bool
+	batchResult := cmd()
+	if batch, ok := batchResult.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			msg := c()
+			if _, ok := msg.(pinStateMsg); ok {
+				hasPinMsg = true
+			}
+		}
+	}
+
+	if !hasPinMsg {
+		t.Error("pressing 'm' without gh should immediately pin to 'merged'")
 	}
 }
