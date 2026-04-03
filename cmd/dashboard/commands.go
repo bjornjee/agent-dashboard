@@ -564,6 +564,31 @@ func buildPRURL(owner, repo, base, branch string) string {
 	)
 }
 
+// ghExistingPRURL uses `gh pr view` to check if a PR already exists for the
+// given branch.  Returns the PR URL if one exists, or "" if not (or if gh is
+// not installed).
+func ghExistingPRURL(dir, branch string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "pr", "view", branch,
+		"--json", "url", "-q", ".url")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// resolvePRURL returns the URL to open for a branch: the existing PR's files
+// page if a PR already exists, or the compare/create page otherwise.
+func resolvePRURL(owner, repo, base, branch, existingPRURL string) string {
+	if existingPRURL != "" {
+		return strings.TrimRight(existingPRURL, "/") + "/files"
+	}
+	return buildPRURL(owner, repo, base, branch)
+}
+
 func openPR(dir, branch string) tea.Cmd {
 	return func() tea.Msg {
 		base := gitDefaultBranch(dir)
@@ -581,7 +606,8 @@ func openPR(dir, branch string) tea.Cmd {
 			return openPRMsg{err: fmt.Errorf("not a GitHub remote: %s", remoteURL)}
 		}
 
-		prURL := buildPRURL(owner, repo, base, branch)
+		existing := ghExistingPRURL(dir, branch)
+		prURL := resolvePRURL(owner, repo, base, branch, existing)
 		parsed, err := url.Parse(prURL)
 		if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" {
 			return openPRMsg{err: fmt.Errorf("refusing to open unexpected URL: %s", prURL)}
