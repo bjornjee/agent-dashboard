@@ -402,6 +402,24 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Confirm jump mode (guards enter key against phantom keystrokes)
+	if m.mode == modeConfirmJump {
+		switch key {
+		case "y", "enter":
+			paneID := m.confirmJumpPaneID
+			m.confirmJumpPaneID = ""
+			m.mode = modeNormal
+			m.statusMsg = ""
+			return m, jumpToAgent(paneID)
+		case "n", "esc":
+			m.confirmJumpPaneID = ""
+			m.mode = modeNormal
+			m.statusMsg = ""
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Help overlay
 	if m.helpVisible {
 		switch key {
@@ -646,7 +664,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if agent := m.selectedAgent(); agent != nil {
-			return m, jumpToAgent(agent.TmuxPaneID)
+			m.mode = modeConfirmJump
+			m.confirmJumpPaneID = agent.TmuxPaneID
+			m.statusMsg = "Jump to agent? (y/Enter to confirm, Esc to cancel)"
+			m.statusMsgTick = -1 // pinned
+			return m, nil
 		}
 	case "r":
 		if !m.tmuxAvailable {
