@@ -53,8 +53,15 @@ type closeResultMsg struct {
 }
 type createSessionMsg struct {
 	target  string
+	folder  string // absolute path of the working directory
 	err     error
 	warning string // shell error detected after launch (e.g. "command not found")
+}
+
+// launchHealthMsg is sent after a deferred health check on a newly created pane.
+type launchHealthMsg struct {
+	target  string
+	warning string // non-empty if shell error detected
 }
 
 // -- Modes --

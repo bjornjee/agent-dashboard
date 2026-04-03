@@ -548,10 +548,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		var cmds []tea.Cmd
-		if m.statusMsg == "spawning" {
+		hasSpawning := m.statusMsg == "spawning"
+		if !hasSpawning {
+			for _, a := range m.agents {
+				if a.State == "spawning" {
+					hasSpawning = true
+					break
+				}
+			}
+		}
+		if hasSpawning {
 			var cmd tea.Cmd
 			m.spawningSpinner, cmd = m.spawningSpinner.Update(msg)
 			cmds = append(cmds, cmd)
+			m.updateLeftContent()
 		}
 		if !m.startupDone {
 			var cmd tea.Cmd
@@ -608,14 +618,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 			return m, nil
 		}
-		if msg.warning != "" {
-			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
-		}
 		m.statusMsgTick = m.tickCount
 
 		// Insert a placeholder agent immediately so the panel doesn't jump
-		// when the state file appears on the next tick. The placeholder is
-		// naturally replaced when loadState returns with real data.
+		// when the state file appears on the next tick. The placeholder uses
+		// "spawning" state to show a spinner until real data arrives.
 		if sess, win, pane, ok := parseTarget(msg.target); ok {
 			already := false
 			for _, a := range m.agents {
@@ -631,7 +638,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Session: sess,
 					Window:  win,
 					Pane:    pane,
-					State:   "running",
+					State:   "spawning",
+					Cwd:     msg.folder,
 				})
 				// Re-sort so placeholder appears in correct position
 				sort.Slice(m.agents, func(i, j int) bool {
@@ -658,7 +666,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.updateRightContent()
-		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
+		return m, tea.Batch(
+			loadState(m.statePath, m.tmuxAvailable),
+			selectPane(msg.target),
+			checkLaunchHealth(msg.target),
+			m.spawningSpinner.Tick,
+		)
+
+	case launchHealthMsg:
+		if msg.warning != "" {
+			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
+			m.statusMsgTick = m.tickCount
+		}
+		return m, nil
 
 	case closeResultMsg:
 		if msg.err != nil {

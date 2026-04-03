@@ -277,7 +277,12 @@ func (m model) agentListContent() string {
 			displayRepo = string(repoRunes[:maxRepo-1]) + "…"
 		}
 
-		icon := lipgloss.NewStyle().Foreground(si.color).Render(si.icon)
+		var icon string
+		if effState == "spawning" {
+			icon = m.spawningSpinner.View()
+		} else {
+			icon = lipgloss.NewStyle().Foreground(si.color).Render(si.icon)
+		}
 		line := fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayRepo, duration)
 
 		if nodeIdx == m.selected {
@@ -779,8 +784,14 @@ func (m model) renderRightPanel() string {
 		if stateLabel == "" {
 			stateLabel = effState
 		}
+		var stateIcon string
+		if effState == "spawning" {
+			stateIcon = m.spawningSpinner.View()
+		} else {
+			stateIcon = si.icon
+		}
 		stateStr := lipgloss.NewStyle().Foreground(si.color).Bold(true).
-			Render(fmt.Sprintf("%s %s", si.icon, stateLabel))
+			Render(fmt.Sprintf("%s %s", stateIcon, stateLabel))
 
 		metaParts := []string{stateStr}
 		if agent.Model != "" {

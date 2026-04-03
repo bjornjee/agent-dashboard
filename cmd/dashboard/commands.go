@@ -515,16 +515,20 @@ func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, p
 			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 
-		// Give the shell a moment to process the command, then check
-		// for startup errors (e.g. "command not found", zsh upgrade prompts).
+		return createSessionMsg{target: newTarget, folder: absFolder}
+	}
+}
+
+// checkLaunchHealth waits briefly then captures pane content to detect shell errors.
+func checkLaunchHealth(target string) tea.Cmd {
+	return func() tea.Msg {
 		time.Sleep(1500 * time.Millisecond)
-		if lines, captureErr := TmuxCapture(newTarget, 20); captureErr == nil {
+		if lines, err := TmuxCapture(target, 20); err == nil {
 			if errLine := detectLaunchError(lines); errLine != "" {
-				return createSessionMsg{target: newTarget, warning: errLine}
+				return launchHealthMsg{target: target, warning: errLine}
 			}
 		}
-
-		return createSessionMsg{target: newTarget}
+		return launchHealthMsg{target: target}
 	}
 }
 

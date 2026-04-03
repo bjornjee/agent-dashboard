@@ -470,7 +470,7 @@ func TestCreateSessionMsg_Error(t *testing.T) {
 	}
 }
 
-func TestCreateSessionMsg_Warning(t *testing.T) {
+func TestCreateSessionMsg_SpawningState(t *testing.T) {
 	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.selfPaneID = "%0"
 	m.width = 120
@@ -483,28 +483,70 @@ func TestCreateSessionMsg_Warning(t *testing.T) {
 	m.buildTree()
 
 	result, _ := m.Update(createSessionMsg{
+		target: "main:2.0",
+		folder: "/tmp/my-project",
+	})
+	rm := result.(model)
+
+	// Placeholder should appear with spawning state and populated Cwd
+	var placeholder *Agent
+	for i := range rm.agents {
+		if rm.agents[i].Target == "main:2.0" {
+			placeholder = &rm.agents[i]
+			break
+		}
+	}
+	if placeholder == nil {
+		t.Fatal("expected placeholder agent to be inserted")
+	}
+	if placeholder.State != "spawning" {
+		t.Errorf("expected state=spawning, got %q", placeholder.State)
+	}
+	if placeholder.Cwd != "/tmp/my-project" {
+		t.Errorf("expected Cwd=/tmp/my-project, got %q", placeholder.Cwd)
+	}
+}
+
+func TestLaunchHealthMsg_Warning(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning"},
+	}
+	m.buildTree()
+
+	result, _ := m.Update(launchHealthMsg{
 		target:  "main:2.0",
 		warning: "zsh: command not found: claude",
 	})
 	rm := result.(model)
 
-	// Pane should still be created (not treated as hard error)
-	found := false
-	for _, a := range rm.agents {
-		if a.Target == "main:2.0" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected placeholder agent to be inserted despite warning")
-	}
-	// Warning should appear in status message
 	if !strings.Contains(rm.statusMsg, "Launch warning") {
 		t.Errorf("expected launch warning in statusMsg, got %q", rm.statusMsg)
 	}
 	if !strings.Contains(rm.statusMsg, "command not found") {
 		t.Errorf("expected 'command not found' in statusMsg, got %q", rm.statusMsg)
+	}
+}
+
+func TestLaunchHealthMsg_NoWarning(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.statusMsg = ""
+
+	result, _ := m.Update(launchHealthMsg{target: "main:2.0"})
+	rm := result.(model)
+
+	if rm.statusMsg != "" {
+		t.Errorf("expected empty statusMsg for clean launch, got %q", rm.statusMsg)
 	}
 }
 
