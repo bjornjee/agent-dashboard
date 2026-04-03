@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
@@ -46,6 +47,7 @@ type model struct {
 	mode            int
 	textInput       textinput.Model
 	tmuxAvailable   bool
+	tmuxReady       *atomic.Bool // shared with watcher goroutine
 	statePath       string
 	selfPaneID      string
 	statusMsg       string
@@ -305,7 +307,7 @@ func (m *model) restoreCurrentCache() {
 	}
 }
 
-func newModel(cfg Config, selfPaneID string, db *DB) model {
+func newModel(cfg Config, db *DB) model {
 	ti := textinput.New()
 	ti.Placeholder = "Type reply..."
 	ti.CharLimit = 4096
@@ -318,11 +320,6 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 	s.Spinner = spinner.Jump
 	s.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
-	var q, a string
-	if cfg.Settings.Banner.ShowQuote {
-		q, a = pickQuote(db)
-	}
-
 	// Discover skills from agent-dashboard plugin cache
 	rawSkills := discoverSkills(cfg.Profile.PluginCacheDir)
 	skillList := buildSkillList(rawSkills)
@@ -332,8 +329,9 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 		cfg:             cfg,
 		agents:          nil,
 		statePath:       cfg.Profile.StateDir,
-		selfPaneID:      selfPaneID,
-		tmuxAvailable:   TmuxIsAvailable(),
+		selfPaneID:      "",
+		tmuxAvailable:   false,
+		tmuxReady:       &atomic.Bool{},
 		textInput:       ti,
 		spawningSpinner: s,
 		mode:            modeNormal,
@@ -351,8 +349,8 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 		agentSubagents:  make(map[string][]SubagentInfo),
 		collapsed:       make(map[string]bool),
 		dismissed:       make(map[string]bool),
-		quote:           q,
-		quoteAuthor:     a,
+		quote:           "",
+		quoteAuthor:     "",
 		nowFunc:         time.Now,
 		pathExists:      dirExists,
 		availableSkills: skillList,
@@ -361,20 +359,33 @@ func newModel(cfg Config, selfPaneID string, db *DB) model {
 }
 
 func (m model) Init() tea.Cmd {
-	cmds := []tea.Cmd{
-		loadState(m.statePath, m.tmuxAvailable),
+	return tea.Batch(
+		deferredStartup(m.statePath, m.db, m.cfg),
+		deferredQuote(m.db, m.cfg.Settings.Banner.ShowQuote),
 		tickEvery(),
-		m.captureSelected(),
-		loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir),
-	}
-	if m.db != nil {
-		cmds = append(cmds, loadDBCost(m.db))
-	}
-	return tea.Batch(cmds...)
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	case startupMsg:
+		m.tmuxAvailable = msg.tmuxAvailable
+		m.selfPaneID = msg.selfPaneID
+		m.tmuxReady.Store(msg.tmuxAvailable)
+		cmds := []tea.Cmd{
+			loadState(m.statePath, m.tmuxAvailable),
+			m.captureSelected(),
+		}
+		if m.db != nil {
+			cmds = append(cmds, loadDBCost(m.db))
+		}
+		return m, tea.Batch(cmds...)
+
+	case quoteMsg:
+		m.quote = msg.text
+		m.quoteAuthor = msg.author
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
