@@ -8,11 +8,62 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fsnotify/fsnotify"
+	"golang.org/x/sync/errgroup"
 )
+
+// -- Deferred startup commands --
+
+// deferredStartup runs all blocking startup work (tmux probes, stale cleanup)
+// concurrently via errgroup so the TUI can render immediately.
+func deferredStartup(stateDir string, db *DB, cfg Config) tea.Cmd {
+	return func() tea.Msg {
+		var (
+			tmuxAvail   bool
+			selfPane    string
+			livePaneIDs map[string]bool
+		)
+
+		g := new(errgroup.Group)
+
+		g.Go(func() error {
+			tmuxAvail = TmuxIsAvailable()
+			return nil
+		})
+
+		g.Go(func() error {
+			selfPane = TmuxResolvePaneID()
+			return nil
+		})
+
+		g.Go(func() error {
+			livePaneIDs = TmuxListLivePaneIDs()
+			return nil
+		})
+
+		_ = g.Wait()
+
+		CleanStale(stateDir, 10*60, livePaneIDs)
+
+		return startupMsg{tmuxAvailable: tmuxAvail, selfPaneID: selfPane}
+	}
+}
+
+// deferredQuote fetches the daily quote in the background so the banner
+// renders instantly with an empty quote, then fills in once ready.
+func deferredQuote(db *DB, showQuote bool) tea.Cmd {
+	if !showQuote {
+		return nil
+	}
+	return func() tea.Msg {
+		q, a := pickQuote(db)
+		return quoteMsg{text: q, author: a}
+	}
+}
 
 // -- Commands --
 
@@ -658,13 +709,13 @@ func sendRawKey(paneID, key string) tea.Cmd {
 	return func() tea.Msg {
 		target := ResolveTarget(paneID)
 		if target == "" {
-			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
+			return rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
 		}
-		return sendResultMsg{err: TmuxSendRaw(target, key)}
+		return rawKeySentMsg{err: TmuxSendRaw(target, key)}
 	}
 }
 
-func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Watcher, error) {
+func watchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -697,11 +748,11 @@ func watchStateDir(dir string, p *tea.Program, tmuxAvailable bool) (*fsnotify.Wa
 					}
 					debounce = time.AfterFunc(50*time.Millisecond, func() {
 						sf := ReadState(dir)
-						if tmuxAvailable {
+						if tmuxReady.Load() {
 							ResolveAgentTargets(&sf, TmuxListPaneTargets())
 						}
 						var pc map[string]string
-						if tmuxAvailable {
+						if tmuxReady.Load() {
 							pc = TmuxListPaneCwds()
 						}
 						ResolveAgentBranches(&sf, pc)

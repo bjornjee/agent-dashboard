@@ -13,7 +13,7 @@ import (
 )
 
 func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}
@@ -45,7 +45,7 @@ func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
 }
 
 func TestBuildTree_CollapsedHidesSubs(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}
@@ -73,7 +73,7 @@ func TestCurrentTool_InAgentStruct(t *testing.T) {
 }
 
 func TestNextParentAgent(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
@@ -115,7 +115,7 @@ func TestNextParentAgent(t *testing.T) {
 }
 
 func TestCloseResult_TriggersPruneDead(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -157,7 +157,7 @@ func TestCloseResult_TriggersPruneDead(t *testing.T) {
 }
 
 func TestWaitingMessage_ShowsLastAssistantMessage(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -197,7 +197,7 @@ func TestWaitingMessage_ShowsLastAssistantMessage(t *testing.T) {
 }
 
 func TestWaitingMessage_FallsBackToConversation(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -220,7 +220,7 @@ func TestWaitingMessage_FallsBackToConversation(t *testing.T) {
 }
 
 func TestReplyMode_ShowsInputBar(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -250,7 +250,7 @@ func TestReplyMode_ShowsInputBar(t *testing.T) {
 }
 
 func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -282,7 +282,7 @@ func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
 }
 
 func TestReplyMode_EscRestoresView(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -312,6 +312,83 @@ func TestReplyMode_EscRestoresView(t *testing.T) {
 	content := m.messageVP.View()
 	if strings.Contains(content, "Reply:") {
 		t.Error("message viewport should not show 'Reply:' after esc")
+	}
+}
+
+func TestReplyMode_PlanStateNoPrematureReplySent(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "plan", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+
+	// Enter reply mode on a plan-state agent (presses "r")
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = result.(model)
+
+	if m.mode != modeReply {
+		t.Fatalf("expected modeReply, got %d", m.mode)
+	}
+
+	// Process the sendRawKey("3") result — this simulates the raw key completing
+	result, _ = m.Update(rawKeySentMsg{err: nil})
+	m = result.(model)
+
+	// The status should NOT say "Reply sent" — the user hasn't typed yet
+	if m.statusMsg == "Reply sent" {
+		t.Error("status should not be 'Reply sent' after raw key send; user hasn't typed yet")
+	}
+}
+
+func TestReplyMode_RawKeySendFailureShowsError(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "plan", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+
+	// Enter reply mode on plan-state agent
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = result.(model)
+
+	// Simulate raw key send failure
+	result, _ = m.Update(rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", "main:2.0")})
+	m = result.(model)
+
+	if !strings.Contains(m.statusMsg, "failed") {
+		t.Errorf("expected error status for raw key failure, got %q", m.statusMsg)
+	}
+	// Should exit reply mode on failure since the pane isn't available
+	if m.mode != modeNormal {
+		t.Errorf("expected modeNormal after raw key failure, got %d", m.mode)
+	}
+}
+
+func TestReplyMode_SendReplyFailureShowsError(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+
+	// Simulate a reply failure
+	result, _ := m.Update(sendResultMsg{err: fmt.Errorf("pane main:2.0 no longer exists")})
+	m = result.(model)
+
+	if !strings.Contains(m.statusMsg, "Reply failed") {
+		t.Errorf("expected 'Reply failed' status, got %q", m.statusMsg)
 	}
 }
 
@@ -349,7 +426,8 @@ func TestFindWindowForRepo_EmptyAgents(t *testing.T) {
 }
 
 func TestCreateSessionMsg_Success(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -374,7 +452,8 @@ func TestCreateSessionMsg_Success(t *testing.T) {
 }
 
 func TestCreateSessionMsg_Error(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -392,7 +471,7 @@ func TestCreateSessionMsg_Error(t *testing.T) {
 }
 
 func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -430,7 +509,7 @@ func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
 }
 
 func TestCreateFolderMode_TabAcceptsSuggestion(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -463,7 +542,7 @@ func TestCreateFolderMode_TabAcceptsSuggestion(t *testing.T) {
 }
 
 func TestCreateFolderMode_SuggestionsInView(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -492,7 +571,8 @@ func TestCreateFolderMode_SuggestionsInView(t *testing.T) {
 }
 
 func TestStateUpdate_PrunesAllMaps(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -542,7 +622,7 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 
 func TestPlanToggle(t *testing.T) {
 	setup := func() model {
-		m := newModel(testConfig(""), "", nil)
+		m := newModel(testConfig(""), nil)
 		m.width = 120
 		m.height = 40
 		m.resizeViewports()
@@ -672,7 +752,7 @@ func TestPlanToggle(t *testing.T) {
 }
 
 func TestPlanMsg_NoAutoShow(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -782,7 +862,7 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 	}
 
 	// Now test the model flow
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -828,7 +908,7 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 }
 
 func TestSpawningSpinner_TickAdvancesFrame(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -854,7 +934,7 @@ func TestSpawningSpinner_TickAdvancesFrame(t *testing.T) {
 }
 
 func TestSelectionPinnedOnReorder(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -893,7 +973,7 @@ func TestSelectionPinnedOnReorder(t *testing.T) {
 }
 
 func TestSelectionPinned_SubagentPreserved(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -934,7 +1014,7 @@ func TestSelectionPinned_SubagentPreserved(t *testing.T) {
 }
 
 func TestSpawningSpinner_VisibleWithNoAgents(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -957,7 +1037,7 @@ func TestSpawningSpinner_VisibleWithNoAgents(t *testing.T) {
 }
 
 func TestHelpBar_FitsWithinWidth(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 80 // typical laptop terminal width
 	m.height = 40
 	m.resizeViewports()
@@ -980,7 +1060,7 @@ func TestHelpBar_FitsWithinWidth(t *testing.T) {
 func TestSelectedSubagent_PreservesIcon(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 80
 	m.height = 40
 	m.resizeViewports()
@@ -1008,7 +1088,8 @@ func TestSelectedSubagent_PreservesIcon(t *testing.T) {
 }
 
 func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1037,7 +1118,8 @@ func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
 
 func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1074,7 +1156,7 @@ func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 }
 
 func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1127,7 +1209,7 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 }
 
 func TestSaveRestoreCache_SubagentKey(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1162,7 +1244,7 @@ func TestSaveRestoreCache_SubagentKey(t *testing.T) {
 }
 
 func TestCreateSession_CallsResizeViewports(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1184,7 +1266,7 @@ func TestCreateSession_CallsResizeViewports(t *testing.T) {
 }
 
 func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1222,7 +1304,7 @@ func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
 }
 
 func TestNavigationDown_PreservesHistory(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1263,7 +1345,7 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 }
 
 func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1324,7 +1406,7 @@ func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
 }
 
 func TestRestoreCache_RegeneratesPlan(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1364,7 +1446,7 @@ func TestRestoreCache_RegeneratesPlan(t *testing.T) {
 }
 
 func TestCacheCapsSubActivity(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1396,7 +1478,7 @@ func TestCacheCapsSubActivity(t *testing.T) {
 }
 
 func TestDismissedSubagentCachePruned(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1447,7 +1529,7 @@ func TestTickHandler_PeriodicStateReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := newModel(testConfig(dir), "", nil)
+	m := newModel(testConfig(dir), nil)
 	m.width = 120
 	m.height = 40
 	m.tmuxAvailable = false // avoid real tmux calls
@@ -1486,7 +1568,7 @@ func TestTickHandler_PeriodicStateReload(t *testing.T) {
 }
 
 func testModelWithAgent(focus int) model {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.historyVP = viewport.New(40, 3)
 	m.messageVP = viewport.New(40, 3)
 	m.rightWidth = 44
@@ -1583,12 +1665,10 @@ func TestAutoScrollLive_PreservesPositionWhenFocused(t *testing.T) {
 
 func TestMergePRMsg_Success_PinsAndCleanup(t *testing.T) {
 	tmpDir := t.TempDir()
-	agentsDir := os.MkdirAll(tmpDir+"/agents", 0755)
-	_ = agentsDir
 	os.MkdirAll(tmpDir+"/agents", 0755)
 	os.WriteFile(tmpDir+"/agents/sess1.json", []byte(`{"state":"pr","pinned_state":"pr"}`), 0644)
 
-	m := newModel(testConfig(tmpDir), "", nil)
+	m := newModel(testConfig(tmpDir), nil)
 	m.statePath = tmpDir
 	m.tmuxAvailable = true
 	m.mergeSessionID = "sess1"
@@ -1609,7 +1689,7 @@ func TestMergePRMsg_Success_PinsAndCleanup(t *testing.T) {
 }
 
 func TestMergePRMsg_Error_ShowsStatus(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.mergeSessionID = "sess1"
 	m.mergePaneID = "%5"
 
@@ -1624,5 +1704,29 @@ func TestMergePRMsg_Error_ShowsStatus(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("expected no cmd on merge error")
+	}
+}
+
+func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
+	m := testModelWithAgent(focusAgentList) // not focused on message
+	m.tmuxAvailable = true
+	m.planVisible = true
+	m.renderedPlan = "# My Plan\nStep 1\nStep 2\nStep 3\nStep 4\nStep 5"
+
+	// First capture — populate viewport
+	result, _ := m.Update(captureResultMsg{lines: []string{"init"}})
+	m = result.(model)
+	m.messageVP.GotoTop()
+
+	// More output arrives while plan is visible
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	result, _ = m.Update(captureResultMsg{lines: lines})
+	m = result.(model)
+
+	if m.messageVP.YOffset != 0 {
+		t.Error("message viewport should NOT auto-scroll when plan is visible — user may be reading the plan")
 	}
 }

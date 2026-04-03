@@ -739,7 +739,7 @@ func truncOrPad(s string, width int) string {
 // -- Panels --
 
 func (m model) renderDiffFilePanel() string {
-	panelHeight := m.height - 5 - bannerHeight
+	panelHeight := m.height - 5 - m.bannerHeight()
 	header := titleStyle.Render(" FILES CHANGED")
 
 	filterLine := ""
@@ -755,7 +755,7 @@ func (m model) renderDiffFilePanel() string {
 }
 
 func (m model) renderDiffContentPanel() string {
-	panelHeight := m.height - 5 - bannerHeight
+	panelHeight := m.height - 5 - m.bannerHeight()
 	header := titleStyle.Render(" DIFF")
 
 	// Sticky function context: find the function for the top visible row

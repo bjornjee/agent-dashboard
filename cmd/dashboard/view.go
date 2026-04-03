@@ -19,7 +19,7 @@ func (m *model) updateLeftContent() {
 func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
-	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
+	panelHeight := m.height - 5 - m.bannerHeight() // matches resizeViewports
 	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") {
 		fullHeight := panelHeight - defaultHeaderLines - 1 // -1 for section label
 		if fullHeight < minMessageHeight {
@@ -170,7 +170,11 @@ func (m model) agentListContent() string {
 	var lines []string
 
 	if len(m.treeNodes) == 0 {
-		lines = append(lines, "  No agents found")
+		if !m.startupDone {
+			lines = append(lines, "  "+m.startupSpinner.View()+" Reticulating splines...")
+		} else {
+			lines = append(lines, "  No agents found")
+		}
 		return strings.Join(lines, "\n")
 	}
 
@@ -701,7 +705,7 @@ func (m model) View() string {
 }
 
 func (m model) renderLeftPanel() string {
-	panelHeight := m.height - 5 - bannerHeight
+	panelHeight := m.height - 5 - m.bannerHeight()
 	style := borderStyle
 	if m.focusedVP == focusAgentList {
 		style = style.BorderForeground(themeSapphire)
@@ -713,7 +717,7 @@ func (m model) renderLeftPanel() string {
 }
 
 func (m model) renderRightPanel() string {
-	panelHeight := m.height - 5 - bannerHeight
+	panelHeight := m.height - 5 - m.bannerHeight()
 
 	// Create wizard modes: simple form
 	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage {
@@ -1087,7 +1091,7 @@ func (m model) truncateHelpBar(parts []string) string {
 
 // renderHelpOverlay renders a full-screen help legend with all keybindings grouped by context.
 func (m model) renderHelpOverlay() string {
-	panelHeight := m.height - 5 - bannerHeight // matches resizeViewports
+	panelHeight := m.height - 5 - m.bannerHeight() // matches resizeViewports
 	contentWidth := m.width - 4                // account for border
 
 	headerStyle := titleStyle

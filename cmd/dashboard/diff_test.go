@@ -13,7 +13,7 @@ import (
 )
 
 func TestDiffMsg_Success(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -38,7 +38,7 @@ func TestDiffMsg_Success(t *testing.T) {
 }
 
 func TestDiffMsg_Error(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -55,7 +55,7 @@ func TestDiffMsg_Error(t *testing.T) {
 }
 
 func TestDiffMsg_NoChanges(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -72,7 +72,7 @@ func TestDiffMsg_NoChanges(t *testing.T) {
 }
 
 func TestDiffFileTreeContent(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -105,7 +105,7 @@ func TestDiffFileTreeContent(t *testing.T) {
 }
 
 func TestBuildDiffTreeEntries(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -166,7 +166,7 @@ func TestBuildDiffTreeEntries(t *testing.T) {
 }
 
 func TestDiffCursorNavigation(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -230,7 +230,7 @@ func TestDiffCursorNavigation(t *testing.T) {
 }
 
 func TestDiffTreeRootFilesNoHeader(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -253,7 +253,7 @@ func TestDiffTreeRootFilesNoHeader(t *testing.T) {
 }
 
 func TestToggleDiffDir(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -291,7 +291,7 @@ func TestToggleDiffDir(t *testing.T) {
 }
 
 func TestDiffFilterBasic(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -327,7 +327,7 @@ func TestDiffFilterBasic(t *testing.T) {
 }
 
 func TestDiffFileTreeContent_Chevrons(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -356,7 +356,7 @@ func TestDiffFileTreeContent_Chevrons(t *testing.T) {
 }
 
 func TestDiffDirFileCount(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -376,7 +376,7 @@ func TestDiffDirFileCount(t *testing.T) {
 }
 
 func TestDiffSideBySideContent(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -442,7 +442,7 @@ func TestApplyDiffBackground(t *testing.T) {
 }
 
 func TestCollapsibleContextBlocks(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()

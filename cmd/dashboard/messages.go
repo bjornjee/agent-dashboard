@@ -37,7 +37,16 @@ type openPRMsg struct {
 }
 type mergePRMsg struct{ err error }
 type ghAvailableMsg struct{ available bool }
+type startupMsg struct {
+	tmuxAvailable bool
+	selfPaneID    string
+}
+type quoteMsg struct {
+	text   string
+	author string
+}
 type pinStateMsg struct{ err error }
+type rawKeySentMsg struct{ err error }
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {
 	err error
@@ -74,8 +83,6 @@ const (
 const (
 	defaultHeaderLines = 9 // estimate for mouse routing & initial sizing; render overrides
 	sectionGaps        = 5 // 3 section labels + 2 blank-line buffers between sections
-	bannerHeight       = 6 // top banner: 11 pixel rows rendered via half-blocks
-
 	minFilesHeight   = 3
 	minHistoryHeight = 5
 	minMessageHeight = 5

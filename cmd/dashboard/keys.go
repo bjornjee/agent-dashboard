@@ -26,7 +26,7 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				if m.diffFilterActive || m.diffFilterText != "" {
 					headerRows++ // filter input line
 				}
-				clickedLine := msg.Y - bannerHeight - headerRows + m.diffFileVP.YOffset
+				clickedLine := msg.Y - m.bannerHeight() - headerRows + m.diffFileVP.YOffset
 				if clickedLine >= 0 {
 					vis := m.visibleDiffEntries()
 					// Map clickedLine to a visible entry index, accounting for
@@ -91,7 +91,7 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Route to inner right viewport based on Y position
 	// Header takes ~defaultHeaderLines rows + 1 border
-	rightStart := 1 + bannerHeight // top border + banner
+	rightStart := 1 + m.bannerHeight() // top border + banner
 	filesStart := rightStart + defaultHeaderLines
 	historyStart := filesStart + m.filesVP.Height + 2     // +1 label +1 buffer
 	messageStart := historyStart + m.historyVP.Height + 2 // +1 label +1 buffer
