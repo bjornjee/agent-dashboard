@@ -54,7 +54,16 @@ make install                        # defaults to claude-code adapter
 # make install ADAPTER=claude-code  # or specify explicitly
 ```
 
-The installer builds the binary to `~/.local/bin/` and registers the adapter's hooks with the host tool (e.g. Claude Code settings).
+The installer:
+1. Builds the Go binary to `~/.local/bin/agent-dashboard`
+2. Creates default settings at `~/.agent-dashboard/settings.toml`
+3. Clones the marketplace repo to `~/.claude/plugins/marketplaces/agent-dashboard/`
+4. Registers the marketplace in `~/.claude/plugins/known_marketplaces.json`
+5. Installs the adapter to `~/.claude/plugins/cache/agent-dashboard/agent-dashboard/<version>/`
+6. Registers the plugin in `~/.claude/plugins/installed_plugins.json`
+7. Enables the plugin in `~/.claude/settings.json`
+
+Restart Claude Code sessions after installation for hooks and skills to take effect.
 
 ### Optional: tmux keybinding
 

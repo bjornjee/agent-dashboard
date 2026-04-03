@@ -10,40 +10,109 @@ ADAPTER="${1:-claude-code}"
 # ---------------------------------------------------------------------------
 
 install_claude_code() {
-  local settings="$HOME/.claude/settings.json"
-  if [ ! -f "$settings" ]; then
-    echo "  WARNING: $settings not found. Is Claude Code installed?"
+  local claude_dir="$HOME/.claude"
+  local plugins_dir="$claude_dir/plugins"
+  local settings="$claude_dir/settings.json"
+
+  if [ ! -d "$claude_dir" ]; then
+    echo "  WARNING: $claude_dir not found. Is Claude Code installed?"
     echo "  You may need to add the plugin manually via: /plugin add bjornjee/agent-dashboard"
     return
   fi
 
+  # Ensure plugins directories exist
+  mkdir -p "$plugins_dir/marketplaces" "$plugins_dir/cache"
+
+  # --- 1. Clone or update marketplace repo ---
+  local mkt_dir="$plugins_dir/marketplaces/agent-dashboard"
+  if [ -d "$mkt_dir/.git" ]; then
+    echo "  Updating marketplace repo..."
+    git -C "$mkt_dir" pull --ff-only --quiet 2>/dev/null || true
+  else
+    echo "  Cloning marketplace repo..."
+    rm -rf "$mkt_dir"
+    git clone --quiet https://github.com/bjornjee/agent-dashboard "$mkt_dir"
+  fi
+
+  # --- 2. Register in known_marketplaces.json ---
+  local known="$plugins_dir/known_marketplaces.json"
+  local commit_sha
+  commit_sha=$(git -C "$mkt_dir" rev-parse HEAD 2>/dev/null || echo "")
+  local now
+  now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+
   node -e "
     const fs = require('fs');
-    const p = '$settings';
-    const s = JSON.parse(fs.readFileSync(p, 'utf8'));
-
-    // Register marketplace source
-    s.extraKnownMarketplaces = s.extraKnownMarketplaces || {};
-    if (!s.extraKnownMarketplaces['agent-dashboard']) {
-      s.extraKnownMarketplaces['agent-dashboard'] = {
-        source: { source: 'github', repo: 'bjornjee/agent-dashboard' }
-      };
-      console.log('  Registered agent-dashboard marketplace.');
-    } else {
-      console.log('  Marketplace already registered.');
-    }
-
-    // Enable the plugin
-    s.enabledPlugins = s.enabledPlugins || {};
-    if (!s.enabledPlugins['agent-dashboard@agent-dashboard']) {
-      s.enabledPlugins['agent-dashboard@agent-dashboard'] = true;
-      console.log('  Enabled agent-dashboard plugin.');
-    } else {
-      console.log('  Plugin already enabled.');
-    }
-
-    fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
+    const p = '$known';
+    const k = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
+    k['agent-dashboard'] = {
+      source: { source: 'github', repo: 'bjornjee/agent-dashboard' },
+      installLocation: '$mkt_dir',
+      lastUpdated: '$now'
+    };
+    fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
+    console.log('  Updated known_marketplaces.json');
   "
+
+  # --- 3. Install adapter to plugin cache ---
+  local version
+  version=$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo "0.0.0")
+  local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$version"
+  mkdir -p "$cache_dir"
+  # Copy the adapter contents into the cache
+  cp -R "$REPO_DIR/adapters/claude-code/." "$cache_dir/"
+  echo "  Installed adapter v$version to plugin cache"
+
+  # --- 4. Register in installed_plugins.json ---
+  local installed="$plugins_dir/installed_plugins.json"
+  node -e "
+    const fs = require('fs');
+    const p = '$installed';
+    const d = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : { version: 2, plugins: {} };
+    d.version = d.version || 2;
+    d.plugins = d.plugins || {};
+
+    const key = 'agent-dashboard@agent-dashboard';
+    const existing = d.plugins[key] || [];
+    // Find or create the user-scope entry
+    let entry = existing.find(e => e.scope === 'user');
+    const now = '$now';
+    if (entry) {
+      entry.installPath = '$cache_dir';
+      entry.version = '$version';
+      entry.lastUpdated = now;
+      entry.gitCommitSha = '$commit_sha';
+    } else {
+      existing.push({
+        scope: 'user',
+        installPath: '$cache_dir',
+        version: '$version',
+        installedAt: now,
+        lastUpdated: now,
+        gitCommitSha: '$commit_sha'
+      });
+    }
+    d.plugins[key] = existing;
+    fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
+    console.log('  Updated installed_plugins.json');
+  "
+
+  # --- 5. Enable in settings.json ---
+  if [ -f "$settings" ]; then
+    node -e "
+      const fs = require('fs');
+      const p = '$settings';
+      const s = JSON.parse(fs.readFileSync(p, 'utf8'));
+      s.enabledPlugins = s.enabledPlugins || {};
+      if (!s.enabledPlugins['agent-dashboard@agent-dashboard']) {
+        s.enabledPlugins['agent-dashboard@agent-dashboard'] = true;
+        fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
+        console.log('  Enabled plugin in settings.json');
+      } else {
+        console.log('  Plugin already enabled in settings.json');
+      }
+    "
+  fi
 }
 
 install_generic() {
