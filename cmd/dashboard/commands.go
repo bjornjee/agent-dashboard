@@ -339,8 +339,11 @@ func selectPane(target string) tea.Cmd {
 	}
 }
 
-func sendReply(paneID, text string) tea.Cmd {
+func sendReply(paneID, text, selfPaneID string) tea.Cmd {
 	return func() tea.Msg {
+		if selfPaneID != "" && paneID == selfPaneID {
+			return sendResultMsg{err: fmt.Errorf("refusing to send to dashboard pane %s", paneID)}
+		}
 		target := ResolveTarget(paneID)
 		if target == "" {
 			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}

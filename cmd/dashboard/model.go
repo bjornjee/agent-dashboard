@@ -146,6 +146,11 @@ type model struct {
 	// within microseconds; real users take at least 200-300ms.
 	confirmEnteredAt time.Time
 
+	// lastMouseAt records when the last mouse event was received.
+	// Key events arriving within mouseKeyCooldown of a mouse event are
+	// treated as phantom keystrokes from fragmented escape sequences.
+	lastMouseAt time.Time
+
 	// Z-plugin suggestions for create folder mode
 	zEntries     []zEntry // cached z entries from ~/.z
 	suggestions  []string // filtered suggestions for current input
@@ -748,7 +753,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if paneID != "" {
 			cmds = append(cmds, sendReply(paneID,
-				"The PR has been merged. Please clean up: remove any worktrees and temporary branches."))
+				"The PR has been merged. Please clean up: remove any worktrees and temporary branches.", m.selfPaneID))
 		}
 		return m, tea.Batch(cmds...)
 
