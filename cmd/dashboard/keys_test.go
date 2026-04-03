@@ -969,6 +969,102 @@ func TestConfirmSend_PhantomKey_Swallowed(t *testing.T) {
 	}
 }
 
+func TestEnterKey_EntersConfirmJump(t *testing.T) {
+	// Pressing enter on a selected agent should enter modeConfirmJump,
+	// NOT immediately jump — guards against phantom keystrokes.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("expected nil cmd from enter (should enter confirm mode, not jump)")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeConfirmJump {
+		t.Errorf("expected modeConfirmJump, got %d", updated.mode)
+	}
+	if updated.confirmJumpPaneID != "%5" {
+		t.Errorf("expected confirmJumpPaneID='%%5', got %q", updated.confirmJumpPaneID)
+	}
+}
+
+func TestConfirmJump_Y_Jumps(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmJump
+	m.confirmJumpPaneID = "%5"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd == nil {
+		t.Fatal("expected cmd after confirming jump")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after confirm, got %d", updated.mode)
+	}
+	if updated.confirmJumpPaneID != "" {
+		t.Error("expected confirmJumpPaneID to be cleared")
+	}
+}
+
+func TestConfirmJump_Enter_Jumps(t *testing.T) {
+	// Enter should also confirm the jump (natural UX).
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmJump
+	m.confirmJumpPaneID = "%5"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected cmd after confirming jump with enter")
+	}
+
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after confirm, got %d", updated.mode)
+	}
+}
+
+func TestConfirmJump_Esc_Cancels(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmJump
+	m.confirmJumpPaneID = "%5"
+	m.statusMsg = "Jump to agent?"
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
+	}
+	if updated.confirmJumpPaneID != "" {
+		t.Error("expected confirmJumpPaneID to be cleared")
+	}
+	if updated.statusMsg != "" {
+		t.Errorf("expected empty status after cancel, got %q", updated.statusMsg)
+	}
+}
+
+func TestConfirmJump_PhantomKey_Swallowed(t *testing.T) {
+	// A phantom key arriving during modeConfirmJump should be swallowed.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmJump
+	m.confirmJumpPaneID = "%5"
+
+	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if cmd != nil {
+		t.Fatal("expected nil cmd for unrecognized key in confirm jump mode")
+	}
+	updated := result.(model)
+	if updated.mode != modeConfirmJump {
+		t.Errorf("expected to stay in modeConfirmJump, got %d", updated.mode)
+	}
+}
+
 func TestConfirmMerge_PhantomKey_Swallowed(t *testing.T) {
 	// A phantom key arriving during modeConfirmMerge should be swallowed.
 	m := newModel(testConfig(t.TempDir()), nil)

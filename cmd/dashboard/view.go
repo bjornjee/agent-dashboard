@@ -1029,6 +1029,12 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
+	if m.mode == modeConfirmJump {
+		parts = append(parts, boldStyle.Render("y/enter")+" jump")
+		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
 	if m.mode == modeCreateFolder {
 		parts = append(parts, boldStyle.Render("enter")+" create")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
