@@ -55,10 +55,11 @@ type model struct {
 	statePath       string
 	selfPaneID      string
 	statusMsg       string
-	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
-	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
-	startupDone     bool          // set true when startupMsg arrives
-	startupSpinner  spinner.Model // shown in agent list until startupMsg
+	statusMsgTick   int            // tick when statusMsg was set; clears after 3s
+	spawningSpinner spinner.Model  // bouncing-ball spinner for "Spawning agent..."
+	spawningTicks   map[string]int // target → tickCount when spawning started
+	startupDone     bool           // set true when startupMsg arrives
+	startupSpinner  spinner.Model  // shown in agent list until startupMsg
 	capturedLines   []string
 	conversation    []ConversationEntry
 	tickCount       int
@@ -357,6 +358,7 @@ func newModel(cfg Config, db *DB) model {
 		tmuxReady:         &atomic.Bool{},
 		textInput:         ti,
 		spawningSpinner:   s,
+		spawningTicks:     make(map[string]int),
 		startupSpinner:    ss,
 		startupDone:       false,
 		mode:              modeNormal,
@@ -425,7 +427,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
 		newAgents := SortedAgents(msg.state, m.selfPaneID)
-		// Preserve spawning placeholders that don't yet have a state file.
+		// Preserve spawning placeholders that don't yet have a state file,
+		// but expire them after 15 seconds to avoid zombies.
+		const maxSpawningTicks = 15
 		newTargets := make(map[string]bool, len(newAgents))
 		for _, a := range newAgents {
 			newTargets[a.Target] = true
@@ -433,8 +437,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		hasSpawning := false
 		for _, a := range m.agents {
 			if a.State == "spawning" && !newTargets[a.Target] {
-				newAgents = append(newAgents, a)
-				hasSpawning = true
+				age := m.tickCount - m.spawningTicks[a.Target]
+				if age <= maxSpawningTicks {
+					newAgents = append(newAgents, a)
+					hasSpawning = true
+				} else {
+					delete(m.spawningTicks, a.Target)
+				}
+			}
+		}
+		// Clean up spawningTicks for targets that now have real data
+		for target := range m.spawningTicks {
+			if newTargets[target] {
+				delete(m.spawningTicks, target)
 			}
 		}
 		if hasSpawning {
@@ -673,6 +688,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					State:   "spawning",
 					Cwd:     msg.folder,
 				})
+				m.spawningTicks[msg.target] = m.tickCount
 				// Re-sort so placeholder appears in correct position
 				sort.Slice(m.agents, func(i, j int) bool {
 					pi := statePriority[m.agents[i].State]
@@ -710,16 +726,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("Launch warning: %s", msg.warning)
 			m.statusMsgTick = m.tickCount
 		}
-		// Transition spawning → running so the placeholder is no longer
-		// preserved across state refreshes and gets replaced by real data.
-		for i := range m.agents {
-			if m.agents[i].Target == msg.target && m.agents[i].State == "spawning" {
-				m.agents[i].State = "running"
-				break
-			}
-		}
-		m.updateLeftContent()
-		return m, loadState(m.statePath, m.tmuxAvailable)
+		return m, nil
 
 	case closeResultMsg:
 		if msg.err != nil {

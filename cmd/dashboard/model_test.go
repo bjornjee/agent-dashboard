@@ -531,43 +531,6 @@ func TestLaunchHealthMsg_Warning(t *testing.T) {
 	if !strings.Contains(rm.statusMsg, "command not found") {
 		t.Errorf("expected 'command not found' in statusMsg, got %q", rm.statusMsg)
 	}
-	// Spawning placeholder should transition to running
-	for _, a := range rm.agents {
-		if a.Target == "main:2.0" && a.State == "spawning" {
-			t.Error("expected spawning agent to transition to running after health check")
-		}
-	}
-}
-
-func TestLaunchHealthMsg_TransitionsSpawningToRunning(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), nil)
-	m.selfPaneID = "%0"
-	m.width = 120
-	m.height = 40
-	m.resizeViewports()
-	m.tmuxAvailable = true
-	m.agents = []Agent{
-		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/project"},
-	}
-	m.buildTree()
-
-	result, _ := m.Update(launchHealthMsg{target: "main:2.0"})
-	rm := result.(model)
-
-	// Agent should now be "running", not "spawning"
-	var agent *Agent
-	for i := range rm.agents {
-		if rm.agents[i].Target == "main:2.0" {
-			agent = &rm.agents[i]
-			break
-		}
-	}
-	if agent == nil {
-		t.Fatal("expected agent to still exist after health check")
-	}
-	if agent.State != "running" {
-		t.Errorf("expected state=running after health check, got %q", agent.State)
-	}
 }
 
 func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
@@ -577,7 +540,8 @@ func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
 	m.height = 40
 	m.resizeViewports()
 	m.tmuxAvailable = true
-	// Simulate a spawning placeholder already in the agent list
+	m.tickCount = 5
+	m.spawningTicks["main:2.0"] = 5 // spawned at tick 5
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/existing"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/new-project"},
@@ -592,7 +556,7 @@ func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
 	})
 	rm := result.(model)
 
-	// The spawning placeholder should be preserved
+	// The spawning placeholder should be preserved (within timeout)
 	found := false
 	for _, a := range rm.agents {
 		if a.Target == "main:2.0" && a.State == "spawning" {
@@ -602,6 +566,78 @@ func TestStateUpdate_PreservesSpawningPlaceholders(t *testing.T) {
 	}
 	if !found {
 		t.Error("stateUpdatedMsg should preserve spawning placeholders not yet in state")
+	}
+}
+
+func TestStateUpdate_ExpiresSpawningAfterTimeout(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.tickCount = 25
+	m.spawningTicks["main:2.0"] = 5 // spawned 20 ticks ago (> 15s timeout)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/existing"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/new-project"},
+	}
+	m.buildTree()
+
+	result, _ := m.Update(stateUpdatedMsg{
+		state: StateFile{Agents: map[string]Agent{
+			"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp/existing"},
+		}},
+	})
+	rm := result.(model)
+
+	// Spawning placeholder should be expired and removed
+	for _, a := range rm.agents {
+		if a.Target == "main:2.0" {
+			t.Error("spawning placeholder should be removed after timeout")
+		}
+	}
+}
+
+func TestStateUpdate_ReplacesSpawningWithRealData(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.tickCount = 8
+	m.spawningTicks["main:2.0"] = 5
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "spawning", Cwd: "/tmp/project"},
+	}
+	m.buildTree()
+
+	// State update now includes the real agent data
+	result, _ := m.Update(stateUpdatedMsg{
+		state: StateFile{Agents: map[string]Agent{
+			"sess1": {Target: "main:2.0", TmuxPaneID: "%5", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/project"},
+		}},
+	})
+	rm := result.(model)
+
+	// Real agent should replace spawning placeholder
+	var agent *Agent
+	for i := range rm.agents {
+		if rm.agents[i].Target == "main:2.0" {
+			agent = &rm.agents[i]
+			break
+		}
+	}
+	if agent == nil {
+		t.Fatal("expected real agent to appear")
+	}
+	if agent.State != "running" {
+		t.Errorf("expected state=running, got %q", agent.State)
+	}
+	// spawningTicks should be cleaned up
+	if _, ok := rm.spawningTicks["main:2.0"]; ok {
+		t.Error("spawningTicks should be cleaned up when real data arrives")
 	}
 }
 
