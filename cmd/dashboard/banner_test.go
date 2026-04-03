@@ -216,6 +216,91 @@ func TestRenderBanner_HidesQuote(t *testing.T) {
 	}
 }
 
+func TestBannerHeight_AllCombinations(t *testing.T) {
+	tests := []struct {
+		name       string
+		showMascot bool
+		showQuote  bool
+		wantMin    int
+		wantMax    int
+	}{
+		{"both shown", true, true, 6, 6},
+		{"mascot only", true, false, 6, 6},
+		{"quote only", false, true, 2, 10}, // version + blank + quote lines
+		{"neither", false, false, 1, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig("")
+			cfg.Settings.Banner.ShowMascot = tt.showMascot
+			cfg.Settings.Banner.ShowQuote = tt.showQuote
+			m := newModel(cfg, "", nil)
+			m.width = 120
+			m.quote = "Short quote"
+			m.quoteAuthor = "Author"
+			got := m.bannerHeight()
+			if got < tt.wantMin || got > tt.wantMax {
+				t.Fatalf("bannerHeight() = %d, want [%d, %d]", got, tt.wantMin, tt.wantMax)
+			}
+		})
+	}
+}
+
+func TestBannerHeight_MatchesRenderedBanner(t *testing.T) {
+	configs := []struct {
+		name       string
+		showMascot bool
+		showQuote  bool
+	}{
+		{"both", true, true},
+		{"mascot only", true, false},
+		{"quote only", false, true},
+		{"neither", false, false},
+	}
+	for _, cc := range configs {
+		t.Run(cc.name, func(t *testing.T) {
+			cfg := testConfig("")
+			cfg.Settings.Banner.ShowMascot = cc.showMascot
+			cfg.Settings.Banner.ShowQuote = cc.showQuote
+			m := newModel(cfg, "", nil)
+			m.width = 120
+			m.quote = "Test quote"
+			m.quoteAuthor = "Author"
+			m.nowFunc = func() time.Time {
+				return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
+			}
+			rendered := m.renderBanner()
+			renderedLines := strings.Count(rendered, "\n") + 1
+			computed := m.bannerHeight()
+			if computed != renderedLines {
+				t.Fatalf("bannerHeight()=%d but rendered banner has %d lines", computed, renderedLines)
+			}
+		})
+	}
+}
+
+func TestBannerHeight_MatchesRenderedBanner_WrappedQuote(t *testing.T) {
+	cfg := testConfig("")
+	cfg.Settings.Banner.ShowMascot = false
+	cfg.Settings.Banner.ShowQuote = true
+	m := newModel(cfg, "", nil)
+	m.width = 40 // narrow width forces quote wrapping
+	m.quote = "If you can't win with words then show them a good example!"
+	m.quoteAuthor = "Stephen Richards"
+	m.nowFunc = func() time.Time {
+		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
+	}
+	rendered := m.renderBanner()
+	renderedLines := strings.Count(rendered, "\n") + 1
+	computed := m.bannerHeight()
+	if computed != renderedLines {
+		t.Fatalf("bannerHeight()=%d but rendered banner has %d lines (wrapped quote)", computed, renderedLines)
+	}
+	if computed < 3 {
+		t.Fatalf("expected wrapped quote to produce at least 3 lines, got %d", computed)
+	}
+}
+
 func TestRenderAxolotl_CorrectHeight(t *testing.T) {
 	art := renderAxolotl()
 	lines := strings.Split(art, "\n")

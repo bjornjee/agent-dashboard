@@ -69,8 +69,6 @@ const (
 const (
 	defaultHeaderLines = 9 // estimate for mouse routing & initial sizing; render overrides
 	sectionGaps        = 5 // 3 section labels + 2 blank-line buffers between sections
-	bannerHeight       = 6 // top banner: 11 pixel rows rendered via half-blocks
-
 	minFilesHeight   = 3
 	minHistoryHeight = 5
 	minMessageHeight = 5

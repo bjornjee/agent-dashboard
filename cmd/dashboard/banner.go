@@ -345,3 +345,9 @@ func (m model) renderBanner() string {
 
 	return lipgloss.JoinHorizontal(lipgloss.Center, left, right)
 }
+
+// bannerHeight returns the actual rendered height of the banner in terminal rows,
+// accounting for whether the mascot and quote are visible.
+func (m model) bannerHeight() int {
+	return lipgloss.Height(m.renderBanner())
+}

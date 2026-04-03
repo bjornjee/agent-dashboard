@@ -725,7 +725,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) resizeViewports() {
 	m.leftWidth = m.width*30/100 - 2
 	m.rightWidth = m.width - m.leftWidth - 4
-	panelHeight := m.height - 5 - bannerHeight
+	panelHeight := m.height - 5 - m.bannerHeight()
 
 	m.agentListVP.Width = m.leftWidth
 	m.agentListVP.Height = panelHeight
