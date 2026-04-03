@@ -698,6 +698,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case rawKeySentMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Key send failed: %v", msg.err)
+			m.statusMsgTick = m.tickCount
+			// Exit reply mode since the pane is unreachable
+			if m.mode == modeReply {
+				m.mode = modeNormal
+				m.textInput.Reset()
+				m.updateRightContent()
+			}
+		}
+		return m, nil
+
 	case sendResultMsg:
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("Reply failed: %v", msg.err)

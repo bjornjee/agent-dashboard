@@ -315,6 +315,83 @@ func TestReplyMode_EscRestoresView(t *testing.T) {
 	}
 }
 
+func TestReplyMode_PlanStateNoPrematureReplySent(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "plan", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+
+	// Enter reply mode on a plan-state agent (presses "r")
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = result.(model)
+
+	if m.mode != modeReply {
+		t.Fatalf("expected modeReply, got %d", m.mode)
+	}
+
+	// Process the sendRawKey("3") result — this simulates the raw key completing
+	result, _ = m.Update(rawKeySentMsg{err: nil})
+	m = result.(model)
+
+	// The status should NOT say "Reply sent" — the user hasn't typed yet
+	if m.statusMsg == "Reply sent" {
+		t.Error("status should not be 'Reply sent' after raw key send; user hasn't typed yet")
+	}
+}
+
+func TestReplyMode_RawKeySendFailureShowsError(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "plan", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+
+	// Enter reply mode on plan-state agent
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = result.(model)
+
+	// Simulate raw key send failure
+	result, _ = m.Update(rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", "main:2.0")})
+	m = result.(model)
+
+	if !strings.Contains(m.statusMsg, "failed") {
+		t.Errorf("expected error status for raw key failure, got %q", m.statusMsg)
+	}
+	// Should exit reply mode on failure since the pane isn't available
+	if m.mode != modeNormal {
+		t.Errorf("expected modeNormal after raw key failure, got %d", m.mode)
+	}
+}
+
+func TestReplyMode_SendReplyFailureShowsError(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []Agent{
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.tmuxAvailable = true
+
+	// Simulate a reply failure
+	result, _ := m.Update(sendResultMsg{err: fmt.Errorf("pane main:2.0 no longer exists")})
+	m = result.(model)
+
+	if !strings.Contains(m.statusMsg, "Reply failed") {
+		t.Errorf("expected 'Reply failed' status, got %q", m.statusMsg)
+	}
+}
+
 func TestFindWindowForRepo_MatchesByFolder(t *testing.T) {
 	agents := []Agent{
 		{Target: "main:1.0", Session: "main", Window: 1, Pane: 0, Cwd: "/home/user/code/skills"},

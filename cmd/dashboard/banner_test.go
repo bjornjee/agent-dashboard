@@ -234,7 +234,7 @@ func TestBannerHeight_AllCombinations(t *testing.T) {
 			cfg := testConfig("")
 			cfg.Settings.Banner.ShowMascot = tt.showMascot
 			cfg.Settings.Banner.ShowQuote = tt.showQuote
-			m := newModel(cfg, "", nil)
+			m := newModel(cfg, nil)
 			m.width = 120
 			m.quote = "Short quote"
 			m.quoteAuthor = "Author"
@@ -262,7 +262,7 @@ func TestBannerHeight_MatchesRenderedBanner(t *testing.T) {
 			cfg := testConfig("")
 			cfg.Settings.Banner.ShowMascot = cc.showMascot
 			cfg.Settings.Banner.ShowQuote = cc.showQuote
-			m := newModel(cfg, "", nil)
+			m := newModel(cfg, nil)
 			m.width = 120
 			m.quote = "Test quote"
 			m.quoteAuthor = "Author"
@@ -283,7 +283,7 @@ func TestBannerHeight_MatchesRenderedBanner_WrappedQuote(t *testing.T) {
 	cfg := testConfig("")
 	cfg.Settings.Banner.ShowMascot = false
 	cfg.Settings.Banner.ShowQuote = true
-	m := newModel(cfg, "", nil)
+	m := newModel(cfg, nil)
 	m.width = 40 // narrow width forces quote wrapping
 	m.quote = "If you can't win with words then show them a good example!"
 	m.quoteAuthor = "Stephen Richards"

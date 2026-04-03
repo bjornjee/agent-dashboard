@@ -41,6 +41,7 @@ type quoteMsg struct {
 	author string
 }
 type pinStateMsg struct{ err error }
+type rawKeySentMsg struct{ err error }
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {
 	err error

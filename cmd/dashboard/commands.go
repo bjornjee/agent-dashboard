@@ -672,9 +672,9 @@ func sendRawKey(paneID, key string) tea.Cmd {
 	return func() tea.Msg {
 		target := ResolveTarget(paneID)
 		if target == "" {
-			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
+			return rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
 		}
-		return sendResultMsg{err: TmuxSendRaw(target, key)}
+		return rawKeySentMsg{err: TmuxSendRaw(target, key)}
 	}
 }
 
