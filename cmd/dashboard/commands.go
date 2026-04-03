@@ -411,7 +411,7 @@ func expandPath(path string) (string, error) {
 	return filepath.Abs(path)
 }
 
-const maxPanesPerWindow = 4
+const maxPanesPerWindow = 8
 
 // validateFolder expands and validates a folder path, returning the absolute path.
 func validateFolder(path string) (string, error) {
@@ -490,7 +490,7 @@ func createSessionWithPrompt(folder string, agents []Agent, selfPaneID string, p
 			if cErr != nil {
 				found = false
 			} else if count >= maxPanesPerWindow {
-				return createSessionMsg{err: fmt.Errorf("4-pane limit reached for %s", repoName)}
+				return createSessionMsg{err: fmt.Errorf("8-pane limit reached for %s", repoName)}
 			} else {
 				newTarget, err = TmuxSplitWindow(sw, absFolder)
 			}
