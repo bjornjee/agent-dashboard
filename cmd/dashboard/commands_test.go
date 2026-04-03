@@ -167,6 +167,55 @@ func TestBuildPRURL(t *testing.T) {
 	}
 }
 
+func TestResolvePRURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		owner   string
+		repo    string
+		base    string
+		branch  string
+		ghPRURL string // non-empty means a PR exists
+		wantURL string
+	}{
+		{
+			name:    "no existing PR opens compare page",
+			owner:   "bjornjee",
+			repo:    "agent-dashboard",
+			base:    "main",
+			branch:  "fix/my-bug",
+			ghPRURL: "",
+			wantURL: "https://github.com/bjornjee/agent-dashboard/compare/main...fix%2Fmy-bug?expand=1",
+		},
+		{
+			name:    "existing PR opens files page",
+			owner:   "bjornjee",
+			repo:    "agent-dashboard",
+			base:    "main",
+			branch:  "fix/my-bug",
+			ghPRURL: "https://github.com/bjornjee/agent-dashboard/pull/42",
+			wantURL: "https://github.com/bjornjee/agent-dashboard/pull/42/files",
+		},
+		{
+			name:    "existing PR URL with trailing slash",
+			owner:   "bjornjee",
+			repo:    "agent-dashboard",
+			base:    "main",
+			branch:  "fix/my-bug",
+			ghPRURL: "https://github.com/bjornjee/agent-dashboard/pull/42/",
+			wantURL: "https://github.com/bjornjee/agent-dashboard/pull/42/files",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolvePRURL(tt.owner, tt.repo, tt.base, tt.branch, tt.ghPRURL)
+			if got != tt.wantURL {
+				t.Errorf("resolvePRURL() = %q, want %q", got, tt.wantURL)
+			}
+		})
+	}
+}
+
 func TestValidateFolder_TildeExpansion(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
