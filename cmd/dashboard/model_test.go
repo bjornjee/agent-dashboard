@@ -1116,6 +1116,44 @@ func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
 	}
 }
 
+func TestCreateSessionMsg_PlaceholderIsSpawning(t *testing.T) {
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	m.statusMsg = "spawning"
+	result, _ := m.Update(createSessionMsg{target: "main:2.0", err: nil})
+	rm := result.(model)
+
+	// Placeholder agent should have state "spawning", not "running"
+	for _, a := range rm.agents {
+		if a.Target == "main:2.0" {
+			if a.State != "spawning" {
+				t.Errorf("expected placeholder state 'spawning', got %q", a.State)
+			}
+			return
+		}
+	}
+	t.Error("placeholder agent main:2.0 not found")
+}
+
+func TestSpawningStatePriority(t *testing.T) {
+	p, ok := statePriority["spawning"]
+	if !ok {
+		t.Fatal("spawning state not in statePriority map")
+	}
+	if p != 3 {
+		t.Errorf("expected spawning priority 3, got %d", p)
+	}
+}
+
 func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 	m := newModel(testConfig("/tmp/test-state.json"), nil)

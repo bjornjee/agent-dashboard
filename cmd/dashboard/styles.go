@@ -63,6 +63,7 @@ var (
 	doneColor       = themeGreen
 	prColor         = themeMauve
 	mergedColor     = themeTeal
+	spawningColor   = themeSapphire
 	planColor       = themeMauve
 	textInputColor  = themeYellow
 
@@ -81,6 +82,7 @@ type stateIcon struct {
 }
 
 var stateIcons = map[string]stateIcon{
+	"spawning":    {"⠋", spawningColor},
 	"permission":  {"⚿", permissionColor},
 	"question":    {"?", questionColor},
 	"error":       {"✗", errorColor},
@@ -139,6 +141,7 @@ func isMerged(state string) bool {
 
 // stateLabel returns a human-readable label for the agent state.
 var stateLabels = map[string]string{
+	"spawning":    "Spawning",
 	"permission":  "Waiting for approval",
 	"question":    "Asked a question",
 	"error":       "Error",

@@ -260,6 +260,27 @@ func (m model) agentListContent() string {
 		repo := agentRepo(agent)
 		repoStyled := agentRepoStyled(agent)
 
+		// Spawning agents: minimal entry — spinner + pane + repo only
+		if effState == "spawning" {
+			icon := lipgloss.NewStyle().Foreground(spawningColor).Render(m.spawningSpinner.View())
+			plainRepo := repo
+			if plainRepo == "" {
+				plainRepo = agent.Session
+			}
+			maxRepo := m.leftWidth - 5 - len(paneID) - 2
+			repoRunes := []rune(plainRepo)
+			displayRepo := repoStyled
+			if maxRepo > 0 && len(repoRunes) > maxRepo {
+				displayRepo = string(repoRunes[:maxRepo-1]) + "…"
+			}
+			line := fmt.Sprintf("   %s %s %s", icon, paneID, displayRepo)
+			if nodeIdx == m.selected {
+				line = highlightLine(line, m.leftWidth)
+			}
+			lines = append(lines, line)
+			continue
+		}
+
 		duration := ""
 		if effState == "running" {
 			duration = FormatDuration(agent.UpdatedAt)

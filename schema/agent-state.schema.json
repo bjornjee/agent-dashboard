@@ -28,7 +28,7 @@
     },
     "state": {
       "type": "string",
-      "enum": ["permission", "plan", "question", "error", "running", "idle_prompt", "done", "pr", "merged"],
+      "enum": ["spawning", "permission", "plan", "question", "error", "running", "idle_prompt", "done", "pr", "merged"],
       "description": "Current agent state"
     },
     "cwd": {

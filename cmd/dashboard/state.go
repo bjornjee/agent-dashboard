@@ -67,6 +67,7 @@ var statePriority = map[string]int{
 	"plan":        1, // blocked — plan ready for review
 	"question":    2, // waiting — needs user reply
 	"error":       2, // waiting — needs investigation
+	"spawning":    3, // spawning — placeholder until first hook event
 	"running":     3,
 	"idle_prompt": 4, // review — finished turn, at prompt
 	"done":        4, // review — finished task

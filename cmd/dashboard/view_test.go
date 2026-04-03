@@ -69,6 +69,53 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 	})
 }
 
+func TestAgentListContent_SpawningMinimalEntry(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+
+	m := model{
+		leftWidth: 40,
+		agents: []Agent{
+			{
+				Target:        "main:2.0",
+				Window:        2,
+				Pane:          0,
+				State:         "spawning",
+				Cwd:           "/Users/someone/Code/my-repo",
+				Branch:        "feat/some-branch",
+				Model:         "claude-opus-4-6",
+				SubagentCount: 2,
+			},
+		},
+		treeNodes: []treeNode{
+			{AgentIdx: 0},
+		},
+		agentSubagents: map[string][]SubagentInfo{},
+		collapsed:      map[string]bool{},
+	}
+
+	content := m.agentListContent()
+
+	// Should contain the repo name
+	if !strings.Contains(content, "my-repo") {
+		t.Error("spawning entry should show repo name")
+	}
+
+	// Should NOT contain the branch (hidden until first event)
+	if strings.Contains(content, "feat/some-branch") {
+		t.Error("spawning entry should not show branch line")
+	}
+
+	// Should NOT contain model badge
+	if strings.Contains(content, "opus") {
+		t.Error("spawning entry should not show model badge")
+	}
+
+	// Should NOT contain subagent count badge
+	if strings.Contains(content, "sub") {
+		t.Error("spawning entry should not show subagent badge")
+	}
+}
+
 func TestRenderHelpOverlayContainsSections(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 

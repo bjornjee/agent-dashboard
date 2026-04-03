@@ -553,10 +553,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		var cmds []tea.Cmd
-		if m.statusMsg == "spawning" {
+		hasSpawning := m.statusMsg == "spawning"
+		if !hasSpawning {
+			for _, a := range m.agents {
+				if a.State == "spawning" {
+					hasSpawning = true
+					break
+				}
+			}
+		}
+		if hasSpawning {
 			var cmd tea.Cmd
 			m.spawningSpinner, cmd = m.spawningSpinner.Update(msg)
 			cmds = append(cmds, cmd)
+			m.updateLeftContent()
 		}
 		if !m.startupDone {
 			var cmd tea.Cmd
@@ -633,7 +643,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Session: sess,
 					Window:  win,
 					Pane:    pane,
-					State:   "running",
+					State:   "spawning",
 				})
 				// Re-sort so placeholder appears in correct position
 				sort.Slice(m.agents, func(i, j int) bool {
