@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // writeAgentFile is a test helper that writes an agent JSON file to dir/agents/.
@@ -593,6 +594,41 @@ func TestCleanStale_SkipsLivePanes(t *testing.T) {
 	// Dead agent should be removed
 	if _, err := os.Stat(filepath.Join(agentsPath, "dead-agent.json")); err == nil {
 		t.Error("dead stale agent was not cleaned")
+	}
+}
+
+func TestCleanStale_DedupSamePane(t *testing.T) {
+	dir := t.TempDir()
+	staleTime := "2020-01-01T00:00:00Z"
+	recentTime := time.Now().UTC().Format(time.RFC3339)
+
+	// Two agents sharing pane %42 — only the newest should survive.
+	writeAgentFile(t, dir, "old-session.json", Agent{
+		SessionID:  "old-session",
+		TmuxPaneID: "%42",
+		State:      "running",
+		UpdatedAt:  staleTime,
+	})
+	writeAgentFile(t, dir, "new-session.json", Agent{
+		SessionID:  "new-session",
+		TmuxPaneID: "%42",
+		State:      "running",
+		UpdatedAt:  recentTime,
+	})
+
+	livePaneIDs := map[string]bool{"%42": true}
+	CleanStale(dir, 10*60, livePaneIDs)
+
+	agentsPath := filepath.Join(dir, "agents")
+
+	// Old session should be removed (duplicate pane, older)
+	if _, err := os.Stat(filepath.Join(agentsPath, "old-session.json")); err == nil {
+		t.Error("old duplicate-pane agent was not cleaned")
+	}
+
+	// New session should survive (newest for this pane + pane alive)
+	if _, err := os.Stat(filepath.Join(agentsPath, "new-session.json")); err != nil {
+		t.Error("newest agent for live pane was incorrectly cleaned")
 	}
 }
 
