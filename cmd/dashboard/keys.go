@@ -8,12 +8,53 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// debugLogKey writes a line to the debug key log file (if open).
+// Format: timestamp | mode | key_string | key_type | runes_hex | mouse_age | phantom
+func (m model) debugLogKey(msg tea.KeyMsg) {
+	if m.debugKeyLog == nil {
+		return
+	}
+	var mouseAge string
+	if m.lastMouseAt.IsZero() {
+		mouseAge = "never"
+	} else {
+		mouseAge = fmt.Sprintf("%dms", time.Since(m.lastMouseAt).Milliseconds())
+	}
+	runeHex := ""
+	for i, r := range msg.Runes {
+		if i > 0 {
+			runeHex += ","
+		}
+		runeHex += fmt.Sprintf("0x%04x", r)
+	}
+	fmt.Fprintf(m.debugKeyLog, "%s | mode=%d | key=%q | type=%d | runes=[%s] | mouse_age=%s | phantom=%v\n",
+		time.Now().Format("15:04:05.000"), m.mode, msg.String(), msg.Type, runeHex, mouseAge, m.isPhantomKey())
+}
+
 // confirmCooldown is the minimum time between entering a confirmation mode
 // and accepting a confirmation key. Phantom keystrokes from terminal escape
 // sequences arrive within microseconds; real users take at least 200-300ms.
 const confirmCooldown = 300 * time.Millisecond
 
+// mouseKeyCooldown is the minimum gap between a mouse event and a key event
+// for the key to be treated as genuine. Fragmented mouse escape sequences
+// produce phantom key events within ~1ms of the mouse event. 50ms is
+// conservative — real mouse-to-keyboard transitions take 150ms+.
+const mouseKeyCooldown = 50 * time.Millisecond
+
+// isPhantomKey returns true if the key event likely originated from a
+// fragmented mouse escape sequence rather than a real keypress.
+func (m model) isPhantomKey() bool {
+	return !m.lastMouseAt.IsZero() && time.Since(m.lastMouseAt) < mouseKeyCooldown
+}
+
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	m.lastMouseAt = time.Now()
+	if m.debugKeyLog != nil {
+		fmt.Fprintf(m.debugKeyLog, "%s | MOUSE | button=%d action=%d x=%d y=%d\n",
+			time.Now().Format("15:04:05.000"), msg.Button, msg.Action, msg.X, msg.Y)
+	}
+
 	// Help overlay: swallow mouse events
 	if m.helpVisible {
 		return m, nil
@@ -114,6 +155,7 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.debugLogKey(msg)
 	key := msg.String()
 
 	// Create folder mode
@@ -311,7 +353,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			if text != "" {
 				if agent := m.selectedAgent(); agent != nil {
-					return m, sendReply(agent.TmuxPaneID, text)
+					return m, sendReply(agent.TmuxPaneID, text, m.selfPaneID)
 				}
 			}
 			return m, nil
@@ -376,7 +418,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			cmds := []tea.Cmd{
 				pinAgentStateCmd(m.statePath, sessionID, "merged"),
-				sendReply(paneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches."),
+				sendReply(paneID, "The PR has been merged. Please clean up: remove any worktrees and temporary branches.", m.selfPaneID),
 			}
 			m.statusMsg = "Marked as merged — cleanup sent"
 			m.statusMsgTick = m.tickCount
@@ -617,6 +659,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "x":
+		if m.isPhantomKey() {
+			return m, nil
+		}
 		if sub := m.selectedSubagent(); sub != nil {
 			// Dismiss selected subagent from tree
 			agent := m.selectedAgent()
@@ -678,6 +723,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+d":
 		return m.scrollFocused(msg)
 	case "enter":
+		if m.isPhantomKey() {
+			return m, nil
+		}
 		if !m.tmuxAvailable {
 			m.statusMsg = "Cannot jump: tmux not detected"
 			return m, nil
@@ -691,6 +739,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "r":
+		if m.isPhantomKey() {
+			return m, nil
+		}
 		if !m.tmuxAvailable {
 			m.statusMsg = "Cannot reply: tmux not detected"
 			return m, nil
@@ -751,6 +802,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 	case "m":
+		if m.isPhantomKey() {
+			return m, nil
+		}
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && m.tmuxAvailable &&
 			isPR(agent.State) && agent.EffectiveDir() != "" && agent.Branch != "" {
 			m.mode = modeConfirmMerge
@@ -792,6 +846,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateRightContent()
 		return m, textinput.Blink
 	case "y", "n":
+		if m.isPhantomKey() {
+			return m, nil
+		}
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {
@@ -810,6 +867,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		if m.isPhantomKey() {
+			return m, nil
+		}
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {

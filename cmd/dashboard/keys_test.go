@@ -1154,3 +1154,121 @@ func TestConfirmCooldown_AcceptsAfterCooldown(t *testing.T) {
 		t.Errorf("expected modeNormal, got %d", updated.mode)
 	}
 }
+
+func TestPhantomKey_EnterRejected(t *testing.T) {
+	// A phantom Enter (from a fragmented mouse escape sequence) should not
+	// trigger the "Jump to agent?" confirmation prompt.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.lastMouseAt = time.Now() // mouse event just happened
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("phantom Enter should be rejected; got mode %d, want modeNormal", updated.mode)
+	}
+}
+
+func TestPhantomKey_MergeRejected(t *testing.T) {
+	// A phantom "m" from a mouse escape sequence should not enter modeConfirmMerge.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "pr", TmuxPaneID: "%5",
+			Cwd: t.TempDir(), Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.lastMouseAt = time.Now()
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("phantom 'm' should be rejected; got mode %d, want modeNormal", updated.mode)
+	}
+}
+
+func TestPhantomKey_CloseRejected(t *testing.T) {
+	// A phantom "x" should not enter modeConfirmClose.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.lastMouseAt = time.Now()
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("phantom 'x' should be rejected; got mode %d, want modeNormal", updated.mode)
+	}
+}
+
+func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
+	// A real Enter key arriving well after the mouse cooldown should be accepted.
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.lastMouseAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := result.(model)
+	if updated.mode != modeConfirmJump {
+		t.Errorf("real Enter should be accepted; got mode %d, want modeConfirmJump", updated.mode)
+	}
+}
+
+func TestHandleMouse_SetsLastMouseAt(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	if !m.lastMouseAt.IsZero() {
+		t.Fatal("lastMouseAt should be zero initially")
+	}
+
+	before := time.Now()
+	result, _ := m.handleMouse(tea.MouseMsg{})
+	after := time.Now()
+
+	updated := result.(model)
+	if updated.lastMouseAt.Before(before) || updated.lastMouseAt.After(after) {
+		t.Errorf("lastMouseAt should be between before and after; got %v", updated.lastMouseAt)
+	}
+}
+
+func TestSendReply_RejectsSelfPane(t *testing.T) {
+	// sendReply should refuse to send to the dashboard's own pane.
+	cmd := sendReply("%5", "test message", "%5")
+	msg := cmd()
+	result, ok := msg.(sendResultMsg)
+	if !ok {
+		t.Fatalf("expected sendResultMsg, got %T", msg)
+	}
+	if result.err == nil {
+		t.Fatal("expected error when sending to self pane")
+	}
+	if !strings.Contains(result.err.Error(), "dashboard pane") {
+		t.Errorf("error should mention dashboard pane, got: %v", result.err)
+	}
+}
+
+func TestSendReply_AllowsDifferentPane(t *testing.T) {
+	// sendReply should NOT block when paneID differs from selfPaneID.
+	// We can't actually send (no tmux), but we verify the self-pane guard
+	// does not trigger.
+	cmd := sendReply("%5", "test message", "%0")
+	msg := cmd()
+	result, ok := msg.(sendResultMsg)
+	if !ok {
+		t.Fatalf("expected sendResultMsg, got %T", msg)
+	}
+	// Error is expected (no tmux), but it should NOT be the self-pane error.
+	if result.err != nil && strings.Contains(result.err.Error(), "dashboard pane") {
+		t.Errorf("should not reject different pane; got: %v", result.err)
+	}
+}
