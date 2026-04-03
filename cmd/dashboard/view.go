@@ -170,7 +170,11 @@ func (m model) agentListContent() string {
 	var lines []string
 
 	if len(m.treeNodes) == 0 {
-		lines = append(lines, "  No agents found")
+		if !m.startupDone {
+			lines = append(lines, "  "+m.startupSpinner.View()+" Reticulating splines...")
+		} else {
+			lines = append(lines, "  No agents found")
+		}
 		return strings.Join(lines, "\n")
 	}
 

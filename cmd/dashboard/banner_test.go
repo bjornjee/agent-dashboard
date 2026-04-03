@@ -80,7 +80,7 @@ func TestRandomQuote_NotEmpty(t *testing.T) {
 func TestRenderBanner_ContainsGreeting(t *testing.T) {
 	cfg := testConfig("")
 	cfg.Username = "TestUser"
-	m := newModel(cfg, "", nil)
+	m := newModel(cfg, nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
@@ -93,7 +93,7 @@ func TestRenderBanner_ContainsGreeting(t *testing.T) {
 }
 
 func TestRenderBanner_ContainsQuote(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
@@ -106,7 +106,7 @@ func TestRenderBanner_ContainsQuote(t *testing.T) {
 }
 
 func TestRenderBanner_ContainsAxolotl(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
@@ -169,7 +169,7 @@ func TestRenderBanner_ContainsVersion(t *testing.T) {
 	Version = "1.2.3"
 	defer func() { Version = "dev" }()
 
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
@@ -184,7 +184,7 @@ func TestRenderBanner_ContainsVersion(t *testing.T) {
 func TestRenderBanner_HidesMascot(t *testing.T) {
 	cfg := testConfig("")
 	cfg.Settings.Banner.ShowMascot = false
-	m := newModel(cfg, "", nil)
+	m := newModel(cfg, nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)
@@ -204,7 +204,7 @@ func TestRenderBanner_HidesMascot(t *testing.T) {
 func TestRenderBanner_HidesQuote(t *testing.T) {
 	cfg := testConfig("")
 	cfg.Settings.Banner.ShowQuote = false
-	m := newModel(cfg, "", nil)
+	m := newModel(cfg, nil)
 	m.width = 120
 	m.nowFunc = func() time.Time {
 		return time.Date(2026, 3, 29, 9, 0, 0, 0, time.Local)

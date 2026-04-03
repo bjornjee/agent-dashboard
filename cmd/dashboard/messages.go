@@ -32,6 +32,14 @@ type subagentsMsg struct {
 type planMsg struct{ content string }
 type openEditorMsg struct{ err error }
 type openPRMsg struct{ err error }
+type startupMsg struct {
+	tmuxAvailable bool
+	selfPaneID    string
+}
+type quoteMsg struct {
+	text   string
+	author string
+}
 type pinStateMsg struct{ err error }
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {

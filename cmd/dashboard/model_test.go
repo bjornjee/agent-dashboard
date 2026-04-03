@@ -13,7 +13,7 @@ import (
 )
 
 func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}
@@ -45,7 +45,7 @@ func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
 }
 
 func TestBuildTree_CollapsedHidesSubs(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}
@@ -73,7 +73,7 @@ func TestCurrentTool_InAgentStruct(t *testing.T) {
 }
 
 func TestNextParentAgent(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},
@@ -115,7 +115,7 @@ func TestNextParentAgent(t *testing.T) {
 }
 
 func TestCloseResult_TriggersPruneDead(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -157,7 +157,7 @@ func TestCloseResult_TriggersPruneDead(t *testing.T) {
 }
 
 func TestWaitingMessage_ShowsLastAssistantMessage(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -197,7 +197,7 @@ func TestWaitingMessage_ShowsLastAssistantMessage(t *testing.T) {
 }
 
 func TestWaitingMessage_FallsBackToConversation(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -220,7 +220,7 @@ func TestWaitingMessage_FallsBackToConversation(t *testing.T) {
 }
 
 func TestReplyMode_ShowsInputBar(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -250,7 +250,7 @@ func TestReplyMode_ShowsInputBar(t *testing.T) {
 }
 
 func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -282,7 +282,7 @@ func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
 }
 
 func TestReplyMode_EscRestoresView(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -349,7 +349,8 @@ func TestFindWindowForRepo_EmptyAgents(t *testing.T) {
 }
 
 func TestCreateSessionMsg_Success(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -374,7 +375,8 @@ func TestCreateSessionMsg_Success(t *testing.T) {
 }
 
 func TestCreateSessionMsg_Error(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -392,7 +394,7 @@ func TestCreateSessionMsg_Error(t *testing.T) {
 }
 
 func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -430,7 +432,7 @@ func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
 }
 
 func TestCreateFolderMode_TabAcceptsSuggestion(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -463,7 +465,7 @@ func TestCreateFolderMode_TabAcceptsSuggestion(t *testing.T) {
 }
 
 func TestCreateFolderMode_SuggestionsInView(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -492,7 +494,8 @@ func TestCreateFolderMode_SuggestionsInView(t *testing.T) {
 }
 
 func TestStateUpdate_PrunesAllMaps(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -542,7 +545,7 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 
 func TestPlanToggle(t *testing.T) {
 	setup := func() model {
-		m := newModel(testConfig(""), "", nil)
+		m := newModel(testConfig(""), nil)
 		m.width = 120
 		m.height = 40
 		m.resizeViewports()
@@ -672,7 +675,7 @@ func TestPlanToggle(t *testing.T) {
 }
 
 func TestPlanMsg_NoAutoShow(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -782,7 +785,7 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 	}
 
 	// Now test the model flow
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -828,7 +831,7 @@ func TestPlanFlow_EndToEnd(t *testing.T) {
 }
 
 func TestSpawningSpinner_TickAdvancesFrame(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -854,7 +857,7 @@ func TestSpawningSpinner_TickAdvancesFrame(t *testing.T) {
 }
 
 func TestSelectionPinnedOnReorder(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -893,7 +896,7 @@ func TestSelectionPinnedOnReorder(t *testing.T) {
 }
 
 func TestSelectionPinned_SubagentPreserved(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -934,7 +937,7 @@ func TestSelectionPinned_SubagentPreserved(t *testing.T) {
 }
 
 func TestSpawningSpinner_VisibleWithNoAgents(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -957,7 +960,7 @@ func TestSpawningSpinner_VisibleWithNoAgents(t *testing.T) {
 }
 
 func TestHelpBar_FitsWithinWidth(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 80 // typical laptop terminal width
 	m.height = 40
 	m.resizeViewports()
@@ -980,7 +983,7 @@ func TestHelpBar_FitsWithinWidth(t *testing.T) {
 func TestSelectedSubagent_PreservesIcon(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 80
 	m.height = 40
 	m.resizeViewports()
@@ -1008,7 +1011,8 @@ func TestSelectedSubagent_PreservesIcon(t *testing.T) {
 }
 
 func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1037,7 +1041,8 @@ func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
 
 func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
-	m := newModel(testConfig("/tmp/test-state.json"), "%0", nil)
+	m := newModel(testConfig("/tmp/test-state.json"), nil)
+	m.selfPaneID = "%0"
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1074,7 +1079,7 @@ func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 }
 
 func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1127,7 +1132,7 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 }
 
 func TestSaveRestoreCache_SubagentKey(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1162,7 +1167,7 @@ func TestSaveRestoreCache_SubagentKey(t *testing.T) {
 }
 
 func TestCreateSession_CallsResizeViewports(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1184,7 +1189,7 @@ func TestCreateSession_CallsResizeViewports(t *testing.T) {
 }
 
 func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1222,7 +1227,7 @@ func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
 }
 
 func TestNavigationDown_PreservesHistory(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1263,7 +1268,7 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 }
 
 func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1324,7 +1329,7 @@ func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
 }
 
 func TestRestoreCache_RegeneratesPlan(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1364,7 +1369,7 @@ func TestRestoreCache_RegeneratesPlan(t *testing.T) {
 }
 
 func TestCacheCapsSubActivity(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1396,7 +1401,7 @@ func TestCacheCapsSubActivity(t *testing.T) {
 }
 
 func TestDismissedSubagentCachePruned(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
 	m.resizeViewports()
@@ -1447,7 +1452,7 @@ func TestTickHandler_PeriodicStateReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := newModel(testConfig(dir), "", nil)
+	m := newModel(testConfig(dir), nil)
 	m.width = 120
 	m.height = 40
 	m.tmuxAvailable = false // avoid real tmux calls
@@ -1486,7 +1491,7 @@ func TestTickHandler_PeriodicStateReload(t *testing.T) {
 }
 
 func testModelWithAgent(focus int) model {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.historyVP = viewport.New(40, 3)
 	m.messageVP = viewport.New(40, 3)
 	m.rightWidth = 44

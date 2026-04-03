@@ -8,20 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// ownPaneID returns the dashboard's own tmux pane ID (%N format)
-// so we can exclude it from the agent list. Falls back to querying
-// tmux directly for popup contexts where TMUX_PANE is unset.
-func ownPaneID() string {
-	return TmuxResolvePaneID()
-}
-
 func main() {
 	cfg := DefaultConfig()
 	stateDir := cfg.Profile.StateDir
-
-	// Clean stale agents (>10 min since last update) on startup,
-	// but keep agents whose tmux panes are still alive.
-	CleanStale(stateDir, 10*60, TmuxListLivePaneIDs())
 
 	dbPath := filepath.Join(stateDir, "usage.db")
 	db, err := OpenDB(dbPath)
@@ -32,12 +21,14 @@ func main() {
 		defer db.Close()
 	}
 
-	selfPane := ownPaneID()
-	m := newModel(cfg, selfPane, db)
+	m := newModel(cfg, db)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
-	// Start directory watcher for per-agent state files
-	watcher, err := watchStateDir(stateDir, p, m.tmuxAvailable)
+	// Start directory watcher for per-agent state files.
+	// m.tmuxReady is an atomic.Bool updated by deferredStartup once the
+	// real TmuxIsAvailable() check completes; the watcher reads it on
+	// each event to decide whether to call tmux for target resolution.
+	watcher, err := watchStateDir(stateDir, p, m.tmuxReady)
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)

@@ -10,7 +10,7 @@ import (
 )
 
 func newTestModelWithAgents() model {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.tmuxAvailable = true
 	m.agents = []Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
@@ -249,7 +249,7 @@ func TestCreateFolderMode_EnterWithTextNoSuggestionsUsesText(t *testing.T) {
 }
 
 func TestUsageModeWorksWithNoAgents(t *testing.T) {
-	m := newModel(testConfig(""), "", nil)
+	m := newModel(testConfig(""), nil)
 	m.agents = nil // no agents
 	m.mode = modeUsage
 
@@ -618,7 +618,7 @@ func TestGKeyPinsPRState_QuestionState(t *testing.T) {
 	os.MkdirAll(agentsDir, 0755)
 	os.WriteFile(filepath.Join(agentsDir, "sess1.json"), []byte(`{"state":"question"}`), 0644)
 
-	m := newModel(testConfig(tmpDir), "", nil)
+	m := newModel(testConfig(tmpDir), nil)
 	m.statePath = tmpDir
 	m.tmuxAvailable = true
 	m.agents = []Agent{
