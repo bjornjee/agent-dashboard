@@ -15,9 +15,9 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
-- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete
+- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection
 - **Quick reply** — send free-text responses directly to agent panes
-- **GitHub PR shortcut** — open existing PR diff or create new PR in browser (uses `gh` when available)
+- **GitHub PR workflow** — open existing PR diff, create new PR, or merge via `gh` CLI (falls back to browser)
 - **Help overlay** — full-screen keybinding reference grouped by context
 - **Daily quote** — fetched from API Ninjas with fallback to embedded quotes
 - **Pixel art banner** — axolotl rendered with half-block Unicode characters
@@ -29,7 +29,7 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 |------------|----------|---------|
 | [tmux](https://github.com/tmux/tmux) | Yes | Agent pane management and live capture |
 | [Claude Code](https://claude.com/claude-code) | Yes | The agents this dashboard monitors |
-| [Go 1.21+](https://go.dev/dl/) | Yes | Building the dashboard binary |
+| [Go 1.26+](https://go.dev/dl/) | Yes | Building the dashboard binary |
 | [Node.js 18+](https://nodejs.org/) | Yes | Claude Code adapter hooks |
 | [git](https://git-scm.com/) | Yes | Diff viewer, branch detection |
 | [GitHub CLI (`gh`)](https://cli.github.com/) | No | Detects existing PRs so `g` opens the diff page instead of creating a new PR |
@@ -97,13 +97,15 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `Tab/Shift+Tab` | Cycle focus between panels |
 | `Ctrl+U/D` | Scroll focused panel (half-page) |
 | `r` | Reply to agent (free-text) |
-| `e` | Open VS Code in agent's directory |
+| `y/n` | Quick approve/reject (blocked or waiting agents) |
+| `1-9` | Send numbered option to agent |
+| `e` | Open editor in agent's directory |
 | `d` | Show git diff (merge-base vs HEAD, syntax highlighted) |
-| `g` | Open existing PR diff or create new PR in browser |
-| `a` | Create new agent session (z-plugin suggestions) |
+| `g` | Open existing PR diff or create new PR |
+| `m` | Merge PR via `gh` CLI and send cleanup |
+| `a` | Create new agent session (z-plugin suggestions + skill selection) |
 | `c` | Collapse/expand subagent tree |
 | `x` | Dismiss subagent or close agent pane |
-| `m` | Mark agent as merged and send cleanup |
 | `p` | Toggle plan view |
 | `u` | Toggle usage dashboard |
 | `h` | Show help overlay with all keybindings |
@@ -117,8 +119,12 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `j/k` or `arrows` | Select file |
 | `J/K` (shift) | Scroll diff content (single line) |
 | `Ctrl+U/D` | Scroll diff content (half page) |
+| `g/G` | Jump to first/last file |
+| `{/}` | Jump file list by half page |
+| `Enter` or `Space` | Toggle directory expand/collapse |
+| `/` | Filter files by name |
 | `e` | Expand/collapse all context |
-| `d` or `Esc` | Exit diff viewer |
+| `d`, `q`, or `Esc` | Exit diff viewer |
 
 ## User Settings
 
@@ -155,19 +161,20 @@ silent_events = true  # suppress event-level notifications (default: false)
 ## Development
 
 ```bash
-make build                        # Build binary to bin/ (injects version from VERSION file)
-make test                         # Run tests
+make build                        # Build binary to bin/ (version from git tag or VERSION file)
+make fmt                          # Auto-format Go source files
+make vet                          # Check formatting + run go vet
+make test                         # Run all tests (vets first)
 make install                      # Build + install binary + adapter (default: claude-code)
 make install ADAPTER=claude-code  # Specify adapter explicitly
 make seed                         # Create fake agent state for testing
 make clean                        # Remove build artifacts and state
+make help                         # Show all available targets
 ```
 
 ### Versioning
 
-The project uses semantic versioning. The version is stored in the `VERSION` file at the repo root and injected into the binary at build time via Go's `-ldflags -X` mechanism. It is displayed in the dashboard banner (top right).
-
-To bump the version, edit `VERSION` and rebuild.
+The project uses semantic versioning. The version is resolved from the latest git tag (stripping the `v` prefix), falling back to the `VERSION` file at the repo root. It is injected into the binary at build time via Go's `-ldflags -X` mechanism and displayed in the dashboard banner.
 
 ### Project Structure
 
@@ -175,6 +182,11 @@ To bump the version, edit `VERSION` and rebuild.
 agent-dashboard/
 ├── Makefile
 ├── VERSION
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── SECURITY.md
+├── release-please-config.json
 ├── install.sh                     # installer (accepts adapter name, default: claude-code)
 ├── agent-dashboard.tmux           # optional tmux keybinding (prefix + D)
 ├── cmd/
@@ -184,16 +196,20 @@ agent-dashboard/
 │   │   ├── view.go                # render logic (panels, layout)
 │   │   ├── keys.go                # keybindings + mouse handling
 │   │   ├── commands.go            # tea.Cmd functions (tmux, state)
+│   │   ├── config.go              # agent profile + dashboard configuration
+│   │   ├── settings.go            # TOML settings loader (banner, notifications)
 │   │   ├── state.go               # agent state structs + file I/O
 │   │   ├── conversation.go        # JSONL parsing, subagent discovery
 │   │   ├── messages.go            # tea message types + constants
 │   │   ├── diff.go                # git diff loading
 │   │   ├── diff_view.go           # diff rendering + syntax highlighting
+│   │   ├── skills.go              # plugin skill discovery
 │   │   ├── usage.go               # token counting + pricing
 │   │   ├── db.go                  # SQLite operations (usage + quotes)
 │   │   ├── banner.go              # axolotl pixel art + quote display
 │   │   ├── tmux.go                # tmux integration helpers
 │   │   ├── zsuggest.go            # z-plugin frecency suggestions
+│   │   ├── wrapped_input.go       # soft-wrap text input helper
 │   │   ├── helpers.go             # text wrapping, markdown rendering
 │   │   ├── styles.go              # Catppuccin Frappe theme
 │   │   ├── catppuccin-frappe.json # chroma syntax theme
@@ -202,11 +218,13 @@ agent-dashboard/
 │   └── populate-quotes/
 │       └── main.go                # bulk quote fetcher for SQLite cache
 ├── adapters/claude-code/          # Claude Code plugin
+│   ├── CLAUDE.md                  # agent instructions for the adapter
+│   ├── package.json               # plugin metadata
 │   ├── hooks/hooks.json           # lifecycle hook definitions
 │   ├── scripts/hooks/             # hook implementations (JS)
-│   ├── packages/                  # shared JS modules (agent-state, git, tmux)
-│   ├── skills/                    # workflow skills (feature, fix, pr, etc.)
-│   └── agents/                    # agent methodology guides
+│   ├── packages/                  # shared JS modules (agent-state, git-status, tmux)
+│   ├── skills/                    # workflow skills (feature, fix, chore, refactor, pr, investigate)
+│   └── agents/                    # agent definitions (code-reviewer, planner, tdd-guide, etc.)
 ├── schema/
 │   └── agent-state.schema.json    # JSON Schema for agent state files
 └── go.mod / go.sum
@@ -222,6 +240,7 @@ agent-dashboard/
 | [glamour](https://github.com/charmbracelet/glamour) | Markdown rendering |
 | [chroma](https://github.com/alecthomas/chroma) | Syntax highlighting |
 | [go-gitdiff](https://github.com/bluekeyes/go-gitdiff) | Git diff parsing |
+| [toml](https://github.com/BurntSushi/toml) | Settings file parsing |
 | [sqlx](https://github.com/jmoiron/sqlx) | SQL query helper |
 | [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure Go SQLite |
 | [fsnotify](https://github.com/fsnotify/fsnotify) | File system watcher |
