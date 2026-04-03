@@ -1580,3 +1580,27 @@ func TestAutoScrollLive_PreservesPositionWhenFocused(t *testing.T) {
 		t.Error("message viewport should NOT auto-scroll when user is focused on it")
 	}
 }
+
+func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
+	m := testModelWithAgent(focusAgentList) // not focused on message
+	m.tmuxAvailable = true
+	m.planVisible = true
+	m.renderedPlan = "# My Plan\nStep 1\nStep 2\nStep 3\nStep 4\nStep 5"
+
+	// First capture — populate viewport
+	result, _ := m.Update(captureResultMsg{lines: []string{"init"}})
+	m = result.(model)
+	m.messageVP.GotoTop()
+
+	// More output arrives while plan is visible
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	result, _ = m.Update(captureResultMsg{lines: lines})
+	m = result.(model)
+
+	if m.messageVP.YOffset != 0 {
+		t.Error("message viewport should NOT auto-scroll when plan is visible — user may be reading the plan")
+	}
+}

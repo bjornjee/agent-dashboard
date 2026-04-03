@@ -627,7 +627,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.capturedLines = msg.lines
 		m.updateRightContent()
 		// Auto-scroll live output to latest when user isn't focused on it
-		if m.focusedVP != focusMessage {
+		// Skip when plan is visible — the user may be reading the plan
+		if m.focusedVP != focusMessage && !m.planVisible {
 			m.messageVP.GotoBottom()
 		}
 		return m, nil
