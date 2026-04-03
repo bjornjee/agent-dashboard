@@ -459,13 +459,13 @@ func TestCreateSessionMsg_Error(t *testing.T) {
 	m.resizeViewports()
 	m.tmuxAvailable = true
 
-	result, _ := m.Update(createSessionMsg{target: "", err: fmt.Errorf("4-pane limit reached")})
+	result, _ := m.Update(createSessionMsg{target: "", err: fmt.Errorf("8-pane limit reached")})
 	rm := result.(model)
 
 	if rm.mode != modeNormal {
 		t.Errorf("expected modeNormal after failed create, got %d", rm.mode)
 	}
-	if !strings.Contains(rm.statusMsg, "4-pane limit") {
+	if !strings.Contains(rm.statusMsg, "8-pane limit") {
 		t.Errorf("expected error in statusMsg, got %q", rm.statusMsg)
 	}
 }
