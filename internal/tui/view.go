@@ -685,7 +685,12 @@ func (m model) View() tea.View {
 	makeView := func(content string) tea.View {
 		v := tea.NewView(content)
 		v.AltScreen = true
-		v.MouseMode = tea.MouseModeCellMotion
+		switch m.mode {
+		case modeReply, modeCreateFolder, modeCreateSkill, modeCreateMessage:
+			v.MouseMode = tea.MouseModeNone
+		default:
+			v.MouseMode = tea.MouseModeCellMotion
+		}
 		return v
 	}
 

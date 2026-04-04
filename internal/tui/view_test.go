@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
@@ -238,5 +239,58 @@ func TestPanelRenderedDimensions(t *testing.T) {
 	expectedHeight := m.height - 5 - m.bannerHeight() + 2
 	if len(lines) != expectedHeight {
 		t.Errorf("left panel height: got %d lines, want %d", len(lines), expectedHeight)
+	}
+}
+
+// -- MouseMode tests --
+
+func TestView_MouseModeCellMotion_InNormalMode(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	v := m.View()
+	if v.MouseMode != tea.MouseModeCellMotion {
+		t.Errorf("expected MouseModeCellMotion in normal mode, got %v", v.MouseMode)
+	}
+}
+
+func TestView_MouseModeNone_InTextInputModes(t *testing.T) {
+	textInputModes := []struct {
+		name string
+		mode int
+	}{
+		{"reply", modeReply},
+		{"createFolder", modeCreateFolder},
+		{"createSkill", modeCreateSkill},
+		{"createMessage", modeCreateMessage},
+	}
+	for _, tt := range textInputModes {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(testConfig(t.TempDir()), nil)
+			m.width = 120
+			m.height = 40
+			m.resizeViewports()
+			m.mode = tt.mode
+
+			v := m.View()
+			if v.MouseMode != tea.MouseModeNone {
+				t.Errorf("expected MouseModeNone in %s mode, got %v", tt.name, v.MouseMode)
+			}
+		})
+	}
+}
+
+func TestView_MouseModeCellMotion_InConfirmMode(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeConfirmClose
+
+	v := m.View()
+	if v.MouseMode != tea.MouseModeCellMotion {
+		t.Errorf("expected MouseModeCellMotion in confirm mode, got %v", v.MouseMode)
 	}
 }

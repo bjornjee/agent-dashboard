@@ -55,7 +55,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithFilter(tui.PhantomFilter))
 
 	// Start directory watcher for per-agent state files.
 	// m.TmuxReady is an atomic.Bool updated by deferredStartup once the
