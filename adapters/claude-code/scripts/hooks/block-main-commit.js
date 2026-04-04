@@ -10,8 +10,9 @@
 const { execSync } = require('node:child_process');
 const path = require('node:path');
 
-const pluginRoot = path.resolve(__dirname, '..', '..');
+const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
+const { writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 
 function isCommitOnMain(command, branch) {
   if (branch !== 'main' && branch !== 'master') return false;
@@ -56,10 +57,12 @@ if (require.main === module && !process.stdin.isTTY) {
       }
 
       if (isCommitOnMain(command, branch)) {
-        process.stderr.write(
-          'Blocked: git commit on main/master is not allowed. ' +
-          'Create a feature branch first.\n'
-        );
+        const reason = 'Blocked: git commit on main/master is not allowed. Create a feature branch first.';
+        const sessionId = input.session_id;
+        if (sessionId) {
+          try { writeState(sessionId, { hook_blocked: reason }); } catch { /* don't break Claude Code */ }
+        }
+        process.stderr.write(reason + '\n');
         process.exit(2);
       }
 
