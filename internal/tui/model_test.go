@@ -1783,14 +1783,21 @@ func TestClearStatus_RespectsMinDisplayTime(t *testing.T) {
 	m.tickCount = 10
 	m.setStatus("hello", false)
 
-	// clearStatus on the same tick should be a no-op (< 1s elapsed)
+	// clearStatus on the same tick should be a no-op (< 2s elapsed)
 	m.clearStatus()
 	if m.statusMsg != "hello" {
 		t.Errorf("clearStatus should not clear within min display time, got msg=%q", m.statusMsg)
 	}
 
-	// After 1 tick (1 second), clearStatus should work
+	// After 1 tick (1 second), still too early
 	m.tickCount = 11
+	m.clearStatus()
+	if m.statusMsg != "hello" {
+		t.Errorf("clearStatus should not clear after only 1 tick, got msg=%q", m.statusMsg)
+	}
+
+	// After 2 ticks (2 seconds), clearStatus should work
+	m.tickCount = 12
 	m.clearStatus()
 	if m.statusMsg != "" {
 		t.Errorf("clearStatus should clear after min display time, got msg=%q", m.statusMsg)
