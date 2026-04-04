@@ -42,10 +42,24 @@ const confirmCooldown = 300 * time.Millisecond
 // 50ms is conservative — real transitions take 150ms+.
 const escapeKeyCooldown = 50 * time.Millisecond
 
+// modeResetCooldown is the minimum gap between a key event processed in a
+// non-normal mode and a mode-entry key in normal mode. When Enter (or another
+// destructive key) causes a mode transition back to normal, phantom repeats
+// from key-release events or terminal artefacts can arrive within a few ms.
+// 100ms is safe — real intentional keypresses take 150ms+.
+const modeResetCooldown = 100 * time.Millisecond
+
 // isPhantomKey returns true if the key event likely originated from a
-// fragmented terminal escape sequence (mouse or focus) rather than a real keypress.
+// fragmented terminal escape sequence (mouse or focus) or from a phantom
+// repeat following a mode transition, rather than a real keypress.
 func (m model) isPhantomKey() bool {
-	return !m.lastEscapeAt.IsZero() && time.Since(m.lastEscapeAt) < escapeKeyCooldown
+	if !m.lastEscapeAt.IsZero() && time.Since(m.lastEscapeAt) < escapeKeyCooldown {
+		return true
+	}
+	if !m.modeResetAt.IsZero() && time.Since(m.modeResetAt) < modeResetCooldown {
+		return true
+	}
+	return false
 }
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
@@ -157,6 +171,12 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.debugLogKey(msg)
 	key := msg.String()
+
+	// Track when keys are processed in non-normal modes so that phantom
+	// repeats arriving right after a mode transition can be rejected.
+	if m.mode != modeNormal && !m.helpVisible && !m.diffVisible {
+		m.modeResetAt = time.Now()
+	}
 
 	// Create folder mode
 	if m.mode == modeCreateFolder {

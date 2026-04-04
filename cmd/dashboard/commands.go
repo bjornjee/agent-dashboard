@@ -339,9 +339,15 @@ func selectPane(target string) tea.Cmd {
 	}
 }
 
+// isSelfPane returns true if paneID matches the dashboard's own pane,
+// indicating that the send should be blocked to prevent self-messaging.
+func isSelfPane(paneID, selfPaneID string) bool {
+	return selfPaneID != "" && paneID == selfPaneID
+}
+
 func sendReply(paneID, text, selfPaneID string) tea.Cmd {
 	return func() tea.Msg {
-		if selfPaneID != "" && paneID == selfPaneID {
+		if isSelfPane(paneID, selfPaneID) {
 			return sendResultMsg{err: fmt.Errorf("refusing to send to dashboard pane %s", paneID)}
 		}
 		target := ResolveTarget(paneID)
