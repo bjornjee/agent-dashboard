@@ -215,7 +215,7 @@ func (m model) agentListContent() string {
 			}
 			subLabel := node.Sub.AgentType
 			if node.Sub.Description != "" {
-				maxDesc := m.leftWidth - 12 - len(subLabel)
+				maxDesc := m.leftWidth - 9 - len(subLabel)
 				desc := node.Sub.Description
 				if maxDesc > 0 && len(desc) > maxDesc {
 					desc = desc[:maxDesc-1] + "…"
@@ -223,7 +223,7 @@ func (m model) agentListContent() string {
 				subLabel += ": " + desc
 			}
 
-			line := fmt.Sprintf("       %s %s %s", helpStyle.Render(prefix), subIcon, subLabel)
+			line := fmt.Sprintf("    %s %s %s", helpStyle.Render(prefix), subIcon, subLabel)
 			if nodeIdx == m.selected {
 				line = highlightLine(line, m.leftWidth)
 			}
@@ -309,7 +309,7 @@ func (m model) agentListContent() string {
 		// Metadata badges
 		badges := agentBadges(agent)
 		if badges != "" {
-			lines = append(lines, "       "+badges)
+			lines = append(lines, "    "+badges)
 		}
 
 		// Collapse indicator if has subagents
