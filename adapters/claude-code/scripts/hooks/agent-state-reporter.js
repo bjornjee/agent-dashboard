@@ -20,19 +20,6 @@ const { readAgentState, writeState, detectState } = require(path.join(pluginRoot
 const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
-/**
- * Resolve agent state on Stop events from hook input and pane buffer.
- * Extracted from report() for testability.
- *
- * @param {object} input - parsed hook stdin (uses last_assistant_message)
- * @param {string[]} paneBuffer - lines from tmux capture-pane
- * @returns {'question'|'idle_prompt'|'done'}
- */
-function resolveStopState(input, paneBuffer) {
-  const lastMessage = input.last_assistant_message || null;
-  return detectState(lastMessage, paneBuffer);
-}
-
 function findSessionId() {
   const sessDir = path.join(os.homedir(), '.claude', 'sessions');
   // Walk up PID tree: hook → (possible sh) → claude
@@ -168,7 +155,8 @@ function report(input) {
   } else {
     // Stop event — detect from pane buffer + last message
     const paneBuffer = capture(target, 15);
-    state = resolveStopState(input, paneBuffer);
+    const lastMessage = input.last_assistant_message || null;
+    state = detectState(lastMessage, paneBuffer);
   }
 
   const parsed = parseTarget(target);
@@ -186,4 +174,4 @@ function report(input) {
 }
 
 // Export for testing
-module.exports = { buildReportEntry, resolveStopState };
+module.exports = { buildReportEntry };

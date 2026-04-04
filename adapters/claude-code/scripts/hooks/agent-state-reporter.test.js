@@ -4,7 +4,8 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildReportEntry, resolveStopState } = require('./agent-state-reporter');
+const { buildReportEntry } = require('./agent-state-reporter');
+const { detectState } = require('../../packages/agent-state/detect');
 
 const BASE_INPUT = {
   session_id: 'abc-123',
@@ -127,51 +128,24 @@ describe('buildReportEntry', () => {
   });
 });
 
-describe('resolveStopState', () => {
+describe('detectState (Stop event path)', () => {
   it('returns idle_prompt when pane buffer has prompt char and no question', () => {
-    const input = {
-      ...BASE_INPUT,
-      hook_event_name: 'Stop',
-      last_assistant_message: 'Here is the investigation report.',
-    };
-    const paneBuffer = ['some output', '\u276f'];
-
-    const state = resolveStopState(input, paneBuffer);
+    const state = detectState('Here is the investigation report.', ['some output', '\u276f']);
     assert.equal(state, 'idle_prompt');
   });
 
   it('returns question when last message ends with a question', () => {
-    const input = {
-      ...BASE_INPUT,
-      hook_event_name: 'Stop',
-      last_assistant_message: 'Should I proceed with the fix?',
-    };
-    const paneBuffer = ['some output', '\u276f'];
-
-    const state = resolveStopState(input, paneBuffer);
+    const state = detectState('Should I proceed with the fix?', ['some output', '\u276f']);
     assert.equal(state, 'question');
   });
 
   it('returns done when no prompt char and no question', () => {
-    const input = {
-      ...BASE_INPUT,
-      hook_event_name: 'Stop',
-      last_assistant_message: 'Done.',
-    };
-    const paneBuffer = ['some output'];
-
-    const state = resolveStopState(input, paneBuffer);
+    const state = detectState('Done.', ['some output']);
     assert.equal(state, 'done');
   });
 
   it('handles null last_assistant_message without throwing', () => {
-    const input = {
-      ...BASE_INPUT,
-      hook_event_name: 'Stop',
-    };
-    const paneBuffer = ['some output', '\u276f'];
-
-    const state = resolveStopState(input, paneBuffer);
+    const state = detectState(null, ['some output', '\u276f']);
     assert.equal(state, 'idle_prompt');
   });
 });
