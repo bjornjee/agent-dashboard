@@ -795,7 +795,7 @@ func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
 
 func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 	// When gh is not available, pressing "m" should enter confirm mode.
-	// Confirming with 'y' should pin to "merged" and send cleanup message.
+	// Confirming with 'y' should pin to "merged".
 	tmpDir := t.TempDir()
 	agentsDir := filepath.Join(tmpDir, "agents")
 	os.MkdirAll(agentsDir, 0755)
@@ -822,7 +822,7 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 		t.Fatalf("expected modeConfirmMerge, got %d", m.mode)
 	}
 
-	// Step 2: confirm with 'y' — should execute merge
+	// Step 2: confirm with 'y' — should pin to merged
 	m.confirmEnteredAt = pastConfirmTime // bypass cooldown for test
 	result, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	if cmd == nil {
@@ -834,23 +834,10 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 		t.Errorf("expected status to contain 'Marked as merged', got %q", updated.statusMsg)
 	}
 
-	// Should have pinStateMsg in the batch
-	var hasPinMsg bool
-	batchResult := cmd()
-	if batch, ok := batchResult.(tea.BatchMsg); ok {
-		for _, c := range batch {
-			if c == nil {
-				continue
-			}
-			msg := c()
-			if _, ok := msg.(pinStateMsg); ok {
-				hasPinMsg = true
-			}
-		}
-	}
-
-	if !hasPinMsg {
-		t.Error("confirming merge without gh should pin to 'merged'")
+	// The returned cmd should be pinAgentStateCmd
+	pinMsg := cmd()
+	if _, ok := pinMsg.(pinStateMsg); !ok {
+		t.Errorf("expected pinStateMsg from cmd, got %T", pinMsg)
 	}
 }
 
@@ -1164,7 +1151,7 @@ func TestPhantomKey_EnterRejected(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now() // mouse event just happened
+	m.lastEscapeAt = time.Now() // mouse event just happened
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := result.(model)
@@ -1182,7 +1169,7 @@ func TestPhantomKey_MergeRejected(t *testing.T) {
 			Cwd: t.TempDir(), Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now()
+	m.lastEscapeAt = time.Now()
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 	updated := result.(model)
@@ -1199,7 +1186,7 @@ func TestPhantomKey_CloseRejected(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now()
+	m.lastEscapeAt = time.Now()
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	updated := result.(model)
@@ -1216,7 +1203,7 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.lastMouseAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
+	m.lastEscapeAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
 
 	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := result.(model)
@@ -1225,10 +1212,10 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 	}
 }
 
-func TestHandleMouse_SetsLastMouseAt(t *testing.T) {
+func TestHandleMouse_SetsLastEscapeAt(t *testing.T) {
 	m := newModel(testConfig(t.TempDir()), nil)
-	if !m.lastMouseAt.IsZero() {
-		t.Fatal("lastMouseAt should be zero initially")
+	if !m.lastEscapeAt.IsZero() {
+		t.Fatal("lastEscapeAt should be zero initially")
 	}
 
 	before := time.Now()
@@ -1236,8 +1223,37 @@ func TestHandleMouse_SetsLastMouseAt(t *testing.T) {
 	after := time.Now()
 
 	updated := result.(model)
-	if updated.lastMouseAt.Before(before) || updated.lastMouseAt.After(after) {
-		t.Errorf("lastMouseAt should be between before and after; got %v", updated.lastMouseAt)
+	if updated.lastEscapeAt.Before(before) || updated.lastEscapeAt.After(after) {
+		t.Errorf("lastEscapeAt should be between before and after; got %v", updated.lastEscapeAt)
+	}
+}
+
+func TestFocusEvent_SetsLastEscapeAt(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	if !m.lastEscapeAt.IsZero() {
+		t.Fatal("lastEscapeAt should be zero initially")
+	}
+
+	before := time.Now()
+	result, _ := m.Update(tea.FocusMsg{})
+	after := time.Now()
+
+	updated := result.(model)
+	if updated.lastEscapeAt.Before(before) || updated.lastEscapeAt.After(after) {
+		t.Errorf("lastEscapeAt should be set by focus event; got %v", updated.lastEscapeAt)
+	}
+}
+
+func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.lastEscapeAt = time.Now() // focus event just happened
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeNormal {
+		t.Errorf("enter should be rejected as phantom after focus event, got mode %d", rm.mode)
 	}
 }
 
@@ -1270,5 +1286,27 @@ func TestSendReply_AllowsDifferentPane(t *testing.T) {
 	// Error is expected (no tmux), but it should NOT be the self-pane error.
 	if result.err != nil && strings.Contains(result.err.Error(), "dashboard pane") {
 		t.Errorf("should not reject different pane; got: %v", result.err)
+	}
+}
+
+// -- Pending reply queue tests --
+
+func TestMergeGH_PinsToMerged(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mergeSessionID = "sess-456"
+	m.mergePaneID = "%7"
+
+	result, cmd := m.Update(mergePRMsg{})
+	rm := result.(model)
+
+	if !strings.Contains(rm.statusMsg, "PR merged") {
+		t.Errorf("expected status to contain 'PR merged', got %q", rm.statusMsg)
+	}
+	if cmd == nil {
+		t.Fatal("expected pin cmd after merge")
+	}
+	pinMsg := cmd()
+	if _, ok := pinMsg.(pinStateMsg); !ok {
+		t.Errorf("expected pinStateMsg, got %T", pinMsg)
 	}
 }
