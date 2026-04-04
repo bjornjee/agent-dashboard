@@ -1289,6 +1289,107 @@ func TestSendReply_AllowsDifferentPane(t *testing.T) {
 	}
 }
 
+// -- Mode-transition phantom tests --
+
+func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
+	// When Enter submits a reply in modeReply, transitioning to modeNormal,
+	// a rapid follow-up Enter (phantom from key release or terminal artefact)
+	// must NOT trigger modeConfirmJump.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.mode = modeReply
+	m.textInput.SetValue("test reply")
+	m.buildTree()
+
+	// Press Enter to submit reply → mode returns to modeNormal.
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Fatalf("expected modeNormal after reply submit, got %d", rm.mode)
+	}
+
+	// Immediately press Enter again (phantom).
+	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode == modeConfirmJump {
+		t.Errorf("phantom Enter after reply submit should NOT trigger modeConfirmJump")
+	}
+}
+
+func TestPhantomEnter_AfterConfirmSend(t *testing.T) {
+	// When Enter confirms a key send in modeConfirmSend, a rapid follow-up
+	// Enter must NOT trigger modeConfirmJump.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].State = "waiting"
+	m.mode = modeConfirmSend
+	m.confirmEnteredAt = pastConfirmTime // bypass confirm cooldown
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+	m.buildTree()
+
+	// Press Enter to confirm send → mode returns to modeNormal.
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Fatalf("expected modeNormal after confirm send, got %d", rm.mode)
+	}
+
+	// Immediately press Enter again (phantom).
+	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode == modeConfirmJump {
+		t.Errorf("phantom Enter after confirm-send should NOT trigger modeConfirmJump")
+	}
+}
+
+func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
+	// When Enter submits in modeCreateMessage, a rapid follow-up Enter
+	// must NOT trigger modeConfirmJump.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.mode = modeCreateMessage
+	m.createFolder = "/tmp/test"
+	m.buildTree()
+
+	// Press Enter to submit → mode returns to modeNormal.
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Fatalf("expected modeNormal after create message submit, got %d", rm.mode)
+	}
+
+	// Immediately press Enter again (phantom).
+	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode == modeConfirmJump {
+		t.Errorf("phantom Enter after create-message should NOT trigger modeConfirmJump")
+	}
+}
+
+func TestRealEnter_AfterCooldown(t *testing.T) {
+	// A real Enter arriving well after a mode transition should work normally.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.mode = modeReply
+	m.textInput.SetValue("test")
+	m.buildTree()
+
+	// Press Enter to submit reply.
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm := result.(model)
+
+	// Simulate time passing beyond the cooldown.
+	rm.modeResetAt = time.Now().Add(-time.Second)
+
+	// Now press Enter — should work normally.
+	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode != modeConfirmJump {
+		t.Errorf("real Enter after cooldown should trigger modeConfirmJump, got mode %d", rm2.mode)
+	}
+}
+
 // -- Pending reply queue tests --
 
 func TestMergeGH_PinsToMerged(t *testing.T) {
