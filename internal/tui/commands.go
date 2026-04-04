@@ -630,10 +630,10 @@ func buildPRURL(owner, repo, base, branch string) string {
 	)
 }
 
-// GHIsAvailable checks if the gh CLI is installed and authenticated.
+// ghIsAvailable checks if the gh CLI is installed and authenticated.
 // Runs `gh auth status` with a 3-second timeout to verify both binary
 // existence and valid authentication (token not expired).
-func GHIsAvailable() bool {
+func ghIsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return tmux.SilentRun(exec.CommandContext(ctx, "gh", "auth", "status")) == nil
@@ -643,7 +643,7 @@ func GHIsAvailable() bool {
 // and sends a ghAvailableMsg. This avoids blocking the TUI at startup.
 func checkGHAvailable() tea.Cmd {
 	return func() tea.Msg {
-		return ghAvailableMsg{available: GHIsAvailable()}
+		return ghAvailableMsg{available: ghIsAvailable()}
 	}
 }
 

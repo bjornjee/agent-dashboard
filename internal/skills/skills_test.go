@@ -79,7 +79,7 @@ func TestBuildSkillList_Empty(t *testing.T) {
 	}
 }
 
-func TestCompareSemver(t *testing.T) {
+func Test_compareSemver(t *testing.T) {
 	tests := []struct {
 		a, b string
 		want int
@@ -90,9 +90,9 @@ func TestCompareSemver(t *testing.T) {
 		{"2.0.0", "1.99.99", 1},
 	}
 	for _, tt := range tests {
-		got := CompareSemver(tt.a, tt.b)
+		got := compareSemver(tt.a, tt.b)
 		if got != tt.want {
-			t.Errorf("CompareSemver(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			t.Errorf("compareSemver(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 		}
 	}
 }

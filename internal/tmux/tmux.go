@@ -184,9 +184,9 @@ func ResolveTarget(paneID string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// TmuxPaneCwd returns the current working directory of a tmux pane by its
+// tmuxPaneCwd returns the current working directory of a tmux pane by its
 // pane ID (%N format). Returns "" if the pane doesn't exist or on error.
-func TmuxPaneCwd(paneID string) string {
+func tmuxPaneCwd(paneID string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", paneID,
@@ -238,8 +238,8 @@ func TmuxListLivePaneIDs() map[string]bool {
 	return panes
 }
 
-// ParseListWindowsOutput parses the output of tmux list-windows -F "#{window_index}\t#{window_name}".
-func ParseListWindowsOutput(output string) []domain.TmuxWindowInfo {
+// parseListWindowsOutput parses the output of tmux list-windows -F "#{window_index}\t#{window_name}".
+func parseListWindowsOutput(output string) []domain.TmuxWindowInfo {
 	var windows []domain.TmuxWindowInfo
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
@@ -258,8 +258,8 @@ func ParseListWindowsOutput(output string) []domain.TmuxWindowInfo {
 	return windows
 }
 
-// ParseCountPanesOutput counts non-empty lines in tmux list-panes output.
-func ParseCountPanesOutput(output string) int {
+// parseCountPanesOutput counts non-empty lines in tmux list-panes output.
+func parseCountPanesOutput(output string) int {
 	count := 0
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line != "" {
@@ -269,8 +269,8 @@ func ParseCountPanesOutput(output string) int {
 	return count
 }
 
-// ParsePaneTarget extracts a clean pane target from tmux -P -F output.
-func ParsePaneTarget(output string) string {
+// parsePaneTarget extracts a clean pane target from tmux -P -F output.
+func parsePaneTarget(output string) string {
 	return strings.TrimSpace(output)
 }
 
@@ -285,7 +285,7 @@ func TmuxListWindows(session string) ([]domain.TmuxWindowInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list-windows failed for %s: %w", session, err)
 	}
-	return ParseListWindowsOutput(string(out)), nil
+	return parseListWindowsOutput(string(out)), nil
 }
 
 // TmuxNewWindow creates a new window in the given session, returning the new pane's target.
@@ -301,7 +301,7 @@ func TmuxNewWindow(session, windowName, startDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("new-window failed: %w", err)
 	}
-	target := ParsePaneTarget(string(out))
+	target := parsePaneTarget(string(out))
 	if err := ValidateTarget(target); err != nil {
 		return "", fmt.Errorf("new-window returned invalid target %q: %w", target, err)
 	}
@@ -321,7 +321,7 @@ func TmuxSplitWindow(sessionWindow, startDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("split-window failed: %w", err)
 	}
-	target := ParsePaneTarget(string(out))
+	target := parsePaneTarget(string(out))
 	if err := ValidateTarget(target); err != nil {
 		return "", fmt.Errorf("split-window returned invalid target %q: %w", target, err)
 	}
@@ -341,7 +341,7 @@ func TmuxCountPanes(sessionWindow string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("list-panes failed for %s: %w", sessionWindow, err)
 	}
-	return ParseCountPanesOutput(string(out)), nil
+	return parseCountPanesOutput(string(out)), nil
 }
 
 // ParseTarget splits a fully-qualified "session:window.pane" string into its
@@ -372,10 +372,10 @@ func ParseTarget(target string) (session string, window, pane int, ok bool) {
 	return session, w, p, true
 }
 
-// ParsePaneTargetsOutput parses the output of:
+// parsePaneTargetsOutput parses the output of:
 //
 //	tmux list-panes -a -F "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}"
-func ParsePaneTargetsOutput(output string) map[string]domain.PaneTarget {
+func parsePaneTargetsOutput(output string) map[string]domain.PaneTarget {
 	result := make(map[string]domain.PaneTarget)
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
@@ -416,7 +416,7 @@ func TmuxListPaneTargets() map[string]domain.PaneTarget {
 	if err != nil {
 		return nil
 	}
-	return ParsePaneTargetsOutput(string(out))
+	return parsePaneTargetsOutput(string(out))
 }
 
 // ExtractSession returns the session name from a tmux target (session:window.pane → session).

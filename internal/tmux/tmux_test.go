@@ -79,7 +79,7 @@ func TestExtractSession(t *testing.T) {
 	}
 }
 
-func TestParseListWindowsOutput(t *testing.T) {
+func Test_parseListWindowsOutput(t *testing.T) {
 	tests := []struct {
 		name   string
 		output string
@@ -109,9 +109,9 @@ func TestParseListWindowsOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseListWindowsOutput(tt.output)
+			got := parseListWindowsOutput(tt.output)
 			if len(got) != len(tt.want) {
-				t.Fatalf("ParseListWindowsOutput() got %d items, want %d", len(got), len(tt.want))
+				t.Fatalf("parseListWindowsOutput() got %d items, want %d", len(got), len(tt.want))
 			}
 			for i := range got {
 				if got[i] != tt.want[i] {
@@ -122,7 +122,7 @@ func TestParseListWindowsOutput(t *testing.T) {
 	}
 }
 
-func TestParseCountPanesOutput(t *testing.T) {
+func Test_parseCountPanesOutput(t *testing.T) {
 	tests := []struct {
 		name   string
 		output string
@@ -135,15 +135,15 @@ func TestParseCountPanesOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseCountPanesOutput(tt.output)
+			got := parseCountPanesOutput(tt.output)
 			if got != tt.want {
-				t.Errorf("ParseCountPanesOutput() = %d, want %d", got, tt.want)
+				t.Errorf("parseCountPanesOutput() = %d, want %d", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestParsePaneTarget(t *testing.T) {
+func Test_parsePaneTarget(t *testing.T) {
 	tests := []struct {
 		name   string
 		output string
@@ -155,9 +155,9 @@ func TestParsePaneTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParsePaneTarget(tt.output)
+			got := parsePaneTarget(tt.output)
 			if got != tt.want {
-				t.Errorf("ParsePaneTarget() = %q, want %q", got, tt.want)
+				t.Errorf("parsePaneTarget() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -205,7 +205,7 @@ func TestParseTarget(t *testing.T) {
 	}
 }
 
-func TestParsePaneTargetsOutput(t *testing.T) {
+func Test_parsePaneTargetsOutput(t *testing.T) {
 	tests := []struct {
 		name   string
 		output string
@@ -237,7 +237,7 @@ func TestParsePaneTargetsOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParsePaneTargetsOutput(tt.output)
+			got := parsePaneTargetsOutput(tt.output)
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %d entries, want %d", len(got), len(tt.want))
 			}

@@ -30,7 +30,7 @@ func DiscoverSkills(pluginCacheDir string) []string {
 		return nil
 	}
 	sort.Slice(versionNames, func(i, j int) bool {
-		return CompareSemver(versionNames[i], versionNames[j]) < 0
+		return compareSemver(versionNames[i], versionNames[j]) < 0
 	})
 	latest := versionNames[len(versionNames)-1]
 
@@ -64,9 +64,9 @@ func BuildSkillList(skills []string) []string {
 	return list
 }
 
-// CompareSemver compares two semver-like strings (e.g. "0.9.0" vs "0.22.1").
+// compareSemver compares two semver-like strings (e.g. "0.9.0" vs "0.22.1").
 // Returns -1, 0, or 1.
-func CompareSemver(a, b string) int {
+func compareSemver(a, b string) int {
 	ap := strings.Split(a, ".")
 	bp := strings.Split(b, ".")
 	maxLen := len(ap)
@@ -76,10 +76,10 @@ func CompareSemver(a, b string) int {
 	for i := 0; i < maxLen; i++ {
 		var ai, bi int
 		if i < len(ap) {
-			ai = AtoiSafe(ap[i])
+			ai = atoiSafe(ap[i])
 		}
 		if i < len(bp) {
-			bi = AtoiSafe(bp[i])
+			bi = atoiSafe(bp[i])
 		}
 		if ai < bi {
 			return -1
@@ -91,8 +91,8 @@ func CompareSemver(a, b string) int {
 	return 0
 }
 
-// AtoiSafe converts a string to int, returning 0 on failure.
-func AtoiSafe(s string) int {
+// atoiSafe converts a string to int, returning 0 on failure.
+func atoiSafe(s string) int {
 	n, _ := strconv.Atoi(s)
 	return n
 }
