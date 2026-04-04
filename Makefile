@@ -17,6 +17,13 @@ vet: ## Run go vet (checks formatting + vets)
 	    echo "$$unformatted"; \
 	    exit 1; \
 	  fi
+	@manifest_ver=$$(sed -n 's/.*"\."[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .release-please-manifest.json 2>/dev/null); \
+	  file_ver=$$(cat VERSION 2>/dev/null | tr -d '[:space:]'); \
+	  if [ -n "$$manifest_ver" ] && [ -n "$$file_ver" ] && [ "$$manifest_ver" != "$$file_ver" ]; then \
+	    echo "VERSION file ($$file_ver) is out of sync with .release-please-manifest.json ($$manifest_ver)"; \
+	    echo "Run: echo $$manifest_ver > VERSION"; \
+	    exit 1; \
+	  fi
 	go vet ./...
 
 test: vet ## Run all tests (vets first)

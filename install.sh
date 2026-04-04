@@ -48,6 +48,7 @@ install_claude_code() {
     k['agent-dashboard'] = {
       source: { source: 'github', repo: 'bjornjee/agent-dashboard' },
       installLocation: '$mkt_dir',
+      autoUpdate: true,
       lastUpdated: '$now'
     };
     fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
@@ -56,9 +57,12 @@ install_claude_code() {
 
   # --- 3. Install adapter to plugin cache ---
   # Read version from the adapter's plugin.json (authoritative for Claude plugin),
-  # falling back to the VERSION file and then 0.0.0.
+  # falling back to git tag, then the VERSION file, and finally 0.0.0.
   local version
-  version=$(node -e "console.log(require('$REPO_DIR/adapters/$ADAPTER/.claude-plugin/plugin.json').version)" 2>/dev/null || cat "$REPO_DIR/VERSION" 2>/dev/null || echo "0.0.0")
+  version=$(node -e "console.log(require('$REPO_DIR/adapters/$ADAPTER/.claude-plugin/plugin.json').version)" 2>/dev/null \
+    || (cd "$REPO_DIR" && v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -z "$v" ] && { git fetch --tags --quiet 2>/dev/null; v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); }; [ -n "$v" ] && echo "$v") \
+    || cat "$REPO_DIR/VERSION" 2>/dev/null \
+    || echo "0.0.0")
   local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$version"
   mkdir -p "$cache_dir"
   # Copy the adapter contents into the cache
