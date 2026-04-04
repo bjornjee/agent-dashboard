@@ -96,6 +96,7 @@ type model struct {
 	// Layout cache (for mouse routing)
 	leftWidth  int
 	rightWidth int
+	mouseY     int // last observed mouse Y position (for hover detection)
 
 	// Diff-specific layout (narrower left, wider right)
 	diffLeftWidth  int
@@ -468,6 +469,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.mouseY = -1 // reset hover — cursor may have left the window
 		m.resizeViewports()
 		return m, nil
 
@@ -572,7 +574,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderedHistory = "" // invalidate cache (Layer 2)
 		m.updateRightContent()
 		// Auto-scroll history to latest when user isn't focused on it
-		if m.focusedVP != focusHistory {
+		// and mouse is not hovering over the history viewport
+		if m.focusedVP != focusHistory && !m.mouseOverHistory() {
 			m.historyVP.GotoBottom()
 		}
 		return m, nil
@@ -753,8 +756,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.capturedLines = msg.lines
 		m.updateRightContent()
 		// Auto-scroll live output to latest when user isn't focused on it
-		// Skip when plan is visible — the user may be reading the plan
-		if m.focusedVP != focusMessage && !m.planVisible {
+		// Skip when plan is visible or mouse is hovering over the viewport
+		if m.focusedVP != focusMessage && !m.planVisible && !m.mouseOverMessage() {
 			m.messageVP.GotoBottom()
 		}
 		return m, nil
@@ -937,4 +940,32 @@ func (m *model) resizeViewports() {
 	m.renderedHistory = "" // invalidate cache on resize
 	m.updateLeftContent()
 	m.updateRightContent()
+}
+
+// filesViewportStartY returns the Y coordinate where the files viewport begins.
+func (m model) filesViewportStartY() int {
+	rightStart := 1 + m.bannerHeight() // top border + banner
+	return rightStart + defaultHeaderLines
+}
+
+// historyViewportStartY returns the Y coordinate where the history viewport begins.
+func (m model) historyViewportStartY() int {
+	return m.filesViewportStartY() + m.filesVP.Height() + 2 // +1 label +1 buffer
+}
+
+// messageViewportStartY returns the Y coordinate where the message viewport begins.
+func (m model) messageViewportStartY() int {
+	return m.historyViewportStartY() + m.historyVP.Height() + 2 // +1 label +1 buffer
+}
+
+// mouseOverHistory reports whether the mouse is hovering over the history viewport.
+func (m model) mouseOverHistory() bool {
+	start := m.historyViewportStartY()
+	return m.mouseY >= start && m.mouseY < start+m.historyVP.Height()
+}
+
+// mouseOverMessage reports whether the mouse is hovering over the message viewport.
+func (m model) mouseOverMessage() bool {
+	start := m.messageViewportStartY()
+	return m.mouseY >= start && m.mouseY < start+m.messageVP.Height()
 }
