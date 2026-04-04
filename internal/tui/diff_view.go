@@ -18,6 +18,10 @@ import (
 const (
 	diffAddBgR, diffAddBgG, diffAddBgB = 35, 60, 45 // greenish tint
 	diffDelBgR, diffDelBgG, diffDelBgB = 60, 36, 36 // reddish tint
+
+	// Emphasis (word-diff) backgrounds — stronger tint for the actual changed characters.
+	diffAddEmphR, diffAddEmphG, diffAddEmphB = 40, 90, 55
+	diffDelEmphR, diffDelEmphG, diffDelEmphB = 90, 40, 40
 )
 
 // collapsibleThreshold is the minimum number of consecutive context lines
@@ -364,6 +368,115 @@ func applyDiffBackground(line string, r, g, b, width int) string {
 	return bgCode + inner + padding + reset
 }
 
+// inlineDiffRange computes the character range that differs between two strings
+// (after tab expansion). Returns the start position of the diff, and the end
+// positions in old and new respectively.
+func inlineDiffRange(oldContent, newContent string) (prefixLen, oldEnd, newEnd int) {
+	oldR := []rune(strings.ReplaceAll(oldContent, "\t", strings.Repeat(" ", tabWidth)))
+	newR := []rune(strings.ReplaceAll(newContent, "\t", strings.Repeat(" ", tabWidth)))
+
+	// Common prefix
+	p := 0
+	for p < len(oldR) && p < len(newR) && oldR[p] == newR[p] {
+		p++
+	}
+
+	// Common suffix (not overlapping prefix)
+	os := len(oldR)
+	ns := len(newR)
+	for os > p && ns > p && oldR[os-1] == newR[ns-1] {
+		os--
+		ns--
+	}
+
+	return p, os, ns
+}
+
+// applyDiffBackgroundWithEmphasis is like applyDiffBackground but applies a
+// stronger (emphasis) background to visible character positions in [emphStart, emphEnd).
+func applyDiffBackgroundWithEmphasis(line string, baseR, baseG, baseB, emphR, emphG, emphB, width, emphStart, emphEnd int) string {
+	const reset = "\x1b[0m"
+	baseBg := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", baseR, baseG, baseB)
+	emphBg := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", emphR, emphG, emphB)
+
+	core := strings.TrimSuffix(line, reset)
+
+	var out strings.Builder
+	visPos := 0
+	inEmph := visPos >= emphStart && visPos < emphEnd
+	if inEmph {
+		out.WriteString(emphBg)
+	} else {
+		out.WriteString(baseBg)
+	}
+
+	runes := []rune(core)
+	i := 0
+	for i < len(runes) {
+		r := runes[i]
+
+		// Handle ANSI escape sequences — pass through, re-applying bg after resets.
+		if r == '\x1b' {
+			escStart := i
+			i++
+			for i < len(runes) && !((runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= 'a' && runes[i] <= 'z')) {
+				i++
+			}
+			if i < len(runes) {
+				i++ // include terminating letter
+			}
+			esc := string(runes[escStart:i])
+
+			if esc == reset {
+				// After reset, re-apply the appropriate bg
+				wantEmph := visPos >= emphStart && visPos < emphEnd
+				if wantEmph {
+					out.WriteString(reset + emphBg)
+				} else {
+					out.WriteString(reset + baseBg)
+				}
+				inEmph = wantEmph
+			} else {
+				out.WriteString(esc)
+			}
+			continue
+		}
+
+		// Visible character — switch bg at emphasis boundaries.
+		wantEmph := visPos >= emphStart && visPos < emphEnd
+		if wantEmph != inEmph {
+			if wantEmph {
+				out.WriteString(emphBg)
+			} else {
+				out.WriteString(baseBg)
+			}
+			inEmph = wantEmph
+		}
+
+		out.WriteRune(r)
+		visPos++
+		i++
+	}
+
+	// Pad to exact width
+	for visPos < width {
+		wantEmph := visPos >= emphStart && visPos < emphEnd
+		if wantEmph != inEmph {
+			if wantEmph {
+				out.WriteString(emphBg)
+			} else {
+				out.WriteString(baseBg)
+			}
+			inEmph = wantEmph
+		}
+		out.WriteRune(' ')
+		visPos++
+	}
+
+	out.WriteString(reset)
+	return out.String()
+}
+
 // -- ANSI-aware wrapping --
 
 // wrapANSI splits a string that may contain ANSI escapes into lines of at most
@@ -705,15 +818,20 @@ func (m model) diffSideBySideContent() (string, []string) {
 				}
 				for j := 0; j < n; j++ {
 					var left, right []string
-					if j < len(dels) {
+					paired := j < len(dels) && j < len(adds)
+					if paired {
+						// Word-level diff: highlight the changed characters.
+						prefix, oldEnd, newEnd := inlineDiffRange(dels[j], adds[j])
+						left = formatDiffLineWithEmphasis(delStart+j, dels[j], contentWidth, lineNumWidth, halfWidth, oldLexer,
+							diffDelBgR, diffDelBgG, diffDelBgB, diffDelEmphR, diffDelEmphG, diffDelEmphB, prefix, oldEnd)
+						right = formatDiffLineWithEmphasis(addStart+j, adds[j], contentWidth, lineNumWidth, halfWidth, newLexer,
+							diffAddBgR, diffAddBgG, diffAddBgB, diffAddEmphR, diffAddEmphG, diffAddEmphB, prefix, newEnd)
+					} else if j < len(dels) {
 						left = formatDiffLineHighlighted(delStart+j, dels[j], contentWidth, lineNumWidth, halfWidth, oldLexer, diffDelBgR, diffDelBgG, diffDelBgB)
+						right = []string{emptyHalf(halfWidth)}
 					} else {
 						left = []string{emptyHalf(halfWidth)}
-					}
-					if j < len(adds) {
 						right = formatDiffLineHighlighted(addStart+j, adds[j], contentWidth, lineNumWidth, halfWidth, newLexer, diffAddBgR, diffAddBgG, diffAddBgB)
-					} else {
-						right = []string{emptyHalf(halfWidth)}
 					}
 					appendRows(joinSideBySide(left, right, halfWidth), curFuncCtx)
 				}
@@ -783,6 +901,64 @@ func formatDiffLineHighlighted(lineNum int, content string, contentWidth, lineNu
 			rows = append(rows, lineCore+reset)
 		} else {
 			rows = append(rows, lineCore)
+		}
+	}
+
+	return rows
+}
+
+// formatDiffLineWithEmphasis is like formatDiffLineHighlighted but applies a
+// stronger background to the characters in the [emphStart, emphEnd) range of
+// the content (in tab-expanded visible positions). Used for word-level diffs.
+func formatDiffLineWithEmphasis(lineNum int, content string, contentWidth, lineNumWidth, halfWidth int, lexer chroma.Lexer, bgR, bgG, bgB, emphR, emphG, emphB, emphStart, emphEnd int) []string {
+	content = strings.ReplaceAll(content, "\t", strings.Repeat(" ", tabWidth))
+	highlighted := syntaxHighlightLine(lexer, content)
+	wrappedContent := wrapANSI(highlighted, contentWidth)
+
+	gutterChar := " "
+	if bgR > bgG {
+		gutterChar = "−"
+	} else {
+		gutterChar = "+"
+	}
+
+	prefixWidth := 1 + lineNumWidth + 1 // gutter + number + space
+	numPrefix := fmt.Sprintf("%s%*d ", gutterChar, lineNumWidth, lineNum)
+	blankPrefix := gutterChar + strings.Repeat(" ", lineNumWidth+1)
+	var rows []string
+
+	for i, chunk := range wrappedContent {
+		prefix := blankPrefix
+		if i == 0 {
+			prefix = numPrefix
+		}
+
+		line := prefix + chunk
+
+		const reset = "\x1b[0m"
+		lineCore := strings.TrimSuffix(line, reset)
+		visWidth := lipgloss.Width(lineCore)
+		if visWidth < halfWidth {
+			lineCore += strings.Repeat(" ", halfWidth-visWidth)
+		}
+
+		// Compute emphasis range within this row's visible positions.
+		contentOffset := i * contentWidth
+		rowEmphStart := prefixWidth + emphStart - contentOffset
+		rowEmphEnd := prefixWidth + emphEnd - contentOffset
+
+		// Clamp to valid range within this row.
+		if rowEmphStart < prefixWidth {
+			rowEmphStart = prefixWidth
+		}
+		if rowEmphEnd > halfWidth {
+			rowEmphEnd = halfWidth
+		}
+
+		if rowEmphStart < rowEmphEnd {
+			rows = append(rows, applyDiffBackgroundWithEmphasis(lineCore, bgR, bgG, bgB, emphR, emphG, emphB, halfWidth, rowEmphStart, rowEmphEnd))
+		} else {
+			rows = append(rows, applyDiffBackground(lineCore, bgR, bgG, bgB, halfWidth))
 		}
 	}
 
