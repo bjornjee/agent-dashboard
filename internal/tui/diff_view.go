@@ -540,11 +540,23 @@ func (m model) diffSideBySideContent() (string, []string) {
 		// Function context from the hunk header (text after @@)
 		curFuncCtx := strings.TrimSpace(frag.Comment)
 
-		// Hunk header
-		hunkHeader := diffHunkStyle.Render(fmt.Sprintf(" @@ -%d,%d +%d,%d @@",
-			frag.OldPosition, frag.OldLines, frag.NewPosition, frag.NewLines))
+		// Hunk separator — show function context as a centered label in a rule,
+		// or a plain separator when no context is available.
+		fullWidth := halfWidth*2 + 3 // both sides + separator
+		var hunkHeader string
 		if curFuncCtx != "" {
-			hunkHeader += " " + diffHunkStyle.Render(curFuncCtx)
+			label := " " + curFuncCtx + " "
+			runeLabel := []rune(label)
+			if len(runeLabel) > fullWidth-4 {
+				runeLabel = append(runeLabel[:fullWidth-5], '…', ' ')
+			}
+			padTotal := fullWidth - len(runeLabel)
+			padLeft := padTotal / 2
+			padRight := padTotal - padLeft
+			hunkHeader = diffHunkStyle.Render(
+				strings.Repeat("─", padLeft) + string(runeLabel) + strings.Repeat("─", padRight))
+		} else {
+			hunkHeader = diffHunkStyle.Render(strings.Repeat("─", fullWidth))
 		}
 		appendRow(hunkHeader, curFuncCtx)
 
