@@ -1804,6 +1804,95 @@ func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
 	}
 }
 
+func TestAutoScrollHistory_DisabledWhenMouseHovering(t *testing.T) {
+	m := testModelWithAgent(focusAgentList) // not focused on history
+	// Simulate mouse hovering over the history viewport area
+	m.mouseY = m.historyViewportStartY() + 1
+
+	// First load
+	initial := []domain.ConversationEntry{{Role: "assistant", Content: "init"}}
+	result, _ := m.Update(conversationMsg{entries: initial, sessionKey: "test"})
+	m = result.(model)
+
+	// Deliver more messages
+	entries := make([]domain.ConversationEntry, 20)
+	for i := range entries {
+		entries[i] = domain.ConversationEntry{Role: "assistant", Content: fmt.Sprintf("message %d with enough text to wrap", i)}
+	}
+	result, _ = m.Update(conversationMsg{entries: entries, sessionKey: "test"})
+	m = result.(model)
+
+	if m.historyVP.YOffset() != 0 {
+		t.Error("history viewport should NOT auto-scroll when mouse is hovering over it")
+	}
+}
+
+func TestAutoScrollHistory_NotDisabledWhenMouseOutside(t *testing.T) {
+	m := testModelWithAgent(focusAgentList)
+	// Mouse outside any right-panel viewport (e.g. top of window)
+	m.mouseY = 0
+
+	initial := []domain.ConversationEntry{{Role: "assistant", Content: "init"}}
+	result, _ := m.Update(conversationMsg{entries: initial, sessionKey: "test"})
+	m = result.(model)
+
+	entries := make([]domain.ConversationEntry, 20)
+	for i := range entries {
+		entries[i] = domain.ConversationEntry{Role: "assistant", Content: fmt.Sprintf("message %d with enough text to wrap", i)}
+	}
+	result, _ = m.Update(conversationMsg{entries: entries, sessionKey: "test"})
+	m = result.(model)
+
+	if !m.historyVP.AtBottom() {
+		t.Error("history viewport should auto-scroll when mouse is outside the viewport")
+	}
+}
+
+func TestAutoScrollLive_DisabledWhenMouseHovering(t *testing.T) {
+	m := testModelWithAgent(focusAgentList) // not focused on message
+	m.tmuxAvailable = true
+	// Simulate mouse hovering over the message viewport area
+	m.mouseY = m.messageViewportStartY() + 1
+
+	// First capture
+	result, _ := m.Update(captureResultMsg{lines: []string{"init"}})
+	m = result.(model)
+	m.messageVP.GotoTop()
+
+	// More output arrives while mouse is hovering
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	result, _ = m.Update(captureResultMsg{lines: lines})
+	m = result.(model)
+
+	if m.messageVP.YOffset() != 0 {
+		t.Error("message viewport should NOT auto-scroll when mouse is hovering over it")
+	}
+}
+
+func TestAutoScrollLive_NotDisabledWhenMouseOutside(t *testing.T) {
+	m := testModelWithAgent(focusAgentList)
+	m.tmuxAvailable = true
+	// Mouse outside any right-panel viewport (e.g. in the left agent list)
+	m.mouseY = 0
+
+	result, _ := m.Update(captureResultMsg{lines: []string{"init"}})
+	m = result.(model)
+
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("output line %d", i)
+	}
+	result, _ = m.Update(captureResultMsg{lines: lines})
+	m = result.(model)
+
+	if !m.messageVP.AtBottom() {
+		t.Error("message viewport should auto-scroll when mouse is outside the viewport")
+	}
+}
+
 func TestRawKeySentMsg_SuccessLabel(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	result, _ := m.Update(rawKeySentMsg{err: nil, label: "Plan approved"})

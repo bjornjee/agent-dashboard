@@ -104,6 +104,7 @@ func PhantomFilter(m tea.Model, msg tea.Msg) tea.Msg {
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	m.lastEscapeAt = time.Now()
 	mouse := msg.Mouse()
+	m.mouseY = mouse.Y
 	if m.DebugKeyLog != nil {
 		fmt.Fprintf(m.DebugKeyLog, "%s | MOUSE | button=%d x=%d y=%d type=%T\n",
 			time.Now().Format("15:04:05.000"), mouse.Button, mouse.X, mouse.Y, msg)
@@ -191,18 +192,15 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Route to inner right viewport based on Y position
-	// Header takes ~defaultHeaderLines rows + 1 border
-	rightStart := 1 + m.bannerHeight() // top border + banner
-	filesStart := rightStart + defaultHeaderLines
-	historyStart := filesStart + m.filesVP.Height() + 2     // +1 label +1 buffer
-	messageStart := historyStart + m.historyVP.Height() + 2 // +1 label +1 buffer
+	historyStart := m.historyViewportStartY()
+	messageStart := m.messageViewportStartY()
 
 	var cmd tea.Cmd
 	if mouse.Y >= messageStart {
 		m.messageVP, cmd = m.messageVP.Update(msg)
 	} else if mouse.Y >= historyStart {
 		m.historyVP, cmd = m.historyVP.Update(msg)
-	} else if mouse.Y >= filesStart {
+	} else if mouse.Y >= m.filesViewportStartY() {
 		m.filesVP, cmd = m.filesVP.Update(msg)
 	}
 	return m, cmd
