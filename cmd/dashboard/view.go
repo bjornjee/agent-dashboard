@@ -720,8 +720,8 @@ func (m model) renderLeftPanel() string {
 		style = style.BorderForeground(themeSapphire)
 	}
 	return style.
-		Width(m.leftWidth).
-		Height(panelHeight).
+		Width(m.leftWidth + 2).
+		Height(panelHeight + 2).
 		Render(m.agentListVP.View())
 }
 
@@ -731,8 +731,8 @@ func (m model) renderRightPanel() string {
 	// Create wizard modes: simple form
 	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage {
 		return borderStyle.
-			Width(m.rightWidth).
-			Height(panelHeight).
+			Width(m.rightWidth + 2).
+			Height(panelHeight + 2).
 			Render(m.messageVP.View())
 	}
 
@@ -750,8 +750,8 @@ func (m model) renderRightPanel() string {
 			content += strings.Repeat("\n", pad) + statusLine
 		}
 		return borderStyle.
-			Width(m.rightWidth).
-			Height(panelHeight).
+			Width(m.rightWidth + 2).
+			Height(panelHeight + 2).
 			Render(content)
 	}
 
@@ -969,8 +969,8 @@ func (m model) renderRightPanel() string {
 	}
 
 	return borderStyle.
-		Width(m.rightWidth).
-		Height(panelHeight).
+		Width(m.rightWidth + 2).
+		Height(panelHeight + 2).
 		Render(content)
 }
 
@@ -1193,8 +1193,8 @@ func (m model) renderHelpOverlay() string {
 	content := strings.Join(lines, "\n")
 
 	style := borderStyle.
-		Width(contentWidth).
-		Height(panelHeight)
+		Width(contentWidth + 2).
+		Height(panelHeight + 2)
 
 	return style.Render(content)
 }

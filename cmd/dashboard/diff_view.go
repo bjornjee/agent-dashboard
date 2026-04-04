@@ -748,8 +748,8 @@ func (m model) renderDiffFilePanel() string {
 
 	content := header + filterLine + "\n\n" + m.diffFileVP.View()
 	return borderStyle.
-		Width(m.diffLeftWidth).
-		Height(panelHeight).
+		Width(m.diffLeftWidth + 2).
+		Height(panelHeight + 2).
 		Render(content)
 }
 
@@ -796,8 +796,8 @@ func (m model) renderDiffContentPanel() string {
 	}
 
 	return borderStyle.
-		Width(m.diffRightWidth).
-		Height(panelHeight).
+		Width(m.diffRightWidth + 2).
+		Height(panelHeight + 2).
 		Render(content)
 }
 

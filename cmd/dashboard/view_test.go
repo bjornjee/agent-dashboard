@@ -151,3 +151,36 @@ func TestStatusLine_SuccessVsError(t *testing.T) {
 		t.Errorf("expected status line to contain 'Key send failed', got %q", s)
 	}
 }
+
+func TestPanelRenderedDimensions(t *testing.T) {
+	// lipgloss v2 includes borders in Width/Height, so rendered panels must
+	// account for the 2-char border frame. This test ensures the rendered
+	// left panel width equals leftWidth + 2 (content + borders).
+	t.Setenv("NO_COLOR", "1")
+
+	m := newModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+
+	panel := m.renderLeftPanel()
+	lines := strings.Split(panel, "\n")
+	if len(lines) == 0 {
+		t.Fatal("rendered left panel has no lines")
+	}
+
+	expectedWidth := m.leftWidth + 2
+	for i, line := range lines {
+		w := lipgloss.Width(line)
+		if w != expectedWidth {
+			t.Errorf("left panel line %d: width %d, want %d", i, w, expectedWidth)
+			break
+		}
+	}
+
+	expectedHeight := m.height - 5 - m.bannerHeight() + 2
+	if len(lines) != expectedHeight {
+		t.Errorf("left panel height: got %d lines, want %d", len(lines), expectedHeight)
+	}
+}
