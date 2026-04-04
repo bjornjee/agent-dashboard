@@ -16,8 +16,8 @@ import (
 
 // Diff background RGB values (subtle tints on Catppuccin Frappé base #303446).
 const (
-	diffAddBgR, diffAddBgG, diffAddBgB = 40, 56, 40 // greenish tint
-	diffDelBgR, diffDelBgG, diffDelBgB = 56, 36, 36 // reddish tint
+	diffAddBgR, diffAddBgG, diffAddBgB = 35, 60, 45 // greenish tint
+	diffDelBgR, diffDelBgG, diffDelBgB = 60, 36, 36 // reddish tint
 )
 
 // collapsibleThreshold is the minimum number of consecutive context lines
@@ -220,7 +220,7 @@ func (m *model) toggleDiffDir() {
 func (m model) dirFileCount(dirKey string) int {
 	count := 0
 	for _, e := range m.diffTreeEntries {
-		if !e.isDir && e.dirKey == dirKey && !e.hidden {
+		if !e.isDir && e.dirKey == dirKey {
 			count++
 		}
 	}
