@@ -1257,37 +1257,21 @@ func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
 	}
 }
 
-func TestSendReply_RejectsSelfPane(t *testing.T) {
-	// sendReply should refuse to send to the dashboard's own pane.
-	cmd := sendReply("%99999", "test message", "%99999")
-	msg := cmd()
-	result, ok := msg.(sendResultMsg)
-	if !ok {
-		t.Fatalf("expected sendResultMsg, got %T", msg)
-	}
-	if result.err == nil {
-		t.Fatal("expected error when sending to self pane")
-	}
-	if !strings.Contains(result.err.Error(), "dashboard pane") {
-		t.Errorf("error should mention dashboard pane, got: %v", result.err)
+func TestIsSelfPane_SamePaneBlocked(t *testing.T) {
+	if !isSelfPane("%5", "%5") {
+		t.Error("isSelfPane should return true when paneID == selfPaneID")
 	}
 }
 
-func TestSendReply_AllowsDifferentPane(t *testing.T) {
-	// sendReply should NOT block when paneID differs from selfPaneID.
-	// Use a pane ID that cannot exist (%99999) so the function hits the
-	// "pane no longer exists" guard BEFORE calling TmuxSendKeys — this
-	// prevents the test from actually injecting text into a live tmux pane.
-	cmd := sendReply("%99999", "test message", "%0")
-	msg := cmd()
-	result, ok := msg.(sendResultMsg)
-	if !ok {
-		t.Fatalf("expected sendResultMsg, got %T", msg)
+func TestIsSelfPane_DifferentPaneAllowed(t *testing.T) {
+	if isSelfPane("%5", "%0") {
+		t.Error("isSelfPane should return false when paneID != selfPaneID")
 	}
-	// Error is expected (pane doesn't exist), but it must NOT be the
-	// self-pane rejection error — that's the guard we're testing.
-	if result.err != nil && strings.Contains(result.err.Error(), "dashboard pane") {
-		t.Errorf("should not reject different pane; got: %v", result.err)
+}
+
+func TestIsSelfPane_EmptySelfSkipsGuard(t *testing.T) {
+	if isSelfPane("%5", "") {
+		t.Error("isSelfPane should return false when selfPaneID is empty")
 	}
 }
 
