@@ -700,13 +700,13 @@ func openPR(dir, branch string) tea.Cmd {
 	}
 }
 
-// mergePR runs `gh pr merge <branch> --squash --delete-branch` in the given
-// directory. Returns mergePRMsg with error details on failure.
+// mergePR runs `gh pr merge <branch> --squash` in the given directory.
+// Branch deletion is left to the cleanup step.
 func mergePR(dir, branch string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "gh", "pr", "merge", branch, "--squash", "--delete-branch")
+		cmd := exec.CommandContext(ctx, "gh", "pr", "merge", branch, "--squash")
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		if err != nil {
