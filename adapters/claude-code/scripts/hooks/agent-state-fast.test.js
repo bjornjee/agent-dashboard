@@ -441,6 +441,75 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.hook_blocked, undefined, 'should not set hook_blocked when absent');
   });
 
+  it('PostToolUse skips when existing state is idle_prompt (stop-state guard)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'idle_prompt',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'PostToolUse should not overwrite idle_prompt');
+    assert.equal(update, null);
+  });
+
+  it('PostToolUse skips when existing state is done (stop-state guard)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'done',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'PostToolUse should not overwrite done');
+    assert.equal(update, null);
+  });
+
+  it('PreToolUse is NOT blocked by stop states (next turn resumes running)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'idle_prompt',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true, 'PreToolUse should transition from idle_prompt to running');
+    assert.equal(update.state, 'running');
+  });
+
   it('preserves existing fields not updated by fast hook', () => {
     writeState('main:1.0', {
       target: 'main:1.0',

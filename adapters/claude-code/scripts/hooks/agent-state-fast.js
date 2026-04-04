@@ -21,6 +21,11 @@ const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages',
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
+// States set by the Stop hook that PostToolUse must not overwrite.
+const STOP_STATES = new Set(['idle_prompt', 'done', 'question']);
+// States set by pr-detect or dashboard pinning.
+const PR_STATES = new Set(['pr', 'merged']);
+
 /**
  * Determine the agent state from the hook event.
  * @param {string} hookEvent - hook_event_name from stdin
@@ -87,9 +92,17 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
     state = 'permission';
   }
 
+  // Stop-derived states must not be overwritten by a late PostToolUse.
+  // PreToolUse (next turn) is allowed through to correctly resume "running".
+  if (hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state)) {
+    if (consumeBlocked) {
+      return { changed: true, update: { hook_blocked: '' } };
+    }
+    return { changed: false, update: null };
+  }
+
   // Preserve PR states set by pr-detect or dashboard pinning.
   // Still clear hook_blocked even when returning early, to avoid a stuck signal.
-  const PR_STATES = new Set(['pr', 'merged']);
   if ((PR_STATES.has(existing.state) || PR_STATES.has(existing.pinned_state)) && state === 'running') {
     if (consumeBlocked) {
       return { changed: true, update: { hook_blocked: '' } };
