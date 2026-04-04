@@ -50,7 +50,7 @@ const modeResetCooldown = 100 * time.Millisecond
 // intentionally excluded so scrolling works immediately after mouse events.
 var phantomGuardedKeys = map[string]bool{
 	"x": true, "enter": true, "r": true, "m": true,
-	"y": true, "n": true,
+	"y": true, "n": true, "q": true,
 	"1": true, "2": true, "3": true, "4": true, "5": true,
 	"6": true, "7": true, "8": true, "9": true,
 }

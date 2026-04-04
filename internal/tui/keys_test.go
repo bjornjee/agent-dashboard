@@ -1640,7 +1640,6 @@ func TestPhantomFilter_AllowsNavigationKeyDuringEscapeCooldown(t *testing.T) {
 		{Code: 'j', Text: "j"},
 		{Code: 'k', Text: "k"},
 		{Code: tea.KeyTab},
-		{Code: 'q', Text: "q"},
 		{Code: 'c', Text: "c"},
 		{Code: 'h', Text: "h"},
 	}
@@ -1737,5 +1736,18 @@ func TestPhantomFilter_PassesThroughNonNormalModeKeys(t *testing.T) {
 	result := PhantomFilter(m, msg)
 	if result == nil {
 		t.Error("keys in modeReply should not be phantom-filtered")
+	}
+}
+
+func TestPhantomFilter_SwallowsQuitKeyDuringEscapeCooldown(t *testing.T) {
+	// 'q' triggers tea.Quit in normal mode — a phantom 'q' from a mouse
+	// escape sequence must be swallowed to prevent the dashboard from
+	// killing itself.
+	m := newTestModelWithAgents()
+	m.lastEscapeAt = time.Now() // mouse event just happened
+
+	result := PhantomFilter(m, tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if result != nil {
+		t.Error("phantom 'q' during escape cooldown should be swallowed to prevent accidental quit")
 	}
 }
