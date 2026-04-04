@@ -146,8 +146,6 @@ function report(input) {
   if (hookEvent === 'Stop' && PR_STATES.has(existing.pinned_state)) return;
 
   const cwd = input.cwd || process.cwd();
-  const hookEvent = input.hook_event_name;
-  const lastMessage = input.last_assistant_message || null;
 
   // Determine agent state based on hook event.
   // PreToolUse/PostToolUse/PermissionRequest are handled by agent-state-fast.js.
