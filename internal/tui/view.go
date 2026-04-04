@@ -893,7 +893,7 @@ func (m model) renderRightPanel() string {
 			messageLabel = " " + planLabelStyle.Render(label) + focusMarker(focusMessage) + scrollHint(m.messageVP)
 		} else if isBlocked(rpEffState) {
 			blockColor := permissionColor
-			blockLabel := "── domain.Agent is blocked"
+			blockLabel := "── Agent is blocked"
 			if rpEffState == "plan" {
 				blockColor = planColor
 				blockLabel = "── Plan ready for review"
@@ -902,12 +902,12 @@ func (m model) renderRightPanel() string {
 				Render(blockLabel) + focusMarker(focusMessage) + scrollHint(m.messageVP)
 		} else if isWaiting(rpEffState) {
 			messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
-				Render("── domain.Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+				Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 9))
 		} else if isReview(rpEffState) || isPR(rpEffState) || isMerged(rpEffState) {
 			if m.mode == modeReply {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(questionColor).Bold(true).
-					Render("── domain.Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+					Render("── Agent is waiting") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 					" " + helpStyle.Render(strings.Repeat("─", 9))
 			} else if isMerged(rpEffState) {
 				messageLabel = " " + lipgloss.NewStyle().Foreground(mergedColor).Bold(true).
@@ -1149,8 +1149,8 @@ func (m model) renderHelpOverlay() string {
 	lines = append(lines, line("J / K", "Line scroll (plan/diff)"))
 	lines = append(lines, "")
 
-	// domain.Agent Actions
-	lines = append(lines, headerStyle.Render("  domain.Agent Actions"))
+	// Agent Actions
+	lines = append(lines, headerStyle.Render("  Agent Actions"))
 	lines = append(lines, line("enter", "Jump to agent pane"))
 	lines = append(lines, line("r", "Reply to agent"))
 	lines = append(lines, line("e", "Open editor"))

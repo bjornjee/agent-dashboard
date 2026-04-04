@@ -18,7 +18,9 @@ import (
 var Version string
 
 func main() {
-	tui.Version = Version
+	if Version != "" {
+		tui.Version = Version
+	}
 
 	cfg := config.DefaultConfig()
 	stateDir := cfg.Profile.StateDir

@@ -305,9 +305,9 @@ func TestMarkNotifications_MultipleConsecutive(t *testing.T) {
 		{Role: "human", Content: "do the thing"},
 		{Role: "assistant", Content: "Done. All changes committed."},
 		{Role: "human", Content: "<task-notification><task-id>a1</task-id></task-notification>"},
-		{Role: "assistant", Content: "domain.Agent A completed."},
+		{Role: "assistant", Content: "Agent A completed."},
 		{Role: "human", Content: "<task-notification><task-id>b2</task-id></task-notification>"},
-		{Role: "assistant", Content: "domain.Agent B completed."},
+		{Role: "assistant", Content: "Agent B completed."},
 	}
 	markNotifications(entries)
 

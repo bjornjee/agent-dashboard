@@ -1127,7 +1127,7 @@ func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 	m.resizeViewports()
 	m.tmuxAvailable = true
 
-	// domain.Agent at window 1 with file changes — user is looking at this agent
+	// Agent at window 1 with file changes — user is looking at this agent
 	m.agents = []domain.Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running",
 			FilesChanged: []string{"+old_file.go"}},
@@ -1182,7 +1182,7 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 	m.selected = 1
 	m.restoreCurrentCache()
 
-	// domain.Agent B should have empty state
+	// Agent B should have empty state
 	if len(m.conversation) != 0 {
 		t.Errorf("expected empty conversation for uncached agent B, got %d entries", len(m.conversation))
 	}
@@ -1319,7 +1319,7 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 
 	// Load conversation for agent A
 	m.conversation = []domain.ConversationEntry{
-		{Role: "assistant", Content: "domain.Agent A message"},
+		{Role: "assistant", Content: "Agent A message"},
 	}
 	m.renderedHistory = "cached history"
 	m.historyConvLen = 1
@@ -1340,8 +1340,8 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 		t.Fatalf("expected selected=0 after up, got %d", rm.selected)
 	}
 
-	// domain.Agent A's conversation should be restored from cache
-	if len(rm.conversation) != 1 || rm.conversation[0].Content != "domain.Agent A message" {
+	// Agent A's conversation should be restored from cache
+	if len(rm.conversation) != 1 || rm.conversation[0].Content != "Agent A message" {
 		t.Errorf("expected agent A conversation to be restored after navigate back, got %v", rm.conversation)
 	}
 }

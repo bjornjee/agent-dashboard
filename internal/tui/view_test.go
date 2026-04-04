@@ -77,7 +77,7 @@ func TestRenderHelpOverlayContainsSections(t *testing.T) {
 
 	content := m.renderHelpOverlay()
 
-	sections := []string{"Navigation", "domain.Agent Actions", "View Controls", "Diff Mode", "Input Modes"}
+	sections := []string{"Navigation", "Agent Actions", "View Controls", "Diff Mode", "Input Modes"}
 	for _, s := range sections {
 		if !strings.Contains(content, s) {
 			t.Errorf("help overlay missing section %q", s)
