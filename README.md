@@ -18,6 +18,7 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr)
 - **Quick reply** — send free-text responses directly to agent panes
 - **GitHub PR workflow** — open existing PR diff, create new PR, or merge via `gh` CLI (falls back to browser)
+- **Status feedback** — colour-coded success/error messages in the help bar for user actions
 - **Help overlay** — full-screen keybinding reference grouped by context
 - **Daily quote** — fetched from API Ninjas with fallback to embedded quotes
 - **Pixel art banner** — axolotl rendered with half-block Unicode characters
@@ -180,6 +181,9 @@ The project uses semantic versioning. The version is resolved from the latest gi
 
 ### Project Structure
 
+<details>
+<summary><code>agent-dashboard/</code> — top-level layout</summary>
+
 ```
 agent-dashboard/
 ├── Makefile
@@ -189,48 +193,93 @@ agent-dashboard/
 ├── LICENSE
 ├── SECURITY.md
 ├── release-please-config.json
-├── install.sh                     # installer (accepts adapter name, default: claude-code)
-├── agent-dashboard.tmux           # optional tmux keybinding (prefix + D)
+├── install.sh                         # installer (accepts adapter name, default: claude-code)
+├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
+├── go.mod / go.sum
 ├── cmd/
 │   ├── dashboard/
-│   │   ├── main.go                # entry point
-│   │   ├── model.go               # Bubble Tea model + update loop
-│   │   ├── view.go                # render logic (panels, layout)
-│   │   ├── keys.go                # keybindings + mouse handling
-│   │   ├── commands.go            # tea.Cmd functions (tmux, state)
-│   │   ├── config.go              # agent profile + dashboard configuration
-│   │   ├── settings.go            # TOML settings loader (banner, notifications)
-│   │   ├── state.go               # agent state structs + file I/O
-│   │   ├── conversation.go        # JSONL parsing, subagent discovery
-│   │   ├── messages.go            # tea message types + constants
-│   │   ├── diff.go                # git diff loading
-│   │   ├── diff_view.go           # diff rendering + syntax highlighting
-│   │   ├── skills.go              # plugin skill discovery
-│   │   ├── usage.go               # token counting + pricing
-│   │   ├── db.go                  # SQLite operations (usage + quotes)
-│   │   ├── banner.go              # axolotl pixel art + quote display
-│   │   ├── tmux.go                # tmux integration helpers
-│   │   ├── zsuggest.go            # z-plugin frecency suggestions
-│   │   ├── wrapped_input.go       # soft-wrap text input helper
-│   │   ├── helpers.go             # text wrapping, markdown rendering
-│   │   ├── styles.go              # Catppuccin Frappe theme
-│   │   ├── catppuccin-frappe.json # chroma syntax theme
-│   │   ├── version.go             # build-time version variable
-│   │   └── *_test.go              # tests
+│   │   └── main.go                    # entry point (imports internal packages)
 │   └── populate-quotes/
-│       └── main.go                # bulk quote fetcher for SQLite cache
-├── adapters/claude-code/          # Claude Code plugin
-│   ├── CLAUDE.md                  # agent instructions for the adapter
-│   ├── package.json               # plugin metadata
-│   ├── hooks/hooks.json           # lifecycle hook definitions
-│   ├── scripts/hooks/             # hook implementations (JS)
-│   ├── packages/                  # shared JS modules (agent-state, git-status, tmux)
-│   ├── skills/                    # workflow skills (feature, fix, chore, refactor, pr, investigate)
-│   └── agents/                    # agent definitions (code-reviewer, planner, tdd-guide, etc.)
-├── schema/
-│   └── agent-state.schema.json    # JSON Schema for agent state files
-└── go.mod / go.sum
+│       └── main.go                    # bulk quote fetcher for SQLite cache
+├── internal/                          # core packages (see below)
+├── adapters/claude-code/              # Claude Code plugin (see below)
+└── schema/
+    └── agent-state.schema.json        # JSON Schema for agent state files
 ```
+
+</details>
+
+<details>
+<summary><code>internal/</code> — Go packages (domain-oriented)</summary>
+
+```
+internal/
+├── config/                            # agent profile + TOML settings loader
+├── conversation/                      # JSONL parsing, subagent discovery
+├── db/                                # SQLite operations (usage + quotes)
+├── domain/                            # shared type definitions (Agent, Message, etc.)
+├── lock/                              # singleton instance lock
+├── skills/                            # plugin skill discovery
+├── state/                             # agent state structs + file I/O
+├── tmux/                              # tmux integration helpers
+├── tui/                               # Bubble Tea UI
+│   ├── model.go                       # Bubble Tea model + update loop
+│   ├── view.go                        # render logic (panels, layout)
+│   ├── keys.go                        # keybindings + mouse handling
+│   ├── commands.go                    # tea.Cmd functions (tmux, state)
+│   ├── messages.go                    # tea message types + constants
+│   ├── diff.go                        # git diff loading
+│   ├── diff_view.go                   # diff rendering + syntax highlighting
+│   ├── banner.go                      # axolotl pixel art + quote display
+│   ├── helpers.go                     # text wrapping, markdown rendering
+│   ├── wrapped_input.go              # soft-wrap text input helper
+│   ├── styles.go                      # Catppuccin Frappe theme
+│   ├── catppuccin-frappe.json         # chroma syntax theme
+│   ├── version.go                     # build-time version variable
+│   └── *_test.go                      # tests
+├── usage/                             # token counting + pricing
+└── zsuggest/                          # z-plugin frecency suggestions
+```
+
+</details>
+
+<details>
+<summary><code>adapters/claude-code/</code> — Claude Code plugin</summary>
+
+```
+adapters/claude-code/
+├── CLAUDE.md                          # agent instructions for the adapter
+├── package.json                       # plugin metadata
+├── hooks/hooks.json                   # lifecycle hook definitions
+├── scripts/hooks/                     # hook implementations (JS)
+│   ├── agent-state-fast.js            # fast agent state reporter
+│   ├── agent-state-reporter.js        # full agent state reporter
+│   ├── block-main-commit.js           # prevents commits to main branch
+│   ├── commit-lint.js                 # validates commit message format
+│   ├── desktop-notify.js              # desktop notifications
+│   ├── pr-detect.js                   # detects existing PRs
+│   ├── test-gate.js                   # blocks merges if tests fail
+│   └── warn-destructive.js            # warns about destructive git ops
+├── packages/                          # shared JS modules
+│   ├── agent-state/                   # state detection + schema validation
+│   ├── git-status/                    # git status utility
+│   └── tmux/                          # tmux integration utilities
+├── skills/                            # workflow skills
+│   ├── feature/                       # feature development
+│   ├── fix/                           # bug fix
+│   ├── chore/                         # non-code changes
+│   ├── refactor/                      # refactoring
+│   ├── pr/                            # PR workflow
+│   └── investigate/                   # investigation
+└── agents/                            # pre-configured agent definitions
+    ├── build-error-resolver.md
+    ├── code-reviewer.md
+    ├── planner.md
+    ├── security-reviewer.md
+    └── tdd-guide.md
+```
+
+</details>
 
 ### Key Dependencies
 
