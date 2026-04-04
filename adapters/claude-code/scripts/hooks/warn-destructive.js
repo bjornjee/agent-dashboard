@@ -7,6 +7,11 @@
 
 'use strict';
 
+const path = require('path');
+
+const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+const { writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
+
 function hasRmRF(cmd) {
   const segments = cmd.split(/[|;&\n]+/);
   for (const seg of segments) {
@@ -55,10 +60,12 @@ if (require.main === module && !process.stdin.isTTY) {
       for (const { pattern, test, label } of DESTRUCTIVE_PATTERNS) {
         const match = test ? test(command) : pattern.test(command);
         if (match) {
-          process.stderr.write(
-            `Blocked: "${label}" is a destructive command. ` +
-            `If intentional, ask the user to run it manually.\n`
-          );
+          const reason = `Blocked: "${label}" is a destructive command. If intentional, ask the user to run it manually.`;
+          const sessionId = input.session_id;
+          if (sessionId) {
+            try { writeState(sessionId, { hook_blocked: reason }); } catch { /* don't break Claude Code */ }
+          }
+          process.stderr.write(reason + '\n');
           process.exit(2);
         }
       }

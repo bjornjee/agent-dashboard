@@ -42,8 +42,10 @@ if (require.main === module && !process.stdin.isTTY) {
         return;
       }
 
-      // Get current branch — use cwd from command's cd prefix if present (worktree support)
-      const effectiveCwd = extractCwdFromCommand(command);
+      // Get current branch — prefer cd prefix in command, then input.cwd from Claude Code.
+      // Without this, the hook runs git in its own cwd (the main repo root), not the
+      // agent's working directory, causing false positives in worktrees.
+      const effectiveCwd = extractCwdFromCommand(command) || input.cwd || null;
       let branch;
       try {
         const opts = { encoding: 'utf8', timeout: 3000 };
