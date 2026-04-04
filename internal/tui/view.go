@@ -741,21 +741,10 @@ func (m model) renderRightPanel() string {
 
 	agent := m.selectedAgent()
 	if agent == nil {
-		content := m.messageVP.View()
-		// Show status line (e.g. spawning spinner) even with no agents
-		statusLine := m.statusLine()
-		if statusLine != "" {
-			contentLines := strings.Count(content, "\n") + 1
-			pad := panelHeight - contentLines - 1
-			if pad < 1 {
-				pad = 1
-			}
-			content += strings.Repeat("\n", pad) + statusLine
-		}
 		return borderStyle.
 			Width(m.rightWidth + 2).
 			Height(panelHeight + 2).
-			Render(content)
+			Render(m.messageVP.View())
 	}
 
 	sub := m.selectedSubagent()
@@ -927,8 +916,6 @@ func (m model) renderRightPanel() string {
 		}
 	}
 
-	statusLine := m.statusLine()
-
 	// Compose right panel (with blank-line buffers between sections)
 	var parts []string
 	if m.mode == modeUsage {
@@ -960,16 +947,6 @@ func (m model) renderRightPanel() string {
 		}
 	}
 	content := strings.Join(parts, "\n")
-
-	if statusLine != "" {
-		contentLines := strings.Count(content, "\n") + 1
-		// panelHeight is the inner height; pad so statusLine sits at the bottom
-		pad := panelHeight - contentLines - 1 // -1 for the status line itself
-		if pad < 1 {
-			pad = 1
-		}
-		content += strings.Repeat("\n", pad) + statusLine
-	}
 
 	return borderStyle.
 		Width(m.rightWidth + 2).
@@ -1022,7 +999,7 @@ func (m model) renderHelpBar() string {
 	// Help overlay active: minimal bar
 	if m.helpVisible {
 		parts = append(parts, boldStyle.Render("h/esc")+" close help")
-		return helpStyle.Render("  " + strings.Join(parts, "  "))
+		return m.composeHelpBarWithStatus(helpStyle.Render("  " + strings.Join(parts, "  ")))
 	}
 
 	if m.diffVisible {
@@ -1030,7 +1007,7 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, boldStyle.Render("J/K")+" line scroll")
 		parts = append(parts, boldStyle.Render("q/d/esc")+" close")
 		parts = append(parts, boldStyle.Render("h")+" help")
-		return helpStyle.Render("  " + strings.Join(parts, "  "))
+		return m.composeHelpBarWithStatus(helpStyle.Render("  " + strings.Join(parts, "  ")))
 	}
 
 	if m.mode == modeConfirmMerge {
@@ -1101,9 +1078,34 @@ func (m model) renderHelpBar() string {
 	return m.truncateHelpBar(parts)
 }
 
+// composeHelpBarWithStatus takes the left-aligned help text and appends
+// the status line right-aligned, padding to fill the terminal width.
+func (m model) composeHelpBarWithStatus(leftContent string) string {
+	status := m.statusLine()
+	if status == "" {
+		return leftContent
+	}
+
+	leftW := lipgloss.Width(leftContent)
+	statusW := lipgloss.Width(status)
+	gap := m.width - leftW - statusW
+	if gap < 2 {
+		gap = 2
+	}
+	return leftContent + strings.Repeat(" ", gap) + status
+}
+
 // truncateHelpBar joins help bar parts and truncates to fit within the terminal width.
+// It reserves space for the status line on the right side.
 func (m model) truncateHelpBar(parts []string) string {
-	maxWidth := m.width - 2 // leave room for leading padding
+	statusText := m.statusLine()
+	statusW := lipgloss.Width(statusText)
+	reserveRight := 0
+	if statusW > 0 {
+		reserveRight = statusW + 2 // +2 for gap
+	}
+
+	maxWidth := m.width - 2 - reserveRight // leave room for leading padding and status
 	if maxWidth <= 0 {
 		return ""
 	}
@@ -1120,7 +1122,8 @@ func (m model) truncateHelpBar(parts []string) string {
 		totalWidth += w
 	}
 
-	return helpStyle.Render("  " + strings.Join(included, "  "))
+	leftContent := helpStyle.Render("  " + strings.Join(included, "  "))
+	return m.composeHelpBarWithStatus(leftContent)
 }
 
 // renderHelpOverlay renders a full-screen help legend with all keybindings grouped by context.
