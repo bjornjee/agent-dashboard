@@ -720,6 +720,74 @@ func mergePR(dir, branch string) tea.Cmd {
 	}
 }
 
+// postMergeCleanup runs deterministic cleanup steps after a PR has been merged:
+// kill the agent pane, remove worktree (if applicable), checkout default branch, pull,
+// delete feature branch, and remove the agent state file.
+func postMergeCleanup(paneID, sessionID, stateDir, cwd, worktreeCwd, branch string) tea.Cmd {
+	return func() tea.Msg {
+		// Validate paths before any destructive operations.
+		if cwd == "" || !filepath.IsAbs(cwd) {
+			return postMergeCleanupMsg{err: fmt.Errorf("invalid cwd: %q", cwd), progress: "validate"}
+		}
+		if worktreeCwd != "" {
+			if !filepath.IsAbs(worktreeCwd) {
+				return postMergeCleanupMsg{err: fmt.Errorf("invalid worktree path: %q", worktreeCwd), progress: "validate"}
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		defaultBranch := gitDefaultBranch(cwd)
+
+		// 1. Kill tmux pane (ignore already-dead)
+		if target := tmux.ResolveTarget(paneID); target != "" {
+			_ = tmux.TmuxKillPane(target)
+		}
+
+		// 2. Remove worktree if applicable
+		if worktreeCwd != "" {
+			cmd := exec.CommandContext(ctx, "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				// If git worktree remove failed, try removing the directory directly as fallback.
+				if rmErr := os.RemoveAll(worktreeCwd); rmErr != nil {
+					detail := strings.TrimSpace(string(out))
+					return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "worktree remove"}
+				}
+			}
+
+			cmd = exec.CommandContext(ctx, "git", "-C", cwd, "worktree", "prune")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				detail := strings.TrimSpace(string(out))
+				return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "worktree prune"}
+			}
+		}
+
+		// 3. Checkout default branch
+		cmd := exec.CommandContext(ctx, "git", "-C", cwd, "checkout", defaultBranch)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			detail := strings.TrimSpace(string(out))
+			return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "checkout " + defaultBranch}
+		}
+
+		// 4. Pull default branch
+		cmd = exec.CommandContext(ctx, "git", "-C", cwd, "pull", "origin", defaultBranch)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			detail := strings.TrimSpace(string(out))
+			return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "pull origin " + defaultBranch}
+		}
+
+		// 5. Delete local branch (ignore errors — GitHub may have already deleted it)
+		cmd = exec.CommandContext(ctx, "git", "-C", cwd, "branch", "-d", branch)
+		_ = cmd.Run()
+
+		// 6. Remove agent state file
+		_ = state.RemoveAgent(stateDir, sessionID)
+
+		return postMergeCleanupMsg{}
+	}
+}
+
 func sendRawKey(paneID, key, label string) tea.Cmd {
 	return func() tea.Msg {
 		target := tmux.ResolveTarget(paneID)

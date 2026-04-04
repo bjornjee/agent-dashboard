@@ -40,6 +40,10 @@ type openPRMsg struct {
 	hasPR bool // true when an existing PR was found (vs compare URL)
 }
 type mergePRMsg struct{ err error }
+type postMergeCleanupMsg struct {
+	err      error
+	progress string // last step name, for error reporting
+}
 type ghAvailableMsg struct{ available bool }
 type startupMsg struct {
 	tmuxAvailable bool
@@ -70,9 +74,10 @@ const (
 	modeReply
 	modeUsage
 	modeConfirmClose
-	modeConfirmMerge // confirm before merging a PR
-	modeConfirmSend  // confirm before sending a key to an agent pane
-	modeConfirmJump  // confirm before jumping to an agent pane
+	modeConfirmMerge   // confirm before merging a PR
+	modeConfirmCleanup // confirm before post-merge cleanup
+	modeConfirmSend    // confirm before sending a key to an agent pane
+	modeConfirmJump    // confirm before jumping to an agent pane
 	modeCreateFolder
 	modeCreateSkill   // skill selection step of create wizard
 	modeCreateMessage // message input step of create wizard

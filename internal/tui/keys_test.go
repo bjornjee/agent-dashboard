@@ -842,6 +842,124 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 	if _, ok := pinMsg.(pinStateMsg); !ok {
 		t.Errorf("expected pinStateMsg from cmd, got %T", pinMsg)
 	}
+
+	// No-GH path should NOT enter cleanup confirm mode
+	if updated.mode == modeConfirmCleanup {
+		t.Error("no-GH path should not enter modeConfirmCleanup")
+	}
+	if updated.cleanupSessionID != "" {
+		t.Error("cleanupSessionID should be empty in no-GH path")
+	}
+}
+
+func TestMKey_ConfirmMerge_Y_StoresMergeCwdFields(t *testing.T) {
+	// Confirming merge should propagate Cwd, branch, and worktreeCwd fields.
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.ghAvailable = true
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeDir = "/worktrees/app/feat-x" // EffectiveDir (worktree)
+	m.confirmMergeBranch = "feat/test"
+	m.confirmMergeCwd = "/code/app" // main repo Cwd
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	updated := result.(model)
+	if updated.mergeCwd != "/code/app" {
+		t.Errorf("expected mergeCwd='/code/app', got %q", updated.mergeCwd)
+	}
+	if updated.mergeWorktreeCwd != "/worktrees/app/feat-x" {
+		t.Errorf("expected mergeWorktreeCwd='/worktrees/app/feat-x', got %q", updated.mergeWorktreeCwd)
+	}
+	if updated.mergeBranch != "feat/test" {
+		t.Errorf("expected mergeBranch='feat/test', got %q", updated.mergeBranch)
+	}
+	if updated.confirmMergeCwd != "" {
+		t.Error("expected confirmMergeCwd to be cleared after confirm")
+	}
+}
+
+func TestMKey_ConfirmMerge_Y_NonWorktree_NoWorktreeCwd(t *testing.T) {
+	// When Cwd == EffectiveDir, mergeWorktreeCwd should be empty.
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.ghAvailable = true
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeDir = "/code/app" // same as Cwd
+	m.confirmMergeBranch = "feat/test"
+	m.confirmMergeCwd = "/code/app"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	updated := result.(model)
+	if updated.mergeWorktreeCwd != "" {
+		t.Errorf("expected empty mergeWorktreeCwd for non-worktree, got %q", updated.mergeWorktreeCwd)
+	}
+}
+
+func TestConfirmCleanup_Y_FiresCleanup(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmCleanup
+	m.confirmEnteredAt = pastConfirmTime
+	m.cleanupSessionID = "sess1"
+	m.cleanupPaneID = "%5"
+	m.cleanupCwd = "/code/app"
+	m.cleanupWorktreeCwd = "/worktrees/app/feat-x"
+	m.cleanupBranch = "feat/test"
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if cmd == nil {
+		t.Fatal("expected cmd after confirming cleanup")
+	}
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal, got %d", updated.mode)
+	}
+	if updated.cleanupSessionID != "" {
+		t.Error("expected cleanupSessionID to be cleared")
+	}
+	if !strings.Contains(updated.statusMsg, "Cleaning up") {
+		t.Errorf("expected status to contain 'Cleaning up', got %q", updated.statusMsg)
+	}
+}
+
+func TestConfirmCleanup_Esc_Cancels(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmCleanup
+	m.confirmEnteredAt = pastConfirmTime
+	m.cleanupSessionID = "sess1"
+	m.cleanupPaneID = "%5"
+	m.cleanupCwd = "/code/app"
+	m.cleanupBranch = "feat/test"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
+	}
+	if updated.cleanupSessionID != "" {
+		t.Error("expected cleanupSessionID to be cleared")
+	}
+	if !strings.Contains(updated.statusMsg, "PR merged") {
+		t.Errorf("expected status 'PR merged', got %q", updated.statusMsg)
+	}
+}
+
+func TestConfirmCleanup_PhantomGuard(t *testing.T) {
+	// 'y' should be swallowed during cooldown period.
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmCleanup
+	m.confirmEnteredAt = time.Now() // just entered — within cooldown
+
+	msg := tea.KeyPressMsg{Code: 'y', Text: "y"}
+	filtered := PhantomFilter(m, msg)
+	if filtered != nil {
+		t.Error("expected 'y' to be swallowed during cleanup confirm cooldown")
+	}
 }
 
 func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
