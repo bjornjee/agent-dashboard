@@ -5,6 +5,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildReportEntry } = require('./agent-state-reporter');
+const { detectState } = require('../../packages/agent-state/detect');
 
 const BASE_INPUT = {
   session_id: 'abc-123',
@@ -124,5 +125,27 @@ describe('buildReportEntry', () => {
     });
 
     assert.equal(changed, true);
+  });
+});
+
+describe('detectState (Stop event path)', () => {
+  it('returns idle_prompt when pane buffer has prompt char and no question', () => {
+    const state = detectState('Here is the investigation report.', ['some output', '\u276f']);
+    assert.equal(state, 'idle_prompt');
+  });
+
+  it('returns question when last message ends with a question', () => {
+    const state = detectState('Should I proceed with the fix?', ['some output', '\u276f']);
+    assert.equal(state, 'question');
+  });
+
+  it('returns done when no prompt char and no question', () => {
+    const state = detectState('Done.', ['some output']);
+    assert.equal(state, 'done');
+  });
+
+  it('handles null last_assistant_message without throwing', () => {
+    const state = detectState(null, ['some output', '\u276f']);
+    assert.equal(state, 'idle_prompt');
   });
 });

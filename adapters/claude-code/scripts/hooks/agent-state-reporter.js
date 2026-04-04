@@ -155,6 +155,7 @@ function report(input) {
   } else {
     // Stop event — detect from pane buffer + last message
     const paneBuffer = capture(target, 15);
+    const lastMessage = input.last_assistant_message || null;
     state = detectState(lastMessage, paneBuffer);
   }
 
