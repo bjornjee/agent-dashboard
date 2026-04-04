@@ -46,7 +46,10 @@ type quoteMsg struct {
 	author string
 }
 type pinStateMsg struct{ err error }
-type rawKeySentMsg struct{ err error }
+type rawKeySentMsg struct {
+	err   error
+	label string // human-readable ack, e.g. "Plan approved"
+}
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {
 	err error

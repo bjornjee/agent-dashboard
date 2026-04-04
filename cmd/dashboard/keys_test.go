@@ -1289,8 +1289,6 @@ func TestSendReply_AllowsDifferentPane(t *testing.T) {
 	}
 }
 
-// -- Pending reply queue tests --
-
 func TestMergeGH_PinsToMerged(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mergeSessionID = "sess-456"
@@ -1308,5 +1306,110 @@ func TestMergeGH_PinsToMerged(t *testing.T) {
 	pinMsg := cmd()
 	if _, ok := pinMsg.(pinStateMsg); !ok {
 		t.Errorf("expected pinStateMsg, got %T", pinMsg)
+	}
+}
+
+func TestYKey_PlanState_SetsConfirmSendLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendLabel != "Plan approved" {
+		t.Errorf("expected label 'Plan approved', got %q", updated.confirmSendLabel)
+	}
+	if updated.confirmSendKey != "1" {
+		t.Errorf("expected sendKey '1' for plan approve, got %q", updated.confirmSendKey)
+	}
+}
+
+func TestNumberKey_BlockedState_SetsConfirmSendLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendLabel != "Sent '3'" {
+		t.Errorf("expected label \"Sent '3'\", got %q", updated.confirmSendLabel)
+	}
+}
+
+func TestConfirmSend_Esc_ClearsLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+	m.confirmSendLabel = "Plan approved"
+	m.statusMsg = "Send 'y' to agent?"
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := result.(model)
+	if updated.confirmSendLabel != "" {
+		t.Errorf("expected confirmSendLabel cleared, got %q", updated.confirmSendLabel)
+	}
+}
+
+func TestEditorKey_SetsInFlightStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.cfg.Editor = "vim"
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	updated := result.(model)
+	if updated.statusMsg != "Opening editor..." {
+		t.Errorf("expected 'Opening editor...', got %q", updated.statusMsg)
+	}
+	if updated.statusIsError {
+		t.Error("expected statusIsError=false for in-flight message")
+	}
+}
+
+func TestDiffKey_SetsInFlightStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	updated := result.(model)
+	if updated.statusMsg != "Loading diff..." {
+		t.Errorf("expected 'Loading diff...', got %q", updated.statusMsg)
+	}
+}
+
+func TestPRKey_SetsInFlightStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp", Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	updated := result.(model)
+	if updated.statusMsg != "Opening PR..." {
+		t.Errorf("expected 'Opening PR...', got %q", updated.statusMsg)
 	}
 }

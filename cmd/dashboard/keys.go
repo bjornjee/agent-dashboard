@@ -387,7 +387,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.confirmPaneID = ""
 			m.confirmSessionID = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -412,12 +412,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.ghAvailable {
 				m.mergeSessionID = sessionID
 				m.mergePaneID = paneID
-				m.statusMsg = "Merging PR..."
-				m.statusMsgTick = m.tickCount
+				m.setStatus("Merging PR...", false)
 				return m, mergePR(dir, branch)
 			}
-			m.statusMsg = "Marked as merged"
-			m.statusMsgTick = m.tickCount
+			m.setStatus("Marked as merged", false)
 			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 		case "n", "esc":
 			m.confirmMergeSessionID = ""
@@ -425,7 +423,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.confirmMergeDir = ""
 			m.confirmMergeBranch = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -440,16 +438,19 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			paneID := m.confirmSendPaneID
 			sendKey := m.confirmSendKey
+			label := m.confirmSendLabel
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
+			m.confirmSendLabel = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
-			return m, sendRawKey(paneID, sendKey)
+			m.clearStatus()
+			return m, sendRawKey(paneID, sendKey, label)
 		case "esc":
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
+			m.confirmSendLabel = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -465,12 +466,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			paneID := m.confirmJumpPaneID
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, jumpToAgent(paneID)
 		case "n", "esc":
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -625,7 +626,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selected > 0 {
 			m.saveCurrentCache()
 			m.selected--
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -636,7 +637,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selected < len(m.treeNodes)-1 {
 			m.saveCurrentCache()
 			m.selected++
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -688,7 +689,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if next != m.selected {
 			m.saveCurrentCache()
 			m.selected = next
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -701,7 +702,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if prev != m.selected {
 			m.saveCurrentCache()
 			m.selected = prev
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -723,7 +724,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot jump: tmux not detected"
+			m.setStatus("Cannot jump: tmux not detected", true)
 			return m, nil
 		}
 		if agent := m.selectedAgent(); agent != nil {
@@ -739,14 +740,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot reply: tmux not detected"
+			m.setStatus("Cannot reply: tmux not detected", true)
 			return m, nil
 		}
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
 			var cmds []tea.Cmd
 			// Plan state: send "3" (feedback option) before entering reply mode
 			if agent.State == "plan" {
-				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3"))
+				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3", "Plan feedback selected"))
 			}
 			m.mode = modeReply
 			m.textInput.Focus()
@@ -779,14 +780,23 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "e":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			m.statusMsg = "Opening editor..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
 			return m, openEditor(m.cfg.Editor, agent.EffectiveDir())
 		}
 	case "d":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			m.statusMsg = "Loading diff..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
 			return m, loadDiffCmd(agent.EffectiveDir())
 		}
 	case "g":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {
+			m.statusMsg = "Opening PR..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
 			cmds := []tea.Cmd{openPR(agent.EffectiveDir(), agent.Branch)}
 			if m.ghAvailable {
 				// Defer pinning to openPRMsg handler — only pin when PR actually exists
@@ -827,8 +837,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "a":
 		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot create session: tmux not detected"
-			m.statusMsgTick = m.tickCount
+			m.setStatus("Cannot create session: tmux not detected", true)
 			return m, nil
 		}
 		m.mode = modeCreateFolder
@@ -849,14 +858,17 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {
 				sendKey := key
+				label := fmt.Sprintf("Sent '%s'", key)
 				// Plan state: y→"1" (approve+bypass), n stays as "n"
 				if es == "plan" && key == "y" {
 					sendKey = "1"
+					label = "Plan approved"
 				}
 				m.mode = modeConfirmSend
 				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
 				m.confirmSendKey = sendKey
+				m.confirmSendLabel = label
 				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
 				m.statusMsgTick = -1 // pinned
 				return m, nil
@@ -873,6 +885,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
 				m.confirmSendKey = key
+				m.confirmSendLabel = fmt.Sprintf("Sent '%s'", key)
 				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
 				m.statusMsgTick = -1 // pinned
 				return m, nil
