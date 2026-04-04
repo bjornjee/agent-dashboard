@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // debugLogKey writes a line to the debug key log file (if open).
 // Format: timestamp | mode | key_string | key_type | runes_hex | mouse_age | phantom
-func (m model) debugLogKey(msg tea.KeyMsg) {
+func (m model) debugLogKey(msg tea.KeyPressMsg) {
 	if m.debugKeyLog == nil {
 		return
 	}
@@ -20,15 +19,8 @@ func (m model) debugLogKey(msg tea.KeyMsg) {
 	} else {
 		mouseAge = fmt.Sprintf("%dms", time.Since(m.lastEscapeAt).Milliseconds())
 	}
-	runeHex := ""
-	for i, r := range msg.Runes {
-		if i > 0 {
-			runeHex += ","
-		}
-		runeHex += fmt.Sprintf("0x%04x", r)
-	}
-	fmt.Fprintf(m.debugKeyLog, "%s | mode=%d | key=%q | type=%d | runes=[%s] | mouse_age=%s | phantom=%v\n",
-		time.Now().Format("15:04:05.000"), m.mode, msg.String(), msg.Type, runeHex, mouseAge, m.isPhantomKey())
+	fmt.Fprintf(m.debugKeyLog, "%s | mode=%d | key=%q | code=%d | text=%q | mouse_age=%s | phantom=%v\n",
+		time.Now().Format("15:04:05.000"), m.mode, msg.String(), msg.Key().Code, msg.Key().Text, mouseAge, m.isPhantomKey())
 }
 
 // confirmCooldown is the minimum time between entering a confirmation mode
@@ -50,9 +42,10 @@ func (m model) isPhantomKey() bool {
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	m.lastEscapeAt = time.Now()
+	mouse := msg.Mouse()
 	if m.debugKeyLog != nil {
-		fmt.Fprintf(m.debugKeyLog, "%s | MOUSE | button=%d action=%d x=%d y=%d\n",
-			time.Now().Format("15:04:05.000"), msg.Button, msg.Action, msg.X, msg.Y)
+		fmt.Fprintf(m.debugKeyLog, "%s | MOUSE | button=%d x=%d y=%d type=%T\n",
+			time.Now().Format("15:04:05.000"), mouse.Button, mouse.X, mouse.Y, msg)
 	}
 
 	// Help overlay: swallow mouse events
@@ -64,16 +57,16 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.diffVisible {
 		leftBorderEnd := m.diffLeftWidth + 2
 		var cmd tea.Cmd
-		if msg.X < leftBorderEnd {
+		if mouse.X < leftBorderEnd {
 			// Left-click selects a file/dir entry in the file list panel.
-			if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+			if click, ok := msg.(tea.MouseClickMsg); ok && click.Mouse().Button == tea.MouseLeft {
 				// Calculate which visible entry was clicked.
 				// Panel layout: 1 border + 1 header + (1 filter if active) + 1 blank = offset rows
 				headerRows := 3 // border + "FILES CHANGED" + blank line
 				if m.diffFilterActive || m.diffFilterText != "" {
 					headerRows++ // filter input line
 				}
-				clickedLine := msg.Y - m.bannerHeight() - headerRows + m.diffFileVP.YOffset
+				clickedLine := mouse.Y - m.bannerHeight() - headerRows + m.diffFileVP.YOffset()
 				if clickedLine >= 0 {
 					vis := m.visibleDiffEntries()
 					// Map clickedLine to a visible entry index, accounting for
@@ -122,7 +115,7 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	leftBorderEnd := m.leftWidth + 2
 
-	if msg.X < leftBorderEnd {
+	if mouse.X < leftBorderEnd {
 		var cmd tea.Cmd
 		m.agentListVP, cmd = m.agentListVP.Update(msg)
 		return m, cmd
@@ -140,21 +133,21 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Header takes ~defaultHeaderLines rows + 1 border
 	rightStart := 1 + m.bannerHeight() // top border + banner
 	filesStart := rightStart + defaultHeaderLines
-	historyStart := filesStart + m.filesVP.Height + 2     // +1 label +1 buffer
-	messageStart := historyStart + m.historyVP.Height + 2 // +1 label +1 buffer
+	historyStart := filesStart + m.filesVP.Height() + 2     // +1 label +1 buffer
+	messageStart := historyStart + m.historyVP.Height() + 2 // +1 label +1 buffer
 
 	var cmd tea.Cmd
-	if msg.Y >= messageStart {
+	if mouse.Y >= messageStart {
 		m.messageVP, cmd = m.messageVP.Update(msg)
-	} else if msg.Y >= historyStart {
+	} else if mouse.Y >= historyStart {
 		m.historyVP, cmd = m.historyVP.Update(msg)
-	} else if msg.Y >= filesStart {
+	} else if mouse.Y >= filesStart {
 		m.filesVP, cmd = m.filesVP.Update(msg)
 	}
 	return m, cmd
 }
 
-func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.debugLogKey(msg)
 	key := msg.String()
 
@@ -195,9 +188,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeCreateMessage
 			m.textInput.Reset()
 			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
-			m.textInput.Focus()
+			focusCmd := m.textInput.Focus()
 			m.updateRightContent()
-			return m, textinput.Blink
+			return m, focusCmd
 		case "esc":
 			m.mode = modeNormal
 			m.textInput.Reset()
@@ -248,20 +241,20 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.mode = modeCreateMessage
 			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
-			m.textInput.Focus()
+			focusCmd := m.textInput.Focus()
 			m.updateRightContent()
-			return m, textinput.Blink
+			return m, focusCmd
 		case "esc":
 			// Back to folder selection
 			m.mode = modeCreateFolder
 			m.selectedCreateSkill = 0
 			m.textInput.SetValue(m.createFolder)
 			m.textInput.CursorEnd()
-			m.textInput.Focus()
+			focusCmd := m.textInput.Focus()
 			m.suggestions = filterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
 			m.selectedSugg = 0
 			m.updateRightContent()
-			return m, textinput.Blink
+			return m, focusCmd
 		case "ctrl+c":
 			m.mode = modeNormal
 			m.textInput.Reset()
@@ -321,11 +314,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeCreateFolder
 			m.textInput.SetValue(m.createFolder)
 			m.textInput.CursorEnd()
-			m.textInput.Focus()
+			focusCmd := m.textInput.Focus()
 			m.suggestions = filterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
 			m.selectedSugg = 0
 			m.updateRightContent()
-			return m, textinput.Blink
+			return m, focusCmd
 		case "ctrl+c":
 			m.mode = modeNormal
 			m.textInput.Reset()
@@ -574,7 +567,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "{":
 			// Move cursor up by half viewport height.
-			half := m.diffFileVP.Height / 2
+			half := m.diffFileVP.Height() / 2
 			if half < 1 {
 				half = 1
 			}
@@ -582,34 +575,34 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "}":
 			// Move cursor down by half viewport height.
-			half := m.diffFileVP.Height / 2
+			half := m.diffFileVP.Height() / 2
 			if half < 1 {
 				half = 1
 			}
 			m.moveDiffCursor(half)
 			return m, nil
-		case "enter", " ":
+		case "enter", "space":
 			m.toggleDiffDir()
 			return m, nil
 		case "/":
 			m.diffFilterActive = true
-			m.diffFilterInput.Focus()
-			return m, textinput.Blink
+			focusCmd := m.diffFilterInput.Focus()
+			return m, focusCmd
 		case "e":
 			m.diffExpandedAll = !m.diffExpandedAll
 			m.updateDiffContent()
 			return m, nil
 		case "ctrl+d":
-			m.diffContentVP.HalfViewDown()
+			m.diffContentVP.HalfPageDown()
 			return m, nil
 		case "ctrl+u":
-			m.diffContentVP.HalfViewUp()
+			m.diffContentVP.HalfPageUp()
 			return m, nil
 		case "J":
-			m.diffContentVP.LineDown(1)
+			m.diffContentVP.ScrollDown(1)
 			return m, nil
 		case "K":
-			m.diffContentVP.LineUp(1)
+			m.diffContentVP.ScrollUp(1)
 			return m, nil
 		case "ctrl+c":
 			return m, tea.Quit
@@ -749,10 +742,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3"))
 			}
 			m.mode = modeReply
-			m.textInput.Focus()
+			focusCmd := m.textInput.Focus()
 			m.updateRightContent()
 			m.messageVP.GotoBottom()
-			cmds = append(cmds, textinput.Blink)
+			cmds = append(cmds, focusCmd)
 			return m, tea.Batch(cmds...)
 		}
 	case "p":
@@ -769,12 +762,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "J":
 		if m.planVisible && m.renderedPlan != "" {
-			m.messageVP.LineDown(1)
+			m.messageVP.ScrollDown(1)
 		}
 		return m, nil
 	case "K":
 		if m.planVisible && m.renderedPlan != "" {
-			m.messageVP.LineUp(1)
+			m.messageVP.ScrollUp(1)
 		}
 		return m, nil
 	case "e":
@@ -833,14 +826,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.mode = modeCreateFolder
 		m.textInput.Placeholder = "Git folder path (e.g. ~/code/myrepo)..."
-		m.textInput.Focus()
+		focusCmd := m.textInput.Focus()
 		if m.zEntries == nil {
 			m.zEntries = loadZEntries(m.cfg.Profile.SessionsDir)
 		}
 		m.suggestions = filterZSuggestions("", m.zEntries, m.pathExists)
 		m.selectedSugg = 0
 		m.updateRightContent()
-		return m, textinput.Blink
+		return m, focusCmd
 	case "y", "n":
 		if m.isPhantomKey() {
 			return m, nil
@@ -883,7 +876,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) scrollFocused(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) scrollFocused(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focusedVP {
 	case focusAgentList:

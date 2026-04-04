@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"image/color"
+
+	"charm.land/lipgloss/v2"
 )
 
 var quotes = []string{
@@ -252,7 +254,7 @@ var axolotlPixels = [][]int{
 	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 }
 
-var pxColors = map[int]lipgloss.Color{
+var pxColors = map[int]color.Color{
 	1: themePink,      // Gills/outline
 	2: themeRosewater, // Face/body
 	3: themeCrust,     // Eyes

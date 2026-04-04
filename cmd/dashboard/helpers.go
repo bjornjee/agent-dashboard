@@ -3,12 +3,13 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"image/color"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 )
 
 //go:embed catppuccin-frappe.json
@@ -34,10 +35,13 @@ func highlightLine(line string, width int) string {
 	// themeSurface1 = #51576d = RGB(81, 87, 109)
 	const bgCode = "\x1b[48;2;81;87;109m"
 	const boldCode = "\x1b[1m"
-	const reset = "\x1b[0m"
+	const resetFull = "\x1b[0m"
+	const resetShort = "\x1b[m"
 
 	// Re-apply background after each inner reset so it persists
-	inner := strings.ReplaceAll(line, reset, reset+bgCode+boldCode)
+	// lipgloss v2 uses \x1b[m instead of \x1b[0m
+	inner := strings.ReplaceAll(line, resetFull, resetFull+bgCode+boldCode)
+	inner = strings.ReplaceAll(inner, resetShort, resetShort+bgCode+boldCode)
 
 	// Pad to full width
 	visWidth := lipgloss.Width(line)
@@ -46,7 +50,7 @@ func highlightLine(line string, width int) string {
 		padding = strings.Repeat(" ", width-visWidth)
 	}
 
-	return bgCode + boldCode + inner + padding + reset
+	return bgCode + boldCode + inner + padding + resetFull
 }
 
 // repoFromCwd extracts the repo name from a working directory path.
@@ -97,7 +101,7 @@ func agentLabel(agent Agent) string {
 }
 
 // branchColor returns the theme color for a branch based on its prefix.
-func branchColor(branch string) lipgloss.Color {
+func branchColor(branch string) color.Color {
 	b := strings.ToLower(branch)
 	switch {
 	case b == "main" || b == "master":
@@ -205,7 +209,7 @@ func modelShort(model string) string {
 
 // permissionModeColor returns the ANSI 256 color for a permission mode,
 // matching Claude Code's visual language.
-func permissionModeColor(mode string) lipgloss.Color {
+func permissionModeColor(mode string) color.Color {
 	m := strings.ToLower(mode)
 	switch {
 	case strings.Contains(m, "plan"):

@@ -6,10 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
@@ -235,7 +234,7 @@ func TestReplyMode_ShowsInputBar(t *testing.T) {
 	m.updateRightContent()
 
 	// Enter reply mode
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = result.(model)
 
 	if m.mode != modeReply {
@@ -265,12 +264,12 @@ func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
 	m.updateRightContent()
 
 	// Enter reply mode
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = result.(model)
 
 	// Type "hello"
 	for _, ch := range "hello" {
-		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		result, _ = m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
 		m = result.(model)
 	}
 
@@ -297,11 +296,11 @@ func TestReplyMode_EscRestoresView(t *testing.T) {
 	m.updateRightContent()
 
 	// Enter reply mode
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = result.(model)
 
 	// Press esc
-	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	result, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = result.(model)
 
 	if m.mode != modeNormal {
@@ -327,7 +326,7 @@ func TestReplyMode_PlanStateNoPrematureReplySent(t *testing.T) {
 	m.tmuxAvailable = true
 
 	// Enter reply mode on a plan-state agent (presses "r")
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = result.(model)
 
 	if m.mode != modeReply {
@@ -356,7 +355,7 @@ func TestReplyMode_RawKeySendFailureShowsError(t *testing.T) {
 	m.tmuxAvailable = true
 
 	// Enter reply mode on plan-state agent
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = result.(model)
 
 	// Simulate raw key send failure
@@ -490,12 +489,12 @@ func TestCreateFolderMode_SuggestionsShown(t *testing.T) {
 	}
 
 	// Enter create folder mode
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	m = result.(model)
 
 	// Type partial path
 	for _, ch := range "skills" {
-		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		result, _ = m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
 		m = result.(model)
 	}
 
@@ -530,7 +529,7 @@ func TestCreateFolderMode_TabAcceptsSuggestion(t *testing.T) {
 	m.suggestions = filterZSuggestions("ski", m.zEntries, nil)
 
 	// Press tab to accept
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	rm := result.(model)
 
 	if rm.textInput.Value() != "/Users/bjornjee/Code/skills" {
@@ -643,7 +642,7 @@ func TestPlanToggle(t *testing.T) {
 		if !m.planVisible {
 			t.Fatal("planVisible should start true")
 		}
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		rm := result.(model)
 		if rm.planVisible {
 			t.Error("p should toggle planVisible off")
@@ -653,7 +652,7 @@ func TestPlanToggle(t *testing.T) {
 	t.Run("p toggles plan back on", func(t *testing.T) {
 		m := setup()
 		m.planVisible = false
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		rm := result.(model)
 		if !rm.planVisible {
 			t.Error("p should toggle planVisible on when plan content exists")
@@ -665,7 +664,7 @@ func TestPlanToggle(t *testing.T) {
 		m.planContent = ""
 		m.renderedPlan = ""
 		m.planVisible = false
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		rm := result.(model)
 		if rm.planVisible {
 			t.Error("p should not enable planVisible when there is no plan content")
@@ -680,7 +679,7 @@ func TestPlanToggle(t *testing.T) {
 		if !m.planVisible {
 			t.Fatal("planVisible should be true before navigation")
 		}
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		result, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		rm := result.(model)
 		if rm.planVisible {
 			t.Error("navigation should reset planVisible")
@@ -695,7 +694,7 @@ func TestPlanToggle(t *testing.T) {
 		}
 		m.buildTree()
 		m.selected = 1 // select subagent
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		rm := result.(model)
 		if rm.planVisible {
 			t.Error("p should not toggle plan when subagent is selected")
@@ -705,11 +704,11 @@ func TestPlanToggle(t *testing.T) {
 	t.Run("J scrolls plan down one line", func(t *testing.T) {
 		m := setup()
 		m.messageVP.SetContent(scrollableContent(100))
-		before := m.messageVP.YOffset
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		before := m.messageVP.YOffset()
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'J', Text: "J"})
 		rm := result.(model)
-		if rm.messageVP.YOffset != before+1 {
-			t.Errorf("J should scroll plan down by 1 line, got offset %d (was %d)", rm.messageVP.YOffset, before)
+		if rm.messageVP.YOffset() != before+1 {
+			t.Errorf("J should scroll plan down by 1 line, got offset %d (was %d)", rm.messageVP.YOffset(), before)
 		}
 	})
 
@@ -717,12 +716,12 @@ func TestPlanToggle(t *testing.T) {
 		m := setup()
 		m.messageVP.SetContent(scrollableContent(100))
 		// Scroll down first so we can scroll up
-		m.messageVP.LineDown(5)
-		before := m.messageVP.YOffset
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		m.messageVP.ScrollDown(5)
+		before := m.messageVP.YOffset()
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'K', Text: "K"})
 		rm := result.(model)
-		if rm.messageVP.YOffset != before-1 {
-			t.Errorf("K should scroll plan up by 1 line, got offset %d (was %d)", rm.messageVP.YOffset, before)
+		if rm.messageVP.YOffset() != before-1 {
+			t.Errorf("K should scroll plan up by 1 line, got offset %d (was %d)", rm.messageVP.YOffset(), before)
 		}
 	})
 
@@ -730,10 +729,10 @@ func TestPlanToggle(t *testing.T) {
 		m := setup()
 		m.planVisible = false
 		m.updateRightContent()
-		before := m.messageVP.YOffset
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+		before := m.messageVP.YOffset()
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'J', Text: "J"})
 		rm := result.(model)
-		if rm.messageVP.YOffset != before {
+		if rm.messageVP.YOffset() != before {
 			t.Error("J should not scroll messageVP when plan is not visible")
 		}
 	})
@@ -742,10 +741,10 @@ func TestPlanToggle(t *testing.T) {
 		m := setup()
 		m.planVisible = false
 		m.updateRightContent()
-		before := m.messageVP.YOffset
-		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+		before := m.messageVP.YOffset()
+		result, _ := m.Update(tea.KeyPressMsg{Code: 'K', Text: "K"})
 		rm := result.(model)
-		if rm.messageVP.YOffset != before {
+		if rm.messageVP.YOffset() != before {
 			t.Error("K should not scroll messageVP when plan is not visible")
 		}
 	})
@@ -1058,7 +1057,7 @@ func TestHelpBar_FitsWithinWidth(t *testing.T) {
 }
 
 func TestSelectedSubagent_PreservesIcon(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Setenv("COLORTERM", "truecolor")
 
 	m := newModel(testConfig(""), nil)
 	m.width = 80
@@ -1117,7 +1116,7 @@ func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
 }
 
 func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("NO_COLOR", "1")
 	m := newModel(testConfig("/tmp/test-state.json"), nil)
 	m.selfPaneID = "%0"
 	m.width = 120
@@ -1250,7 +1249,7 @@ func TestCreateSession_CallsResizeViewports(t *testing.T) {
 	m.resizeViewports()
 
 	origRightWidth := m.rightWidth
-	origFilesH := m.filesVP.Height
+	origFilesH := m.filesVP.Height()
 
 	// Simulate createSessionMsg
 	result, _ := m.Update(createSessionMsg{target: "main:2.0"})
@@ -1260,8 +1259,8 @@ func TestCreateSession_CallsResizeViewports(t *testing.T) {
 	if rm.rightWidth != origRightWidth {
 		t.Errorf("rightWidth changed after createSession: %d → %d", origRightWidth, rm.rightWidth)
 	}
-	if rm.filesVP.Height != origFilesH {
-		t.Errorf("filesVP.Height changed after createSession: %d → %d", origFilesH, rm.filesVP.Height)
+	if rm.filesVP.Height() != origFilesH {
+		t.Errorf("filesVP.Height changed after createSession: %d → %d", origFilesH, rm.filesVP.Height())
 	}
 }
 
@@ -1323,7 +1322,7 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 	m.historyConvLen = 1
 
 	// Navigate down to agent B
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	result, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	rm := result.(model)
 
 	if rm.selected != 1 {
@@ -1331,7 +1330,7 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 	}
 
 	// Navigate back up to agent A
-	result, _ = rm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	result, _ = rm.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	rm = result.(model)
 
 	if rm.selected != 0 {
@@ -1569,8 +1568,8 @@ func TestTickHandler_PeriodicStateReload(t *testing.T) {
 
 func testModelWithAgent(focus int) model {
 	m := newModel(testConfig(""), nil)
-	m.historyVP = viewport.New(40, 3)
-	m.messageVP = viewport.New(40, 3)
+	m.historyVP = viewport.New(viewport.WithWidth(40), viewport.WithHeight(3))
+	m.messageVP = viewport.New(viewport.WithWidth(40), viewport.WithHeight(3))
 	m.rightWidth = 44
 	m.agents = []Agent{{Target: "main:1.0", Window: 1, Pane: 0, State: "running"}}
 	m.buildTree()
@@ -1615,7 +1614,7 @@ func TestAutoScrollHistory_PreservesPositionWhenFocused(t *testing.T) {
 	result, _ = m.Update(conversationMsg{entries: entries, sessionKey: "test"})
 	m = result.(model)
 
-	if m.historyVP.YOffset != 0 {
+	if m.historyVP.YOffset() != 0 {
 		t.Error("history viewport should NOT auto-scroll when user is focused on it")
 	}
 }
@@ -1658,7 +1657,7 @@ func TestAutoScrollLive_PreservesPositionWhenFocused(t *testing.T) {
 	result, _ = m.Update(captureResultMsg{lines: lines})
 	m = result.(model)
 
-	if m.messageVP.YOffset != 0 {
+	if m.messageVP.YOffset() != 0 {
 		t.Error("message viewport should NOT auto-scroll when user is focused on it")
 	}
 }
@@ -1726,7 +1725,7 @@ func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
 	result, _ = m.Update(captureResultMsg{lines: lines})
 	m = result.(model)
 
-	if m.messageVP.YOffset != 0 {
+	if m.messageVP.YOffset() != 0 {
 		t.Error("message viewport should NOT auto-scroll when plan is visible — user may be reading the plan")
 	}
 }

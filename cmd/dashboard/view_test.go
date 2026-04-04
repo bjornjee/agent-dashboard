@@ -5,14 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
 
 func TestAgentListContentClampsWidth(t *testing.T) {
 	// Force ASCII output so lipgloss.Width is predictable.
-	// All tests in this package inherit this profile.
-	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("NO_COLOR", "1")
 
 	fixedTime := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC).Format(time.RFC3339)
 
@@ -70,7 +68,7 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 }
 
 func TestRenderHelpOverlayContainsSections(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("NO_COLOR", "1")
 
 	m := newModel(testConfig(""), nil)
 	m.width = 100
@@ -87,7 +85,7 @@ func TestRenderHelpOverlayContainsSections(t *testing.T) {
 }
 
 func TestSlimHelpBarContainsHHelp(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("NO_COLOR", "1")
 
 	m := newModel(testConfig(""), nil)
 	m.width = 120
@@ -115,7 +113,7 @@ func TestSlimHelpBarContainsHHelp(t *testing.T) {
 }
 
 func TestHelpBarWhenHelpVisible(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("NO_COLOR", "1")
 
 	m := newModel(testConfig(""), nil)
 	m.width = 120
