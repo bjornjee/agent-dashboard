@@ -56,6 +56,7 @@ type model struct {
 	statePath       string
 	selfPaneID      string
 	statusMsg       string
+	statusIsError   bool          // true = render in red, false = render in green
 	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
 	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
 	startupDone     bool          // set true when startupMsg arrives
@@ -132,6 +133,7 @@ type model struct {
 	// Send-key confirmation (guards against phantom keystrokes from mouse escape sequences)
 	confirmSendPaneID string // tmux pane ID for pending key send
 	confirmSendKey    string // key to send (y, n, 1-9)
+	confirmSendLabel  string // human-readable ack for the key send
 
 	// Jump confirmation (guards against phantom enter from mouse escape sequences)
 	confirmJumpPaneID string // tmux pane ID for pending jump
@@ -176,6 +178,19 @@ type model struct {
 
 	// Path validation for z suggestions (injectable for testing)
 	pathExists func(string) bool
+}
+
+// setStatus sets a timed status message. isError controls the display color.
+func (m *model) setStatus(msg string, isError bool) {
+	m.statusMsg = msg
+	m.statusIsError = isError
+	m.statusMsgTick = m.tickCount
+}
+
+// clearStatus resets the status message and error flag.
+func (m *model) clearStatus() {
+	m.statusMsg = ""
+	m.statusIsError = false
 }
 
 // buildTree rebuilds the flat tree node list from agents and their subagents.
@@ -539,11 +554,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-clear status message: errors get 6s, others 3s
 		if m.statusMsg != "" && m.statusMsgTick >= 0 {
 			ttl := 3
-			if strings.HasPrefix(m.statusMsg, "Create failed") || strings.HasPrefix(m.statusMsg, "Close failed") {
+			if m.statusIsError {
 				ttl = 6
 			}
 			if m.tickCount-m.statusMsgTick >= ttl {
-				m.statusMsg = ""
+				m.clearStatus()
 			}
 		}
 		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation()}
@@ -619,8 +634,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case createSessionMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Create failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("Create failed: %v", msg.err), true)
 			m.mode = modeNormal
 			return m, nil
 		}
@@ -675,11 +689,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case closeResultMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Close failed: %v", msg.err)
+			m.setStatus(fmt.Sprintf("Close failed: %v", msg.err), true)
 		} else {
-			m.statusMsg = "Pane closed"
+			m.setStatus("Pane closed", false)
 		}
-		m.statusMsgTick = m.tickCount
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), pruneDead(m.statePath))
 
 	case pruneDeadMsg:
@@ -700,42 +713,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case jumpResultMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Jump failed: %v", msg.err)
+			m.setStatus(fmt.Sprintf("Jump failed: %v", msg.err), true)
 		} else {
-			m.statusMsg = "Jumped — switch back to this window for dashboard"
+			m.setStatus("Jumped — switch back to this window for dashboard", false)
 		}
-		m.statusMsgTick = m.tickCount
 		return m, nil
 
 	case openEditorMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Editor failed: %v", msg.err)
+			m.setStatus(fmt.Sprintf("Editor failed: %v", msg.err), true)
 		} else {
-			m.statusMsg = fmt.Sprintf("Opened %s", m.cfg.Editor)
+			m.setStatus(fmt.Sprintf("Opened %s", m.cfg.Editor), false)
 		}
-		m.statusMsgTick = m.tickCount
 		return m, nil
 
 	case openPRMsg:
 		sessionID := m.openPRSessionID
 		m.openPRSessionID = ""
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("PR link failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("PR link failed: %v", msg.err), true)
 			return m, nil
 		}
 		// Deferred pin: when gh detected an existing PR, pin to "pr" now
 		if sessionID != "" && msg.hasPR {
-			m.statusMsg = "Opened PR page in browser"
-			m.statusMsgTick = m.tickCount
+			m.setStatus("Opened PR page in browser", false)
 			return m, pinAgentStateCmd(m.statePath, sessionID, "pr")
 		}
 		if msg.hasPR {
-			m.statusMsg = "Opened PR page in browser"
+			m.setStatus("Opened PR page in browser", false)
 		} else {
-			m.statusMsg = "Opened compare page in browser"
+			m.setStatus("Opened compare page in browser", false)
 		}
-		m.statusMsgTick = m.tickCount
 		return m, nil
 
 	case ghAvailableMsg:
@@ -747,59 +755,53 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mergeSessionID = ""
 		m.mergePaneID = ""
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Merge failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("Merge failed: %v", msg.err), true)
 			return m, nil
 		}
-		m.statusMsg = "PR merged"
-		m.statusMsgTick = m.tickCount
+		m.setStatus("PR merged", false)
 		return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 
 	case pinStateMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Pin state failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("Pin state failed: %v", msg.err), true)
 		}
 		return m, nil
 
 	case rawKeySentMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Key send failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("Key send failed: %v", msg.err), true)
 			// Exit reply mode since the pane is unreachable
 			if m.mode == modeReply {
 				m.mode = modeNormal
 				m.textInput.Reset()
 				m.updateRightContent()
 			}
+		} else if msg.label != "" {
+			m.setStatus(msg.label, false)
 		}
 		return m, nil
 
 	case sendResultMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Reply failed: %v", msg.err)
+			m.setStatus(fmt.Sprintf("Reply failed: %v", msg.err), true)
 		} else {
-			m.statusMsg = "Reply sent"
+			m.setStatus("Reply sent", false)
 		}
-		m.statusMsgTick = m.tickCount
 		return m, nil
 
 	case selectPaneMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Focus failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("Focus failed: %v", msg.err), true)
 		}
 		return m, nil
 
 	case diffMsg:
 		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("Diff failed: %v", msg.err)
-			m.statusMsgTick = m.tickCount
+			m.setStatus(fmt.Sprintf("Diff failed: %v", msg.err), true)
 			return m, nil
 		}
 		if len(msg.files) == 0 {
-			m.statusMsg = "No changes"
-			m.statusMsgTick = m.tickCount
+			m.setStatus("No changes", false)
 			return m, nil
 		}
 		m.diffFiles = msg.files

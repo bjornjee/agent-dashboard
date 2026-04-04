@@ -127,3 +127,29 @@ func TestHelpBarWhenHelpVisible(t *testing.T) {
 		t.Error("help bar when helpVisible should contain 'close' hint")
 	}
 }
+
+func TestStatusLine_SuccessVsError(t *testing.T) {
+	m := newModel(testConfig(""), nil)
+
+	// Success message should not be empty
+	m.statusMsg = "Reply sent"
+	m.statusIsError = false
+	s := m.statusLine()
+	if s == "" {
+		t.Error("expected non-empty status line for success message")
+	}
+	if !strings.Contains(s, "Reply sent") {
+		t.Errorf("expected status line to contain 'Reply sent', got %q", s)
+	}
+
+	// Error message should not be empty
+	m.statusMsg = "Key send failed: pane gone"
+	m.statusIsError = true
+	s = m.statusLine()
+	if s == "" {
+		t.Error("expected non-empty status line for error message")
+	}
+	if !strings.Contains(s, "Key send failed") {
+		t.Errorf("expected status line to contain 'Key send failed', got %q", s)
+	}
+}

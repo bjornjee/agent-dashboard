@@ -708,13 +708,13 @@ func mergePR(dir, branch string) tea.Cmd {
 	}
 }
 
-func sendRawKey(paneID, key string) tea.Cmd {
+func sendRawKey(paneID, key, label string) tea.Cmd {
 	return func() tea.Msg {
 		target := ResolveTarget(paneID)
 		if target == "" {
-			return rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", paneID)}
+			return rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", paneID), label: label}
 		}
-		return rawKeySentMsg{err: TmuxSendRaw(target, key)}
+		return rawKeySentMsg{err: TmuxSendRaw(target, key), label: label}
 	}
 }
 
