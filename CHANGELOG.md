@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.5.0](https://github.com/bjornjee/agent-dashboard/compare/v0.4.0...v0.5.0) (2026-04-04)
+
+
+### Features
+
+* add status feedback for user actions and color-code success vs error ([#112](https://github.com/bjornjee/agent-dashboard/issues/112)) ([c4ee4e8](https://github.com/bjornjee/agent-dashboard/commit/c4ee4e8115d471dd7550ec8f05f302f121056ce7))
+* auto-cleanup after PR merge with confirmation gate ([#132](https://github.com/bjornjee/agent-dashboard/issues/132)) ([1f1ea09](https://github.com/bjornjee/agent-dashboard/commit/1f1ea09f6c42fe5bbb954bf39d2dcecdf9651e02))
+* auto-dismiss plan overlay when agent leaves plan state ([#126](https://github.com/bjornjee/agent-dashboard/issues/126)) ([e7cf9ef](https://github.com/bjornjee/agent-dashboard/commit/e7cf9eff5f5f3e6d43fbe89dcd27fe3d66c86267))
+* centralize phantom keystroke defense with bubbletea v2 WithFilter ([#130](https://github.com/bjornjee/agent-dashboard/issues/130)) ([70a07c5](https://github.com/bjornjee/agent-dashboard/commit/70a07c5d60785c53a8a70fc1ba4e83985f76fdf0))
+* detect hook-blocked tool calls as permission state ([#118](https://github.com/bjornjee/agent-dashboard/issues/118)) ([70664f4](https://github.com/bjornjee/agent-dashboard/commit/70664f44475e6bfb37600a2071a0421dc741db29))
+* move status updates from right panel to help bar ([#124](https://github.com/bjornjee/agent-dashboard/issues/124)) ([f792816](https://github.com/bjornjee/agent-dashboard/commit/f792816838bafb505159a8108402bb7bc0a66b6b))
+* persist spawning spinner until agent state file appears on disk ([#125](https://github.com/bjornjee/agent-dashboard/issues/125)) ([dc3f378](https://github.com/bjornjee/agent-dashboard/commit/dc3f37811657f453fb15530b59b4afad4c614dff))
+* upgrade bubbletea to v2.0.2 ([#119](https://github.com/bjornjee/agent-dashboard/issues/119)) ([86a87a3](https://github.com/bjornjee/agent-dashboard/commit/86a87a3625d395cb901884fe1927794ebdc0a2e7))
+
+
+### Bug Fixes
+
+* account for lipgloss v2 border-inclusive Width/Height in panel rendering ([#120](https://github.com/bjornjee/agent-dashboard/issues/120)) ([d7e6071](https://github.com/bjornjee/agent-dashboard/commit/d7e6071bb5182d2083422d52a89d31efbb67a58d))
+* add periodic dedup to PruneDead for agents sharing the same tmux pane ([#105](https://github.com/bjornjee/agent-dashboard/issues/105)) ([3cd721b](https://github.com/bjornjee/agent-dashboard/commit/3cd721beaf22f33329b1a737383cf7f26400bbdb))
+* add singleton lock to prevent multiple dashboard instances ([#108](https://github.com/bjornjee/agent-dashboard/issues/108)) ([4bee6ff](https://github.com/bjornjee/agent-dashboard/commit/4bee6ff7b161b46543cc6ec5abfcae3462a599ec))
+* dedup stale agents sharing the same tmux pane in CleanStale ([#104](https://github.com/bjornjee/agent-dashboard/issues/104)) ([86d72e9](https://github.com/bjornjee/agent-dashboard/commit/86d72e970af611aace4c996745dd062600ad7571))
+* guard enter key against phantom keystrokes from mouse escape sequences ([f9306da](https://github.com/bjornjee/agent-dashboard/commit/f9306da73847efbfa380746e93a96b9e86dacc4d))
+* guard enter key against phantom keystrokes from mouse escape sequences ([10b72c3](https://github.com/bjornjee/agent-dashboard/commit/10b72c3c6151d9900400c2965a06ad420019297d))
+* guard mode-entry keys against phantom mouse escape keystrokes ([#114](https://github.com/bjornjee/agent-dashboard/issues/114)) ([f7b2fa1](https://github.com/bjornjee/agent-dashboard/commit/f7b2fa1c83c68aad6345b9193c357f4ae49ac849))
+* guard mode-entry keys against phantom repeats after mode transitions ([#117](https://github.com/bjornjee/agent-dashboard/issues/117)) ([443ae3a](https://github.com/bjornjee/agent-dashboard/commit/443ae3a0a9431c9b0894c9926c389f702ad1856d))
+* prevent PostToolUse race from overwriting Stop-derived states ([#121](https://github.com/bjornjee/agent-dashboard/issues/121)) ([#121](https://github.com/bjornjee/agent-dashboard/issues/121)) ([4960e49](https://github.com/bjornjee/agent-dashboard/commit/4960e494aa867c83d678ddb288a98b4280180822))
+* queue merge cleanup replies instead of injecting via tmux send-keys ([#107](https://github.com/bjornjee/agent-dashboard/issues/107)) ([859e7a8](https://github.com/bjornjee/agent-dashboard/commit/859e7a8864aed17733918d2f5725c4369b5efcbd))
+* remove --delete-branch from gh pr merge to avoid false errors ([#123](https://github.com/bjornjee/agent-dashboard/issues/123)) ([1a87e40](https://github.com/bjornjee/agent-dashboard/commit/1a87e409618c5c55374235e27af707a47765e9f2))
+* remove auto-injection of merge cleanup message into agent panes ([#115](https://github.com/bjornjee/agent-dashboard/issues/115)) ([faf2a4f](https://github.com/bjornjee/agent-dashboard/commit/faf2a4f17ff7bbdc846714367c4769956f396bb6))
+* remove duplicate const that broke files-changed list ([#127](https://github.com/bjornjee/agent-dashboard/issues/127)) ([7ee636c](https://github.com/bjornjee/agent-dashboard/commit/7ee636c343f6a44ae858d0cb5a713e43a7bdb4eb))
+* resolve undefined lastMessage in Stop hook causing stuck running state ([#131](https://github.com/bjornjee/agent-dashboard/issues/131)) ([75c256b](https://github.com/bjornjee/agent-dashboard/commit/75c256b5268734d125ad5793acb9e7553bdb20dc))
+* suppress auto-scroll when mouse hovers over viewport ([#133](https://github.com/bjornjee/agent-dashboard/issues/133)) ([8c1b935](https://github.com/bjornjee/agent-dashboard/commit/8c1b93519b2291c3539130044938044fb46fb6b9))
+* use worktree cwd in block-main-commit and test-gate hooks ([#113](https://github.com/bjornjee/agent-dashboard/issues/113)) ([a2d5823](https://github.com/bjornjee/agent-dashboard/commit/a2d58233119a238651c99b721a4e0232a901cded))
+
 ## [0.4.0](https://github.com/bjornjee/agent-dashboard/compare/v0.3.0...v0.4.0) (2026-04-03)
 
 
