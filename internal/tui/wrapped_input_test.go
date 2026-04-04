@@ -142,6 +142,34 @@ func TestRenderWrappedInput_Placeholder(t *testing.T) {
 	}
 }
 
+func TestRenderWrappedInput_IndentedWrapping(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	// With a prefix, continuation lines get the prefix prepended.
+	// The wrapping width should account for the prefix so that
+	// continuation lines (prefix + content) don't exceed the width.
+	prefix := "        " // 8 chars
+	width := 20
+	text := strings.Repeat("x", 50)
+	out := renderWrappedInput(text, 0, width, false, nil, prefix)
+	lines := strings.Split(out, "\n")
+
+	if len(lines) < 2 {
+		t.Fatalf("expected multiple lines, got %d", len(lines))
+	}
+
+	// First line has no prefix — should be at most width runes.
+	if got := len([]rune(lines[0])); got > width {
+		t.Errorf("line 0 is %d runes wide (want <= %d): %q", got, width, lines[0])
+	}
+	// Continuation lines include prefix — should also be at most width runes.
+	for i := 1; i < len(lines); i++ {
+		if got := len([]rune(lines[i])); got > width {
+			t.Errorf("line %d is %d runes wide (want <= %d): %q", i, got, width, lines[i])
+		}
+	}
+}
+
 func TestRenderWrappedInput_NilSkills(t *testing.T) {
 	// Should not panic
 	out := renderWrappedInput("/feature test", 0, 40, true, nil)

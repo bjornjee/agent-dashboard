@@ -1739,3 +1739,56 @@ func TestPhantomFilter_PassesThroughNonNormalModeKeys(t *testing.T) {
 		t.Error("keys in modeReply should not be phantom-filtered")
 	}
 }
+
+func TestReplyMode_ViewportScrollsToBottom(t *testing.T) {
+	// When typing in reply mode, the viewport must scroll to the bottom
+	// so that the reply input (including wrapped continuation lines) stays visible.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].State = "done"
+	m.selected = 0
+	m.buildTree()
+	m.width = 80
+	m.height = 40
+	m.resizeViewports()
+
+	// Add a long assistant message to push the reply input below the viewport
+	longMsg := strings.Repeat("This is a long assistant message line.\n", 50)
+	m.conversation = []domain.ConversationEntry{
+		{Role: "assistant", Content: longMsg},
+	}
+
+	// Enter reply mode and scroll to bottom (as the real code does)
+	m.mode = modeReply
+	m.textInput.Focus()
+	m.updateRightContent()
+	m.messageVP.GotoBottom()
+
+	// Verify the content is taller than the viewport (precondition)
+	vpHeight := m.messageVP.Height()
+	totalLines := m.messageVP.TotalLineCount()
+	if totalLines <= vpHeight {
+		t.Fatalf("precondition: content (%d lines) must exceed viewport height (%d)", totalLines, vpHeight)
+	}
+
+	// Now scroll UP to simulate the viewport being away from bottom
+	// (this simulates what happens when content grows without auto-scroll)
+	m.messageVP.SetYOffset(0)
+	if m.messageVP.AtBottom() {
+		t.Fatal("precondition: viewport should not be at bottom after scrolling to top")
+	}
+
+	// Type enough text to cause wrapping
+	longReply := strings.Repeat("a", 200)
+	m.textInput.SetValue(longReply)
+	m.textInput.SetCursor(len(longReply))
+
+	// Simulate a key press to trigger the update path in reply mode
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	rm := result.(model)
+
+	// The viewport should be at the bottom so the reply is visible
+	if !rm.messageVP.AtBottom() {
+		t.Error("viewport should scroll to bottom in reply mode after typing, so reply text is visible")
+	}
+}

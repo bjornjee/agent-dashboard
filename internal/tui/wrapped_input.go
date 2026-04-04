@@ -25,6 +25,33 @@ func softWrapRunes(runes []rune, width int) [][]rune {
 	return rows
 }
 
+// softWrapRunesTwoWidth splits runes using firstWidth for the first row
+// and contWidth for all subsequent rows. When firstWidth == contWidth it
+// behaves identically to softWrapRunes.
+func softWrapRunesTwoWidth(runes []rune, firstWidth, contWidth int) [][]rune {
+	if firstWidth <= 0 {
+		firstWidth = 1
+	}
+	if contWidth <= 0 {
+		contWidth = 1
+	}
+	if len(runes) <= firstWidth {
+		return [][]rune{runes}
+	}
+	var rows [][]rune
+	rows = append(rows, runes[:firstWidth])
+	remaining := runes[firstWidth:]
+	for len(remaining) > 0 {
+		w := contWidth
+		if w > len(remaining) {
+			w = len(remaining)
+		}
+		rows = append(rows, remaining[:w])
+		remaining = remaining[w:]
+	}
+	return rows
+}
+
 // isSlashCommand checks whether runes[start] begins a /skill command.
 // The slash must be at position 0 or preceded by a space.
 // Returns the exclusive end index and whether a match was found.
@@ -76,6 +103,16 @@ func renderWrappedInput(value string, cursorPos int, width int, focused bool, sk
 		width = 1
 	}
 
+	// Continuation lines get the prefix prepended, so their content
+	// width must be reduced to keep the total line within width.
+	contWidth := width
+	if prefix != "" {
+		contWidth = width - len([]rune(prefix))
+		if contWidth < 1 {
+			contWidth = 1
+		}
+	}
+
 	runes := []rune(value)
 
 	// Empty input: show cursor block when focused, placeholder otherwise.
@@ -100,7 +137,7 @@ func renderWrappedInput(value string, cursorPos int, width int, focused bool, sk
 		}
 	}
 
-	rows := softWrapRunes(runes, width)
+	rows := softWrapRunesTwoWidth(runes, width, contWidth)
 
 	// Map cursorPos to (row, col).
 	cursorRow, cursorCol := -1, -1
@@ -109,16 +146,24 @@ func renderWrappedInput(value string, cursorPos int, width int, focused bool, sk
 		if pos == len(runes) {
 			lastRow := len(rows) - 1
 			lastLen := len(rows[lastRow])
-			if lastLen >= width {
+			rowWidth := contWidth
+			if lastRow == 0 {
+				rowWidth = width
+			}
+			if lastLen >= rowWidth {
 				cursorRow = lastRow + 1
 				cursorCol = 0
 			} else {
 				cursorRow = lastRow
 				cursorCol = lastLen
 			}
+		} else if pos < width {
+			cursorRow = 0
+			cursorCol = pos
 		} else {
-			cursorRow = pos / width
-			cursorCol = pos % width
+			adjusted := pos - width
+			cursorRow = 1 + adjusted/contWidth
+			cursorCol = adjusted % contWidth
 		}
 	}
 
