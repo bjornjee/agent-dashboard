@@ -1082,8 +1082,8 @@ func TestConfirmMerge_PhantomKey_Swallowed(t *testing.T) {
 }
 
 func TestConfirmCooldown_RejectsPhantomConfirmation(t *testing.T) {
-	// A confirmation arriving within the cooldown period should be ignored.
-	// This guards against phantom keystrokes from escape sequences.
+	// A confirmation arriving within the cooldown period should be swallowed
+	// by PhantomFilter before reaching handleKey.
 	tests := []struct {
 		name string
 		mode int
@@ -1101,30 +1101,18 @@ func TestConfirmCooldown_RejectsPhantomConfirmation(t *testing.T) {
 			m := NewModel(testConfig(t.TempDir()), nil)
 			m.mode = tt.mode
 			m.confirmEnteredAt = time.Now() // just entered — within cooldown
-			m.confirmMergeSessionID = "sess1"
-			m.confirmMergePaneID = "%5"
-			m.confirmMergeDir = t.TempDir()
-			m.confirmMergeBranch = "feat/test"
-			m.confirmSendPaneID = "%5"
-			m.confirmSendKey = "y"
-			m.confirmJumpPaneID = "%5"
-			m.confirmPaneID = "%5"
-			m.confirmSessionID = "sess1"
 
-			result, cmd := m.handleKey(tt.key)
-			if cmd != nil {
-				t.Fatal("expected nil cmd — confirmation should be rejected during cooldown")
-			}
-			updated := result.(model)
-			if updated.mode != tt.mode {
-				t.Errorf("expected to stay in %d, got %d", tt.mode, updated.mode)
+			result := PhantomFilter(m, tt.key)
+			if result != nil {
+				t.Fatal("expected nil — confirmation should be swallowed by PhantomFilter during cooldown")
 			}
 		})
 	}
 }
 
 func TestConfirmCooldown_AcceptsAfterCooldown(t *testing.T) {
-	// A confirmation arriving after the cooldown should be accepted.
+	// A confirmation arriving after the cooldown passes PhantomFilter and
+	// is processed normally by handleKey.
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.mode = modeConfirmMerge
 	m.confirmEnteredAt = time.Now().Add(-time.Second) // well past cooldown
@@ -1146,8 +1134,8 @@ func TestConfirmCooldown_AcceptsAfterCooldown(t *testing.T) {
 }
 
 func TestPhantomKey_EnterRejected(t *testing.T) {
-	// A phantom Enter (from a fragmented mouse escape sequence) should not
-	// trigger the "Jump to agent?" confirmation prompt.
+	// A phantom Enter (from a fragmented mouse escape sequence) should be
+	// swallowed by PhantomFilter.
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.agents = []domain.Agent{
@@ -1156,15 +1144,14 @@ func TestPhantomKey_EnterRejected(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now() // mouse event just happened
 
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	updated := result.(model)
-	if updated.mode != modeNormal {
-		t.Errorf("phantom Enter should be rejected; got mode %d, want modeNormal", updated.mode)
+	result := PhantomFilter(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if result != nil {
+		t.Error("phantom Enter should be swallowed by PhantomFilter")
 	}
 }
 
 func TestPhantomKey_MergeRejected(t *testing.T) {
-	// A phantom "m" from a mouse escape sequence should not enter modeConfirmMerge.
+	// A phantom "m" from a mouse escape sequence should be swallowed by PhantomFilter.
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.agents = []domain.Agent{
@@ -1174,15 +1161,14 @@ func TestPhantomKey_MergeRejected(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now()
 
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
-	updated := result.(model)
-	if updated.mode != modeNormal {
-		t.Errorf("phantom 'm' should be rejected; got mode %d, want modeNormal", updated.mode)
+	result := PhantomFilter(m, tea.KeyPressMsg{Code: 'm', Text: "m"})
+	if result != nil {
+		t.Error("phantom 'm' should be swallowed by PhantomFilter")
 	}
 }
 
 func TestPhantomKey_CloseRejected(t *testing.T) {
-	// A phantom "x" should not enter modeConfirmClose.
+	// A phantom "x" should be swallowed by PhantomFilter.
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.agents = []domain.Agent{
@@ -1191,10 +1177,9 @@ func TestPhantomKey_CloseRejected(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now()
 
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
-	updated := result.(model)
-	if updated.mode != modeNormal {
-		t.Errorf("phantom 'x' should be rejected; got mode %d, want modeNormal", updated.mode)
+	result := PhantomFilter(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if result != nil {
+		t.Error("phantom 'x' should be swallowed by PhantomFilter")
 	}
 }
 
@@ -1252,11 +1237,9 @@ func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
 	m.lastEscapeAt = time.Now() // focus event just happened
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, _ := m.handleKey(msg)
-	rm := result.(model)
-
-	if rm.mode != modeNormal {
-		t.Errorf("enter should be rejected as phantom after focus event, got mode %d", rm.mode)
+	result := PhantomFilter(m, msg)
+	if result != nil {
+		t.Error("enter should be swallowed as phantom after focus event")
 	}
 }
 
@@ -1283,7 +1266,7 @@ func TestIsSelfPane_EmptySelfSkipsGuard(t *testing.T) {
 func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
 	// When Enter submits a reply in modeReply, transitioning to modeNormal,
 	// a rapid follow-up Enter (phantom from key release or terminal artefact)
-	// must NOT trigger modeConfirmJump.
+	// must be swallowed by PhantomFilter.
 	m := newTestModelWithAgents()
 	m.agents[0].TmuxPaneID = "%5"
 	m.mode = modeReply
@@ -1297,17 +1280,16 @@ func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
 		t.Fatalf("expected modeNormal after reply submit, got %d", rm.mode)
 	}
 
-	// Immediately press Enter again (phantom).
-	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	rm2 := result2.(model)
-	if rm2.mode == modeConfirmJump {
-		t.Errorf("phantom Enter after reply submit should NOT trigger modeConfirmJump")
+	// Immediately press Enter again (phantom) — filter should swallow it.
+	filtered := PhantomFilter(rm, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if filtered != nil {
+		t.Error("phantom Enter after reply submit should be swallowed by PhantomFilter")
 	}
 }
 
 func TestPhantomEnter_AfterConfirmSend(t *testing.T) {
 	// When Enter confirms a key send in modeConfirmSend, a rapid follow-up
-	// Enter must NOT trigger modeConfirmJump.
+	// Enter must be swallowed by PhantomFilter.
 	m := newTestModelWithAgents()
 	m.agents[0].TmuxPaneID = "%5"
 	m.agents[0].State = "waiting"
@@ -1324,17 +1306,16 @@ func TestPhantomEnter_AfterConfirmSend(t *testing.T) {
 		t.Fatalf("expected modeNormal after confirm send, got %d", rm.mode)
 	}
 
-	// Immediately press Enter again (phantom).
-	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	rm2 := result2.(model)
-	if rm2.mode == modeConfirmJump {
-		t.Errorf("phantom Enter after confirm-send should NOT trigger modeConfirmJump")
+	// Immediately press Enter again (phantom) — filter should swallow it.
+	filtered := PhantomFilter(rm, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if filtered != nil {
+		t.Error("phantom Enter after confirm-send should be swallowed by PhantomFilter")
 	}
 }
 
 func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
 	// When Enter submits in modeCreateMessage, a rapid follow-up Enter
-	// must NOT trigger modeConfirmJump.
+	// must be swallowed by PhantomFilter.
 	m := newTestModelWithAgents()
 	m.agents[0].TmuxPaneID = "%5"
 	m.mode = modeCreateMessage
@@ -1348,11 +1329,10 @@ func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
 		t.Fatalf("expected modeNormal after create message submit, got %d", rm.mode)
 	}
 
-	// Immediately press Enter again (phantom).
-	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	rm2 := result2.(model)
-	if rm2.mode == modeConfirmJump {
-		t.Errorf("phantom Enter after create-message should NOT trigger modeConfirmJump")
+	// Immediately press Enter again (phantom) — filter should swallow it.
+	filtered := PhantomFilter(rm, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if filtered != nil {
+		t.Error("phantom Enter after create-message should be swallowed by PhantomFilter")
 	}
 }
 
@@ -1371,8 +1351,15 @@ func TestRealEnter_AfterCooldown(t *testing.T) {
 	// Simulate time passing beyond the cooldown.
 	rm.modeResetAt = time.Now().Add(-time.Second)
 
+	// Verify PhantomFilter lets the key through.
+	enterMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	filtered := PhantomFilter(rm, enterMsg)
+	if filtered == nil {
+		t.Fatal("real Enter after cooldown should pass through PhantomFilter")
+	}
+
 	// Now press Enter — should work normally.
-	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	result2, _ := rm.handleKey(enterMsg)
 	rm2 := result2.(model)
 	if rm2.mode != modeConfirmJump {
 		t.Errorf("real Enter after cooldown should trigger modeConfirmJump, got mode %d", rm2.mode)
@@ -1501,5 +1488,136 @@ func TestPRKey_SetsInFlightStatus(t *testing.T) {
 	updated := result.(model)
 	if updated.statusMsg != "Opening PR..." {
 		t.Errorf("expected 'Opening PR...', got %q", updated.statusMsg)
+	}
+}
+
+// -- PhantomFilter tests --
+
+func TestPhantomFilter_SwallowsDestructiveKeyDuringEscapeCooldown(t *testing.T) {
+	destructiveKeys := []tea.KeyPressMsg{
+		{Code: 'x', Text: "x"},
+		{Code: tea.KeyEnter},
+		{Code: 'r', Text: "r"},
+		{Code: 'm', Text: "m"},
+		{Code: 'y', Text: "y"},
+		{Code: 'n', Text: "n"},
+		{Code: '1', Text: "1"},
+		{Code: '5', Text: "5"},
+		{Code: '9', Text: "9"},
+	}
+	for _, key := range destructiveKeys {
+		t.Run(key.String(), func(t *testing.T) {
+			m := newTestModelWithAgents()
+			m.lastEscapeAt = time.Now() // mouse event just happened
+			result := PhantomFilter(m, key)
+			if result != nil {
+				t.Errorf("expected nil (swallowed) for destructive key %q during escape cooldown", key.String())
+			}
+		})
+	}
+}
+
+func TestPhantomFilter_AllowsNavigationKeyDuringEscapeCooldown(t *testing.T) {
+	navKeys := []tea.KeyPressMsg{
+		{Code: 'j', Text: "j"},
+		{Code: 'k', Text: "k"},
+		{Code: tea.KeyTab},
+		{Code: 'q', Text: "q"},
+		{Code: 'c', Text: "c"},
+		{Code: 'h', Text: "h"},
+	}
+	for _, key := range navKeys {
+		t.Run(key.String(), func(t *testing.T) {
+			m := newTestModelWithAgents()
+			m.lastEscapeAt = time.Now()
+			result := PhantomFilter(m, key)
+			if result == nil {
+				t.Errorf("navigation key %q should NOT be swallowed", key.String())
+			}
+		})
+	}
+}
+
+func TestPhantomFilter_SwallowsKeyDuringModeResetCooldown(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.modeResetAt = time.Now() // just transitioned back to normal
+
+	result := PhantomFilter(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if result != nil {
+		t.Error("enter should be swallowed during mode reset cooldown")
+	}
+}
+
+func TestPhantomFilter_AllowsKeyAfterCooldownExpires(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.lastEscapeAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
+
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result := PhantomFilter(m, msg)
+	if result == nil {
+		t.Error("key should pass through after cooldown expires")
+	}
+}
+
+func TestPhantomFilter_SwallowsConfirmKeyDuringConfirmCooldown(t *testing.T) {
+	tests := []struct {
+		name string
+		mode int
+		key  tea.KeyPressMsg
+	}{
+		{"close_y", modeConfirmClose, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"merge_y", modeConfirmMerge, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"send_enter", modeConfirmSend, tea.KeyPressMsg{Code: tea.KeyEnter}},
+		{"jump_y", modeConfirmJump, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"jump_enter", modeConfirmJump, tea.KeyPressMsg{Code: tea.KeyEnter}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(testConfig(t.TempDir()), nil)
+			m.mode = tt.mode
+			m.confirmEnteredAt = time.Now() // just entered — within cooldown
+			result := PhantomFilter(m, tt.key)
+			if result != nil {
+				t.Errorf("confirm key should be swallowed during cooldown in mode %d", tt.mode)
+			}
+		})
+	}
+}
+
+func TestPhantomFilter_AllowsConfirmKeyAfterCooldown(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = time.Now().Add(-time.Second) // well past cooldown
+
+	msg := tea.KeyPressMsg{Code: 'y', Text: "y"}
+	result := PhantomFilter(m, msg)
+	if result == nil {
+		t.Error("confirm key should pass through after cooldown")
+	}
+}
+
+func TestPhantomFilter_PassesThroughNonKeyMessages(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.lastEscapeAt = time.Now()
+
+	// Mouse messages should pass through even during cooldown
+	msg := tea.MouseMotionMsg{}
+	result := PhantomFilter(m, msg)
+	if result == nil {
+		t.Error("non-key messages should always pass through")
+	}
+}
+
+func TestPhantomFilter_PassesThroughNonNormalModeKeys(t *testing.T) {
+	// In non-normal, non-confirm modes (e.g. reply), destructive keys pass through
+	// because they're being used as text input, not actions.
+	m := newTestModelWithAgents()
+	m.mode = modeReply
+	m.lastEscapeAt = time.Now()
+
+	msg := tea.KeyPressMsg{Code: 'x', Text: "x"}
+	result := PhantomFilter(m, msg)
+	if result == nil {
+		t.Error("keys in modeReply should not be phantom-filtered")
 	}
 }
