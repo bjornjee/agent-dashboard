@@ -792,6 +792,79 @@ func TestPlanMsg_NoAutoShow(t *testing.T) {
 	}
 }
 
+func TestPlanVisible_AutoDismissOnStateChange(t *testing.T) {
+	t.Run("cleared when agent leaves plan state", func(t *testing.T) {
+		m := NewModel(testConfig(""), nil)
+		m.width = 120
+		m.height = 40
+		m.resizeViewports()
+		m.agents = []domain.Agent{
+			{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
+		}
+		m.buildTree()
+		m.planVisible = true
+		m.planContent = "# My Plan"
+		m.renderedPlan = "rendered"
+
+		// Agent transitions to running
+		result, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+			Agents: map[string]domain.Agent{
+				"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+			},
+		}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("planVisible should be auto-cleared when agent leaves plan state")
+		}
+	})
+
+	t.Run("preserved when agent is still in plan state", func(t *testing.T) {
+		m := NewModel(testConfig(""), nil)
+		m.width = 120
+		m.height = 40
+		m.resizeViewports()
+		m.agents = []domain.Agent{
+			{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
+		}
+		m.buildTree()
+		m.planVisible = true
+		m.planContent = "# My Plan"
+		m.renderedPlan = "rendered"
+
+		result, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+			Agents: map[string]domain.Agent{
+				"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
+			},
+		}})
+		rm := result.(model)
+		if !rm.planVisible {
+			t.Error("planVisible should be preserved when agent is still in plan state")
+		}
+	})
+
+	t.Run("cleared when selected agent disappears", func(t *testing.T) {
+		m := NewModel(testConfig(""), nil)
+		m.width = 120
+		m.height = 40
+		m.resizeViewports()
+		m.agents = []domain.Agent{
+			{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
+		}
+		m.buildTree()
+		m.planVisible = true
+		m.planContent = "# My Plan"
+
+		// State update with no agents
+		result, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+			Agents: map[string]domain.Agent{},
+		}})
+		rm := result.(model)
+		if rm.planVisible {
+			t.Error("planVisible should be cleared when selected agent disappears")
+		}
+	})
+}
+
 // scrollableContent returns n lines of text suitable for testing viewport scrolling.
 func scrollableContent(n int) string {
 	var b strings.Builder

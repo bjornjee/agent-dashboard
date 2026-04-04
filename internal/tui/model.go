@@ -528,6 +528,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				c.convFileOffset = 0
 			}
 		}
+		// Auto-dismiss plan overlay when agent leaves plan state
+		if m.planVisible {
+			if a := m.selectedAgent(); a == nil || a.State != "plan" {
+				m.planVisible = false
+				m.planContent = ""
+				m.renderedPlan = ""
+			}
+		}
 		m.updateLeftContent()
 		m.updateRightContent()
 		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir), m.loadPlan()}
