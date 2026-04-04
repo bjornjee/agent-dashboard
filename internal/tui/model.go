@@ -828,6 +828,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffCursor = 0
 		m.diffVisible = true
 		m.updateDiffContent()
+		m.clearStatus()
 		return m, nil
 
 	case tea.FocusMsg:
