@@ -603,6 +603,95 @@ func HasPendingQuestion(projDir, sessionID string) bool {
 	return hasPendingToolCall(projDir, sessionID, "AskUserQuestion")
 }
 
+// LastPendingBlockingTool scans the JSONL tail and returns which blocking
+// tool (ExitPlanMode or AskUserQuestion) appeared most recently with no
+// human message after it. Returns "plan", "question", or "" if neither
+// is pending. This resolves the ambiguity when both tools are pending —
+// the most recent one wins.
+func LastPendingBlockingTool(projDir, sessionID string) string {
+	path := filepath.Join(projDir, sessionID+".jsonl")
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	const tailSize = 32 * 1024
+	stat, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	if stat.Size() > tailSize {
+		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
+			return ""
+		}
+		// Skip the partial first line after seeking mid-file.
+		var oneByte [1]byte
+		for {
+			_, err := f.Read(oneByte[:])
+			if err != nil || oneByte[0] == '\n' {
+				break
+			}
+		}
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, tailSize), 1024*1024)
+
+	// Track the most recent blocking tool seen and whether a human
+	// message appeared after it.
+	lastTool := "" // "plan" or "question"
+	humanAfter := false
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		var entry jsonlEntry
+		if json.Unmarshal(line, &entry) != nil {
+			continue
+		}
+
+		switch entry.Type {
+		case "assistant":
+			var env messageEnvelope
+			if json.Unmarshal(entry.Message, &env) != nil {
+				continue
+			}
+			var blocks []toolUseBlock
+			if json.Unmarshal(env.Content, &blocks) != nil {
+				continue
+			}
+			// Scan all blocks — the last matching blocking tool in
+			// this message wins (handles both tools in one message).
+			for _, b := range blocks {
+				if b.Type != "tool_use" {
+					continue
+				}
+				switch b.Name {
+				case "ExitPlanMode":
+					lastTool = "plan"
+					humanAfter = false
+				case "AskUserQuestion":
+					lastTool = "question"
+					humanAfter = false
+				}
+			}
+		case "user":
+			if lastTool != "" && isHumanUserEntry(entry.Message) {
+				humanAfter = true
+			}
+		}
+	}
+
+	if lastTool != "" && !humanAfter {
+		return lastTool
+	}
+	return ""
+}
+
 // hasPendingToolCall checks if the most recent tool_use with the given name
 // has no subsequent human user message. System-generated tool_result
 // entries are not counted as human input.

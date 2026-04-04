@@ -166,7 +166,8 @@ func ApplyPinnedStates(sf *domain.StateFile) {
 
 // ApplyIdleOverrides checks each idle_prompt or permission agent for a pending
 // plan review (ExitPlanMode) or pending question (AskUserQuestion) and
-// overrides the state accordingly. Plan takes priority over question.
+// overrides the state accordingly. The most recently seen blocking tool wins —
+// if AskUserQuestion appears after ExitPlanMode, "question" takes precedence.
 // Permission agents are included because the plan selection menu is
 // classified as "permission" by hooks. Running agents are skipped — the
 // PostToolUse hook's stop-state guard prevents the race that used to leave
@@ -185,11 +186,8 @@ func ApplyIdleOverrides(sf *domain.StateFile, projectsDir string) {
 		if sessionID == "" {
 			continue
 		}
-		if conversation.HasPendingPlanReview(projDir, sessionID) {
-			agent.State = "plan"
-			sf.Agents[key] = agent
-		} else if conversation.HasPendingQuestion(projDir, sessionID) {
-			agent.State = "question"
+		if override := conversation.LastPendingBlockingTool(projDir, sessionID); override != "" {
+			agent.State = override
 			sf.Agents[key] = agent
 		}
 	}

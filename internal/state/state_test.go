@@ -941,3 +941,52 @@ func TestApplyIdleOverrides_LeavesPermissionAloneWhenNoPlan(t *testing.T) {
 		t.Errorf("expected state 'permission' unchanged (real permission, no plan), got %q", sf.Agents[sessionID].State)
 	}
 }
+
+func TestApplyIdleOverrides_QuestionAfterPlanWins(t *testing.T) {
+	sessionID := "sess-interview"
+	// ExitPlanMode first, then AskUserQuestion — the most recent blocking tool
+	// should win. Only tool_results between them (no human text), so both are
+	// technically "pending", but AskUserQuestion is the later action.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"AskUserQuestion","input":{"question":"Before I update the plan, what framework do you prefer?"}}]},"timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Waiting for user response"}]},"timestamp":"2026-03-28T10:00:03Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "question" {
+		t.Errorf("expected 'question' (AskUserQuestion after ExitPlanMode), got %q", sf.Agents[sessionID].State)
+	}
+}
+
+func TestApplyIdleOverrides_PlanAfterUnansweredQuestionWins(t *testing.T) {
+	sessionID := "sess-plan-after-q"
+	// AskUserQuestion first (only tool_result after), then ExitPlanMode —
+	// the most recent blocking tool wins, so plan takes precedence.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"A"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:03Z"}
+`
+	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, projectsDir)
+
+	if sf.Agents[sessionID].State != "plan" {
+		t.Errorf("expected 'plan' (ExitPlanMode after AskUserQuestion), got %q", sf.Agents[sessionID].State)
+	}
+}
