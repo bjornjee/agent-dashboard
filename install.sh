@@ -48,6 +48,7 @@ install_claude_code() {
     k['agent-dashboard'] = {
       source: { source: 'github', repo: 'bjornjee/agent-dashboard' },
       installLocation: '$mkt_dir',
+      autoUpdate: true,
       lastUpdated: '$now'
     };
     fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
