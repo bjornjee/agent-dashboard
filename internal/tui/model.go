@@ -47,35 +47,38 @@ type agentCache struct {
 // -- Model --
 
 type model struct {
-	cfg             domain.Config
-	agents          []domain.Agent
-	selected        int // index into treeNodes
-	treeNodes       []treeNode
-	width, height   int
-	mode            int
-	textInput       textinput.Model
-	tmuxAvailable   bool
-	ghAvailable     bool
-	openPRSessionID string       // stored for deferred pin in openPRMsg handler
-	mergeSessionID  string       // stored for async merge callback
-	mergePaneID     string       // stored for async merge callback
-	TmuxReady       *atomic.Bool // shared with watcher goroutine
-	statePath       string
-	selfPaneID      string
-	statusMsg       string
-	statusIsError   bool          // true = render in red, false = render in green
-	statusMsgTick   int           // tick when statusMsg was set; clears after 3s
-	spawningSpinner spinner.Model // bouncing-ball spinner for "Spawning agent..."
-	startupDone     bool          // set true when startupMsg arrives
-	startupSpinner  spinner.Model // shown in agent list until startupMsg
-	capturedLines   []string
-	conversation    []domain.ConversationEntry
-	tickCount       int
-	agentUsage      map[string]domain.Usage
-	totalUsage      domain.Usage
-	db              *db.DB
-	dbTotalCost     float64
-	dbTodayCost     float64
+	cfg              domain.Config
+	agents           []domain.Agent
+	selected         int // index into treeNodes
+	treeNodes        []treeNode
+	width, height    int
+	mode             int
+	textInput        textinput.Model
+	tmuxAvailable    bool
+	ghAvailable      bool
+	openPRSessionID  string       // stored for deferred pin in openPRMsg handler
+	mergeSessionID   string       // stored for async merge callback
+	mergePaneID      string       // stored for async merge callback
+	mergeCwd         string       // main repo dir for cleanup after merge
+	mergeWorktreeCwd string       // worktree path, empty for non-worktree agents
+	mergeBranch      string       // branch name for cleanup after merge
+	TmuxReady        *atomic.Bool // shared with watcher goroutine
+	statePath        string
+	selfPaneID       string
+	statusMsg        string
+	statusIsError    bool          // true = render in red, false = render in green
+	statusMsgTick    int           // tick when statusMsg was set; clears after 3s
+	spawningSpinner  spinner.Model // bouncing-ball spinner for "Spawning agent..."
+	startupDone      bool          // set true when startupMsg arrives
+	startupSpinner   spinner.Model // shown in agent list until startupMsg
+	capturedLines    []string
+	conversation     []domain.ConversationEntry
+	tickCount        int
+	agentUsage       map[string]domain.Usage
+	totalUsage       domain.Usage
+	db               *db.DB
+	dbTotalCost      float64
+	dbTodayCost      float64
 
 	// History render cache (Layers 2+3)
 	renderedHistory   string // cached output of historyContent()
@@ -150,6 +153,14 @@ type model struct {
 	confirmMergePaneID    string
 	confirmMergeDir       string
 	confirmMergeBranch    string
+	confirmMergeCwd       string // main repo dir (Cwd), for worktree cleanup
+
+	// Cleanup confirmation (populated after merge succeeds)
+	cleanupSessionID   string
+	cleanupPaneID      string
+	cleanupCwd         string
+	cleanupWorktreeCwd string
+	cleanupBranch      string
 
 	// Confirmation cooldown — reject confirmations arriving within 300ms of
 	// entering a confirm mode. Phantom keystrokes from escape sequences arrive
@@ -800,13 +811,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mergePRMsg:
 		sessionID := m.mergeSessionID
+		paneID := m.mergePaneID
+		cwd := m.mergeCwd
+		worktreeCwd := m.mergeWorktreeCwd
+		branch := m.mergeBranch
 		m.mergeSessionID = ""
 		m.mergePaneID = ""
+		m.mergeCwd = ""
+		m.mergeWorktreeCwd = ""
+		m.mergeBranch = ""
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Merge failed: %v", msg.err), true)
 			return m, nil
 		}
-		m.setStatus("PR merged", false)
+		// Enter cleanup confirmation mode
+		m.cleanupSessionID = sessionID
+		m.cleanupPaneID = paneID
+		m.cleanupCwd = cwd
+		m.cleanupWorktreeCwd = worktreeCwd
+		m.cleanupBranch = branch
+		m.mode = modeConfirmCleanup
+		m.confirmEnteredAt = time.Now()
+		m.setStatus(fmt.Sprintf("PR merged — clean up %s? (y/n)", branch), false)
+		m.statusMsgTick = -1 // pinned
 		return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 
 	case pinStateMsg:
@@ -814,6 +841,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus(fmt.Sprintf("Pin state failed: %v", msg.err), true)
 		}
 		return m, nil
+
+	case postMergeCleanupMsg:
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Cleanup failed at %s: %v", msg.progress, msg.err), true)
+			return m, nil
+		}
+		m.setStatus("Cleaned up", false)
+		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), pruneDead(m.statePath))
 
 	case rawKeySentMsg:
 		if msg.err != nil {

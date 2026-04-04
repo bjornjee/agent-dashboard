@@ -1021,6 +1021,12 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
+	if m.mode == modeConfirmCleanup {
+		parts = append(parts, boldStyle.Render("y")+" cleanup")
+		parts = append(parts, boldStyle.Render("n/esc")+" skip")
+		return m.truncateHelpBar(parts)
+	}
+
 	if m.mode == modeConfirmSend {
 		parts = append(parts, boldStyle.Render("enter")+" confirm")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")

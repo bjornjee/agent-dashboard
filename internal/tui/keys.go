@@ -83,7 +83,7 @@ func PhantomFilter(m tea.Model, msg tea.Msg) tea.Msg {
 	// Confirmation modes: swallow confirming keys during cooldown.
 	if !mdl.confirmEnteredAt.IsZero() && time.Since(mdl.confirmEnteredAt) < confirmCooldown {
 		switch mdl.mode {
-		case modeConfirmClose, modeConfirmMerge:
+		case modeConfirmClose, modeConfirmMerge, modeConfirmCleanup:
 			if keyStr == "y" {
 				return nil
 			}
@@ -460,14 +460,21 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			paneID := m.confirmMergePaneID
 			dir := m.confirmMergeDir
 			branch := m.confirmMergeBranch
+			cwd := m.confirmMergeCwd
 			m.confirmMergeSessionID = ""
 			m.confirmMergePaneID = ""
 			m.confirmMergeDir = ""
 			m.confirmMergeBranch = ""
+			m.confirmMergeCwd = ""
 			m.mode = modeNormal
 			if m.ghAvailable {
 				m.mergeSessionID = sessionID
 				m.mergePaneID = paneID
+				m.mergeCwd = cwd
+				m.mergeBranch = branch
+				if cwd != dir {
+					m.mergeWorktreeCwd = dir
+				}
 				m.setStatus("Merging PR...", false)
 				return m, mergePR(dir, branch)
 			}
@@ -478,8 +485,39 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmMergePaneID = ""
 			m.confirmMergeDir = ""
 			m.confirmMergeBranch = ""
+			m.confirmMergeCwd = ""
 			m.mode = modeNormal
 			m.clearStatus()
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Confirm cleanup mode (post-merge)
+	if m.mode == modeConfirmCleanup {
+		switch key {
+		case "y":
+			sessionID := m.cleanupSessionID
+			paneID := m.cleanupPaneID
+			cwd := m.cleanupCwd
+			worktreeCwd := m.cleanupWorktreeCwd
+			branch := m.cleanupBranch
+			m.cleanupSessionID = ""
+			m.cleanupPaneID = ""
+			m.cleanupCwd = ""
+			m.cleanupWorktreeCwd = ""
+			m.cleanupBranch = ""
+			m.mode = modeNormal
+			m.setStatus("Cleaning up...", false)
+			return m, postMergeCleanup(paneID, sessionID, m.statePath, cwd, worktreeCwd, branch)
+		case "n", "esc":
+			m.cleanupSessionID = ""
+			m.cleanupPaneID = ""
+			m.cleanupCwd = ""
+			m.cleanupWorktreeCwd = ""
+			m.cleanupBranch = ""
+			m.mode = modeNormal
+			m.setStatus("PR merged", false)
 			return m, nil
 		}
 		return m, nil
@@ -857,6 +895,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmMergePaneID = agent.TmuxPaneID
 			m.confirmMergeDir = agent.EffectiveDir()
 			m.confirmMergeBranch = agent.Branch
+			m.confirmMergeCwd = agent.Cwd
 			m.statusMsg = fmt.Sprintf("Merge %s? (y/n)", agent.Branch)
 			m.statusMsgTick = -1 // pinned
 			return m, nil
