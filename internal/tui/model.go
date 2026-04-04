@@ -202,20 +202,7 @@ func (m *model) setStatus(msg string, isError bool) {
 }
 
 // clearStatus resets the status message and error flag.
-// It respects a minimum 2-tick (2 second) display time so that status
-// messages remain visible long enough to be read. Use forceClearStatus
-// for explicit user-initiated dismissals (e.g. cancelling a confirm dialog).
 func (m *model) clearStatus() {
-	if m.statusMsg != "" && m.statusMsgTick >= 0 && m.tickCount-m.statusMsgTick < 2 {
-		return // not yet visible for 2 seconds
-	}
-	m.statusMsg = ""
-	m.statusIsError = false
-}
-
-// forceClearStatus unconditionally resets the status message, bypassing the
-// minimum display time. Use for explicit user actions like cancelling a dialog.
-func (m *model) forceClearStatus() {
 	m.statusMsg = ""
 	m.statusIsError = false
 }
