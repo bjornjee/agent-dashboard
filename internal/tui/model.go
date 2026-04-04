@@ -185,6 +185,11 @@ type model struct {
 	selectedCreateSkill int      // index into availableSkills
 	createSkillName     string   // selected skill name ("" if none)
 
+	// Spawning status — keeps the bottom "Spawning agent..." spinner alive
+	// until the agent's state file appears on disk or 30s safety expiry.
+	spawningFolder string // folder path; cleared when matching Cwd appears in stateUpdatedMsg
+	spawningTick   int    // tick when spawning started; used for safety expiry
+
 	// Banner
 	quote       string           // random quote text selected at startup
 	quoteAuthor string           // quote author (empty for fallback quotes)
@@ -470,6 +475,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		state.ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
 		m.agents = state.SortedAgents(msg.state, m.selfPaneID)
+		// Clear spawning status once the real agent appears on disk
+		if m.spawningFolder != "" {
+			for _, a := range m.agents {
+				if a.Cwd == m.spawningFolder || a.WorktreeCwd == m.spawningFolder {
+					m.spawningFolder = ""
+					if m.statusMsg == "spawning" {
+						m.clearStatus()
+					}
+					break
+				}
+			}
+		}
 		// Prune maps for agents no longer present
 		live := make(map[string]bool, len(m.agents))
 		for _, a := range m.agents {
@@ -573,6 +590,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.tickCount++
+		// Safety expiry for spawning status (30s)
+		if m.spawningFolder != "" && m.tickCount-m.spawningTick >= 30 {
+			m.spawningFolder = ""
+			if m.statusMsg == "spawning" {
+				m.clearStatus()
+			}
+		}
 		// Auto-clear status message: errors get 6s, others 3s
 		if m.statusMsg != "" && m.statusMsgTick >= 0 {
 			ttl := 3
@@ -656,11 +680,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case createSessionMsg:
 		if msg.err != nil {
+			m.spawningFolder = ""
 			m.setStatus(fmt.Sprintf("Create failed: %v", msg.err), true)
 			m.mode = modeNormal
 			return m, nil
 		}
-		m.statusMsgTick = m.tickCount // let "spawning" expire naturally via 3s auto-clear
+		// Keep statusMsgTick = -1 so "Spawning agent..." spinner persists
+		// until stateUpdatedMsg matches the folder (or 30s safety expiry).
 
 		// Insert a placeholder agent immediately so the panel doesn't jump
 		// when the state file appears on the next tick. The placeholder is

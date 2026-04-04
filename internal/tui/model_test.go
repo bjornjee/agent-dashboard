@@ -1838,6 +1838,99 @@ func TestRawKeySentMsg_EmptyLabel_NoStatus(t *testing.T) {
 	}
 }
 
+func TestSpawningFolder_SurvivesCreateSessionSuccess(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/Users/someone/Code/my-project"
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	updated, _ := m.Update(createSessionMsg{target: "main:1.0"})
+	um := updated.(model)
+
+	if um.spawningFolder == "" {
+		t.Error("spawningFolder should persist after createSessionMsg success (cleared by stateUpdatedMsg)")
+	}
+}
+
+func TestSpawningFolder_ClearedOnCreateSessionError(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/Users/someone/Code/my-project"
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	updated, _ := m.Update(createSessionMsg{err: fmt.Errorf("tmux failed")})
+	um := updated.(model)
+
+	if um.spawningFolder != "" {
+		t.Errorf("expected spawningFolder to be cleared on error, got %q", um.spawningFolder)
+	}
+}
+
+func TestSpawningFolder_ClearedOnStateUpdateWithMatchingAgent(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/Users/someone/Code/my-project"
+	m.tmuxAvailable = true
+	m.startupDone = true
+
+	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"sess1": {Target: "main:1.0", State: "running", Cwd: "/Users/someone/Code/my-project"},
+		},
+	}})
+	um := updated.(model)
+
+	if um.spawningFolder != "" {
+		t.Errorf("expected spawningFolder to be cleared when matching Cwd appears, got %q", um.spawningFolder)
+	}
+}
+
+func TestSpawningFolder_PersistsOnStateUpdateWithoutMatch(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/Users/someone/Code/my-project"
+	m.tmuxAvailable = true
+	m.startupDone = true
+
+	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"sess1": {Target: "main:1.0", State: "running", Cwd: "/Users/someone/Code/other-project"},
+		},
+	}})
+	um := updated.(model)
+
+	if um.spawningFolder == "" {
+		t.Error("spawningFolder should persist when no matching Cwd found")
+	}
+}
+
+func TestSpawningFolder_SafetyExpiry(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/Users/someone/Code/my-project"
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+	m.spawningTick = 0
+	m.tickCount = 28 // will become 29 after tickCount++ in handler
+
+	// After increment: tickCount=29, 29-0=29 < 30, should persist
+	updated, _ := m.Update(tickMsg{})
+	um := updated.(model)
+	if um.spawningFolder == "" {
+		t.Error("spawningFolder should persist before 30s expiry")
+	}
+	if um.statusMsg != "spawning" {
+		t.Error("statusMsg should still be 'spawning' before expiry")
+	}
+
+	// After increment: tickCount=30, 30-0=30 >= 30, should be cleared
+	updated2, _ := um.Update(tickMsg{})
+	um2 := updated2.(model)
+	if um2.spawningFolder != "" {
+		t.Errorf("expected spawningFolder to be cleared after 30s expiry, got %q", um2.spawningFolder)
+	}
+	if um2.statusMsg != "" {
+		t.Errorf("expected statusMsg to be cleared after 30s expiry, got %q", um2.statusMsg)
+	}
+}
+
 func TestSetStatus_SetsFields(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tickCount = 42
