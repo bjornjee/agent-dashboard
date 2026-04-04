@@ -272,6 +272,69 @@ func getLexerForFile(filename string) chroma.Lexer {
 	return chroma.Coalesce(lexer)
 }
 
+// truncateFuncSignature smart-truncates a Go function signature to fit maxWidth.
+// It preserves the return type by collapsing parameters with "…" when needed.
+// e.g. "func ReadConversationIncremental(projDir, sessionID string, limit int, prev []ConversationEntry) ([]ConversationEntry, int64)"
+//
+//	→ "func ReadConversationIncremental(…) ([]ConversationEntry, int64)"
+func truncateFuncSignature(sig string, maxWidth int) string {
+	if len([]rune(sig)) <= maxWidth {
+		return sig
+	}
+
+	// Find the parameter list boundaries: first "(" and its matching ")".
+	openParen := strings.Index(sig, "(")
+	if openParen < 0 {
+		// No parens — simple truncation.
+		r := []rune(sig)
+		if len(r) > maxWidth-1 {
+			return string(r[:maxWidth-1]) + "…"
+		}
+		return sig
+	}
+
+	// Find the matching close paren by counting nesting depth.
+	depth := 0
+	closeParen := -1
+	for i, ch := range sig[openParen:] {
+		switch ch {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				closeParen = openParen + i
+				break
+			}
+		}
+		if closeParen >= 0 {
+			break
+		}
+	}
+
+	if closeParen < 0 {
+		// Unbalanced — fall back to simple truncation.
+		r := []rune(sig)
+		if len(r) > maxWidth-1 {
+			return string(r[:maxWidth-1]) + "…"
+		}
+		return sig
+	}
+
+	// Try collapsing params: "func Name(…) returnType"
+	collapsed := sig[:openParen+1] + "…" + sig[closeParen:]
+	if len([]rune(collapsed)) <= maxWidth {
+		return collapsed
+	}
+
+	// Still too long — truncate from the end.
+	r := []rune(collapsed)
+	if len(r) > maxWidth-1 {
+		return string(r[:maxWidth-1]) + "…"
+	}
+	return collapsed
+}
+
 // -- Background overlay --
 
 // applyDiffBackground applies an RGB background color to a line, preserving
@@ -806,7 +869,9 @@ func (m model) renderDiffContentPanel() string {
 
 	stickyLine := ""
 	if stickyCtx != "" && !m.diffContentVP.AtTop() {
-		stickyLine = "\n" + diffHunkStyle.Render(" "+stickyCtx)
+		maxWidth := m.diffRightWidth - 2
+		display := truncateFuncSignature(stickyCtx, maxWidth)
+		stickyLine = "\n" + diffHunkStyle.Render(" "+display)
 	}
 
 	// Scroll hints
