@@ -540,25 +540,8 @@ func (m model) diffSideBySideContent() (string, []string) {
 		// Function context from the hunk header (text after @@)
 		curFuncCtx := strings.TrimSpace(frag.Comment)
 
-		// Hunk separator — show function context as a centered label in a rule,
-		// or a plain separator when no context is available.
-		fullWidth := halfWidth*2 + 3 // both sides + separator
-		var hunkHeader string
-		if curFuncCtx != "" {
-			label := " " + curFuncCtx + " "
-			runeLabel := []rune(label)
-			if len(runeLabel) > fullWidth-4 {
-				runeLabel = append(runeLabel[:fullWidth-5], '…', ' ')
-			}
-			padTotal := fullWidth - len(runeLabel)
-			padLeft := padTotal / 2
-			padRight := padTotal - padLeft
-			hunkHeader = diffHunkStyle.Render(
-				strings.Repeat("─", padLeft) + string(runeLabel) + strings.Repeat("─", padRight))
-		} else {
-			hunkHeader = diffHunkStyle.Render(strings.Repeat("─", fullWidth))
-		}
-		appendRow(hunkHeader, curFuncCtx)
+		// No visible hunk header — function context is shown via the
+		// pinned header at the top of the diff viewport as the user scrolls.
 
 		// Collect lines and identify context runs for collapsing
 		type diffLine struct {
@@ -695,22 +678,18 @@ func formatDiffLineHighlighted(lineNum int, content string, contentWidth, lineNu
 	hasBg := bgR != 0 || bgG != 0 || bgB != 0
 
 	// GitHub-style gutter marker: − for deletions, + for additions.
-	var gutterMark string
+	// Use plain text here; applyDiffBackground will color the whole line.
+	gutterChar := " "
 	if hasBg {
 		if bgR > bgG {
-			gutterMark = diffDelStyle.Render("−")
+			gutterChar = "−"
 		} else {
-			gutterMark = diffAddStyle.Render("+")
+			gutterChar = "+"
 		}
 	}
 
-	numPrefix := fmt.Sprintf(" %*d ", lineNumWidth, lineNum)
-	blankPrefix := strings.Repeat(" ", lineNumWidth+2) // same width, no number
-	if gutterMark != "" {
-		// Replace leading space with the colored gutter marker.
-		numPrefix = gutterMark + numPrefix[1:]
-		blankPrefix = gutterMark + blankPrefix[1:]
-	}
+	numPrefix := fmt.Sprintf("%s%*d ", gutterChar, lineNumWidth, lineNum)
+	blankPrefix := gutterChar + strings.Repeat(" ", lineNumWidth+1) // same width, no number
 	var rows []string
 
 	for i, chunk := range wrappedContent {
