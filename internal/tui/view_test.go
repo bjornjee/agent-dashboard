@@ -153,6 +153,61 @@ func TestStatusLine_SuccessVsError(t *testing.T) {
 	}
 }
 
+func TestHelpBarContainsStatusMessage(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	// Set a success status message
+	m.statusMsg = "Reply sent"
+	m.statusIsError = false
+
+	bar := m.renderHelpBar()
+	if !strings.Contains(bar, "Reply sent") {
+		t.Errorf("help bar should contain status message 'Reply sent', got %q", bar)
+	}
+}
+
+func TestHelpBarContainsSpawningSpinner(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	bar := m.renderHelpBar()
+	if !strings.Contains(bar, "Spawning agent") {
+		t.Errorf("help bar should contain 'Spawning agent', got %q", bar)
+	}
+}
+
+func TestRightPanelDoesNotContainStatusLine(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+
+	m.statusMsg = "Reply sent"
+	m.statusIsError = false
+
+	panel := m.renderRightPanel()
+	if strings.Contains(panel, "Reply sent") {
+		t.Error("right panel should NOT contain status message — it should be in the help bar")
+	}
+}
+
 func TestPanelRenderedDimensions(t *testing.T) {
 	// lipgloss v2 includes borders in Width/Height, so rendered panels must
 	// account for the 2-char border frame. This test ensures the rendered

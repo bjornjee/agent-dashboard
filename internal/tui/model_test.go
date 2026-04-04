@@ -1029,12 +1029,10 @@ func TestSpawningSpinner_VisibleWithNoAgents(t *testing.T) {
 	m.statusMsg = "spawning"
 	m.statusMsgTick = -1
 
-	// Render the right panel
-	view := m.renderRightPanel()
-
-	// The spawning spinner text should be visible even with no agents
-	if !strings.Contains(view, "Spawning agent") {
-		t.Errorf("spawning spinner should be visible when no agents exist, got:\n%s", view)
+	// The spawning spinner text should be visible in the help bar
+	bar := m.renderHelpBar()
+	if !strings.Contains(bar, "Spawning agent") {
+		t.Errorf("spawning spinner should be visible in help bar when no agents exist, got:\n%s", bar)
 	}
 }
 
