@@ -1777,3 +1777,22 @@ func TestSetStatus_SetsFields(t *testing.T) {
 		t.Errorf("setStatus(true) mismatch: msg=%q err=%v tick=%d", m.statusMsg, m.statusIsError, m.statusMsgTick)
 	}
 }
+
+func TestClearStatus_RespectsMinDisplayTime(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tickCount = 10
+	m.setStatus("hello", false)
+
+	// clearStatus on the same tick should be a no-op (< 1s elapsed)
+	m.clearStatus()
+	if m.statusMsg != "hello" {
+		t.Errorf("clearStatus should not clear within min display time, got msg=%q", m.statusMsg)
+	}
+
+	// After 1 tick (1 second), clearStatus should work
+	m.tickCount = 11
+	m.clearStatus()
+	if m.statusMsg != "" {
+		t.Errorf("clearStatus should clear after min display time, got msg=%q", m.statusMsg)
+	}
+}

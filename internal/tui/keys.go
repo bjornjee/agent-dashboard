@@ -401,7 +401,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmPaneID = ""
 			m.confirmSessionID = ""
 			m.mode = modeNormal
-			m.clearStatus()
+			m.forceClearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -437,7 +437,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmMergeDir = ""
 			m.confirmMergeBranch = ""
 			m.mode = modeNormal
-			m.clearStatus()
+			m.forceClearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -457,14 +457,14 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmSendKey = ""
 			m.confirmSendLabel = ""
 			m.mode = modeNormal
-			m.clearStatus()
+			m.forceClearStatus()
 			return m, sendRawKey(paneID, sendKey, label)
 		case "esc":
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
 			m.confirmSendLabel = ""
 			m.mode = modeNormal
-			m.clearStatus()
+			m.forceClearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -480,12 +480,12 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			paneID := m.confirmJumpPaneID
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
-			m.clearStatus()
+			m.forceClearStatus()
 			return m, jumpToAgent(paneID)
 		case "n", "esc":
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
-			m.clearStatus()
+			m.forceClearStatus()
 			return m, nil
 		}
 		return m, nil
