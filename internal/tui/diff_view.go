@@ -278,14 +278,10 @@ func getLexerForFile(filename string) chroma.Lexer {
 //
 //	→ "func ReadConversationIncremental(…) ([]ConversationEntry, int64)"
 func truncateFuncSignature(sig string, maxWidth int) string {
-	if len([]rune(sig)) <= maxWidth {
-		return sig
-	}
-
 	// Find the parameter list boundaries: first "(" and its matching ")".
 	openParen := strings.Index(sig, "(")
 	if openParen < 0 {
-		// No parens — simple truncation.
+		// No parens — simple truncation if needed.
 		r := []rune(sig)
 		if len(r) > maxWidth-1 {
 			return string(r[:maxWidth-1]) + "…"
@@ -313,11 +309,19 @@ func truncateFuncSignature(sig string, maxWidth int) string {
 	}
 
 	if closeParen < 0 {
-		// Unbalanced — fall back to simple truncation.
-		r := []rune(sig)
+		// Unbalanced — git already truncated the signature.
+		// Always collapse to "func Name(…)" so we show a clean label
+		// instead of a jaggedly-cut parameter list.
+		collapsed := sig[:openParen+1] + "…)"
+		r := []rune(collapsed)
 		if len(r) > maxWidth-1 {
 			return string(r[:maxWidth-1]) + "…"
 		}
+		return collapsed
+	}
+
+	// Full signature fits — no truncation needed.
+	if len([]rune(sig)) <= maxWidth {
 		return sig
 	}
 
@@ -869,7 +873,7 @@ func (m model) renderDiffContentPanel() string {
 
 	stickyLine := ""
 	if stickyCtx != "" && !m.diffContentVP.AtTop() {
-		maxWidth := m.diffRightWidth - 2
+		maxWidth := m.diffRightWidth - 1 // -1 for leading space
 		display := truncateFuncSignature(stickyCtx, maxWidth)
 		stickyLine = "\n" + diffHunkStyle.Render(" "+display)
 	}
