@@ -380,7 +380,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmPaneID = ""
 			m.confirmSessionID = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -405,12 +405,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.ghAvailable {
 				m.mergeSessionID = sessionID
 				m.mergePaneID = paneID
-				m.statusMsg = "Merging PR..."
-				m.statusMsgTick = m.tickCount
+				m.setStatus("Merging PR...", false)
 				return m, mergePR(dir, branch)
 			}
-			m.statusMsg = "Marked as merged"
-			m.statusMsgTick = m.tickCount
+			m.setStatus("Marked as merged", false)
 			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 		case "n", "esc":
 			m.confirmMergeSessionID = ""
@@ -418,7 +416,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmMergeDir = ""
 			m.confirmMergeBranch = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -436,13 +434,13 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, sendRawKey(paneID, sendKey)
 		case "esc":
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -458,12 +456,12 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			paneID := m.confirmJumpPaneID
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, jumpToAgent(paneID)
 		case "n", "esc":
 			m.confirmJumpPaneID = ""
 			m.mode = modeNormal
-			m.statusMsg = ""
+			m.clearStatus()
 			return m, nil
 		}
 		return m, nil
@@ -618,7 +616,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.selected > 0 {
 			m.saveCurrentCache()
 			m.selected--
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -629,7 +627,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.selected < len(m.treeNodes)-1 {
 			m.saveCurrentCache()
 			m.selected++
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -681,7 +679,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if next != m.selected {
 			m.saveCurrentCache()
 			m.selected = next
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -694,7 +692,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if prev != m.selected {
 			m.saveCurrentCache()
 			m.selected = prev
-			m.statusMsg = ""
+			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
 			m.updateLeftContent()
@@ -716,7 +714,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot jump: tmux not detected"
+			m.setStatus("Cannot jump: tmux not detected", true)
 			return m, nil
 		}
 		if agent := m.selectedAgent(); agent != nil {
@@ -732,7 +730,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot reply: tmux not detected"
+			m.setStatus("Cannot reply: tmux not detected", true)
 			return m, nil
 		}
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
@@ -820,8 +818,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "a":
 		if !m.tmuxAvailable {
-			m.statusMsg = "Cannot create session: tmux not detected"
-			m.statusMsgTick = m.tickCount
+			m.setStatus("Cannot create session: tmux not detected", true)
 			return m, nil
 		}
 		m.mode = modeCreateFolder
