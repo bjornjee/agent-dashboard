@@ -1729,3 +1729,50 @@ func TestAutoScrollLive_DisabledWhenPlanVisible(t *testing.T) {
 		t.Error("message viewport should NOT auto-scroll when plan is visible — user may be reading the plan")
 	}
 }
+
+func TestRawKeySentMsg_SuccessLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	result, _ := m.Update(rawKeySentMsg{err: nil, label: "Plan approved"})
+	updated := result.(model)
+	if updated.statusMsg != "Plan approved" {
+		t.Errorf("expected status 'Plan approved', got %q", updated.statusMsg)
+	}
+	if updated.statusIsError {
+		t.Error("expected statusIsError=false for success")
+	}
+}
+
+func TestRawKeySentMsg_ErrorSetsIsError(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	result, _ := m.Update(rawKeySentMsg{err: fmt.Errorf("pane gone"), label: "Plan approved"})
+	updated := result.(model)
+	if !strings.Contains(updated.statusMsg, "failed") {
+		t.Errorf("expected error status, got %q", updated.statusMsg)
+	}
+	if !updated.statusIsError {
+		t.Error("expected statusIsError=true for error")
+	}
+}
+
+func TestRawKeySentMsg_EmptyLabel_NoStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.statusMsg = "previous"
+	result, _ := m.Update(rawKeySentMsg{err: nil, label: ""})
+	updated := result.(model)
+	if updated.statusMsg != "previous" {
+		t.Errorf("expected status unchanged, got %q", updated.statusMsg)
+	}
+}
+
+func TestSetStatus_SetsFields(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tickCount = 42
+	m.setStatus("hello", false)
+	if m.statusMsg != "hello" || m.statusIsError || m.statusMsgTick != 42 {
+		t.Errorf("setStatus(false) mismatch: msg=%q err=%v tick=%d", m.statusMsg, m.statusIsError, m.statusMsgTick)
+	}
+	m.setStatus("oops", true)
+	if m.statusMsg != "oops" || !m.statusIsError || m.statusMsgTick != 42 {
+		t.Errorf("setStatus(true) mismatch: msg=%q err=%v tick=%d", m.statusMsg, m.statusIsError, m.statusMsgTick)
+	}
+}

@@ -34,10 +34,24 @@ const confirmCooldown = 300 * time.Millisecond
 // 50ms is conservative — real transitions take 150ms+.
 const escapeKeyCooldown = 50 * time.Millisecond
 
+// modeResetCooldown is the minimum gap between a key event processed in a
+// non-normal mode and a mode-entry key in normal mode. When Enter (or another
+// destructive key) causes a mode transition back to normal, phantom repeats
+// from key-release events or terminal artefacts can arrive within a few ms.
+// 100ms is safe — real intentional keypresses take 150ms+.
+const modeResetCooldown = 100 * time.Millisecond
+
 // isPhantomKey returns true if the key event likely originated from a
-// fragmented terminal escape sequence (mouse or focus) rather than a real keypress.
+// fragmented terminal escape sequence (mouse or focus) or from a phantom
+// repeat following a mode transition, rather than a real keypress.
 func (m model) isPhantomKey() bool {
-	return !m.lastEscapeAt.IsZero() && time.Since(m.lastEscapeAt) < escapeKeyCooldown
+	if !m.lastEscapeAt.IsZero() && time.Since(m.lastEscapeAt) < escapeKeyCooldown {
+		return true
+	}
+	if !m.modeResetAt.IsZero() && time.Since(m.modeResetAt) < modeResetCooldown {
+		return true
+	}
+	return false
 }
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
@@ -150,6 +164,12 @@ func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.debugLogKey(msg)
 	key := msg.String()
+
+	// Track when keys are processed in non-normal modes so that phantom
+	// repeats arriving right after a mode transition can be rejected.
+	if m.mode != modeNormal && !m.helpVisible && !m.diffVisible {
+		m.modeResetAt = time.Now()
+	}
 
 	// Create folder mode
 	if m.mode == modeCreateFolder {
@@ -431,14 +451,17 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			paneID := m.confirmSendPaneID
 			sendKey := m.confirmSendKey
+			label := m.confirmSendLabel
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
+			m.confirmSendLabel = ""
 			m.mode = modeNormal
 			m.clearStatus()
-			return m, sendRawKey(paneID, sendKey)
+			return m, sendRawKey(paneID, sendKey, label)
 		case "esc":
 			m.confirmSendPaneID = ""
 			m.confirmSendKey = ""
+			m.confirmSendLabel = ""
 			m.mode = modeNormal
 			m.clearStatus()
 			return m, nil
@@ -737,7 +760,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			var cmds []tea.Cmd
 			// Plan state: send "3" (feedback option) before entering reply mode
 			if agent.State == "plan" {
-				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3"))
+				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3", "Plan feedback selected"))
 			}
 			m.mode = modeReply
 			focusCmd := m.textInput.Focus()
@@ -770,14 +793,23 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "e":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			m.statusMsg = "Opening editor..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
 			return m, openEditor(m.cfg.Editor, agent.EffectiveDir())
 		}
 	case "d":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			m.statusMsg = "Loading diff..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
 			return m, loadDiffCmd(agent.EffectiveDir())
 		}
 	case "g":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {
+			m.statusMsg = "Opening PR..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
 			cmds := []tea.Cmd{openPR(agent.EffectiveDir(), agent.Branch)}
 			if m.ghAvailable {
 				// Defer pinning to openPRMsg handler — only pin when PR actually exists
@@ -839,14 +871,17 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			es := agent.State
 			if isBlocked(es) || isWaiting(es) {
 				sendKey := key
+				label := fmt.Sprintf("Sent '%s'", key)
 				// Plan state: y→"1" (approve+bypass), n stays as "n"
 				if es == "plan" && key == "y" {
 					sendKey = "1"
+					label = "Plan approved"
 				}
 				m.mode = modeConfirmSend
 				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
 				m.confirmSendKey = sendKey
+				m.confirmSendLabel = label
 				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
 				m.statusMsgTick = -1 // pinned
 				return m, nil
@@ -863,6 +898,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
 				m.confirmSendKey = key
+				m.confirmSendLabel = fmt.Sprintf("Sent '%s'", key)
 				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
 				m.statusMsgTick = -1 // pinned
 				return m, nil

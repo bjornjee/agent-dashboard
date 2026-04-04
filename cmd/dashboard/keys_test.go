@@ -1259,39 +1259,124 @@ func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
 	}
 }
 
-func TestSendReply_RejectsSelfPane(t *testing.T) {
-	// sendReply should refuse to send to the dashboard's own pane.
-	cmd := sendReply("%5", "test message", "%5")
-	msg := cmd()
-	result, ok := msg.(sendResultMsg)
-	if !ok {
-		t.Fatalf("expected sendResultMsg, got %T", msg)
-	}
-	if result.err == nil {
-		t.Fatal("expected error when sending to self pane")
-	}
-	if !strings.Contains(result.err.Error(), "dashboard pane") {
-		t.Errorf("error should mention dashboard pane, got: %v", result.err)
+func TestIsSelfPane_SamePaneBlocked(t *testing.T) {
+	if !isSelfPane("%5", "%5") {
+		t.Error("isSelfPane should return true when paneID == selfPaneID")
 	}
 }
 
-func TestSendReply_AllowsDifferentPane(t *testing.T) {
-	// sendReply should NOT block when paneID differs from selfPaneID.
-	// We can't actually send (no tmux), but we verify the self-pane guard
-	// does not trigger.
-	cmd := sendReply("%5", "test message", "%0")
-	msg := cmd()
-	result, ok := msg.(sendResultMsg)
-	if !ok {
-		t.Fatalf("expected sendResultMsg, got %T", msg)
-	}
-	// Error is expected (no tmux), but it should NOT be the self-pane error.
-	if result.err != nil && strings.Contains(result.err.Error(), "dashboard pane") {
-		t.Errorf("should not reject different pane; got: %v", result.err)
+func TestIsSelfPane_DifferentPaneAllowed(t *testing.T) {
+	if isSelfPane("%5", "%0") {
+		t.Error("isSelfPane should return false when paneID != selfPaneID")
 	}
 }
 
-// -- Pending reply queue tests --
+func TestIsSelfPane_EmptySelfSkipsGuard(t *testing.T) {
+	if isSelfPane("%5", "") {
+		t.Error("isSelfPane should return false when selfPaneID is empty")
+	}
+}
+
+// -- Mode-transition phantom tests --
+
+func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
+	// When Enter submits a reply in modeReply, transitioning to modeNormal,
+	// a rapid follow-up Enter (phantom from key release or terminal artefact)
+	// must NOT trigger modeConfirmJump.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.mode = modeReply
+	m.textInput.SetValue("test reply")
+	m.buildTree()
+
+	// Press Enter to submit reply → mode returns to modeNormal.
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Fatalf("expected modeNormal after reply submit, got %d", rm.mode)
+	}
+
+	// Immediately press Enter again (phantom).
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode == modeConfirmJump {
+		t.Errorf("phantom Enter after reply submit should NOT trigger modeConfirmJump")
+	}
+}
+
+func TestPhantomEnter_AfterConfirmSend(t *testing.T) {
+	// When Enter confirms a key send in modeConfirmSend, a rapid follow-up
+	// Enter must NOT trigger modeConfirmJump.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.agents[0].State = "waiting"
+	m.mode = modeConfirmSend
+	m.confirmEnteredAt = pastConfirmTime // bypass confirm cooldown
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+	m.buildTree()
+
+	// Press Enter to confirm send → mode returns to modeNormal.
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Fatalf("expected modeNormal after confirm send, got %d", rm.mode)
+	}
+
+	// Immediately press Enter again (phantom).
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode == modeConfirmJump {
+		t.Errorf("phantom Enter after confirm-send should NOT trigger modeConfirmJump")
+	}
+}
+
+func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
+	// When Enter submits in modeCreateMessage, a rapid follow-up Enter
+	// must NOT trigger modeConfirmJump.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.mode = modeCreateMessage
+	m.createFolder = "/tmp/test"
+	m.buildTree()
+
+	// Press Enter to submit → mode returns to modeNormal.
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Fatalf("expected modeNormal after create message submit, got %d", rm.mode)
+	}
+
+	// Immediately press Enter again (phantom).
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode == modeConfirmJump {
+		t.Errorf("phantom Enter after create-message should NOT trigger modeConfirmJump")
+	}
+}
+
+func TestRealEnter_AfterCooldown(t *testing.T) {
+	// A real Enter arriving well after a mode transition should work normally.
+	m := newTestModelWithAgents()
+	m.agents[0].TmuxPaneID = "%5"
+	m.mode = modeReply
+	m.textInput.SetValue("test")
+	m.buildTree()
+
+	// Press Enter to submit reply.
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+
+	// Simulate time passing beyond the cooldown.
+	rm.modeResetAt = time.Now().Add(-time.Second)
+
+	// Now press Enter — should work normally.
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm2 := result2.(model)
+	if rm2.mode != modeConfirmJump {
+		t.Errorf("real Enter after cooldown should trigger modeConfirmJump, got mode %d", rm2.mode)
+	}
+}
 
 func TestMergeGH_PinsToMerged(t *testing.T) {
 	m := newTestModelWithAgents()
@@ -1310,5 +1395,110 @@ func TestMergeGH_PinsToMerged(t *testing.T) {
 	pinMsg := cmd()
 	if _, ok := pinMsg.(pinStateMsg); !ok {
 		t.Errorf("expected pinStateMsg, got %T", pinMsg)
+	}
+}
+
+func TestYKey_PlanState_SetsConfirmSendLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendLabel != "Plan approved" {
+		t.Errorf("expected label 'Plan approved', got %q", updated.confirmSendLabel)
+	}
+	if updated.confirmSendKey != "1" {
+		t.Errorf("expected sendKey '1' for plan approve, got %q", updated.confirmSendKey)
+	}
+}
+
+func TestNumberKey_BlockedState_SetsConfirmSendLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendLabel != "Sent '3'" {
+		t.Errorf("expected label \"Sent '3'\", got %q", updated.confirmSendLabel)
+	}
+}
+
+func TestConfirmSend_Esc_ClearsLabel(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "y"
+	m.confirmSendLabel = "Plan approved"
+	m.statusMsg = "Send 'y' to agent?"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	updated := result.(model)
+	if updated.confirmSendLabel != "" {
+		t.Errorf("expected confirmSendLabel cleared, got %q", updated.confirmSendLabel)
+	}
+}
+
+func TestEditorKey_SetsInFlightStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.cfg.Editor = "vim"
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	updated := result.(model)
+	if updated.statusMsg != "Opening editor..." {
+		t.Errorf("expected 'Opening editor...', got %q", updated.statusMsg)
+	}
+	if updated.statusIsError {
+		t.Error("expected statusIsError=false for in-flight message")
+	}
+}
+
+func TestDiffKey_SetsInFlightStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	updated := result.(model)
+	if updated.statusMsg != "Loading diff..." {
+		t.Errorf("expected 'Loading diff...', got %q", updated.statusMsg)
+	}
+}
+
+func TestPRKey_SetsInFlightStatus(t *testing.T) {
+	m := newModel(testConfig(t.TempDir()), nil)
+	m.agents = []Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp", Branch: "feat/test"},
+	}
+	m.buildTree()
+	m.selected = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
+	updated := result.(model)
+	if updated.statusMsg != "Opening PR..." {
+		t.Errorf("expected 'Opening PR...', got %q", updated.statusMsg)
 	}
 }

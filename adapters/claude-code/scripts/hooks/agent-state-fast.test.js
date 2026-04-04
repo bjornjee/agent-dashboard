@@ -316,6 +316,131 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.state, 'permission');
   });
 
+  it('hook_blocked overrides state to "permission" on PreToolUse', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      hook_blocked: 'Blocked: "git push --force" is a destructive command.',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'permission');
+    assert.equal(update.hook_blocked, '', 'hook_blocked should be cleared after consuming');
+  });
+
+  it('hook_blocked is NOT consumed on PermissionRequest (only PreToolUse)', () => {
+    // PermissionRequest resolves to "permission" on its own — hook_blocked
+    // should not be consumed here, only on PreToolUse.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      hook_blocked: 'Blocked: some reason',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'Bash',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(update.state, 'permission');
+    assert.equal(update.hook_blocked, undefined, 'PermissionRequest should not consume hook_blocked');
+  });
+
+  it('hook_blocked is NOT consumed on PostToolUse (prevents race)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      hook_blocked: 'Blocked: "git push --force" is a destructive command.',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    // PostToolUse should NOT clear hook_blocked — it must survive until next PreToolUse
+    assert.equal(update.state, 'running');
+    assert.equal(update.hook_blocked, undefined, 'PostToolUse should not clear hook_blocked');
+  });
+
+  it('hook_blocked is cleared even when PR-state guard returns early', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'pr',
+      current_tool: '',
+      hook_blocked: 'Blocked: some reason',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    // PR guard returns early, but hook_blocked must still be cleared
+    assert.equal(changed, true);
+    assert.equal(update.hook_blocked, '', 'hook_blocked should be cleared even with PR state');
+  });
+
+  it('no hook_blocked means normal "running" state on PreToolUse', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'permission',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(update.state, 'running');
+    assert.equal(update.hook_blocked, undefined, 'should not set hook_blocked when absent');
+  });
+
   it('preserves existing fields not updated by fast hook', () => {
     writeState('main:1.0', {
       target: 'main:1.0',

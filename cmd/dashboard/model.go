@@ -133,6 +133,7 @@ type model struct {
 	// Send-key confirmation (guards against phantom keystrokes from mouse escape sequences)
 	confirmSendPaneID string // tmux pane ID for pending key send
 	confirmSendKey    string // key to send (y, n, 1-9)
+	confirmSendLabel  string // human-readable ack for the key send
 
 	// Jump confirmation (guards against phantom enter from mouse escape sequences)
 	confirmJumpPaneID string // tmux pane ID for pending jump
@@ -153,6 +154,13 @@ type model struct {
 	// escapeKeyCooldown are treated as phantom keystrokes from fragmented
 	// escape sequences.
 	lastEscapeAt time.Time
+
+	// modeResetAt records when a key event was last processed while in a
+	// non-normal mode. If a mode-entry key (enter, x, r, m, y, n, 1-9)
+	// arrives in normal mode within modeResetCooldown of this timestamp,
+	// it is treated as a phantom keystroke (e.g. from key-release events
+	// or terminal artefacts following the mode transition).
+	modeResetAt time.Time
 
 	// debugKeyLog is an open file for logging raw key events.
 	// Set to nil to disable. Written by debugLogKey in keys.go.
@@ -557,7 +565,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ttl = 6
 			}
 			if m.tickCount-m.statusMsgTick >= ttl {
-				m.statusMsg = ""
+				m.clearStatus()
 			}
 		}
 		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation()}
@@ -775,6 +783,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Reset()
 				m.updateRightContent()
 			}
+		} else if msg.label != "" {
+			m.setStatus(msg.label, false)
 		}
 		return m, nil
 
