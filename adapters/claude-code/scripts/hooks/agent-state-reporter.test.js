@@ -4,7 +4,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildReportEntry } = require('./agent-state-reporter');
+const { buildReportEntry, resolveStopState } = require('./agent-state-reporter');
 
 const BASE_INPUT = {
   session_id: 'abc-123',
@@ -124,5 +124,54 @@ describe('buildReportEntry', () => {
     });
 
     assert.equal(changed, true);
+  });
+});
+
+describe('resolveStopState', () => {
+  it('returns idle_prompt when pane buffer has prompt char and no question', () => {
+    const input = {
+      ...BASE_INPUT,
+      hook_event_name: 'Stop',
+      last_assistant_message: 'Here is the investigation report.',
+    };
+    const paneBuffer = ['some output', '\u276f'];
+
+    const state = resolveStopState(input, paneBuffer);
+    assert.equal(state, 'idle_prompt');
+  });
+
+  it('returns question when last message ends with a question', () => {
+    const input = {
+      ...BASE_INPUT,
+      hook_event_name: 'Stop',
+      last_assistant_message: 'Should I proceed with the fix?',
+    };
+    const paneBuffer = ['some output', '\u276f'];
+
+    const state = resolveStopState(input, paneBuffer);
+    assert.equal(state, 'question');
+  });
+
+  it('returns done when no prompt char and no question', () => {
+    const input = {
+      ...BASE_INPUT,
+      hook_event_name: 'Stop',
+      last_assistant_message: 'Done.',
+    };
+    const paneBuffer = ['some output'];
+
+    const state = resolveStopState(input, paneBuffer);
+    assert.equal(state, 'done');
+  });
+
+  it('handles null last_assistant_message without throwing', () => {
+    const input = {
+      ...BASE_INPUT,
+      hook_event_name: 'Stop',
+    };
+    const paneBuffer = ['some output', '\u276f'];
+
+    const state = resolveStopState(input, paneBuffer);
+    assert.equal(state, 'idle_prompt');
   });
 });
