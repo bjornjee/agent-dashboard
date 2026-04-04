@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bluekeyes/go-gitdiff/gitdiff"
 	tea "charm.land/bubbletea/v2"
+	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
 type diffMsg struct {

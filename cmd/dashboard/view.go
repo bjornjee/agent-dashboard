@@ -930,14 +930,14 @@ func (m model) renderRightPanel() string {
 	var parts []string
 	if m.mode == modeUsage {
 		// Single-section layout: header + label + messageVP
-		m.messageVP.SetHeight(max(panelHeight - actualHeaderLines - 1, minMessageHeight))
+		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
 		parts = []string{
 			headerStr,
 			messageLabel,
 			m.messageVP.View(),
 		}
 	} else if m.planVisible && m.renderedPlan != "" {
-		m.messageVP.SetHeight(max(panelHeight - actualHeaderLines - 1, minMessageHeight))
+		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
 		parts = []string{
 			headerStr,
 			messageLabel,
