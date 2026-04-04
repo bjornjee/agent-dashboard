@@ -155,6 +155,13 @@ type model struct {
 	// escape sequences.
 	lastEscapeAt time.Time
 
+	// modeResetAt records when a key event was last processed while in a
+	// non-normal mode. If a mode-entry key (enter, x, r, m, y, n, 1-9)
+	// arrives in normal mode within modeResetCooldown of this timestamp,
+	// it is treated as a phantom keystroke (e.g. from key-release events
+	// or terminal artefacts following the mode transition).
+	modeResetAt time.Time
+
 	// debugKeyLog is an open file for logging raw key events.
 	// Set to nil to disable. Written by debugLogKey in keys.go.
 	debugKeyLog *os.File
