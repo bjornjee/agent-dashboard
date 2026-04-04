@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -25,10 +27,10 @@ func (m *model) updateRightContent() {
 		if fullHeight < minMessageHeight {
 			fullHeight = minMessageHeight
 		}
-		m.messageVP.Height = fullHeight
+		m.messageVP.SetHeight(fullHeight)
 	} else {
 		_, _, msgHeight := panelHeights(panelHeight, defaultHeaderLines)
-		m.messageVP.Height = msgHeight
+		m.messageVP.SetHeight(msgHeight)
 	}
 
 	// Create folder mode overrides right panel (works even with no agents)
@@ -242,7 +244,7 @@ func (m model) agentListContent() string {
 			if effState == "plan" {
 				hdr = struct {
 					label string
-					color lipgloss.Color
+					color color.Color
 				}{"PLAN", planColor}
 			}
 			lines = append(lines, " "+lipgloss.NewStyle().
@@ -330,16 +332,16 @@ func (m model) filesContent(agent Agent) string {
 	w := m.rightWidth - 4
 	var lines []string
 	for _, f := range agent.FilesChanged {
-		var color lipgloss.Color
+		var clr color.Color
 		switch {
 		case strings.HasPrefix(f, "+"):
-			color = doneColor
+			clr = doneColor
 		case strings.HasPrefix(f, "-"):
-			color = errorColor
+			clr = errorColor
 		default:
-			color = textInputColor
+			clr = textInputColor
 		}
-		style := lipgloss.NewStyle().Foreground(color)
+		style := lipgloss.NewStyle().Foreground(clr)
 		for _, wl := range wrapText(f, w) {
 			lines = append(lines, "  "+style.Render(wl))
 		}
@@ -676,9 +678,16 @@ func (m model) subagentOutputContent() string {
 
 // -- View --
 
-func (m model) View() string {
+func (m model) View() tea.View {
+	makeView := func(content string) tea.View {
+		v := tea.NewView(content)
+		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
+		return v
+	}
+
 	if m.width == 0 || m.height == 0 {
-		return "Loading..."
+		return makeView("Loading...")
 	}
 
 	banner := m.renderBanner()
@@ -686,7 +695,7 @@ func (m model) View() string {
 	if m.helpVisible {
 		overlay := m.renderHelpOverlay()
 		helpBar := m.renderHelpBar()
-		return lipgloss.JoinVertical(lipgloss.Left, banner, overlay, helpBar)
+		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, overlay, helpBar))
 	}
 
 	var left, right string
@@ -701,7 +710,7 @@ func (m model) View() string {
 
 	help := m.renderHelpBar()
 
-	return lipgloss.JoinVertical(lipgloss.Left, banner, main, help)
+	return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, main, help))
 }
 
 func (m model) renderLeftPanel() string {
@@ -825,9 +834,9 @@ func (m model) renderRightPanel() string {
 	headerStr := strings.Join(header, "\n")
 	actualHeaderLines := strings.Count(headerStr, "\n") + 1
 	filesH, historyH, msgH := panelHeights(panelHeight, actualHeaderLines)
-	m.filesVP.Height = filesH
-	m.historyVP.Height = historyH
-	m.messageVP.Height = msgH
+	m.filesVP.SetHeight(filesH)
+	m.historyVP.SetHeight(historyH)
+	m.messageVP.SetHeight(msgH)
 
 	// Section labels + viewports
 	focusMarker := func(vp int) string {
@@ -921,14 +930,14 @@ func (m model) renderRightPanel() string {
 	var parts []string
 	if m.mode == modeUsage {
 		// Single-section layout: header + label + messageVP
-		m.messageVP.Height = max(panelHeight-actualHeaderLines-1, minMessageHeight)
+		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
 		parts = []string{
 			headerStr,
 			messageLabel,
 			m.messageVP.View(),
 		}
 	} else if m.planVisible && m.renderedPlan != "" {
-		m.messageVP.Height = max(panelHeight-actualHeaderLines-1, minMessageHeight)
+		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
 		parts = []string{
 			headerStr,
 			messageLabel,
@@ -974,11 +983,11 @@ func (m model) statusLine() string {
 			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
 	}
 	if m.statusMsg != "" {
-		color := themeGreen
+		clr := themeGreen
 		if m.statusIsError {
-			color = errorColor
+			clr = errorColor
 		}
-		return " " + lipgloss.NewStyle().Foreground(color).Render(m.statusMsg)
+		return " " + lipgloss.NewStyle().Foreground(clr).Render(m.statusMsg)
 	}
 	return ""
 }

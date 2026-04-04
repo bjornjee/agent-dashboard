@@ -8,12 +8,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // -- Tree node --
@@ -399,13 +399,13 @@ func newModel(cfg Config, db *DB) model {
 		startupDone:       false,
 		mode:              modeNormal,
 		db:                db,
-		agentListVP:       viewport.New(0, 0),
-		filesVP:           viewport.New(0, 0),
-		historyVP:         viewport.New(0, 0),
-		messageVP:         viewport.New(0, 0),
+		agentListVP:       viewport.New(),
+		filesVP:           viewport.New(),
+		historyVP:         viewport.New(),
+		messageVP:         viewport.New(),
 		focusedVP:         focusAgentList,
-		diffFileVP:        viewport.New(0, 0),
-		diffContentVP:     viewport.New(0, 0),
+		diffFileVP:        viewport.New(),
+		diffContentVP:     viewport.New(),
 		diffCollapsedDirs: make(map[string]bool),
 		diffFilterInput:   dfi,
 		agentCaches:       make(map[string]*agentCache),
@@ -840,7 +840,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
 
@@ -858,21 +858,21 @@ func (m *model) resizeViewports() {
 	m.rightWidth = m.width - m.leftWidth - 4
 	panelHeight := m.height - 5 - m.bannerHeight()
 
-	m.agentListVP.Width = m.leftWidth
-	m.agentListVP.Height = panelHeight
+	m.agentListVP.SetWidth(m.leftWidth)
+	m.agentListVP.SetHeight(panelHeight)
 
 	filesH, historyH, msgH := panelHeights(panelHeight, defaultHeaderLines)
 
-	m.filesVP.Width = m.rightWidth
-	m.filesVP.Height = filesH
+	m.filesVP.SetWidth(m.rightWidth)
+	m.filesVP.SetHeight(filesH)
 
-	m.historyVP.Width = m.rightWidth
-	m.historyVP.Height = historyH
+	m.historyVP.SetWidth(m.rightWidth)
+	m.historyVP.SetHeight(historyH)
 
-	m.messageVP.Width = m.rightWidth
-	m.messageVP.Height = msgH
+	m.messageVP.SetWidth(m.rightWidth)
+	m.messageVP.SetHeight(msgH)
 
-	m.textInput.Width = m.rightWidth - 12 // account for "Reply: " prefix + padding
+	m.textInput.SetWidth(m.rightWidth - 12) // account for "Reply: " prefix + padding
 
 	// Diff viewer viewports (narrower left panel for file list)
 	m.diffLeftWidth = m.width*20/100 - 2
@@ -884,10 +884,10 @@ func (m *model) resizeViewports() {
 	if diffPanelHeight < 3 {
 		diffPanelHeight = 3
 	}
-	m.diffFileVP.Width = m.diffLeftWidth
-	m.diffFileVP.Height = diffPanelHeight
-	m.diffContentVP.Width = m.diffRightWidth
-	m.diffContentVP.Height = diffPanelHeight
+	m.diffFileVP.SetWidth(m.diffLeftWidth)
+	m.diffFileVP.SetHeight(diffPanelHeight)
+	m.diffContentVP.SetWidth(m.diffRightWidth)
+	m.diffContentVP.SetHeight(diffPanelHeight)
 
 	if m.planContent != "" && m.planVisible {
 		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)

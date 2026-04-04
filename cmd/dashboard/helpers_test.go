@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"image/color"
+
+	"charm.land/lipgloss/v2"
 )
 
 func TestRepoFromCwd(t *testing.T) {
@@ -139,7 +140,7 @@ func TestPermissionModeColor(t *testing.T) {
 	tests := []struct {
 		name string
 		mode string
-		want lipgloss.Color
+		want color.Color
 	}{
 		{"plan mode gets mauve", "plan", themeMauve},
 		{"auto-edit gets yellow", "auto-edit", themeYellow},
@@ -425,7 +426,7 @@ func TestBranchColor(t *testing.T) {
 	tests := []struct {
 		name   string
 		branch string
-		want   lipgloss.Color
+		want   color.Color
 	}{
 		{"feat prefix", "feat/dashboard", themeGreen},
 		{"fix prefix", "fix/auth-bug", themePeach},
@@ -596,7 +597,7 @@ func TestPermissionModeStyle(t *testing.T) {
 }
 
 func TestHighlightLine(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Setenv("COLORTERM", "truecolor")
 
 	t.Run("preserves inner ANSI colors", func(t *testing.T) {
 		red := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000")).Render("RED")

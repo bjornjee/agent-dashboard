@@ -1,6 +1,10 @@
 package main
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // -- Theme palette --
 //
@@ -10,7 +14,7 @@ import "github.com/charmbracelet/lipgloss"
 // Current theme: Catppuccin Frappé
 // Reference: https://catppuccin.com/palette
 
-const (
+var (
 	themeRosewater = lipgloss.Color("#f2d5cf")
 	themeFlamingo  = lipgloss.Color("#eebebe")
 	themePink      = lipgloss.Color("#f4b8e4")
@@ -77,7 +81,7 @@ var (
 
 type stateIcon struct {
 	icon  string
-	color lipgloss.Color
+	color color.Color
 }
 
 var stateIcons = map[string]stateIcon{
@@ -94,7 +98,7 @@ var stateIcons = map[string]stateIcon{
 
 var groupHeaders = map[int]struct {
 	label string
-	color lipgloss.Color
+	color color.Color
 }{
 	1: {"BLOCKED", permissionColor},
 	2: {"WAITING", questionColor},

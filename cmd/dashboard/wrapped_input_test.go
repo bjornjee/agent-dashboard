@@ -3,9 +3,6 @@ package main
 import (
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
 
 func TestSoftWrapRunes(t *testing.T) {
@@ -71,8 +68,7 @@ func TestIsSlashCommand(t *testing.T) {
 }
 
 func TestRenderWrappedInput_SlashHighlighting(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("COLORTERM", "truecolor")
 	skills := []string{"(none)", "feature", "chore"}
 
 	// Matched skill should contain blue ANSI (themeBlue #8caaee)
@@ -104,8 +100,7 @@ func TestRenderWrappedInput_SlashHighlighting(t *testing.T) {
 }
 
 func TestRenderWrappedInput_Cursor(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("COLORTERM", "truecolor")
 
 	// Focused: cursor shows as reverse video
 	out := renderWrappedInput("abc", 1, 40, true, nil)
@@ -127,7 +122,7 @@ func TestRenderWrappedInput_Cursor(t *testing.T) {
 }
 
 func TestRenderWrappedInput_Wrapping(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("NO_COLOR", "1")
 
 	// 20 chars at width 8 should produce 3 lines
 	out := renderWrappedInput("abcdefghijklmnopqrst", 0, 8, false, nil)
@@ -138,8 +133,7 @@ func TestRenderWrappedInput_Wrapping(t *testing.T) {
 }
 
 func TestRenderWrappedInput_Placeholder(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	t.Setenv("COLORTERM", "truecolor")
 
 	// Empty + focused: should show cursor block, not placeholder text
 	out := renderWrappedInput("", 0, 40, true, nil)

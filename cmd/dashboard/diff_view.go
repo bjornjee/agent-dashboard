@@ -6,12 +6,12 @@ import (
 	"path"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // Diff background RGB values (subtle tints on Catppuccin Frappé base #303446).
@@ -760,7 +760,7 @@ func (m model) renderDiffContentPanel() string {
 	// Sticky function context: find the function for the top visible row
 	stickyCtx := ""
 	if len(m.diffFuncCtx) > 0 {
-		topRow := m.diffContentVP.YOffset
+		topRow := m.diffContentVP.YOffset()
 		if topRow >= len(m.diffFuncCtx) {
 			topRow = len(m.diffFuncCtx) - 1
 		}
@@ -809,8 +809,8 @@ func (m *model) updateDiffContent() {
 	// Only scroll if cursor is within the visible entries range.
 	vis := m.visibleDiffEntries()
 	if m.diffCursor >= 0 && m.diffCursor < len(vis) {
-		vpHeight := m.diffFileVP.Height
-		yOff := m.diffFileVP.YOffset
+		vpHeight := m.diffFileVP.Height()
+		yOff := m.diffFileVP.YOffset()
 		if vpHeight > 0 {
 			if cursorLine < yOff {
 				m.diffFileVP.SetYOffset(cursorLine)
