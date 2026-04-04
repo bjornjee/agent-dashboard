@@ -1259,7 +1259,7 @@ func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
 
 func TestSendReply_RejectsSelfPane(t *testing.T) {
 	// sendReply should refuse to send to the dashboard's own pane.
-	cmd := sendReply("%5", "test message", "%5")
+	cmd := sendReply("%99999", "test message", "%99999")
 	msg := cmd()
 	result, ok := msg.(sendResultMsg)
 	if !ok {
@@ -1275,15 +1275,17 @@ func TestSendReply_RejectsSelfPane(t *testing.T) {
 
 func TestSendReply_AllowsDifferentPane(t *testing.T) {
 	// sendReply should NOT block when paneID differs from selfPaneID.
-	// We can't actually send (no tmux), but we verify the self-pane guard
-	// does not trigger.
-	cmd := sendReply("%5", "test message", "%0")
+	// Use a pane ID that cannot exist (%99999) so the function hits the
+	// "pane no longer exists" guard BEFORE calling TmuxSendKeys — this
+	// prevents the test from actually injecting text into a live tmux pane.
+	cmd := sendReply("%99999", "test message", "%0")
 	msg := cmd()
 	result, ok := msg.(sendResultMsg)
 	if !ok {
 		t.Fatalf("expected sendResultMsg, got %T", msg)
 	}
-	// Error is expected (no tmux), but it should NOT be the self-pane error.
+	// Error is expected (pane doesn't exist), but it must NOT be the
+	// self-pane rejection error — that's the guard we're testing.
 	if result.err != nil && strings.Contains(result.err.Error(), "dashboard pane") {
 		t.Errorf("should not reject different pane; got: %v", result.err)
 	}
