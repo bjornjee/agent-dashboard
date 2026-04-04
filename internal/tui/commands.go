@@ -830,6 +830,11 @@ func WatchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotif
 						debounce.Stop()
 					}
 					debounce = time.AfterFunc(50*time.Millisecond, func() {
+						defer func() {
+							if r := recover(); r != nil {
+								fmt.Fprintf(os.Stderr, "panic in watcher callback: %v\n", r)
+							}
+						}()
 						sf := state.ReadState(dir)
 						if tmuxReady.Load() {
 							state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())

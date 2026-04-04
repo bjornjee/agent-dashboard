@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,6 +26,24 @@ func main() {
 
 	cfg := config.DefaultConfig()
 	stateDir := cfg.Profile.StateDir
+
+	// Redirect stderr to a crash log so panics and signals are captured
+	// even when bubbletea owns the alternate screen.
+	crashLogPath := filepath.Join(stateDir, "crash.log")
+	if crashLog, err := os.OpenFile(crashLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); err == nil {
+		os.Stderr = crashLog
+		defer crashLog.Close()
+		fmt.Fprintf(crashLog, "=== dashboard started pid=%d %s ===\n", os.Getpid(), time.Now().Format(time.RFC3339))
+	}
+
+	// Log signals that would terminate the process.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		sig := <-sigCh
+		fmt.Fprintf(os.Stderr, "=== received signal: %s at %s ===\n", sig, time.Now().Format(time.RFC3339))
+		os.Exit(128 + int(sig.(syscall.Signal)))
+	}()
 
 	// Singleton lock — only one dashboard instance at a time.
 	lockFile, err := lock.AcquireLock(stateDir)
