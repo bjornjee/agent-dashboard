@@ -77,11 +77,23 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
 
-  const state = resolveState(hookEvent, toolName);
+  let state = resolveState(hookEvent, toolName);
+
+  // Only consume hook_blocked on PreToolUse — the same event type that blocking
+  // hooks fire on. Ignoring it on PostToolUse prevents a rapid PostToolUse from
+  // a prior tool clearing the signal before the dashboard reads it.
+  const consumeBlocked = existing.hook_blocked && hookEvent === 'PreToolUse';
+  if (consumeBlocked && state === 'running') {
+    state = 'permission';
+  }
 
   // Preserve PR states set by pr-detect or dashboard pinning.
+  // Still clear hook_blocked even when returning early, to avoid a stuck signal.
   const PR_STATES = new Set(['pr', 'merged']);
   if ((PR_STATES.has(existing.state) || PR_STATES.has(existing.pinned_state)) && state === 'running') {
+    if (consumeBlocked) {
+      return { changed: true, update: { hook_blocked: '' } };
+    }
     return { changed: false, update: null };
   }
 
@@ -90,7 +102,8 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
   const changed = existing.state !== state
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
-    || (worktreeCwd && existing.worktree_cwd !== worktreeCwd);
+    || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
+    || consumeBlocked;
 
   if (!changed && existing.state) {
     return { changed: false, update: null };
@@ -108,6 +121,11 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
 
   if (worktreeCwd) {
     update.worktree_cwd = worktreeCwd;
+  }
+
+  // Clear hook_blocked after consuming it (one-shot signal from blocking hooks).
+  if (consumeBlocked) {
+    update.hook_blocked = '';
   }
 
   return { changed: true, update };
