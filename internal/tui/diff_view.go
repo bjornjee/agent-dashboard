@@ -633,19 +633,42 @@ func (m model) diffSideBySideContent() (string, []string) {
 					}
 				}
 
-			case gitdiff.OpDelete:
-				left := formatDiffLineHighlighted(oldLineNum, dl.content, contentWidth, lineNumWidth, halfWidth, oldLexer, diffDelBgR, diffDelBgG, diffDelBgB)
-				right := []string{emptyHalf(halfWidth)}
-				appendRows(joinSideBySide(left, right, halfWidth), curFuncCtx)
-				oldLineNum++
-				i++
+			case gitdiff.OpDelete, gitdiff.OpAdd:
+				// Collect consecutive delete/add runs and pair them
+				// side-by-side like GitHub's split diff.
+				var dels, adds []string
+				delStart := oldLineNum
+				addStart := newLineNum
+				for i < len(allLines) && allLines[i].op == gitdiff.OpDelete {
+					dels = append(dels, allLines[i].content)
+					i++
+				}
+				for i < len(allLines) && allLines[i].op == gitdiff.OpAdd {
+					adds = append(adds, allLines[i].content)
+					i++
+				}
 
-			case gitdiff.OpAdd:
-				left := []string{emptyHalf(halfWidth)}
-				right := formatDiffLineHighlighted(newLineNum, dl.content, contentWidth, lineNumWidth, halfWidth, newLexer, diffAddBgR, diffAddBgG, diffAddBgB)
-				appendRows(joinSideBySide(left, right, halfWidth), curFuncCtx)
-				newLineNum++
-				i++
+				// Pair deletions with additions side-by-side
+				n := len(dels)
+				if len(adds) > n {
+					n = len(adds)
+				}
+				for j := 0; j < n; j++ {
+					var left, right []string
+					if j < len(dels) {
+						left = formatDiffLineHighlighted(delStart+j, dels[j], contentWidth, lineNumWidth, halfWidth, oldLexer, diffDelBgR, diffDelBgG, diffDelBgB)
+					} else {
+						left = []string{emptyHalf(halfWidth)}
+					}
+					if j < len(adds) {
+						right = formatDiffLineHighlighted(addStart+j, adds[j], contentWidth, lineNumWidth, halfWidth, newLexer, diffAddBgR, diffAddBgG, diffAddBgB)
+					} else {
+						right = []string{emptyHalf(halfWidth)}
+					}
+					appendRows(joinSideBySide(left, right, halfWidth), curFuncCtx)
+				}
+				oldLineNum += len(dels)
+				newLineNum += len(adds)
 			}
 		}
 	}
@@ -669,10 +692,25 @@ func formatDiffLineHighlighted(lineNum int, content string, contentWidth, lineNu
 	// Wrap the highlighted content into chunks of contentWidth visible chars.
 	wrappedContent := wrapANSI(highlighted, contentWidth)
 
+	hasBg := bgR != 0 || bgG != 0 || bgB != 0
+
+	// GitHub-style gutter marker: − for deletions, + for additions.
+	var gutterMark string
+	if hasBg {
+		if bgR > bgG {
+			gutterMark = diffDelStyle.Render("−")
+		} else {
+			gutterMark = diffAddStyle.Render("+")
+		}
+	}
+
 	numPrefix := fmt.Sprintf(" %*d ", lineNumWidth, lineNum)
 	blankPrefix := strings.Repeat(" ", lineNumWidth+2) // same width, no number
-
-	hasBg := bgR != 0 || bgG != 0 || bgB != 0
+	if gutterMark != "" {
+		// Replace leading space with the colored gutter marker.
+		numPrefix = gutterMark + numPrefix[1:]
+		blankPrefix = gutterMark + blankPrefix[1:]
+	}
 	var rows []string
 
 	for i, chunk := range wrappedContent {
