@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // pastConfirmTime returns a time far enough in the past to bypass the cooldown.
@@ -32,7 +32,7 @@ func TestShiftDownJumpsToNextParent(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.selected = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyShiftDown}
+	msg := tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -45,7 +45,7 @@ func TestShiftUpJumpsToPrevParent(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.selected = 2
 
-	msg := tea.KeyMsg{Type: tea.KeyShiftUp}
+	msg := tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -59,7 +59,7 @@ func TestCtrlDownDoesNotJump(t *testing.T) {
 	// Start at parent0 (idx 0) — old code would jump to parent1 (idx 2)
 	m.selected = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlDown}
+	msg := tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -74,7 +74,7 @@ func TestCtrlUpDoesNotJump(t *testing.T) {
 	// Start at parent1 (idx 2) — if ctrl+up still worked, it would jump to 0
 	m.selected = 2
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlUp}
+	msg := tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -88,7 +88,7 @@ func TestAKeyEntersCreateFolderMode(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.selected = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
+	msg := tea.KeyPressMsg{Code: 'a', Text: "a"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -101,7 +101,7 @@ func TestAKeyNoopWithoutTmux(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.tmuxAvailable = false
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
+	msg := tea.KeyPressMsg{Code: 'a', Text: "a"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -118,7 +118,7 @@ func TestCreateFolderMode_EscReturnsToNormal(t *testing.T) {
 	m.mode = modeCreateFolder
 	m.textInput.SetValue("/some/path")
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -134,7 +134,7 @@ func TestShiftSDoesNothing(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.selected = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}}
+	msg := tea.KeyPressMsg{Code: 'S', Text: "S"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -151,7 +151,7 @@ func TestCreateFolderMode_EnterAcceptsSuggestion(t *testing.T) {
 	m.selectedSugg = 0
 	// textInput is empty — user arrow-selected a suggestion without Tab
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -171,7 +171,7 @@ func TestCreateFolderMode_EnterUsesHighlightedSuggestion(t *testing.T) {
 	m.suggestions = []string{"/Users/test/code/sales-app", "/Users/test/code/sales-demo"}
 	m.selectedSugg = 1
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -187,7 +187,7 @@ func TestCreateFolderMode_DownAdvancesSelection(t *testing.T) {
 	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b"}
 	m.selectedSugg = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyDown}
+	msg := tea.KeyPressMsg{Code: tea.KeyDown}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -202,7 +202,7 @@ func TestCreateFolderMode_TypingResetsSelection(t *testing.T) {
 	m.selectedSugg = 2
 	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b", "/Users/test/code/c"}
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	msg := tea.KeyPressMsg{Code: 'x', Text: "x"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -218,7 +218,7 @@ func TestCreateFolderMode_EnterWithTextUsesSuggestionWhenVisible(t *testing.T) {
 	m.suggestions = []string{"/Users/test/code/suggestion"}
 	m.selectedSugg = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -239,7 +239,7 @@ func TestCreateFolderMode_EnterWithTextNoSuggestionsUsesText(t *testing.T) {
 	m.suggestions = nil // no suggestions visible
 	m.selectedSugg = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -256,6 +256,8 @@ func TestUsageModeWorksWithNoAgents(t *testing.T) {
 	m := newModel(testConfig(""), nil)
 	m.agents = nil // no agents
 	m.mode = modeUsage
+	m.messageVP.SetWidth(80)
+	m.messageVP.SetHeight(40)
 
 	m.updateRightContent()
 
@@ -271,7 +273,7 @@ func TestCreateFolderMode_UpWrapsSelection(t *testing.T) {
 	m.suggestions = []string{"/Users/test/code/a", "/Users/test/code/b"}
 	m.selectedSugg = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyUp}
+	msg := tea.KeyPressMsg{Code: tea.KeyUp}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -284,7 +286,7 @@ func TestHKeyOpensHelp(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.selected = 0
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	msg := tea.KeyPressMsg{Code: 'h', Text: "h"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -297,7 +299,7 @@ func TestHKeyClosesHelp(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.helpVisible = true
 
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	msg := tea.KeyPressMsg{Code: 'h', Text: "h"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -310,7 +312,7 @@ func TestEscClosesHelp(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.helpVisible = true
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -324,7 +326,7 @@ func TestHelpOverlaySwallowsKeys(t *testing.T) {
 	m.helpVisible = true
 
 	// 'r' should not enter reply mode when help is visible
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+	msg := tea.KeyPressMsg{Code: 'r', Text: "r"}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -346,7 +348,7 @@ func TestCreateWizard_FolderToSkill(t *testing.T) {
 	m.textInput.SetValue("/Users/test/code/myrepo")
 	m.suggestions = nil
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -368,7 +370,7 @@ func TestCreateWizard_SkillNavigation(t *testing.T) {
 	m.selectedCreateSkill = 0
 
 	// Down
-	msg := tea.KeyMsg{Type: tea.KeyDown}
+	msg := tea.KeyPressMsg{Code: tea.KeyDown}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 	if rm.selectedCreateSkill != 1 {
@@ -377,7 +379,7 @@ func TestCreateWizard_SkillNavigation(t *testing.T) {
 
 	// Up from 1 back to 0
 	rm.mode = modeCreateSkill
-	msg = tea.KeyMsg{Type: tea.KeyUp}
+	msg = tea.KeyPressMsg{Code: tea.KeyUp}
 	result, _ = rm.handleKey(msg)
 	rm = result.(model)
 	if rm.selectedCreateSkill != 0 {
@@ -385,7 +387,7 @@ func TestCreateWizard_SkillNavigation(t *testing.T) {
 	}
 
 	// Up from 0 stays at 0 (no wrap)
-	msg = tea.KeyMsg{Type: tea.KeyUp}
+	msg = tea.KeyPressMsg{Code: tea.KeyUp}
 	result, _ = rm.handleKey(msg)
 	rm = result.(model)
 	if rm.selectedCreateSkill != 0 {
@@ -400,7 +402,7 @@ func TestCreateWizard_SkillToMessage(t *testing.T) {
 	m.selectedCreateSkill = 1 // "feature"
 	m.createFolder = "/Users/test/repo"
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -418,7 +420,7 @@ func TestCreateWizard_SkillNoneToMessage(t *testing.T) {
 	m.availableSkills = []string{"(none)", "feature", "fix"}
 	m.selectedCreateSkill = 0 // "(none)"
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -436,7 +438,7 @@ func TestCreateWizard_EscFromSkillGoesBackToFolder(t *testing.T) {
 	m.createFolder = "/Users/test/repo"
 	m.selectedCreateSkill = 2
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -458,7 +460,7 @@ func TestCreateWizard_CtrlCFromSkillCancels(t *testing.T) {
 	m.createFolder = "/Users/test/repo"
 	m.selectedCreateSkill = 2
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	msg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -479,7 +481,7 @@ func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	m.availableSkills = []string{"(none)", "feature", "fix"}
 	m.textInput.SetValue("some message")
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -499,7 +501,7 @@ func TestCreateWizard_EscFromMessageGoesToFolderWhenNoSkills(t *testing.T) {
 	m.skillsAvailable = false
 	m.textInput.SetValue("some message")
 
-	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -519,7 +521,7 @@ func TestCreateWizard_CtrlCFromMessageCancels(t *testing.T) {
 	m.createSkillName = "feature"
 	m.textInput.SetValue("some message")
 
-	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	msg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -541,7 +543,7 @@ func TestCreateWizard_MessageLaunch(t *testing.T) {
 	m.createSkillName = "feature"
 	m.textInput.SetValue("add login page")
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, cmd := m.handleKey(msg)
 	rm := result.(model)
 
@@ -567,7 +569,7 @@ func TestCreateWizard_MessageEmptyLaunch(t *testing.T) {
 	m.createSkillName = ""
 	// textInput is empty — no message
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, cmd := m.handleKey(msg)
 	rm := result.(model)
 
@@ -633,7 +635,7 @@ func TestGKeyPinsPRState_NoGH(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	_, cmd := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	if cmd == nil {
 		t.Fatal("expected cmd from 'g' key, got nil")
 	}
@@ -677,7 +679,7 @@ func TestGKeyDefersPin_WithGH(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	if cmd == nil {
 		t.Fatal("expected cmd from 'g' key, got nil")
 	}
@@ -727,7 +729,7 @@ func TestMKey_WithGH_EntersConfirmMode(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd from 'm' key (should enter confirm mode, not execute)")
 	}
@@ -756,7 +758,7 @@ func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
 	m.confirmMergeDir = t.TempDir()
 	m.confirmMergeBranch = "feat/test"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming merge")
 	}
@@ -780,7 +782,7 @@ func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
 	m.confirmMergeSessionID = "sess1"
 	m.statusMsg = "Merge feat/test? (y/n)"
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
@@ -813,7 +815,7 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 	m.selected = 0
 
 	// Step 1: press 'm' — should enter confirm mode
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd from 'm' (confirm mode)")
 	}
@@ -824,7 +826,7 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 
 	// Step 2: confirm with 'y' — should pin to merged
 	m.confirmEnteredAt = pastConfirmTime // bypass cooldown for test
-	result, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, cmd = m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming merge")
 	}
@@ -850,7 +852,7 @@ func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd from 'y' (should enter confirm mode)")
 	}
@@ -876,7 +878,7 @@ func TestYKey_PlanAgent_MapsTo1(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	updated := result.(model)
 	if updated.confirmSendKey != "1" {
 		t.Errorf("expected plan 'y' to map to '1', got %q", updated.confirmSendKey)
@@ -892,7 +894,7 @@ func TestNumKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd from '3' (should enter confirm mode)")
 	}
@@ -913,7 +915,7 @@ func TestConfirmSend_Enter_Sends(t *testing.T) {
 	m.confirmSendPaneID = "%5"
 	m.confirmSendKey = "y"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming send")
 	}
@@ -934,7 +936,7 @@ func TestConfirmSend_Esc_Cancels(t *testing.T) {
 	m.confirmSendKey = "y"
 	m.statusMsg = "Send 'y' to agent?"
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
@@ -954,7 +956,7 @@ func TestConfirmSend_PhantomKey_Swallowed(t *testing.T) {
 	m.confirmSendPaneID = "%5"
 	m.confirmSendKey = "y"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd for unrecognized key in confirm mode")
 	}
@@ -975,7 +977,7 @@ func TestEnterKey_EntersConfirmJump(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil {
 		t.Fatal("expected nil cmd from enter (should enter confirm mode, not jump)")
 	}
@@ -995,7 +997,7 @@ func TestConfirmJump_Y_Jumps(t *testing.T) {
 	m.confirmEnteredAt = pastConfirmTime
 	m.confirmJumpPaneID = "%5"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming jump")
 	}
@@ -1016,7 +1018,7 @@ func TestConfirmJump_Enter_Jumps(t *testing.T) {
 	m.confirmEnteredAt = pastConfirmTime
 	m.confirmJumpPaneID = "%5"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming jump with enter")
 	}
@@ -1033,7 +1035,7 @@ func TestConfirmJump_Esc_Cancels(t *testing.T) {
 	m.confirmJumpPaneID = "%5"
 	m.statusMsg = "Jump to agent?"
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
@@ -1052,7 +1054,7 @@ func TestConfirmJump_PhantomKey_Swallowed(t *testing.T) {
 	m.mode = modeConfirmJump
 	m.confirmJumpPaneID = "%5"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd for unrecognized key in confirm jump mode")
 	}
@@ -1068,7 +1070,7 @@ func TestConfirmMerge_PhantomKey_Swallowed(t *testing.T) {
 	m.mode = modeConfirmMerge
 	m.confirmMergeSessionID = "sess1"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'p', Text: "p"})
 	if cmd != nil {
 		t.Fatal("expected nil cmd for unrecognized key in confirm merge mode")
 	}
@@ -1084,13 +1086,13 @@ func TestConfirmCooldown_RejectsPhantomConfirmation(t *testing.T) {
 	tests := []struct {
 		name string
 		mode int
-		key  tea.KeyMsg
+		key  tea.KeyPressMsg
 	}{
-		{"merge_y", modeConfirmMerge, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}},
-		{"close_y", modeConfirmClose, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}},
-		{"send_enter", modeConfirmSend, tea.KeyMsg{Type: tea.KeyEnter}},
-		{"jump_y", modeConfirmJump, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}},
-		{"jump_enter", modeConfirmJump, tea.KeyMsg{Type: tea.KeyEnter}},
+		{"merge_y", modeConfirmMerge, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"close_y", modeConfirmClose, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"send_enter", modeConfirmSend, tea.KeyPressMsg{Code: tea.KeyEnter}},
+		{"jump_y", modeConfirmJump, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"jump_enter", modeConfirmJump, tea.KeyPressMsg{Code: tea.KeyEnter}},
 	}
 
 	for _, tt := range tests {
@@ -1132,7 +1134,7 @@ func TestConfirmCooldown_AcceptsAfterCooldown(t *testing.T) {
 	m.confirmMergeDir = t.TempDir()
 	m.confirmMergeBranch = "feat/test"
 
-	result, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd == nil {
 		t.Fatal("expected cmd after cooldown period")
 	}
@@ -1153,7 +1155,7 @@ func TestPhantomKey_EnterRejected(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now() // mouse event just happened
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("phantom Enter should be rejected; got mode %d, want modeNormal", updated.mode)
@@ -1171,7 +1173,7 @@ func TestPhantomKey_MergeRejected(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now()
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("phantom 'm' should be rejected; got mode %d, want modeNormal", updated.mode)
@@ -1188,7 +1190,7 @@ func TestPhantomKey_CloseRejected(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now()
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("phantom 'x' should be rejected; got mode %d, want modeNormal", updated.mode)
@@ -1205,7 +1207,7 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 	m.buildTree()
 	m.lastEscapeAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	updated := result.(model)
 	if updated.mode != modeConfirmJump {
 		t.Errorf("real Enter should be accepted; got mode %d, want modeConfirmJump", updated.mode)
@@ -1219,7 +1221,7 @@ func TestHandleMouse_SetsLastEscapeAt(t *testing.T) {
 	}
 
 	before := time.Now()
-	result, _ := m.handleMouse(tea.MouseMsg{})
+	result, _ := m.handleMouse(tea.MouseMotionMsg{})
 	after := time.Now()
 
 	updated := result.(model)
@@ -1248,7 +1250,7 @@ func TestPhantomKey_AfterFocus_EnterRejected(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.lastEscapeAt = time.Now() // focus event just happened
 
-	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
@@ -1288,14 +1290,14 @@ func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
 	m.buildTree()
 
 	// Press Enter to submit reply → mode returns to modeNormal.
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm := result.(model)
 	if rm.mode != modeNormal {
 		t.Fatalf("expected modeNormal after reply submit, got %d", rm.mode)
 	}
 
 	// Immediately press Enter again (phantom).
-	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm2 := result2.(model)
 	if rm2.mode == modeConfirmJump {
 		t.Errorf("phantom Enter after reply submit should NOT trigger modeConfirmJump")
@@ -1315,14 +1317,14 @@ func TestPhantomEnter_AfterConfirmSend(t *testing.T) {
 	m.buildTree()
 
 	// Press Enter to confirm send → mode returns to modeNormal.
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm := result.(model)
 	if rm.mode != modeNormal {
 		t.Fatalf("expected modeNormal after confirm send, got %d", rm.mode)
 	}
 
 	// Immediately press Enter again (phantom).
-	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm2 := result2.(model)
 	if rm2.mode == modeConfirmJump {
 		t.Errorf("phantom Enter after confirm-send should NOT trigger modeConfirmJump")
@@ -1339,14 +1341,14 @@ func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
 	m.buildTree()
 
 	// Press Enter to submit → mode returns to modeNormal.
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm := result.(model)
 	if rm.mode != modeNormal {
 		t.Fatalf("expected modeNormal after create message submit, got %d", rm.mode)
 	}
 
 	// Immediately press Enter again (phantom).
-	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm2 := result2.(model)
 	if rm2.mode == modeConfirmJump {
 		t.Errorf("phantom Enter after create-message should NOT trigger modeConfirmJump")
@@ -1362,14 +1364,14 @@ func TestRealEnter_AfterCooldown(t *testing.T) {
 	m.buildTree()
 
 	// Press Enter to submit reply.
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm := result.(model)
 
 	// Simulate time passing beyond the cooldown.
 	rm.modeResetAt = time.Now().Add(-time.Second)
 
 	// Now press Enter — should work normally.
-	result2, _ := rm.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	result2, _ := rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rm2 := result2.(model)
 	if rm2.mode != modeConfirmJump {
 		t.Errorf("real Enter after cooldown should trigger modeConfirmJump, got mode %d", rm2.mode)
@@ -1405,7 +1407,7 @@ func TestYKey_PlanState_SetsConfirmSendLabel(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	updated := result.(model)
 	if updated.mode != modeConfirmSend {
 		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
@@ -1427,7 +1429,7 @@ func TestNumberKey_BlockedState_SetsConfirmSendLabel(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
 	updated := result.(model)
 	if updated.mode != modeConfirmSend {
 		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
@@ -1445,7 +1447,7 @@ func TestConfirmSend_Esc_ClearsLabel(t *testing.T) {
 	m.confirmSendLabel = "Plan approved"
 	m.statusMsg = "Send 'y' to agent?"
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	updated := result.(model)
 	if updated.confirmSendLabel != "" {
 		t.Errorf("expected confirmSendLabel cleared, got %q", updated.confirmSendLabel)
@@ -1461,7 +1463,7 @@ func TestEditorKey_SetsInFlightStatus(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	updated := result.(model)
 	if updated.statusMsg != "Opening editor..." {
 		t.Errorf("expected 'Opening editor...', got %q", updated.statusMsg)
@@ -1479,7 +1481,7 @@ func TestDiffKey_SetsInFlightStatus(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	updated := result.(model)
 	if updated.statusMsg != "Loading diff..." {
 		t.Errorf("expected 'Loading diff...', got %q", updated.statusMsg)
@@ -1494,7 +1496,7 @@ func TestPRKey_SetsInFlightStatus(t *testing.T) {
 	m.buildTree()
 	m.selected = 0
 
-	result, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	updated := result.(model)
 	if updated.statusMsg != "Opening PR..." {
 		t.Errorf("expected 'Opening PR...', got %q", updated.statusMsg)

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 		}
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m)
 
 	// Start directory watcher for per-agent state files.
 	// m.tmuxReady is an atomic.Bool updated by deferredStartup once the
