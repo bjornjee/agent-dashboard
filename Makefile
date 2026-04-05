@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test install install-web clean seed web help
+.PHONY: build build-web fmt vet test test-race install install-web clean seed web help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || cat VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -10,6 +10,7 @@ build: ## Build the dashboard binary
 
 build-web: ## Build the web server binary
 	go build -o bin/agent-dashboard-web ./cmd/web/
+	@if [ "$$(uname)" = "Darwin" ]; then codesign -s - bin/agent-dashboard-web; fi
 
 fmt: ## Auto-format Go source files
 	gofmt -w .
@@ -31,6 +32,9 @@ vet: ## Run go vet (checks formatting + vets)
 	go vet ./...
 
 test: vet ## Run all tests (vets first)
+	CGO_ENABLED=0 go test ./...
+
+test-race: vet ## Run tests with race detector (CI only, requires codesigned binaries)
 	go test -race ./...
 
 install: ## Build and install binary + adapter (ADAPTER=claude-code)
