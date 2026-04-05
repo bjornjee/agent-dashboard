@@ -70,8 +70,8 @@ var petFrames = map[petState][][]string{
 
 // State durations in ticks before transitioning.
 var petStateDurations = map[petState]int{
-	petIdle:     20, // 8 seconds
-	petWalking:  16, // 6.4 seconds
+	petIdle:     16, // 6.4 seconds
+	petWalking:  12, // 4.8 seconds
 	petDrowsy:   12, // 4.8 seconds
 	petSleeping: 20, // 8 seconds
 	petEating:   16, // 6.4 seconds
