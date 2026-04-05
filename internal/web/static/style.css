@@ -1732,11 +1732,6 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .diff-sidebar { width: 100%; min-width: unset; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border-default); }
   .diff-content { max-height: none; }
   .diff-toggle-btn[data-mode="side-by-side"] { display: none; }
-  /* Force inline diffs: no side-scroll, maximise width */
-  .diff-content { overflow-x: hidden; }
-  .diff-content .d2h-diff-table { table-layout: fixed; }
-  .diff-content .d2h-code-line-ctn { white-space: pre-wrap; word-break: break-all; overflow-x: visible; }
-  .diff-file-header { padding: 8px 12px; }
 }
 
 /* Mobile */
