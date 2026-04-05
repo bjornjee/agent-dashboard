@@ -1734,10 +1734,8 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .diff-toggle-btn[data-mode="side-by-side"] { display: none; }
   /* Force inline diffs: no side-scroll, maximise width */
   .diff-content { overflow-x: hidden; }
-  .diff-content .d2h-file-diff { overflow: hidden; }
-  .diff-content .d2h-diff-table { width: 100% !important; }
-  .diff-content .d2h-code-linenumber { width: 36px !important; min-width: 36px !important; max-width: 36px !important; padding: 0 4px !important; font-size: 11px; }
-  .diff-content .d2h-code-line-ctn { white-space: pre-wrap !important; word-break: break-all !important; overflow-x: visible !important; }
+  .diff-content .d2h-diff-table { table-layout: fixed; }
+  .diff-content .d2h-code-line-ctn { white-space: pre-wrap; word-break: break-all; overflow-x: visible; }
   .diff-file-header { padding: 8px 12px; }
 }
 
