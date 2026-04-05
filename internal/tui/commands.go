@@ -569,6 +569,17 @@ func openEditor(editor, dir string) tea.Cmd {
 	}
 }
 
+func openWorktreeWindowCmd(session, branch, dir string) tea.Cmd {
+	return func() tea.Msg {
+		windowName := "shell"
+		if branch != "" {
+			windowName = sanitizeWindowName(branch)
+		}
+		_, err := tmux.TmuxNewWindow(session, windowName, dir)
+		return openWorktreeMsg{err: err, dir: dir}
+	}
+}
+
 func gitRemoteURL(dir string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

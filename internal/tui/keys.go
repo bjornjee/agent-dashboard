@@ -856,6 +856,17 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.messageVP.ScrollUp(1)
 		}
 		return m, nil
+	case "o":
+		if !m.tmuxAvailable {
+			m.setStatus("Cannot open window: tmux not detected", true)
+			return m, nil
+		}
+		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
+			m.statusMsg = "Opening window..."
+			m.statusIsError = false
+			m.statusMsgTick = -1 // pinned until async result
+			return m, openWorktreeWindowCmd(agent.Session, agent.Branch, agent.EffectiveDir())
+		}
 	case "e":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" {
 			m.statusMsg = "Opening editor..."

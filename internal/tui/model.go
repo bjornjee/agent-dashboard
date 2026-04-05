@@ -789,6 +789,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case openWorktreeMsg:
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Open window failed: %v", msg.err), true)
+		} else {
+			m.setStatus(fmt.Sprintf("Opened %s in new window", msg.dir), false)
+		}
+		return m, nil
+
 	case openPRMsg:
 		sessionID := m.openPRSessionID
 		m.openPRSessionID = ""

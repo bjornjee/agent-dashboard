@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1790,5 +1791,110 @@ func TestReplyMode_ViewportScrollsToBottom(t *testing.T) {
 	// The viewport should be at the bottom so the reply is visible
 	if !rm.messageVP.AtBottom() {
 		t.Error("viewport should scroll to bottom in reply mode after typing, so reply text is visible")
+	}
+}
+
+func TestOpenWorktreeWindowWithWorktreeCwd(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.agents[0].Cwd = "/home/user/code/myrepo"
+	m.agents[0].WorktreeCwd = "/home/user/code/worktrees/myrepo/feature-branch"
+	m.agents[0].Session = "main"
+	m.agents[0].Branch = "feat/my-feature"
+	m.buildTree()
+	m.selected = 0
+
+	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
+	result, cmd := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.statusMsg != "Opening window..." {
+		t.Errorf("expected status 'Opening window...', got %q", rm.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected a command to be returned for opening worktree window")
+	}
+}
+
+func TestOpenWorktreeWindowWithCwdOnly(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.agents[0].Cwd = "/home/user/code/myrepo"
+	m.agents[0].WorktreeCwd = ""
+	m.agents[0].Session = "main"
+	m.agents[0].Branch = "main"
+	m.buildTree()
+	m.selected = 0
+
+	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
+	result, cmd := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.statusMsg != "Opening window..." {
+		t.Errorf("expected status 'Opening window...', got %q", rm.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected a command to be returned for opening cwd window")
+	}
+}
+
+func TestOpenWorktreeWindowNoTmux(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.tmuxAvailable = false
+	m.agents[0].Cwd = "/home/user/code/myrepo"
+	m.buildTree()
+	m.selected = 0
+
+	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if !rm.statusIsError {
+		t.Error("expected error status when tmux is not available")
+	}
+	if !strings.Contains(rm.statusMsg, "tmux") {
+		t.Errorf("expected tmux error message, got %q", rm.statusMsg)
+	}
+}
+
+func TestOpenWorktreeWindowNoAgent(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.tmuxAvailable = true
+	m.buildTree()
+
+	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
+	result, cmd := m.handleKey(msg)
+	rm := result.(model)
+
+	// No agent selected — should be a no-op
+	if rm.statusMsg != "" {
+		t.Errorf("expected no status message, got %q", rm.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("expected no command when no agent is selected")
+	}
+}
+
+func TestOpenWorktreeMsgSuccess(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	result, _ := m.Update(openWorktreeMsg{err: nil, dir: "/tmp/worktree"})
+	rm := result.(model)
+
+	if rm.statusIsError {
+		t.Error("expected non-error status on success")
+	}
+	if !strings.Contains(rm.statusMsg, "/tmp/worktree") {
+		t.Errorf("expected status to contain dir, got %q", rm.statusMsg)
+	}
+}
+
+func TestOpenWorktreeMsgError(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	result, _ := m.Update(openWorktreeMsg{err: fmt.Errorf("new-window failed"), dir: "/tmp/worktree"})
+	rm := result.(model)
+
+	if !rm.statusIsError {
+		t.Error("expected error status on failure")
+	}
+	if !strings.Contains(rm.statusMsg, "new-window failed") {
+		t.Errorf("expected error message in status, got %q", rm.statusMsg)
 	}
 }
