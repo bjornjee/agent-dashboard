@@ -159,12 +159,25 @@ Trace the code paths that were active at the time of the crash:
    - Panic/crash recovery mechanisms
    - Race conditions in concurrent code
 
-3. **Check configuration** that affects crash behavior:
+3. **Instrument production runners to trace leaked subprocess calls** — when tests crash an external system (tmux, databases, etc.), add debug logging to every production runner that spawns subprocesses. Log to a persistent file so the output survives the crash:
+   ```go
+   // Add to every production runner method that calls exec.Command
+   func debugLogExec(caller, name string, args []string) {
+       f, _ := os.OpenFile("/tmp/test-exec.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+       if f != nil {
+           defer f.Close()
+           fmt.Fprintf(f, "[%s] %s %v\n", caller, name, args)
+       }
+   }
+   ```
+   Run tests, then inspect the log to identify which packages and code paths are leaking real subprocess calls. An empty log file (or no file created) confirms zero leaks. This is especially useful when subprocess calls are indirect — e.g., an HTTP handler calls a function that calls a package function that eventually hits `exec.Command` through 3+ layers of indirection.
+
+4. **Check configuration** that affects crash behavior:
    - tmux: `exit-empty`, `exit-unattached`, `destroy-unattached`
    - Process supervisors: launchd plists, systemd units
    - Application-level restart/respawn logic
 
-4. **Check recent code changes** in the area:
+5. **Check recent code changes** in the area:
    ```
    git log --oneline --since="1 week ago" -- <relevant-paths>
    ```
