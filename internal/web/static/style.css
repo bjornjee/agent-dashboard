@@ -1736,10 +1736,9 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .diff-content { overflow-x: hidden; }
   .diff-content .d2h-file-diff { overflow: hidden; }
   .diff-content .d2h-diff-table { width: 100% !important; }
-  .diff-content .d2h-code-linenumber { width: 28px !important; min-width: 28px !important; max-width: 28px !important; padding: 0 2px !important; font-size: 10px !important; display: table-cell !important; }
+  .diff-content .d2h-code-linenumber { width: 28px !important; min-width: 28px !important; max-width: 28px !important; padding: 0 2px !important; font-size: 10px !important; }
   .diff-content .d2h-code-linenumber .line-num1 { display: none !important; }
-  .diff-content .d2h-code-line { padding: 0 !important; width: 100% !important; display: block !important; }
-  .diff-content .d2h-code-line-ctn { white-space: pre-wrap !important; word-break: break-all !important; overflow-x: visible !important; width: 100% !important; }
+  .diff-content .d2h-code-line-ctn { white-space: pre-wrap !important; word-break: break-all !important; overflow-x: visible !important; }
   .diff-file-header { padding: 8px 8px; }
   .diff-file-path { font-size: 12px; }
 }
