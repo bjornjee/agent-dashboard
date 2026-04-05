@@ -64,6 +64,7 @@ func SilentStart(cmd *exec.Cmd) error {
 	return cmd.Start()
 }
 
+
 // validTarget matches tmux targets: session:window.pane where components are alphanumeric, dash, underscore, or dot.
 var validTarget = regexp.MustCompile(`^[a-zA-Z0-9_.\-]+(:[0-9]+(\.[0-9]+)?)?$`)
 
