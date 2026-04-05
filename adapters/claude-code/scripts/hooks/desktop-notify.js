@@ -21,8 +21,7 @@
 
 const { spawnSync } = require('child_process');
 const { readFileSync } = require('fs');
-const { basename, resolve, join } = require('path');
-const { homedir } = require('os');
+const { basename, resolve } = require('path');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || resolve(__dirname, '..', '..');
 const tmuxPkg = require(resolve(pluginRoot, 'packages', 'tmux'));
@@ -30,33 +29,6 @@ const tmuxPkg = require(resolve(pluginRoot, 'packages', 'tmux'));
 const TITLE = 'Claude Code';
 const SOUND = 'Blow';
 const MAX_BODY = 100;
-
-/**
- * Read a boolean value from settings.toml using simple regex matching.
- * Returns the parsed value, or defaultVal if the key is absent or the file
- * is unreadable.
- */
-function readSettingsBool(key, defaultVal) {
-  try {
-    const stateDir = process.env.AGENT_DASHBOARD_DIR || join(homedir(), '.agent-dashboard');
-    const raw = readFileSync(join(stateDir, 'settings.toml'), 'utf8');
-    const match = raw.match(new RegExp(`^\\s*${key}\\s*=\\s*(true|false)`, 'm'));
-    if (match) return match[1] === 'true';
-  } catch { /* file missing or unreadable */ }
-  return defaultVal;
-}
-
-/**
- * Load notification settings from ~/.agent-dashboard/settings.toml.
- * All three default to false (opt-in).
- */
-function loadNotificationSettings() {
-  return {
-    enabled:      readSettingsBool('enabled', false),
-    sound:        readSettingsBool('sound', false),
-    silentEvents: readSettingsBool('silent_events', false),
-  };
-}
 
 // Notification types that require user attention.
 const ALERTING_NOTIFICATION_TYPES = new Set([
@@ -81,27 +53,7 @@ const ALERTING_ERRORS = new Set([
  * whether it contains a tool_use block matching ALERTING_TOOL_NAMES.
  */
 function lastTurnHasAlertingTool(transcriptPath) {
-  if (!transcriptPath) return false;
-  try {
-    const raw = readFileSync(transcriptPath, 'utf8');
-    const lines = raw.trimEnd().split('\n');
-
-    // Walk backwards to find the last assistant entry with a message.
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const entry = JSON.parse(lines[i]);
-      if (entry.type !== 'assistant' || !entry.message) continue;
-
-      const content = entry.message.content;
-      if (!Array.isArray(content)) return false;
-
-      return content.some(
-        block => block.type === 'tool_use' && ALERTING_TOOL_NAMES.has(block.name)
-      );
-    }
-  } catch {
-    // Transcript unreadable — fall through silently.
-  }
-  return false;
+  return findAlertingToolName(transcriptPath) !== undefined;
 }
 
 /**
@@ -170,7 +122,7 @@ function buildBody(input) {
   return extractSummary(input.last_assistant_message);
 }
 
-function getSubtitle(cwd) {
+function getSubtitle(cwd, input) {
   const parts = [];
 
   if (cwd) {
@@ -187,12 +139,83 @@ function getSubtitle(cwd) {
     parts.push(branch.stdout.trim());
   }
 
+  if (input) {
+    const state = getAgentState(input);
+    if (state) parts.push(state);
+  }
+
   return parts.join(' | ') || undefined;
 }
 
 function hasCommand(cmd) {
   const result = spawnSync('which', [cmd], { stdio: 'ignore', timeout: 2000 });
   return result.status === 0;
+}
+
+const TERMINAL_BUNDLE_IDS = {
+  ghostty: 'com.mitchellh.ghostty',
+  'iTerm.app': 'com.googlecode.iterm2',
+  Apple_Terminal: 'com.apple.Terminal',
+  WezTerm: 'com.github.wez.wezterm',
+};
+
+function getTerminalBundleId(termProgram) {
+  return TERMINAL_BUNDLE_IDS[termProgram];
+}
+
+const NOTIFICATION_STATE_MAP = {
+  permission_prompt: 'needs permission',
+  idle_prompt: 'idle',
+  elicitation_dialog: 'needs input',
+};
+
+/**
+ * Find the name of the alerting tool in the last assistant turn, if any.
+ * Returns the tool name string or undefined.
+ */
+function findAlertingToolName(transcriptPath) {
+  if (!transcriptPath) return undefined;
+  try {
+    const raw = readFileSync(transcriptPath, 'utf8');
+    const lines = raw.trimEnd().split('\n');
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const entry = JSON.parse(lines[i]);
+      if (entry.type !== 'assistant' || !entry.message) continue;
+
+      const content = entry.message.content;
+      if (!Array.isArray(content)) return undefined;
+
+      const tool = content.find(
+        block => block.type === 'tool_use' && ALERTING_TOOL_NAMES.has(block.name)
+      );
+      return tool ? tool.name : undefined;
+    }
+  } catch {
+    // Transcript unreadable — fall through silently.
+  }
+  return undefined;
+}
+
+function getAgentState(input) {
+  const event = input.hook_event_name;
+
+  if (event === 'Notification') {
+    return NOTIFICATION_STATE_MAP[input.notification_type] || 'notification';
+  }
+
+  if (event === 'StopFailure') {
+    return input.error === 'rate_limit' ? 'rate limited' : 'error';
+  }
+
+  if (event === 'Stop') {
+    const toolName = findAlertingToolName(input.transcript_path);
+    if (toolName === 'AskUserQuestion') return 'asked a question';
+    if (toolName === 'ExitPlanMode') return 'plan ready';
+    return 'done';
+  }
+
+  return undefined;
 }
 
 function sanitizeShellArg(str) {
@@ -224,6 +247,9 @@ function notifyWithTerminalNotifier(title, subtitle, body, sound) {
   const action = getTmuxAction();
   if (action) args.push('-execute', action);
 
+  const bundleId = getTerminalBundleId(process.env.TERM_PROGRAM);
+  if (bundleId) args.push('-activate', bundleId);
+
   spawnSync('terminal-notifier', args, { stdio: 'ignore', timeout: 5000 });
 }
 
@@ -251,7 +277,7 @@ function notify(title, subtitle, body, sound) {
 
 // Export for testing
 if (typeof module !== 'undefined') {
-  module.exports = { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, buildBody, readSettingsBool, loadNotificationSettings, ALERTING_NOTIFICATION_TYPES, ALERTING_TOOL_NAMES, ALERTING_ERRORS };
+  module.exports = { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, getTerminalBundleId, getAgentState, buildBody, ALERTING_NOTIFICATION_TYPES, ALERTING_TOOL_NAMES, ALERTING_ERRORS };
 }
 
 // Only run stdin reader when executed directly (not when require()'d by tests)
@@ -265,18 +291,10 @@ if (require.main === module) {
   });
   process.stdin.on('end', () => {
     try {
-      const settings = loadNotificationSettings();
-      if (!settings.enabled) return;
-
       const input = data.trim() ? JSON.parse(data) : {};
-      const isAlert = shouldAlert(input);
-
-      // Skip non-alerting events when silent_events is disabled
-      if (!isAlert && !settings.silentEvents) return;
-
-      const sound = (isAlert && settings.sound) ? SOUND : undefined;
+      const sound = shouldAlert(input) ? SOUND : undefined;
       const body = buildBody(input);
-      const subtitle = getSubtitle(input.cwd);
+      const subtitle = getSubtitle(input.cwd, input);
       notify(TITLE, subtitle, body, sound);
     } catch {
       // Silent — don't break Claude Code if notification fails
