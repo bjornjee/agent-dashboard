@@ -930,6 +930,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case tea.PasteMsg:
+		if m.diffVisible && m.diffFilterActive {
+			var cmd tea.Cmd
+			m.diffFilterInput, cmd = m.diffFilterInput.Update(msg)
+			m.diffFilterText = m.diffFilterInput.Value()
+			m.applyTreeVisibility()
+			m.diffCursor = 0
+			m.updateDiffContent()
+			return m, cmd
+		}
+		switch m.mode {
+		case modeReply, modeCreateFolder, modeCreateMessage:
+			var cmd tea.Cmd
+			m.textInput, cmd = m.textInput.Update(msg)
+			switch m.mode {
+			case modeReply:
+				m.updateRightContent()
+				m.messageVP.GotoBottom()
+			case modeCreateFolder:
+				m.suggestions = zsuggest.FilterZSuggestions(m.textInput.Value(), m.zEntries, m.pathExists)
+				m.selectedSugg = 0
+				m.updateRightContent()
+			case modeCreateMessage:
+				m.updateRightContent()
+			}
+			return m, cmd
+		}
+		return m, nil
 	}
 
 	if m.mode == modeReply {
