@@ -135,8 +135,10 @@ window.Dashboard = {
 
   openPR(id) {
     const agent = agents.find(a => a.session_id === id);
-    if (agent && agent.branch) {
-      toast('Opening PR page...', 'success');
+    if (agent && agent.pr_url) {
+      window.open(agent.pr_url, '_blank');
+    } else {
+      toast('No PR URL available', 'error');
     }
   },
 

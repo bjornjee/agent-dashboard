@@ -303,7 +303,9 @@ async function loadTabContent(tab, agentId) {
         const files = data.files || [];
         const totalAdds = files.reduce((s, f) => s + (f.additions || 0), 0);
         const totalDels = files.reduce((s, f) => s + (f.deletions || 0), 0);
-        const hasPR = !!data.pr_url;
+        const agent = agents.find(a => a.session_id === agentId);
+        const prUrl = agent && agent.pr_url ? agent.pr_url + '/files' : '';
+        const hasPR = !!prUrl;
 
         let html = '<div class="mobile-diff-summary">';
         html += '<div class="mobile-diff-stats">'
@@ -325,7 +327,7 @@ async function loadTabContent(tab, agentId) {
         html += '</div>';
 
         if (hasPR) {
-          html += '<a class="mobile-pr-link mobile-pr-link--active" href="' + escapeHtml(data.pr_url) + '" target="_blank" rel="noopener">'
+          html += '<a class="mobile-pr-link mobile-pr-link--active" href="' + escapeHtml(prUrl) + '" target="_blank" rel="noopener">'
             + '&#x2197; View Diff on GitHub</a>';
         } else {
           html += '<div class="mobile-pr-link mobile-pr-link--inactive">'
