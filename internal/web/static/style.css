@@ -654,7 +654,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 
 /* Diff2html dark overrides */
 .diff-content .d2h-wrapper { border: none; }
-.diff-content .d2h-file-header { background: var(--bg-elevated); border-color: var(--border-subtle); color: var(--text-primary); position: sticky; top: 0; z-index: 2; }
+.diff-content .d2h-file-header { background: var(--bg-elevated); border-color: var(--border-subtle); color: var(--text-primary); }
 .diff-content .d2h-file-name-wrapper { color: var(--text-primary); }
 .diff-content .d2h-file-name { color: var(--text-primary); }
 .diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; }
@@ -676,7 +676,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-del .d2h-code-line-ctn { color: var(--text-primary); }
 .diff-content del { background: rgba(248, 113, 113, 0.25); text-decoration: none; }
 
-/* Hunk info (overridden by sticky rule in side-by-side section) */
+/* Empty placeholders and borders */
 .diff-content .d2h-emptyplaceholder { background: var(--bg-surface); border-color: var(--border-subtle); }
 .diff-content .d2h-file-diff { border-color: var(--border-subtle); }
 .diff-content .d2h-file-side-diff { border-color: var(--border-subtle); }
@@ -705,7 +705,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-del .d2h-code-line-ctn del { background: rgba(248, 113, 113, 0.30); text-decoration: none; border-radius: 2px; }
 
 /* Hunk/function context header */
-.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--accent-text); position: sticky; top: 37px; z-index: 2; }
+.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--accent-text); }
 .diff-content .d2h-code-side-emptyplaceholder { background: var(--bg-surface); }
 
 /* Hide diff2html UI artifacts */
@@ -724,9 +724,6 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  position: sticky;
-  top: 0;
-  z-index: 3;
   user-select: none;
 }
 .diff-file-header:hover { background: var(--bg-overlay); }
