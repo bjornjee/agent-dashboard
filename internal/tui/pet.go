@@ -167,9 +167,9 @@ func (p petModel) View() string {
 		Faint(true)
 
 	const spriteLines = 3
-	topPad := 1 - p.bounce  // on ground: 1 empty line above; bouncing: 0
-	botPad := p.bounce       // on ground: 0 below; bouncing: 1 empty line below
-	_ = botPad               // used implicitly: spriteLines + topPad + botPad = 4
+	topPad := 1 - p.bounce // on ground: 1 empty line above; bouncing: 0
+	botPad := p.bounce     // on ground: 0 below; bouncing: 1 empty line below
+	_ = botPad             // used implicitly: spriteLines + topPad + botPad = 4
 
 	var sb strings.Builder
 	for i := 0; i < topPad; i++ {
