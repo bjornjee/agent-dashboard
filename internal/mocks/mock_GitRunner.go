@@ -13,6 +13,43 @@ type MockGitRunner struct {
 	mock.Mock
 }
 
+// CombinedOutputDir provides a mock function with given fields: ctx, dir, name, args
+func (_m *MockGitRunner) CombinedOutputDir(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
+	_va := make([]interface{}, len(args))
+	for _i := range args {
+		_va[_i] = args[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, dir, name)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CombinedOutputDir")
+	}
+
+	var r0 []byte
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...string) ([]byte, error)); ok {
+		return rf(ctx, dir, name, args...)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...string) []byte); ok {
+		r0 = rf(ctx, dir, name, args...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...string) error); ok {
+		r1 = rf(ctx, dir, name, args...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Output provides a mock function with given fields: ctx, name, args
 func (_m *MockGitRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
 	_va := make([]interface{}, len(args))
@@ -48,6 +85,81 @@ func (_m *MockGitRunner) Output(ctx context.Context, name string, args ...string
 	}
 
 	return r0, r1
+}
+
+// RunDir provides a mock function with given fields: ctx, dir, name, args
+func (_m *MockGitRunner) RunDir(ctx context.Context, dir string, name string, args ...string) error {
+	_va := make([]interface{}, len(args))
+	for _i := range args {
+		_va[_i] = args[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, dir, name)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RunDir")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...string) error); ok {
+		r0 = rf(ctx, dir, name, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// SilentRun provides a mock function with given fields: ctx, name, args
+func (_m *MockGitRunner) SilentRun(ctx context.Context, name string, args ...string) error {
+	_va := make([]interface{}, len(args))
+	for _i := range args {
+		_va[_i] = args[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, ctx, name)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SilentRun")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, ...string) error); ok {
+		r0 = rf(ctx, name, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Start provides a mock function with given fields: name, args
+func (_m *MockGitRunner) Start(name string, args ...string) error {
+	_va := make([]interface{}, len(args))
+	for _i := range args {
+		_va[_i] = args[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, name)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Start")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, ...string) error); ok {
+		r0 = rf(name, args...)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // NewMockGitRunner creates a new instance of MockGitRunner. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

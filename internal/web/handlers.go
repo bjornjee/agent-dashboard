@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os/exec"
@@ -11,6 +12,31 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
 )
+
+// CommandRunner abstracts subprocess execution for git/gh commands
+// so tests can swap in a mock.
+type CommandRunner interface {
+	Output(ctx context.Context, name string, args ...string) ([]byte, error)
+	CombinedOutput(ctx context.Context, dir, name string, args ...string) ([]byte, error)
+}
+
+type execCommandRunner struct{}
+
+func (r *execCommandRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+func (r *execCommandRunner) CombinedOutput(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	return cmd.CombinedOutput()
+}
+
+// cmdRunner is the package-level runner used by handlers and actions.
+// Tests replace this with a mock.
+var cmdRunner CommandRunner = &execCommandRunner{}
 
 // handleConversation returns conversation entries for an agent.
 func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
@@ -63,8 +89,10 @@ type diffFile struct {
 // findMergeBase returns the merge-base commit between HEAD and main/master,
 // or "HEAD" as a fallback (which shows only uncommitted changes).
 func findMergeBase(dir string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
-		out, err := exec.Command("git", "-C", dir, "merge-base", "HEAD", base).Output()
+		out, err := cmdRunner.Output(ctx, "git", "-C", dir, "merge-base", "HEAD", base)
 		if err == nil {
 			if s := strings.TrimSpace(string(out)); s != "" {
 				return s
@@ -88,23 +116,24 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	base := findMergeBase(dir)
-	cmd := exec.Command("git", "-C", dir, "diff", base, "--no-color")
-	out, err := cmd.Output()
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	out, err := cmdRunner.Output(ctx, "git", "-C", dir, "diff", base, "--no-color")
 	if err != nil {
 		writeJSON(w, http.StatusOK, diffResponse{})
 		return
 	}
 
 	// Include untracked files so new files appear in the diff.
-	untrackedOut, err := exec.Command("git", "-C", dir,
-		"ls-files", "--others", "--exclude-standard").Output()
+	untrackedOut, err := cmdRunner.Output(ctx, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard")
 	if err == nil && len(strings.TrimSpace(string(untrackedOut))) > 0 {
 		for _, name := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
 			if name == "" {
 				continue
 			}
-			patch, _ := exec.Command("git", "-C", dir,
-				"diff", "--no-index", "--", "/dev/null", name).Output()
+			patch, _ := cmdRunner.Output(ctx, "git", "-C", dir,
+				"diff", "--no-index", "--", "/dev/null", name)
 			if len(patch) > 0 {
 				out = append(out, patch...)
 			}
@@ -113,8 +142,8 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 
 	// Build set of gitignored paths to filter out
 	ignored := make(map[string]bool)
-	if ignOut, err := exec.Command("git", "-C", dir,
-		"ls-files", "--others", "--ignored", "--exclude-standard", "--directory").Output(); err == nil {
+	if ignOut, err := cmdRunner.Output(ctx, "git", "-C", dir,
+		"ls-files", "--others", "--ignored", "--exclude-standard", "--directory"); err == nil {
 		for _, p := range strings.Split(strings.TrimSpace(string(ignOut)), "\n") {
 			p = strings.TrimSuffix(strings.TrimSpace(p), "/")
 			if p != "" {

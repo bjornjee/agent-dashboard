@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/stretchr/testify/mock"
 )
 
 // writeAgentFile is a test helper that writes an agent JSON file to dir/agents/.
@@ -490,16 +493,38 @@ func TestResolveAgentTargets_NilMap(t *testing.T) {
 	}
 }
 
-func TestResolveAgentBranches(t *testing.T) {
-	// Use the current repo directory — we know it's a git repo.
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
+// withMockBranchRunner swaps the package-level branchRunner with a mock
+// and restores the original on test cleanup.
+func withMockBranchRunner(t *testing.T) *mocks.MockBranchRunner {
+	t.Helper()
+	m := mocks.NewMockBranchRunner(t)
+	orig := branchRunner
+	branchRunner = m
+	t.Cleanup(func() { branchRunner = orig })
+	return m
+}
+
+// mockGitBranch sets up a mock expectation: when git rev-parse is called
+// for the given directory, return the given branch name. If branch is "",
+// return an error (simulating a non-git directory).
+func mockGitBranch(m *mocks.MockBranchRunner, dir, branch string) {
+	if branch == "" {
+		m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").
+			Return(nil, fmt.Errorf("not a git repo"))
+	} else {
+		m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").
+			Return([]byte(branch+"\n"), nil)
 	}
+}
+
+func TestResolveAgentBranches(t *testing.T) {
+	m := withMockBranchRunner(t)
+	mockGitBranch(m, "/valid/repo", "feat/mock-branch")
+	mockGitBranch(m, "/nonexistent/path", "")
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			"with-cwd": {Cwd: cwd, Branch: "stale-branch", State: "running"},
+			"with-cwd": {Cwd: "/valid/repo", Branch: "stale-branch", State: "running"},
 			"no-cwd":   {Cwd: "", Branch: "should-stay", State: "running"},
 			"bad-cwd":  {Cwd: "/nonexistent/path", Branch: "should-stay", State: "running"},
 		},
@@ -507,51 +532,44 @@ func TestResolveAgentBranches(t *testing.T) {
 
 	ResolveAgentBranches(&sf, nil)
 
-	// domain.Agent with valid cwd should have branch updated to something non-empty and not the stale value
-	if sf.Agents["with-cwd"].Branch == "stale-branch" || sf.Agents["with-cwd"].Branch == "" {
-		t.Errorf("expected branch to be resolved from git, got %q", sf.Agents["with-cwd"].Branch)
+	if sf.Agents["with-cwd"].Branch != "feat/mock-branch" {
+		t.Errorf("expected branch feat/mock-branch, got %q", sf.Agents["with-cwd"].Branch)
 	}
-
-	// domain.Agent without cwd should be unchanged
 	if sf.Agents["no-cwd"].Branch != "should-stay" {
 		t.Errorf("expected branch unchanged for no-cwd agent, got %q", sf.Agents["no-cwd"].Branch)
 	}
-
-	// domain.Agent with bad cwd should be unchanged
 	if sf.Agents["bad-cwd"].Branch != "should-stay" {
 		t.Errorf("expected branch unchanged for bad-cwd agent, got %q", sf.Agents["bad-cwd"].Branch)
 	}
 }
 
 func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := withMockBranchRunner(t)
+	mockGitBranch(m, "/valid/repo", "feat/from-cwd")
+	mockGitBranch(m, "/valid/worktree", "feat/from-worktree")
+	mockGitBranch(m, "/nonexistent/worktree", "")
+	mockGitBranch(m, "/bad/wt", "")
+	mockGitBranch(m, "/bad/cwd", "")
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			// WorktreeCwd set to valid git dir — should use it
-			"worktree": {WorktreeCwd: cwd, Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
-			// WorktreeCwd set to invalid path — should fall back to Cwd
-			"fallback": {WorktreeCwd: "/nonexistent/worktree", Cwd: cwd, Branch: "stale", State: "running"},
-			// WorktreeCwd empty — should use Cwd as before
-			"no-worktree": {Cwd: cwd, Branch: "stale", State: "running"},
-			// Both invalid — should be unchanged
-			"both-bad": {WorktreeCwd: "/bad/wt", Cwd: "/bad/cwd", Branch: "should-stay", State: "running"},
+			"worktree":    {WorktreeCwd: "/valid/worktree", Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
+			"fallback":    {WorktreeCwd: "/nonexistent/worktree", Cwd: "/valid/repo", Branch: "stale", State: "running"},
+			"no-worktree": {Cwd: "/valid/repo", Branch: "stale", State: "running"},
+			"both-bad":    {WorktreeCwd: "/bad/wt", Cwd: "/bad/cwd", Branch: "should-stay", State: "running"},
 		},
 	}
 
 	ResolveAgentBranches(&sf, nil)
 
-	if sf.Agents["worktree"].Branch == "stale" || sf.Agents["worktree"].Branch == "" {
-		t.Errorf("worktree: expected branch from WorktreeCwd, got %q", sf.Agents["worktree"].Branch)
+	if sf.Agents["worktree"].Branch != "feat/from-worktree" {
+		t.Errorf("worktree: expected feat/from-worktree, got %q", sf.Agents["worktree"].Branch)
 	}
-	if sf.Agents["fallback"].Branch == "stale" || sf.Agents["fallback"].Branch == "" {
-		t.Errorf("fallback: expected branch from Cwd fallback, got %q", sf.Agents["fallback"].Branch)
+	if sf.Agents["fallback"].Branch != "feat/from-cwd" {
+		t.Errorf("fallback: expected feat/from-cwd, got %q", sf.Agents["fallback"].Branch)
 	}
-	if sf.Agents["no-worktree"].Branch == "stale" || sf.Agents["no-worktree"].Branch == "" {
-		t.Errorf("no-worktree: expected branch from Cwd, got %q", sf.Agents["no-worktree"].Branch)
+	if sf.Agents["no-worktree"].Branch != "feat/from-cwd" {
+		t.Errorf("no-worktree: expected feat/from-cwd, got %q", sf.Agents["no-worktree"].Branch)
 	}
 	if sf.Agents["both-bad"].Branch != "should-stay" {
 		t.Errorf("both-bad: expected unchanged, got %q", sf.Agents["both-bad"].Branch)
@@ -559,63 +577,52 @@ func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
 }
 
 func TestResolveAgentBranches_PaneCwdFallback(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := withMockBranchRunner(t)
+	mockGitBranch(m, "/pane/cwd", "feat/pane-branch")
+	mockGitBranch(m, "/existing/cwd", "feat/existing-branch")
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			// No Cwd, no WorktreeCwd — should backfill from paneCwds and resolve branch
-			"no-cwd": {TmuxPaneID: "%10", Branch: "stale", State: "running"},
-			// Has Cwd already — should NOT be overwritten by paneCwds
-			"has-cwd": {TmuxPaneID: "%11", Cwd: cwd, Branch: "stale", State: "running"},
-			// No TmuxPaneID — cannot use paneCwds fallback
+			"no-cwd":  {TmuxPaneID: "%10", Branch: "stale", State: "running"},
+			"has-cwd": {TmuxPaneID: "%11", Cwd: "/existing/cwd", Branch: "stale", State: "running"},
 			"no-pane": {Branch: "should-stay", State: "running"},
 		},
 	}
 
 	paneCwds := map[string]string{
-		"%10": cwd,
+		"%10": "/pane/cwd",
 		"%11": "/should/not/be/used",
 	}
 
 	ResolveAgentBranches(&sf, paneCwds)
 
-	// no-cwd: Cwd should be backfilled and branch resolved
-	if sf.Agents["no-cwd"].Cwd != cwd {
-		t.Errorf("no-cwd: expected Cwd backfilled to %q, got %q", cwd, sf.Agents["no-cwd"].Cwd)
+	if sf.Agents["no-cwd"].Cwd != "/pane/cwd" {
+		t.Errorf("no-cwd: expected Cwd backfilled to /pane/cwd, got %q", sf.Agents["no-cwd"].Cwd)
 	}
-	if sf.Agents["no-cwd"].Branch == "stale" || sf.Agents["no-cwd"].Branch == "" {
-		t.Errorf("no-cwd: expected branch resolved from paneCwds, got %q", sf.Agents["no-cwd"].Branch)
+	if sf.Agents["no-cwd"].Branch != "feat/pane-branch" {
+		t.Errorf("no-cwd: expected feat/pane-branch, got %q", sf.Agents["no-cwd"].Branch)
 	}
-
-	// has-cwd: Cwd should remain unchanged (not overwritten)
-	if sf.Agents["has-cwd"].Cwd != cwd {
-		t.Errorf("has-cwd: Cwd should remain %q, got %q", cwd, sf.Agents["has-cwd"].Cwd)
+	if sf.Agents["has-cwd"].Cwd != "/existing/cwd" {
+		t.Errorf("has-cwd: Cwd should remain /existing/cwd, got %q", sf.Agents["has-cwd"].Cwd)
 	}
-
-	// no-pane: should be unchanged
 	if sf.Agents["no-pane"].Branch != "should-stay" {
 		t.Errorf("no-pane: expected unchanged, got %q", sf.Agents["no-pane"].Branch)
 	}
 }
 
 func TestGitBranch(t *testing.T) {
-	// Valid git repo
-	cwd, _ := os.Getwd()
-	branch := gitBranch(cwd)
-	if branch == "" {
-		t.Error("expected non-empty branch for current repo")
+	m := withMockBranchRunner(t)
+	mockGitBranch(m, "/valid/repo", "main")
+	mockGitBranch(m, "/nonexistent/path", "")
+
+	branch := gitBranch("/valid/repo")
+	if branch != "main" {
+		t.Errorf("expected main, got %q", branch)
 	}
 
-	// Invalid path
 	if gitBranch("/nonexistent/path") != "" {
 		t.Error("expected empty branch for invalid path")
 	}
-
-	// Empty path — git -C "" resolves to cwd, so gitBranch may return
-	// a value. ResolveAgentBranches guards against empty Cwd upstream.
 }
 
 func TestCleanStale_SkipsLivePanes(t *testing.T) {

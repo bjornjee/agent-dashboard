@@ -8,3 +8,9 @@ packages:
   github.com/bjornjee/agent-dashboard/internal/tui:
     interfaces:
       GitRunner:
+  github.com/bjornjee/agent-dashboard/internal/state:
+    interfaces:
+      BranchRunner:
+  github.com/bjornjee/agent-dashboard/internal/web:
+    interfaces:
+      CommandRunner:

@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestServerStartsAndServesRoutes(t *testing.T) {
@@ -322,7 +325,20 @@ func TestConversationEndpoint(t *testing.T) {
 	}
 }
 
+// withMockCommandRunner swaps the package-level cmdRunner with a mock
+// and restores the original on test cleanup.
+func withMockCommandRunner(t *testing.T) *mocks.MockCommandRunner {
+	t.Helper()
+	m := mocks.NewMockCommandRunner(t)
+	orig := cmdRunner
+	cmdRunner = m
+	t.Cleanup(func() { cmdRunner = orig })
+	return m
+}
+
 func TestDiffEndpoint(t *testing.T) {
+	m := withMockCommandRunner(t)
+
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()
 	cfg.Profile.StateDir = stateDir
@@ -330,13 +346,31 @@ func TestDiffEndpoint(t *testing.T) {
 	agentsDir := filepath.Join(stateDir, "agents")
 	os.MkdirAll(agentsDir, 0700)
 
+	agentDir := t.TempDir()
 	agent := domain.Agent{
 		SessionID: "diff-1",
 		State:     "running",
-		Cwd:       t.TempDir(), // Valid dir but not a git repo
+		Cwd:       agentDir,
 	}
 	data, _ := json.Marshal(agent)
 	os.WriteFile(filepath.Join(agentsDir, "diff-1.json"), data, 0600)
+
+	// Mock findMergeBase: all merge-base attempts fail -> returns "HEAD"
+	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
+		m.On("Output", mock.Anything, "git", "-C", agentDir, "merge-base", "HEAD", base).
+			Return(nil, fmt.Errorf("not a git repo"))
+	}
+	// Mock git diff HEAD
+	m.On("Output", mock.Anything, "git", "-C", agentDir, "diff", "HEAD", "--no-color").
+		Return([]byte{}, nil)
+	// Mock untracked files
+	m.On("Output", mock.Anything, "git", "-C", agentDir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte{}, nil)
+	// Mock ignored files
+	m.On("Output", mock.Anything, "git", "-C", agentDir,
+		"ls-files", "--others", "--ignored", "--exclude-standard", "--directory").
+		Return([]byte{}, nil)
 
 	srv := NewServer(cfg, nil, ServerOptions{})
 	ts := httptest.NewServer(srv.Handler())
@@ -353,7 +387,6 @@ func TestDiffEndpoint(t *testing.T) {
 
 	var dr diffResponse
 	json.NewDecoder(resp.Body).Decode(&dr)
-	// No diff expected (not a git repo)
 	if dr.Raw != "" {
 		t.Errorf("expected empty diff, got %q", dr.Raw)
 	}
