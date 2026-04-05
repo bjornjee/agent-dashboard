@@ -1904,10 +1904,7 @@ func TestOpenWorktreeMsgError(t *testing.T) {
 func TestPasteInReplyMode(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeReply
-	focusCmd := m.textInput.Focus()
-	if focusCmd != nil {
-		// drain focus command
-	}
+	m.textInput.Focus()
 
 	msg := tea.PasteMsg{Content: "pasted text"}
 	result, _ := m.Update(msg)
@@ -1921,10 +1918,7 @@ func TestPasteInReplyMode(t *testing.T) {
 func TestPasteInCreateFolderMode(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
-	focusCmd := m.textInput.Focus()
-	if focusCmd != nil {
-		// drain focus command
-	}
+	m.textInput.Focus()
 
 	msg := tea.PasteMsg{Content: "/some/path"}
 	result, _ := m.Update(msg)
@@ -1938,10 +1932,7 @@ func TestPasteInCreateFolderMode(t *testing.T) {
 func TestPasteInCreateMessageMode(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateMessage
-	focusCmd := m.textInput.Focus()
-	if focusCmd != nil {
-		// drain focus command
-	}
+	m.textInput.Focus()
 
 	msg := tea.PasteMsg{Content: "agent message"}
 	result, _ := m.Update(msg)
@@ -1956,10 +1947,7 @@ func TestPasteInDiffFilterMode(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.diffVisible = true
 	m.diffFilterActive = true
-	focusCmd := m.diffFilterInput.Focus()
-	if focusCmd != nil {
-		// drain focus command
-	}
+	m.diffFilterInput.Focus()
 
 	msg := tea.PasteMsg{Content: "filter"}
 	result, _ := m.Update(msg)
@@ -1983,5 +1971,18 @@ func TestPasteInNormalModeIsNoop(t *testing.T) {
 
 	if rm.textInput.Value() != "" {
 		t.Errorf("expected textInput to be empty in normal mode, got %q", rm.textInput.Value())
+	}
+}
+
+func TestPasteInCreateSkillModeIsNoop(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateSkill
+
+	msg := tea.PasteMsg{Content: "should be ignored"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.textInput.Value() != "" {
+		t.Errorf("expected textInput to be empty in skill selection mode, got %q", rm.textInput.Value())
 	}
 }

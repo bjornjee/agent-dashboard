@@ -932,6 +932,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.PasteMsg:
+		// Mirror modeResetAt guard from handleKey so phantom-guard
+		// logic stays consistent across key and paste paths.
+		if m.mode != modeNormal && !m.helpVisible && !m.diffVisible {
+			m.modeResetAt = time.Now()
+		}
 		if m.diffVisible && m.diffFilterActive {
 			var cmd tea.Cmd
 			m.diffFilterInput, cmd = m.diffFilterInput.Update(msg)
