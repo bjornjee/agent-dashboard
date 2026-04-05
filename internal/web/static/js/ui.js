@@ -159,18 +159,13 @@ export const UI = {
     const cost = opts.cost || 0;
     const currentPhase = opts.currentPhase || 0;
 
+    const hasPhase = totalPhases > 0 || phase;
     let phaseValue = '';
+    let progressHtml = '';
+
     if (totalPhases > 0) {
       phaseValue = `<span>${currentPhase} of ${totalPhases}</span>`;
       if (phase) phaseValue += ` <span class="vital-phase-name">&middot; ${escapeHtml(phase)}</span>`;
-    } else if (phase) {
-      phaseValue = escapeHtml(phase);
-    } else {
-      phaseValue = '&mdash;';
-    }
-
-    let progressHtml = '';
-    if (totalPhases > 0) {
       progressHtml = '<div class="progress-segments">';
       for (let i = 1; i <= totalPhases; i++) {
         if (i < currentPhase) progressHtml += '<div class="progress-segment progress-segment--complete"></div>';
@@ -178,14 +173,21 @@ export const UI = {
         else progressHtml += '<div class="progress-segment progress-segment--pending"></div>';
       }
       progressHtml += '</div>';
+    } else if (phase) {
+      phaseValue = escapeHtml(phase);
     }
 
-    return `<div class="vital-signs" role="status">
-      <div class="vital-cell">
+    let phaseCellHtml = '';
+    if (hasPhase) {
+      phaseCellHtml = `<div class="vital-cell">
         <span class="vital-label">Phase</span>
         <span class="vital-value vital-value--phase">${phaseValue}</span>
       </div>
-      <div class="vital-divider"></div>
+      <div class="vital-divider"></div>`;
+    }
+
+    return `<div class="vital-signs" role="status">
+      ${phaseCellHtml}
       <div class="vital-cell">
         <span class="vital-label">Elapsed</span>
         <span class="vital-value">${escapeHtml(elapsed)}</span>

@@ -1258,13 +1258,24 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 .plan-content {
   font-size: 14px;
   line-height: 22px;
+  color: var(--text-secondary);
 }
 
-.plan-content h1, .plan-content h2, .plan-content h3 {
-  margin: 16px 0 8px;
-  color: var(--text-primary);
-  font-weight: 500;
+.plan-content h1 {
+  font-size: 17px; font-weight: 500; color: var(--text-primary);
+  margin: 0 0 16px; line-height: 26px;
 }
+.plan-content h2 {
+  font-size: 15px; font-weight: 500; color: var(--text-primary);
+  margin: 24px 0 8px; line-height: 22px;
+}
+.plan-content h3 {
+  font-size: 14px; font-weight: 500; color: var(--text-secondary);
+  margin: 16px 0 6px; line-height: 22px;
+}
+.plan-content p { margin: 0 0 12px; }
+.plan-content ul, .plan-content ol { padding-left: 20px; margin: 0 0 12px; }
+.plan-content li { margin-bottom: 4px; }
 
 .plan-content code {
   background: var(--code-bg);
