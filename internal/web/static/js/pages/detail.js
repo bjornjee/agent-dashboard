@@ -344,7 +344,7 @@ async function loadTabContent(tab, agentId) {
           const adds = f.additions || 0;
           const dels = f.deletions || 0;
           sidebarHtml += '<div class="diff-sidebar-file' + (f.idx === 0 ? ' active' : '') + '" data-file-idx="' + f.idx + '" title="' + escapeHtml(f.path) + '">'
-            + '<span class="diff-status-dot diff-status-dot-' + status + '"></span>'
+            + UI.fileStatusIndicator(status)
             + '<span class="diff-sidebar-name">' + escapeHtml(f.fileName) + '</span>'
             + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
             + '</div>';
@@ -357,13 +357,13 @@ async function loadTabContent(tab, agentId) {
       let sectionsHtml = '';
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
-        const status = ['added', 'modified', 'deleted'].includes(f.status) ? f.status : 'modified';
+        const status = ['added', 'modified', 'deleted', 'renamed'].includes(f.status) ? f.status : 'modified';
         const adds = f.additions || 0;
         const dels = f.deletions || 0;
         sectionsHtml += '<div class="diff-file-section" data-file-idx="' + i + '" id="diff-file-' + i + '">'
           + '<div class="diff-file-header">'
           + '<span class="diff-file-chevron expanded">&#9656;</span>'
-          + '<span class="diff-status-dot diff-status-dot-' + status + '"></span>'
+          + UI.fileStatusIndicator(status)
           + '<span class="diff-file-path">' + escapeHtml(f.path) + '</span>'
           + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
           + '</div>'
@@ -376,10 +376,12 @@ async function loadTabContent(tab, agentId) {
         + '<span>Showing ' + files.length + ' changed file' + (files.length !== 1 ? 's' : '')
         + ' with <span class="diff-stats-add">+' + totalAdds + '</span> addition' + (totalAdds !== 1 ? 's' : '')
         + ' and <span class="diff-stats-del">-' + totalDels + '</span> deletion' + (totalDels !== 1 ? 's' : '') + '</span>'
+        + '<div class="diff-controls">'
+        + UI.toggleSwitch('Wrap', 'diff-wrap-lines', sessionStorage.getItem('diff-wrap-lines') === 'true')
         + '<div class="diff-view-toggle">'
         + '<button class="diff-toggle-btn' + (viewMode === 'side-by-side' ? ' active' : '') + '" data-mode="side-by-side">Split</button>'
         + '<button class="diff-toggle-btn' + (viewMode === 'line-by-line' ? ' active' : '') + '" data-mode="line-by-line">Unified</button>'
-        + '</div></div>';
+        + '</div></div></div>';
 
       container.innerHTML = '<div class="diff-view">'
         + summaryHtml
@@ -532,6 +534,16 @@ async function loadTabContent(tab, agentId) {
           });
         });
       });
+
+      // Wrap toggle
+      const wrapInput = container.querySelector('.toggle-switch__input[data-key="diff-wrap-lines"]');
+      if (wrapInput && diffContent) {
+        if (sessionStorage.getItem('diff-wrap-lines') === 'true') diffContent.classList.add('diff-wrap');
+        wrapInput.addEventListener('change', () => {
+          diffContent.classList.toggle('diff-wrap', wrapInput.checked);
+          sessionStorage.setItem('diff-wrap-lines', wrapInput.checked);
+        });
+      }
 
       break;
     }

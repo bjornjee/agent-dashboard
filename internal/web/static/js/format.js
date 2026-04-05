@@ -16,6 +16,7 @@ export function duration(agent) {
   const start = new Date(agent.started_at);
   const now = new Date();
   const totalSecs = Math.floor((now - start) / 1000);
+  if (totalSecs < 60) return '< 1m';
   const mins = Math.floor(totalSecs / 60);
   const secs = totalSecs % 60;
   if (mins >= 60) {
@@ -30,6 +31,7 @@ export function durationFromTimestamp(ts) {
   const start = new Date(ts);
   const now = new Date();
   const totalSecs = Math.floor((now - start) / 1000);
+  if (totalSecs < 60) return '< 1m';
   const mins = Math.floor(totalSecs / 60);
   const secs = totalSecs % 60;
   if (mins >= 60) {
@@ -77,8 +79,25 @@ export function formatTimeShort(iso) {
 
 export function formatTokens(count) {
   if (!count) return '0';
+  if (count >= 1000000) return (count / 1000000).toFixed(1) + 'M';
   if (count >= 1000) return (count / 1000).toFixed(1) + 'k';
   return String(count);
+}
+
+export function formatCostFull(value) {
+  if (value == null || value < 0) return '$0.00';
+  if (value >= 1000) return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$' + value.toFixed(2);
+}
+
+export function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parts = dateStr.split('-');
+  if (parts.length < 3) return dateStr;
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  return months[m] + ' ' + d;
 }
 
 export function stripMarkdown(s) {
