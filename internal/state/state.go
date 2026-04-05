@@ -30,7 +30,6 @@ func (r *execBranchRunner) Output(ctx context.Context, name string, args ...stri
 // Tests replace this with a mock.
 var branchRunner BranchRunner = &execBranchRunner{}
 
-
 // SetTestRunner swaps the package-level branchRunner and returns a restore function.
 // This allows test packages outside of state to inject a mock runner.
 func SetTestRunner(r BranchRunner) func() {
