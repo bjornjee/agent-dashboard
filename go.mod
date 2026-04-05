@@ -15,9 +15,13 @@ require (
 
 require github.com/BurntSushi/toml v1.6.0
 
-require golang.org/x/sync v0.20.0
+require (
+	golang.org/x/oauth2 v0.36.0
+	golang.org/x/sync v0.20.0
+)
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect

@@ -1,4 +1,4 @@
-.PHONY: build fmt vet test install clean seed help
+.PHONY: build build-web fmt vet test install install-web clean seed web help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || cat VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -6,6 +6,9 @@ ADAPTER ?= claude-code
 
 build: ## Build the dashboard binary
 	go build $(LDFLAGS) -o bin/agent-dashboard ./cmd/dashboard/
+
+build-web: ## Build the web server binary
+	go build -o bin/agent-dashboard-web ./cmd/web/
 
 fmt: ## Auto-format Go source files
 	gofmt -w .
@@ -31,6 +34,12 @@ test: vet ## Run all tests (vets first)
 
 install: ## Build and install binary + adapter (ADAPTER=claude-code)
 	./install.sh $(ADAPTER)
+
+install-web: build-web ## Install web server binary
+	cp bin/agent-dashboard-web ~/.local/bin/
+
+web: build-web ## Run web server locally
+	./bin/agent-dashboard-web --port 8390
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/
