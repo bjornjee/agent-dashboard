@@ -15,10 +15,11 @@ import (
 )
 
 // handleSuggestions returns frecency-ranked directory suggestions from ~/.z
-// or Claude Code session history.
+// or Claude Code session history. Returns all valid directories (not capped
+// at 5 like the TUI) since the browser's datalist filters client-side.
 func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	entries := zsuggest.LoadZEntriesWithHome(s.cfg.Profile.HomeDir, s.cfg.Profile.SessionsDir)
-	paths := zsuggest.FilterZSuggestions("", entries, nil)
+	paths := zsuggest.RankAll(entries, zsuggest.DirExists)
 	if paths == nil {
 		paths = []string{}
 	}

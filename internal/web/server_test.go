@@ -757,11 +757,17 @@ func TestSuggestionsWithZFile(t *testing.T) {
 	cfg.Profile.StateDir = t.TempDir()
 	cfg.Profile.SessionsDir = t.TempDir()
 
+	// Create real directories so DirExists passes
+	dirA := filepath.Join(t.TempDir(), "project-a")
+	dirB := filepath.Join(t.TempDir(), "project-b")
+	os.MkdirAll(dirA, 0700)
+	os.MkdirAll(dirB, 0700)
+
 	// Point home dir at a temp dir with a .z file
 	homeDir := t.TempDir()
 	cfg.Profile.HomeDir = homeDir
 	os.WriteFile(filepath.Join(homeDir, ".z"), []byte(
-		"/tmp/project-a|100|1700000000\n/tmp/project-b|50|1700000000\n",
+		fmt.Sprintf("%s|100|1700000000\n%s|50|1700000000\n", dirA, dirB),
 	), 0600)
 
 	srv := NewServer(cfg, nil, ServerOptions{})
@@ -775,12 +781,14 @@ func TestSuggestionsWithZFile(t *testing.T) {
 	defer resp.Body.Close()
 
 	var suggestions []string
-	json.NewDecoder(resp.Body).Decode(&suggestions)
+	if err := json.NewDecoder(resp.Body).Decode(&suggestions); err != nil {
+		t.Fatalf("decode suggestions: %v", err)
+	}
 	if len(suggestions) != 2 {
 		t.Fatalf("expected 2 suggestions, got %d: %v", len(suggestions), suggestions)
 	}
-	// Higher rank should come first
-	if suggestions[0] != "/tmp/project-a" {
-		t.Errorf("expected /tmp/project-a first, got %s", suggestions[0])
+	// Higher rank should come first (both in same time bucket)
+	if suggestions[0] != dirA {
+		t.Errorf("expected %s first, got %s", dirA, suggestions[0])
 	}
 }
