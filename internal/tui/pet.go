@@ -15,6 +15,8 @@ const (
 	petIdle petState = iota
 	petWalking
 	petSitting
+	petLounging
+	petDaydream
 	petSleeping
 )
 
@@ -26,7 +28,7 @@ const petSpriteWidth = 10
 const petHeight = 5
 
 // petTickInterval controls the animation frame rate.
-const petTickInterval = 250 * time.Millisecond
+const petTickInterval = 400 * time.Millisecond
 
 // petTickMsg is sent on each animation frame.
 type petTickMsg struct{}
@@ -44,6 +46,14 @@ var petFrames = map[petState][][]string{
 	petSitting: {
 		{" ^   ^", "(o . o)", " (\" \")/~"},
 	},
+	petLounging: {
+		{" ^   ^", "(- . -)~~", "  \"\"\"\""},
+		{" ^   ^", "(- . -) ~~", "  \"\"\"\""},
+	},
+	petDaydream: {
+		{"    . *", " ^   ^", "(o . o)~~"},
+		{"     *", " ^   ^", "(o . o) ~~"},
+	},
 	petSleeping: {
 		{" ^   ^", "(- . -) z", " (u u)~"},
 		{" ^   ^", "(- . -) zZ", " (u u)~"},
@@ -55,6 +65,8 @@ var petStateDurations = map[petState]int{
 	petIdle:     20, // 5 seconds
 	petWalking:  16, // 4 seconds
 	petSitting:  12, // 3 seconds
+	petLounging: 20, // 5 seconds
+	petDaydream: 20, // 5 seconds
 	petSleeping: 24, // 6 seconds
 }
 
@@ -125,6 +137,10 @@ func (p *petModel) advanceState() {
 	case petWalking:
 		p.state = petSitting
 	case petSitting:
+		p.state = petLounging
+	case petLounging:
+		p.state = petDaydream
+	case petDaydream:
 		p.state = petSleeping
 	case petSleeping:
 		p.state = petIdle

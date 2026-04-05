@@ -113,7 +113,7 @@ func TestPetStateCycle(t *testing.T) {
 		p.advanceState()
 	}
 	// Should have seen all states in the cycle
-	for _, s := range []petState{petIdle, petWalking, petSitting, petSleeping} {
+	for _, s := range []petState{petIdle, petWalking, petSitting, petLounging, petDaydream, petSleeping} {
 		if !seen[s] {
 			t.Errorf("state %d never reached in cycle", s)
 		}
