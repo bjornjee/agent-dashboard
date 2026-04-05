@@ -3,13 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/bjornjee/agent-dashboard/internal/mocks"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestDiffMsg_Success(t *testing.T) {
@@ -486,43 +486,55 @@ func TestCollapsibleContextBlocks(t *testing.T) {
 }
 
 func TestLoadDiff_IncludesUntrackedFiles(t *testing.T) {
-	// Set up a temporary git repo with a tracked change and an untracked file.
-	dir := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("command %v failed: %v\n%s", args, err, out)
-		}
-	}
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
 
-	// Init repo with initial commit
-	run("git", "init", "-b", "main")
-	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("original\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	run("git", "add", "tracked.txt")
-	run("git", "commit", "-m", "initial")
+	dir := "/fake/project"
 
-	// Create a feature branch with a tracked modification + an untracked new file
-	run("git", "checkout", "-b", "feature")
-	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("modified\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	run("git", "add", "tracked.txt")
-	run("git", "commit", "-m", "modify tracked")
+	// findMergeBase tries origin/main first
+	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", "HEAD", "origin/main").
+		Return([]byte("abc123\n"), nil)
 
-	// Create untracked files (simulates new files created by an agent)
-	if err := os.WriteFile(filepath.Join(dir, "new_service.py"), []byte("def run():\n    pass\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "new_test.py"), []byte("def test_run():\n    pass\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	// git diff against the merge-base — one tracked file changed
+	trackedDiff := "diff --git a/tracked.txt b/tracked.txt\n" +
+		"index 2e65efe..d5b24fa 100644\n" +
+		"--- a/tracked.txt\n" +
+		"+++ b/tracked.txt\n" +
+		"@@ -1 +1 @@\n" +
+		"-original\n" +
+		"+modified\n"
+	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123").
+		Return([]byte(trackedDiff), nil)
+
+	// git ls-files --others — two untracked files
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte("new_service.py\nnew_test.py\n"), nil)
+
+	// git diff --no-index for each untracked file
+	untrackedDiff1 := "diff --git a/dev/null b/new_service.py\n" +
+		"new file mode 100644\n" +
+		"--- /dev/null\n" +
+		"+++ b/new_service.py\n" +
+		"@@ -0,0 +1,2 @@\n" +
+		"+def run():\n" +
+		"+    pass\n"
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"diff", "--no-index", "--", "/dev/null", "new_service.py").
+		Return([]byte(untrackedDiff1), nil)
+
+	untrackedDiff2 := "diff --git a/dev/null b/new_test.py\n" +
+		"new file mode 100644\n" +
+		"--- /dev/null\n" +
+		"+++ b/new_test.py\n" +
+		"@@ -0,0 +1,2 @@\n" +
+		"+def test_run():\n" +
+		"+    pass\n"
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"diff", "--no-index", "--", "/dev/null", "new_test.py").
+		Return([]byte(untrackedDiff2), nil)
 
 	ctx := context.Background()
 	files, err := loadDiff(ctx, dir)

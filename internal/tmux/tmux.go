@@ -16,6 +16,30 @@ import (
 
 const Timeout = 2 * time.Second
 
+// Runner abstracts tmux command execution so tests can swap in a mock.
+type Runner interface {
+	Output(ctx context.Context, args ...string) ([]byte, error)
+	Run(ctx context.Context, args ...string) error
+}
+
+// ExecRunner is the production Runner that shells out to tmux.
+type ExecRunner struct{}
+
+func (r *ExecRunner) Output(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "tmux", args...).Output()
+}
+
+func (r *ExecRunner) Run(ctx context.Context, args ...string) error {
+	cmd := exec.CommandContext(ctx, "tmux", args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run()
+}
+
+// runner is the package-level Runner used by all tmux functions.
+// Tests replace this with a mock.
+var runner Runner = &ExecRunner{}
+
 // SilentRun runs a command with stdout and stderr discarded.
 // This prevents child processes from writing to the terminal,
 // which could inject escape sequences that bubbletea misinterprets as keys.
@@ -50,7 +74,7 @@ func ValidateTarget(target string) error {
 func TmuxIsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	return SilentRun(exec.CommandContext(ctx, "tmux", "list-sessions")) == nil
+	return runner.Run(ctx, "list-sessions") == nil
 }
 
 // TmuxResolvePaneID returns the current pane's ID (%N format).
@@ -62,7 +86,7 @@ func TmuxResolvePaneID() string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "#{pane_id}").Output()
+	out, err := runner.Output(ctx, "display-message", "-p", "#{pane_id}")
 	if err != nil {
 		return ""
 	}
@@ -74,9 +98,9 @@ func TmuxCapture(target string, lines int) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "tmux",
+	out, err := runner.Output(ctx,
 		"capture-pane", "-p", "-t", target, "-S", fmt.Sprintf("-%d", lines),
-	).Output()
+	)
 	if err != nil {
 		return nil, fmt.Errorf("capture-pane failed for %s: %w", target, err)
 	}
@@ -92,13 +116,13 @@ func TmuxJump(target string) error {
 
 	ctx1, cancel1 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel1()
-	if err := SilentRun(exec.CommandContext(ctx1, "tmux", "select-window", "-t", sw)); err != nil {
+	if err := runner.Run(ctx1, "select-window", "-t", sw); err != nil {
 		return fmt.Errorf("select-window failed for %s: %w", sw, err)
 	}
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel2()
-	if err := SilentRun(exec.CommandContext(ctx2, "tmux", "select-pane", "-t", target)); err != nil {
+	if err := runner.Run(ctx2, "select-pane", "-t", target); err != nil {
 		return fmt.Errorf("select-pane failed for %s: %w", target, err)
 	}
 
@@ -115,7 +139,7 @@ func TmuxZoomPane(target string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	return SilentRun(exec.CommandContext(ctx, "tmux", "resize-pane", "-Z", "-t", target))
+	return runner.Run(ctx, "resize-pane", "-Z", "-t", target)
 }
 
 // TmuxSelectPane switches focus to the given tmux pane without changing window.
@@ -125,7 +149,7 @@ func TmuxSelectPane(target string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	return SilentRun(exec.CommandContext(ctx, "tmux", "select-pane", "-t", target))
+	return runner.Run(ctx, "select-pane", "-t", target)
 }
 
 // TmuxSendKeys sends text literally to a tmux pane, followed by Enter.
@@ -133,19 +157,19 @@ func TmuxSelectPane(target string) error {
 func TmuxSendKeys(target, text string) error {
 	ctx1, cancel1 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel1()
-	if err := SilentRun(exec.CommandContext(ctx1, "tmux", "send-keys", "-l", "-t", target, text)); err != nil {
+	if err := runner.Run(ctx1, "send-keys", "-l", "-t", target, text); err != nil {
 		return err
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel2()
-	return SilentRun(exec.CommandContext(ctx2, "tmux", "send-keys", "-t", target, "Enter"))
+	return runner.Run(ctx2, "send-keys", "-t", target, "Enter")
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.
 func TmuxSendRaw(target, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	return SilentRun(exec.CommandContext(ctx, "tmux", "send-keys", "-t", target, key))
+	return runner.Run(ctx, "send-keys", "-t", target, key)
 }
 
 // TmuxKillPane kills a tmux pane by target and rebalances the window layout.
@@ -153,7 +177,7 @@ func TmuxKillPane(target string) error {
 	sw := ExtractSessionWindow(target)
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	if err := SilentRun(exec.CommandContext(ctx, "tmux", "kill-pane", "-t", target)); err != nil {
+	if err := runner.Run(ctx, "kill-pane", "-t", target); err != nil {
 		return fmt.Errorf("kill-pane failed for %s: %w", target, err)
 	}
 	// Rebalance remaining panes; ignore error (window may now be empty)
@@ -168,7 +192,7 @@ func TmuxEvenLayout(sessionWindow string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	return SilentRun(exec.CommandContext(ctx, "tmux", "select-layout", "-t", sessionWindow, "tiled"))
+	return runner.Run(ctx, "select-layout", "-t", sessionWindow, "tiled")
 }
 
 // ResolveTarget resolves a tmux pane ID (%N) to its current target string
@@ -176,8 +200,8 @@ func TmuxEvenLayout(sessionWindow string) error {
 func ResolveTarget(paneID string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", paneID,
-		"#{session_name}:#{window_index}.#{pane_index}").Output()
+	out, err := runner.Output(ctx, "display-message", "-p", "-t", paneID,
+		"#{session_name}:#{window_index}.#{pane_index}")
 	if err != nil {
 		return ""
 	}
@@ -189,8 +213,8 @@ func ResolveTarget(paneID string) string {
 func tmuxPaneCwd(paneID string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", paneID,
-		"#{pane_current_path}").Output()
+	out, err := runner.Output(ctx, "display-message", "-p", "-t", paneID,
+		"#{pane_current_path}")
 	if err != nil {
 		return ""
 	}
@@ -202,8 +226,8 @@ func tmuxPaneCwd(paneID string) string {
 func TmuxListPaneCwds() map[string]string {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
-		"-F", "#{pane_id}\t#{pane_current_path}").Output()
+	out, err := runner.Output(ctx, "list-panes", "-a",
+		"-F", "#{pane_id}\t#{pane_current_path}")
 	if err != nil {
 		return nil
 	}
@@ -224,8 +248,8 @@ func TmuxListPaneCwds() map[string]string {
 func TmuxListLivePaneIDs() map[string]bool {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
-		"-F", "#{pane_id}").Output()
+	out, err := runner.Output(ctx, "list-panes", "-a",
+		"-F", "#{pane_id}")
 	if err != nil {
 		return nil
 	}
@@ -279,9 +303,9 @@ func TmuxListWindows(session string) ([]domain.TmuxWindowInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "tmux",
+	out, err := runner.Output(ctx,
 		"list-windows", "-t", session, "-F", "#{window_index}\t#{window_name}",
-	).Output()
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list-windows failed for %s: %w", session, err)
 	}
@@ -294,10 +318,10 @@ func TmuxNewWindow(session, windowName, startDir string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "tmux",
+	out, err := runner.Output(ctx,
 		"new-window", "-t", session+":", "-n", windowName, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	).Output()
+	)
 	if err != nil {
 		return "", fmt.Errorf("new-window failed: %w", err)
 	}
@@ -314,10 +338,10 @@ func TmuxSplitWindow(sessionWindow, startDir string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "tmux",
+	out, err := runner.Output(ctx,
 		"split-window", "-t", sessionWindow, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	).Output()
+	)
 	if err != nil {
 		return "", fmt.Errorf("split-window failed: %w", err)
 	}
@@ -335,9 +359,9 @@ func TmuxCountPanes(sessionWindow string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "tmux",
+	out, err := runner.Output(ctx,
 		"list-panes", "-t", sessionWindow, "-F", "#{pane_index}",
-	).Output()
+	)
 	if err != nil {
 		return 0, fmt.Errorf("list-panes failed for %s: %w", sessionWindow, err)
 	}
@@ -411,8 +435,8 @@ func parsePaneTargetsOutput(output string) map[string]domain.PaneTarget {
 func TmuxListPaneTargets() map[string]domain.PaneTarget {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-panes", "-a",
-		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}").Output()
+	out, err := runner.Output(ctx, "list-panes", "-a",
+		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}")
 	if err != nil {
 		return nil
 	}
