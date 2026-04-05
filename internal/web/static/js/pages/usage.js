@@ -4,10 +4,11 @@ import { ICONS } from '../icons.js';
 import { escapeHtml, repoName } from '../format.js';
 import { get } from '../api.js';
 
+
 export async function renderUsage(app, agents) {
   app.innerHTML = UI.header('Usage',
     UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
-  ) + '<div class="usage-view"><div class="loading"><span class="spinner"></span></div></div>';
+  ) + '<div class="usage-view">' + UI.loadingBlock() + '</div>';
 
   const data = await get('/api/usage/daily');
   if (!data) return;
@@ -58,7 +59,7 @@ export async function renderUsage(app, agents) {
       ${chartHtml}
     </div>
     <h3 class="usage-chart-title" style="margin-top:24px">Per-Agent Breakdown</h3>
-    <div id="usage-agent-breakdown"><div class="loading"><span class="spinner"></span></div></div>
+    <div id="usage-agent-breakdown">${UI.loadingBlock()}</div>
   `;
 
   loadAgentBreakdown(agents);

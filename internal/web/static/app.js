@@ -4,6 +4,7 @@ import { renderDetail, showModal, toast } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
+import { UI } from './js/ui.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -20,6 +21,15 @@ let eventSource = null;
 function setView(view, agentId) {
   currentView = view;
   selectedAgentId = agentId || null;
+  try { sessionStorage.setItem('dashboard-view', JSON.stringify({ view, agentId: agentId || null })); } catch {}
+}
+
+// Wrap an async action with button spinner feedback.
+async function withSpinner(evt, fn) {
+  const btn = evt && evt.target ? evt.target.closest('button') : null;
+  let origHtml;
+  if (btn) { origHtml = btn.innerHTML; btn.disabled = true; btn.innerHTML += UI.spinner(); }
+  try { await fn(); } finally { if (btn) { btn.innerHTML = origHtml; btn.disabled = false; } }
 }
 
 // --- SSE ---
@@ -59,53 +69,65 @@ window.Dashboard = {
     renderDetail(app, agents, id, setView);
   },
 
-  async approve(id) {
-    const result = await post('/api/agents/' + id + '/approve');
-    if (result && result.ok) toast('Approved', 'success');
-    else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+  async approve(id, evt) {
+    await withSpinner(evt, async () => {
+      const result = await post('/api/agents/' + id + '/approve');
+      if (result && result.ok) toast('Approved', 'success');
+      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+    });
   },
 
-  async reject(id) {
-    const result = await post('/api/agents/' + id + '/reject');
-    if (result && result.ok) toast('Rejected', 'success');
-    else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+  async reject(id, evt) {
+    await withSpinner(evt, async () => {
+      const result = await post('/api/agents/' + id + '/reject');
+      if (result && result.ok) toast('Rejected', 'success');
+      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+    });
   },
 
-  async sendInput(id) {
+  async sendInput(id, evt) {
     const input = document.getElementById('reply-input');
     if (!input || !input.value.trim()) return;
     const text = input.value.trim();
     input.value = '';
-    const result = await post('/api/agents/' + id + '/input', { text });
-    if (result && result.ok) toast('Sent', 'success');
-    else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+    await withSpinner(evt, async () => {
+      const result = await post('/api/agents/' + id + '/input', { text });
+      if (result && result.ok) toast('Sent', 'success');
+      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+    });
   },
 
   confirmStop(id) {
-    showModal('Stop Agent', 'Send Ctrl+C to this agent?', async () => {
-      const result = await post('/api/agents/' + id + '/stop');
-      if (result && result.ok) toast('Stopped', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+    showModal('Stop Agent', 'Send Ctrl+C to this agent?', async (evt) => {
+      await withSpinner(evt, async () => {
+        const result = await post('/api/agents/' + id + '/stop');
+        if (result && result.ok) toast('Stopped', 'success');
+        else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      });
     });
   },
 
   confirmMerge(id) {
-    showModal('Merge PR', 'Merge this PR with --squash?', async () => {
-      const result = await post('/api/agents/' + id + '/merge');
-      if (result && result.ok) toast('Merged', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+    showModal('Merge PR', 'Merge this PR with --squash?', async (evt) => {
+      await withSpinner(evt, async () => {
+        const result = await post('/api/agents/' + id + '/merge');
+        if (result && result.ok) toast('Merged', 'success');
+        else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      });
     });
   },
 
   confirmClose(id) {
-    showModal('Close Agent', 'Kill the tmux pane and remove this agent?', async () => {
-      const result = await post('/api/agents/' + id + '/close');
-      if (result && result.ok) {
-        toast('Closed', 'success');
-        renderList(app, agents);
-      } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
-      }
+    showModal('Close Agent', 'Kill the tmux pane and remove this agent?', async (evt) => {
+      await withSpinner(evt, async () => {
+        const result = await post('/api/agents/' + id + '/close');
+        if (result && result.ok) {
+          toast('Closed', 'success');
+          renderList(app, agents);
+        } else {
+          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        }
+      });
     });
   },
 
@@ -118,7 +140,7 @@ window.Dashboard = {
     }
   },
 
-  async createAgent() {
+  async createAgent(evt) {
     const folder = document.getElementById('create-folder')?.value?.trim();
     const skill = document.getElementById('create-skill')?.value?.trim();
     const message = document.getElementById('create-message')?.value?.trim();
@@ -128,13 +150,15 @@ window.Dashboard = {
       return;
     }
 
-    const result = await post('/api/agents/create', { folder, skill, message });
-    if (result && result.ok) {
-      toast('Agent created', 'success');
-      renderList(app, agents);
-    } else {
-      toast('Failed: ' + (result?.error || 'unknown'), 'error');
-    }
+    await withSpinner(evt, async () => {
+      const result = await post('/api/agents/create', { folder, skill, message });
+      if (result && result.ok) {
+        toast('Agent created', 'success');
+        renderList(app, agents);
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      }
+    });
   },
 
   toggleExpand(btn) {
@@ -158,7 +182,28 @@ window.Dashboard = {
 async function init() {
   const data = await get('/api/agents');
   if (data) agents = data;
-  renderList(app, agents);
+
+  // Restore saved view state
+  let restored = false;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('dashboard-view'));
+    if (saved && saved.view) {
+      if (saved.view === 'detail' && saved.agentId && agents.find(a => a.session_id === saved.agentId)) {
+        renderDetail(app, agents, saved.agentId, setView);
+        restored = true;
+      } else if (saved.view === 'usage') {
+        setView('usage');
+        renderUsage(app, agents);
+        restored = true;
+      } else if (saved.view === 'create') {
+        setView('create');
+        renderCreate(app, agents);
+        restored = true;
+      }
+    }
+  } catch {}
+
+  if (!restored) renderList(app, agents);
   connectSSE();
 }
 

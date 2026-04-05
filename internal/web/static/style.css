@@ -470,6 +470,30 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.spinner-inline {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.btn[disabled], .btn-outlined[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ============================================
+   COMPONENT: Header home link
+   ============================================ */
+.header-home {
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ============================================
    COMPONENT: Inline code
    ============================================ */

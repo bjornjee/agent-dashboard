@@ -17,9 +17,9 @@ export function showModal(title, message, onConfirm) {
   `;
   document.body.appendChild(overlay);
   overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#modal-confirm').addEventListener('click', () => {
+  overlay.querySelector('#modal-confirm').addEventListener('click', (e) => {
     overlay.remove();
-    onConfirm();
+    onConfirm(e);
   });
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
