@@ -49,6 +49,7 @@ function renderActionBar(agent) {
 }
 
 let activityFilter = 'all';
+let currentPRUrl = '';
 
 function applyActivityFilter(container) {
   container.querySelectorAll('.timeline-entry').forEach(el => {
@@ -68,6 +69,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);
   if (!agent) { window.Dashboard.showList(); return; }
+  currentPRUrl = agent.pr_url || '';
 
   const st = effectiveState(agent);
   const detailHeader = `
@@ -295,6 +297,45 @@ async function loadTabContent(tab, agentId) {
       if (signal.aborted) return;
       if (!data || !data.raw) {
         container.innerHTML = UI.emptyState(ICONS.fileDiff, 'No diff available', 'Changes will appear here once the agent modifies files');
+        return;
+      }
+
+      // On mobile, show a PR link instead of rendering diffs
+      if (window.innerWidth <= 768) {
+        const files = data.files || [];
+        const totalAdds = files.reduce((s, f) => s + (f.additions || 0), 0);
+        const totalDels = files.reduce((s, f) => s + (f.deletions || 0), 0);
+        const prUrl = currentPRUrl ? currentPRUrl + '/files' : '';
+        const hasPR = !!prUrl;
+
+        let html = '<div class="mobile-diff-summary">';
+        html += '<div class="mobile-diff-stats">'
+          + '<span class="diff-stats-add">+' + totalAdds + '</span> '
+          + '<span class="diff-stats-del">-' + totalDels + '</span> '
+          + 'across ' + files.length + ' file' + (files.length !== 1 ? 's' : '')
+          + '</div>';
+
+        // File list
+        html += '<div class="mobile-diff-files">';
+        for (const f of files) {
+          const status = f.status || 'modified';
+          html += '<div class="mobile-diff-file">'
+            + UI.fileStatusIndicator(status)
+            + '<span class="mobile-diff-file-path">' + escapeHtml(f.path) + '</span>'
+            + '<span class="diff-stats"><span class="diff-stats-add">+' + (f.additions || 0) + '</span> <span class="diff-stats-del">-' + (f.deletions || 0) + '</span></span>'
+            + '</div>';
+        }
+        html += '</div>';
+
+        if (hasPR) {
+          html += '<a class="mobile-pr-link mobile-pr-link--active" href="' + escapeHtml(prUrl) + '" target="_blank" rel="noopener">'
+            + '&#x2197; View Diff on GitHub</a>';
+        } else {
+          html += '<div class="mobile-pr-link mobile-pr-link--inactive">'
+            + 'No PR available &mdash; create a PR to view diffs on mobile</div>';
+        }
+        html += '</div>';
+        container.innerHTML = html;
         return;
       }
 

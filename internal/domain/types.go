@@ -21,6 +21,7 @@ type Agent struct {
 	LastHookEvent      string   `json:"last_hook_event"`
 	CurrentTool        string   `json:"current_tool"`
 	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
+	PRURL              string   `json:"pr_url,omitempty"`
 	PinnedState        string   `json:"pinned_state,omitempty"`
 }
 
