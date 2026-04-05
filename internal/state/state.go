@@ -15,6 +15,21 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
+// BranchRunner abstracts git command execution so tests can swap in a mock.
+type BranchRunner interface {
+	Output(ctx context.Context, name string, args ...string) ([]byte, error)
+}
+
+type execBranchRunner struct{}
+
+func (r *execBranchRunner) Output(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+// branchRunner is the package-level runner used by gitBranch.
+// Tests replace this with a mock.
+var branchRunner BranchRunner = &execBranchRunner{}
+
 // AgentsDir returns the agents subdirectory within the state directory.
 func AgentsDir(dir string) string {
 	return filepath.Join(dir, "agents")
@@ -146,7 +161,7 @@ func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string) {
 func gitBranch(dir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := branchRunner.Output(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return ""
 	}
