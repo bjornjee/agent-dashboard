@@ -40,6 +40,7 @@ export function renderList(app, agents) {
           ${agent.started_at ? '<span>' + durationShort(agent) + '</span>' : ''}
           ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
         </div>
+        <div class="agent-card__subagents" data-agent-id="${agent.session_id}" data-subagent-count="${agent.subagent_count || 0}"></div>
         <div class="agent-bottom-row">
           ${agent.current_tool ? '<span class="agent-current-tool">' + escapeHtml(agent.current_tool) + '</span>' : ''}
           <span class="agent-cost" data-agent-id="${agent.session_id}"></span>
@@ -56,6 +57,7 @@ export function renderList(app, agents) {
   html += '</div>';
   app.innerHTML = html;
   loadAgentCosts();
+  loadSubagentRows();
 }
 
 async function loadAgentCosts() {
@@ -67,6 +69,29 @@ async function loadAgentCosts() {
       if (u && u.CostUSD > 0) {
         el.innerHTML = '<span class="agent-cost-label">Cost</span>' + formatCost(u.CostUSD);
       }
+    } catch { /* ignore */ }
+  }));
+}
+
+async function loadSubagentRows() {
+  const els = document.querySelectorAll('.agent-card__subagents[data-agent-id]');
+  if (!els.length) return;
+  await Promise.all(Array.from(els).map(async (el) => {
+    const count = parseInt(el.dataset.subagentCount, 10);
+    if (!count) return;
+    try {
+      const subs = await get('/api/agents/' + el.dataset.agentId + '/subagents');
+      if (!subs || !subs.length) return;
+      let html = '';
+      for (const sub of subs) {
+        html += UI.subagentRow({
+          status: sub.Completed ? 'completed' : 'running',
+          name: sub.AgentType || 'subagent',
+          task: sub.Description || '',
+          started_at: sub.StartedAt,
+        });
+      }
+      el.innerHTML = html;
     } catch { /* ignore */ }
   }));
 }

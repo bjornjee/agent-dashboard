@@ -1142,10 +1142,23 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 
 /* Diff2html dark overrides */
 .diff-content .d2h-wrapper { border: none; }
-.diff-content .d2h-file-header { background: var(--bg-elevated); border-color: var(--border-default); color: var(--text-primary); }
+.diff-content .d2h-file-header {
+  background: var(--bg-elevated); border-color: var(--border-default); color: var(--text-primary);
+  position: sticky; top: 0; z-index: 10;
+}
 .diff-content .d2h-file-name-wrapper { color: var(--text-primary); }
 .diff-content .d2h-file-name { color: var(--text-primary); }
-.diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; }
+.diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; table-layout: auto; }
+
+/* Horizontal scroll for long lines */
+.diff-content .d2h-code-line-ctn { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.diff-content .d2h-code-line-ctn::-webkit-scrollbar { height: 6px; }
+.diff-content .d2h-code-line-ctn::-webkit-scrollbar-track { background: var(--bg-base); border-radius: 3px; }
+.diff-content .d2h-code-line-ctn::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+.diff-content .d2h-code-line-ctn::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* Wrap toggle */
+.diff-content.diff-wrap .d2h-code-line-ctn { white-space: pre-wrap; word-break: break-all; overflow-x: visible; }
 .diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; position: static !important; }
 .diff-content .d2h-code-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-line-ctn { color: var(--text-primary); }
