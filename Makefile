@@ -44,7 +44,7 @@ install-web: build-web ## Install web server binary
 	cp bin/agent-dashboard-web ~/.local/bin/
 
 web: build-web ## Run web server locally
-	./bin/agent-dashboard-web --port 8390
+	./bin/agent-dashboard-web --port 8390 --bind 0.0.0.0
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/
