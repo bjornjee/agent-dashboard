@@ -6,9 +6,9 @@ import { get } from '../api.js';
 export function renderCreate(app, agents) {
   const agentFolders = [...new Set(agents.map(a => a.cwd).filter(Boolean))];
 
-  app.innerHTML = UI.header('New Agent',
-    UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
-  ) + `
+  app.innerHTML = UI.header('New Agent', {
+    actions: [{ label: '&larr; Back', onclick: 'Dashboard.showList()' }],
+  }) + `
     <div class="create-form-card">
       <div class="form-group">
         <label class="form-label">Folder</label>
