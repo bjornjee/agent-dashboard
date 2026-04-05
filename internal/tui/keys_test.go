@@ -1898,3 +1898,91 @@ func TestOpenWorktreeMsgError(t *testing.T) {
 		t.Errorf("expected error message in status, got %q", rm.statusMsg)
 	}
 }
+
+// --- Paste (Cmd+V / bracketed paste) tests ---
+
+func TestPasteInReplyMode(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeReply
+	m.textInput.Focus()
+
+	msg := tea.PasteMsg{Content: "pasted text"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.textInput.Value() != "pasted text" {
+		t.Errorf("expected textInput to contain 'pasted text', got %q", rm.textInput.Value())
+	}
+}
+
+func TestPasteInCreateFolderMode(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateFolder
+	m.textInput.Focus()
+
+	msg := tea.PasteMsg{Content: "/some/path"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.textInput.Value() != "/some/path" {
+		t.Errorf("expected textInput to contain '/some/path', got %q", rm.textInput.Value())
+	}
+}
+
+func TestPasteInCreateMessageMode(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateMessage
+	m.textInput.Focus()
+
+	msg := tea.PasteMsg{Content: "agent message"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.textInput.Value() != "agent message" {
+		t.Errorf("expected textInput to contain 'agent message', got %q", rm.textInput.Value())
+	}
+}
+
+func TestPasteInDiffFilterMode(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.diffVisible = true
+	m.diffFilterActive = true
+	m.diffFilterInput.Focus()
+
+	msg := tea.PasteMsg{Content: "filter"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.diffFilterInput.Value() != "filter" {
+		t.Errorf("expected diffFilterInput to contain 'filter', got %q", rm.diffFilterInput.Value())
+	}
+	if rm.diffFilterText != "filter" {
+		t.Errorf("expected diffFilterText to be 'filter', got %q", rm.diffFilterText)
+	}
+}
+
+func TestPasteInNormalModeIsNoop(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeNormal
+
+	msg := tea.PasteMsg{Content: "should be ignored"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.textInput.Value() != "" {
+		t.Errorf("expected textInput to be empty in normal mode, got %q", rm.textInput.Value())
+	}
+}
+
+func TestPasteInCreateSkillModeIsNoop(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateSkill
+
+	msg := tea.PasteMsg{Content: "should be ignored"}
+	result, _ := m.Update(msg)
+	rm := result.(model)
+
+	if rm.textInput.Value() != "" {
+		t.Errorf("expected textInput to be empty in skill selection mode, got %q", rm.textInput.Value())
+	}
+}
