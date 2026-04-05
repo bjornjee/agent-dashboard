@@ -6,11 +6,11 @@ ADAPTER ?= claude-code
 
 build: ## Build the dashboard binary
 	go build $(LDFLAGS) -o bin/agent-dashboard ./cmd/dashboard/
-	@if [ "$$(uname)" = "Darwin" ]; then codesign -s - bin/agent-dashboard; fi
+	@if [ "$$(uname)" = "Darwin" ]; then codesign -f -s - bin/agent-dashboard; fi
 
 build-web: ## Build the web server binary
 	go build -o bin/agent-dashboard-web ./cmd/web/
-	@if [ "$$(uname)" = "Darwin" ]; then codesign -s - bin/agent-dashboard-web; fi
+	@if [ "$$(uname)" = "Darwin" ]; then codesign -f -s - bin/agent-dashboard-web; fi
 
 fmt: ## Auto-format Go source files
 	gofmt -w .
