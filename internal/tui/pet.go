@@ -18,10 +18,11 @@ const (
 	petSleeping
 )
 
-// petSpriteWidth is the character width of the stick figure sprites.
-const petSpriteWidth = 5
+// petSpriteWidth is the character width of the widest stick figure sprite.
+const petSpriteWidth = 6
 
-// petHeight is the number of lines the pet panel occupies (including separator).
+// petHeight is the number of lines the pet panel occupies:
+// 1 separator + 3 sprite lines + 1 trailing newline from View() = 5.
 const petHeight = 5
 
 // petTickInterval controls the animation frame rate.

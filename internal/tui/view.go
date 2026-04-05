@@ -729,14 +729,10 @@ func (m model) renderLeftPanel() string {
 	}
 
 	if m.petEnabled {
-		agentListHeight := panelHeight - petHeight
-		if agentListHeight < 3 {
-			agentListHeight = 3
-		}
 		separator := lipgloss.NewStyle().
 			Foreground(themeOverlay0).
 			Width(m.leftWidth + 2).
-			Render(strings.Repeat("���", m.leftWidth+2))
+			Render(strings.Repeat("─", m.leftWidth+2))
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			m.agentListVP.View(),
 			separator,

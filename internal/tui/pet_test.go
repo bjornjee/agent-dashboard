@@ -90,8 +90,8 @@ func TestPetStateCycle(t *testing.T) {
 		p.ticksInState = p.stateDuration + 1
 		p.advanceState()
 	}
-	// Should have seen at least idle, walking, sitting
-	for _, s := range []petState{petIdle, petWalking, petSitting} {
+	// Should have seen all states in the cycle
+	for _, s := range []petState{petIdle, petWalking, petSitting, petSleeping} {
 		if !seen[s] {
 			t.Errorf("state %d never reached in cycle", s)
 		}
