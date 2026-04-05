@@ -13,7 +13,7 @@ export const UI = {
     for (const a of actions) {
       controls += `<button class="header-text-btn" onclick="${a.onclick}">${a.label}</button>`;
     }
-    if (actions.length && (showToggle || o.cta)) {
+    if (actions.length && o.cta) {
       controls += '<div class="header-divider"></div>';
     }
     if (showToggle) {
