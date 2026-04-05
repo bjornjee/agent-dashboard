@@ -1,5 +1,5 @@
 // Reusable UI component factory.
-import { escapeHtml, formatCost, formatTokens } from './format.js';
+import { escapeHtml, formatCost, formatCostFull, formatTokens, formatDateShort, durationFromTimestamp } from './format.js';
 import { STATE_BADGE } from './state.js';
 import { ICONS } from './icons.js';
 
@@ -54,6 +54,101 @@ export const UI = {
 
   emptyState(icon, title, subtitle) {
     return `<div class="empty-state">${icon}<div class="empty-state-title">${escapeHtml(title)}</div><div class="empty-state-subtitle">${escapeHtml(subtitle)}</div></div>`;
+  },
+
+  metricsStrip(cells) {
+    let html = '<div class="usage-metrics">';
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i];
+      html += '<div class="usage-metric">';
+      html += `<div class="usage-metric__label">${escapeHtml(c.label)}</div>`;
+      html += `<div class="usage-metric__value">${escapeHtml(c.value)}</div>`;
+      if (c.delta) {
+        const cls = c.delta.direction === 'up' ? 'usage-metric__delta--up'
+          : c.delta.direction === 'down' ? 'usage-metric__delta--down'
+          : 'usage-metric__delta--neutral';
+        html += `<div class="usage-metric__delta ${cls}">${escapeHtml(c.delta.text)}</div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  },
+
+  chartContainer(title, chartHtml, rightAction) {
+    return `<div class="usage-chart-card">
+      <div class="usage-chart-card__header">
+        <div class="usage-chart__title">${escapeHtml(title)}</div>
+        ${rightAction || ''}
+      </div>
+      ${chartHtml}
+    </div>`;
+  },
+
+  chartBar(opts) {
+    const todayCls = opts.isToday ? ' usage-bar--today' : '';
+    const tooltip = `<div class="chart-tooltip">${escapeHtml(opts.value)} &middot; ${escapeHtml(opts.label)}</div>`;
+    let todayLabel = '';
+    if (opts.isToday) {
+      todayLabel = '<span class="usage-bar-today-label">Today</span>';
+    }
+    return `<div class="usage-bar${todayCls}" style="height:${opts.height}%">
+      ${tooltip}
+      <span class="usage-bar-label">${escapeHtml(opts.label)}</span>
+      ${todayLabel}
+    </div>`;
+  },
+
+  dateRangeSelector(options, active, onclickFn) {
+    let html = '<div class="date-range-selector">';
+    for (const opt of options) {
+      const cls = opt.value === active ? ' date-range-option--active' : '';
+      html += `<button class="date-range-option${cls}" onclick="${onclickFn}(${opt.value})">${escapeHtml(opt.label)}</button>`;
+    }
+    html += '</div>';
+    return html;
+  },
+
+  tableCard(title, tableHtml) {
+    return `<div class="usage-table-container">
+      <div class="usage-table__title">${escapeHtml(title)}</div>
+      ${tableHtml}
+    </div>`;
+  },
+
+  subagentRow(sub) {
+    const statusColor = STATE_BADGE[sub.status] || 'running';
+    const name = escapeHtml(sub.name || sub.type || 'subagent');
+    const task = sub.task ? escapeHtml(sub.task) : '';
+    const dur = sub.started_at ? durationFromTimestamp(sub.started_at) : '';
+    return `<div class="agent-card__subagent-row">
+      <span class="subagent-status-dot subagent-status-dot--${statusColor}"></span>
+      <span class="agent-card__subagent-name">${name}</span>
+      <span class="agent-card__subagent-task">${task}</span>
+      <span class="agent-card__subagent-duration">${escapeHtml(dur)}</span>
+    </div>`;
+  },
+
+  fileStatusIndicator(status) {
+    switch (status) {
+      case 'added':
+        return '<span class="file-status file-status--added">+</span>';
+      case 'deleted':
+        return '<span class="file-status file-status--deleted">&minus;</span>';
+      case 'renamed':
+        return '<span class="file-status file-status--renamed">&rarr;</span>';
+      default:
+        return '<span class="file-status file-status--modified"></span>';
+    }
+  },
+
+  toggleSwitch(label, key, defaultOn) {
+    const checked = defaultOn ? ' checked' : '';
+    return `<label class="toggle-switch">
+      <span class="toggle-switch__label">${escapeHtml(label)}</span>
+      <input type="checkbox" class="toggle-switch__input" data-key="${escapeHtml(key)}"${checked}>
+      <span class="toggle-switch__track"></span>
+    </label>`;
   },
 
   vitalSigns(opts) {
