@@ -364,6 +364,15 @@ body {
   white-space: nowrap;
 }
 
+.agent-current-tool {
+  background: var(--accent-muted);
+  color: var(--accent-text);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
 .agent-preview {
   font-size: 13px;
   color: var(--text-secondary);
@@ -457,6 +466,7 @@ body {
 .msg-role-label {
   font-size: 11px; font-weight: 600; color: var(--text-tertiary);
   margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.5px;
+  display: flex; align-items: center; gap: 4px;
 }
 
 .msg-assistant .markdown-body { color: var(--text-primary); }
@@ -493,6 +503,20 @@ body {
 .activity-separator { border: none; border-top: 1px solid var(--border-subtle); margin: 8px 0; }
 .activity-icon { display: inline-flex; align-items: center; width: 20px; justify-content: center; margin-right: 4px; color: var(--text-tertiary); }
 .activity-expand-btn { color: var(--accent-text); font-size: 11px; cursor: pointer; background: none; border: none; padding: 2px 0; font-family: var(--font-sans); }
+
+/* Turn grouping */
+.activity-turn { border-left: 2px solid var(--border-subtle); padding-left: 10px; margin-bottom: 12px; }
+.activity-turn:last-child { margin-bottom: 0; }
+.activity-tool-group { margin: 4px 0; }
+.activity-tool-summary {
+  font-size: 11px; font-weight: 600; color: var(--text-tertiary);
+  cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 4px;
+  list-style: none; font-family: var(--font-sans);
+}
+.activity-tool-summary::-webkit-details-marker { display: none; }
+.activity-tool-summary::before { content: '\25B6'; font-size: 8px; transition: transform 0.15s; display: inline-block; }
+details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
+.activity-entry-tool { padding-left: 8px; border-left: 1px solid var(--border-subtle); margin-left: 8px; }
 
 /* ============================================
    VIEW: Diff
@@ -759,6 +783,7 @@ body {
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-card);
 }
+.create-form-card .btn { width: 100%; }
 .form-group { margin-bottom: 16px; }
 .form-label {
   display: block; font-size: 11px; font-weight: 600;

@@ -302,6 +302,7 @@
             ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
             ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
             ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
+            ${agent.current_tool ? '<span class="agent-current-tool">' + escapeHtml(agent.current_tool) + '</span>' : ''}
           </div>
           ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(stripMarkdown(agent.last_message_preview)) + '</div>' : ''}
         `;
@@ -398,7 +399,9 @@
           const content = entry.Content || entry.content || '';
           const time = entry.Timestamp || entry.timestamp || '';
           if (role !== lastRole) {
-            html += `<div class="msg-role-label">${role === 'human' ? 'You' : 'Claude'}</div>`;
+            const icon = role === 'human' ? ICONS.human : ICONS.assistant;
+            const label = role === 'human' ? 'You' : 'Claude';
+            html += `<div class="msg-role-label">${icon} ${label}</div>`;
             lastRole = role;
           }
           if (role === 'human') {
@@ -423,25 +426,71 @@
           html += `<button class="activity-filter-btn${activityFilter === f ? ' active' : ''}" data-filter="${f}">${f}</button>`;
         }
         html += '</div>';
-        html += '<div class="activity-log">';
-        let lastKind = '';
+        // Group entries into turns: human prompt -> tool calls -> assistant response
+        const turns = [];
+        let currentTurn = null;
         for (const e of entries) {
           const kind = e.Kind || e.kind || 'tool';
-          const content = e.Content || e.content || '';
-          const time = e.Timestamp || e.timestamp || '';
-          const cls = 'activity-' + kind;
-          if (kind === 'human' && lastKind && lastKind !== 'human') {
-            html += '<hr class="activity-separator">';
+          if (kind === 'human') {
+            currentTurn = { human: e, tools: [], assistant: null };
+            turns.push(currentTurn);
+          } else if (currentTurn) {
+            if (kind === 'tool') currentTurn.tools.push(e);
+            else if (kind === 'assistant') currentTurn.assistant = e;
+          } else {
+            // Entries before first human message
+            if (!turns.length) turns.push({ human: null, tools: [], assistant: null });
+            if (kind === 'tool') turns[0].tools.push(e);
+            else if (kind === 'assistant') turns[0].assistant = e;
           }
-          lastKind = kind;
-          const truncated = content.length > 200;
-          const displayContent = truncated ? content.substring(0, 200) + '...' : content;
-          html += `<div class="activity-entry" data-kind="${kind}">`
-            + kindIcon(kind)
-            + `<span class="activity-time">${formatTimeShort(time)}</span> `
-            + `<span class="${cls}" data-full="${escapeHtml(content)}" data-truncated="true">${escapeHtml(displayContent)}</span>`
-            + (truncated ? ` <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
-            + `</div>`;
+        }
+
+        html += '<div class="activity-log">';
+        for (const turn of turns) {
+          html += '<div class="activity-turn">';
+          // Human entry
+          if (turn.human) {
+            const content = turn.human.Content || turn.human.content || '';
+            const time = turn.human.Timestamp || turn.human.timestamp || '';
+            const truncated = content.length > 200;
+            const display = truncated ? content.substring(0, 200) + '...' : content;
+            html += `<div class="activity-entry" data-kind="human">`
+              + kindIcon('human')
+              + `<span class="activity-time">${formatTimeShort(time)}</span> `
+              + `<span class="activity-human" data-full="${escapeHtml(content)}" data-truncated="true">${escapeHtml(display)}</span>`
+              + (truncated ? ` <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
+              + `</div>`;
+          }
+          // Tool calls — collapsible group
+          if (turn.tools.length > 0) {
+            html += `<details class="activity-tool-group"><summary class="activity-tool-summary">${kindIcon('tool')} ${turn.tools.length} tool call${turn.tools.length !== 1 ? 's' : ''}</summary>`;
+            for (const e of turn.tools) {
+              const content = e.Content || e.content || '';
+              const time = e.Timestamp || e.timestamp || '';
+              const truncated = content.length > 200;
+              const display = truncated ? content.substring(0, 200) + '...' : content;
+              html += `<div class="activity-entry activity-entry-tool" data-kind="tool">`
+                + `<span class="activity-time">${formatTimeShort(time)}</span> `
+                + `<span class="activity-tool" data-full="${escapeHtml(content)}" data-truncated="true">${escapeHtml(display)}</span>`
+                + (truncated ? ` <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
+                + `</div>`;
+            }
+            html += '</details>';
+          }
+          // Assistant entry
+          if (turn.assistant) {
+            const content = turn.assistant.Content || turn.assistant.content || '';
+            const time = turn.assistant.Timestamp || turn.assistant.timestamp || '';
+            const truncated = content.length > 300;
+            const display = truncated ? content.substring(0, 300) + '...' : content;
+            html += `<div class="activity-entry" data-kind="assistant">`
+              + kindIcon('assistant')
+              + `<span class="activity-time">${formatTimeShort(time)}</span> `
+              + `<span class="activity-assistant" data-full="${escapeHtml(content)}" data-truncated="true">${escapeHtml(display)}</span>`
+              + (truncated ? ` <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
+              + `</div>`;
+          }
+          html += '</div>';
         }
         html += '</div>';
         container.innerHTML = html;
@@ -739,7 +788,7 @@
           <label class="form-label">Message (optional)</label>
           <textarea id="create-message" class="action-input" style="width:100%;min-height:80px;resize:vertical" placeholder="What should the agent do?"></textarea>
         </div>
-        ${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent()" })}
+        <div style="margin-top:8px">${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent()" })}</div>
       </div>
     `;
   }
