@@ -538,7 +538,9 @@ async function loadTabContent(tab, agentId) {
       // Wrap toggle
       const wrapInput = container.querySelector('.toggle-switch__input[data-key="diff-wrap-lines"]');
       if (wrapInput && diffContent) {
-        if (sessionStorage.getItem('diff-wrap-lines') === 'true') diffContent.classList.add('diff-wrap');
+        // Force wrap on mobile to prevent horizontal scroll
+        if (window.innerWidth <= 768) diffContent.classList.add('diff-wrap');
+        else if (sessionStorage.getItem('diff-wrap-lines') === 'true') diffContent.classList.add('diff-wrap');
         wrapInput.addEventListener('change', () => {
           diffContent.classList.toggle('diff-wrap', wrapInput.checked);
           sessionStorage.setItem('diff-wrap-lines', wrapInput.checked);
