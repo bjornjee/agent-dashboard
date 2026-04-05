@@ -1,8 +1,8 @@
 // Agent list view.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { STATE_BORDER, effectiveState, stateGroup } from '../state.js';
-import { escapeHtml, repoName, duration, stripMarkdown } from '../format.js';
+import { effectiveState, stateGroup } from '../state.js';
+import { escapeHtml, repoName, durationShort, stripMarkdown, formatCost } from '../format.js';
 import { get } from '../api.js';
 
 export function renderList(app, agents) {
@@ -16,7 +16,7 @@ export function renderList(app, agents) {
   const order = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
   let html = UI.header('Agent Dashboard',
     UI.btn('Usage', { variant: 'ghost', onclick: "Dashboard.showUsage()" })
-    + UI.btn('+ New', { variant: 'ghost', onclick: "Dashboard.showCreate()" })
+    + `<button class="btn-outlined" onclick="Dashboard.showCreate()">+ New</button>`
   );
   html += '<div class="agent-list">';
 
@@ -37,15 +37,15 @@ export function renderList(app, agents) {
         <div class="agent-meta">
           ${agent.branch ? '<span>' + escapeHtml(agent.branch) + '</span>' : ''}
           ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
-          ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
+          ${agent.started_at ? '<span>' + durationShort(agent) + '</span>' : ''}
           ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
+        </div>
+        <div class="agent-bottom-row">
           ${agent.current_tool ? '<span class="agent-current-tool">' + escapeHtml(agent.current_tool) + '</span>' : ''}
           <span class="agent-cost" data-agent-id="${agent.session_id}"></span>
         </div>
-        ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(stripMarkdown(agent.last_message_preview)) + '</div>' : ''}
       `;
       html += UI.card(cardContent, {
-        borderColor: STATE_BORDER[st] || 'var(--border-subtle)',
         onclick: `Dashboard.selectAgent('${agent.session_id}')`,
         className: 'agent-card',
       });
@@ -65,7 +65,7 @@ async function loadAgentCosts() {
     try {
       const u = await get('/api/agents/' + el.dataset.agentId + '/usage');
       if (u && u.CostUSD > 0) {
-        el.textContent = '$' + u.CostUSD.toFixed(2);
+        el.innerHTML = '<span class="agent-cost-label">Cost</span>' + formatCost(u.CostUSD);
       }
     } catch { /* ignore */ }
   }));

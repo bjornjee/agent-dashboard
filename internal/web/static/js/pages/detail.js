@@ -2,7 +2,7 @@
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { effectiveState } from '../state.js';
-import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, renderMarkdown, skeletonLoading } from '../format.js';
+import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 
@@ -18,23 +18,23 @@ function renderActionBar(agent) {
   const st = effectiveState(agent);
   let actions = '';
 
-  actions += UI.btn('Open Claude', { variant: 'secondary', onclick: "Dashboard.openClaude()" });
+  actions += UI.btn('Open Claude', { variant: 'primary', onclick: "Dashboard.openClaude()" });
 
   if (st === 'permission' || st === 'plan') {
-    actions += UI.btn('Approve', { variant: 'primary', onclick: `Dashboard.approve('${agent.session_id}')` });
+    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}')` });
     actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}')` });
   } else if (st === 'question' || st === 'error') {
     actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
-    actions += UI.btn('Send', { variant: 'primary', onclick: `Dashboard.sendInput('${agent.session_id}')` });
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}')` });
   } else if (st === 'pr') {
     actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });
-    actions += UI.btn('Merge', { variant: 'primary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
+    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
   } else if (st === 'merged') {
     actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${agent.session_id}')` });
   }
 
   if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question') {
-    actions += UI.btn('Stop', { variant: 'danger', onclick: `Dashboard.confirmStop('${agent.session_id}')` });
+    actions += UI.stopBtn(`Dashboard.confirmStop('${agent.session_id}')`);
   }
 
   return `<div class="action-bar">${actions}</div>`;
@@ -73,7 +73,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   const st = effectiveState(agent);
   const detailHeader = `
     <div class="detail-header">
-      ${UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })}
+      <button class="btn btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
       <div class="detail-title">
         <h2>${escapeHtml(repoName(agent))}</h2>
         ${UI.badge(st, st)}
@@ -87,6 +87,8 @@ export async function renderDetail(app, agents, agentId, setView) {
     </div>
   `;
 
+  const vitalSignsPlaceholder = '<div id="vital-signs-container"></div>';
+
   const tabs = UI.tabs([
     { key: 'conversation', label: 'Chat' },
     { key: 'activity', label: 'Activity' },
@@ -96,6 +98,7 @@ export async function renderDetail(app, agents, agentId, setView) {
 
   app.innerHTML = `
     ${detailHeader}
+    ${vitalSignsPlaceholder}
     ${tabs}
     <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
     <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
@@ -118,9 +121,26 @@ export async function renderDetail(app, agents, agentId, setView) {
     });
   });
 
-  // Load initial tab + subagents in parallel
+  // Load initial tab + subagents + vital signs in parallel
   loadTabContent('conversation', agentId);
   loadSubagentSummary(agentId);
+  loadVitalSigns(agentId, agent);
+}
+
+async function loadVitalSigns(agentId, agent) {
+  const container = document.getElementById('vital-signs-container');
+  if (!container) return;
+  try {
+    const usage = await get('/api/agents/' + agentId + '/usage');
+    const elapsed = agent.started_at ? duration(agent) : '';
+    container.innerHTML = UI.vitalSigns({
+      elapsed: elapsed,
+      tokens: (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0),
+      cost: usage ? usage.CostUSD : 0,
+    });
+  } catch {
+    container.innerHTML = '';
+  }
 }
 
 async function loadSubagentSummary(agentId) {
@@ -136,8 +156,8 @@ async function loadSubagentSummary(agentId) {
   const running = subs.length - completed;
 
   let html = `<div class="subagent-summary-header">${ICONS.subagent} <span>${subs.length} subagent${subs.length !== 1 ? 's' : ''}</span>`;
-  if (running > 0) html += ` <span class="badge badge-blue">${running} running</span>`;
-  if (completed > 0) html += ` <span class="badge badge-green">${completed} done</span>`;
+  if (running > 0) html += ` <span class="badge badge-running">${running} running</span>`;
+  if (completed > 0) html += ` <span class="badge badge-completed">${completed} done</span>`;
   html += '</div>';
 
   html += '<div class="subagent-summary-list">';
@@ -146,8 +166,9 @@ async function loadSubagentSummary(agentId) {
     const type = sub.AgentType || sub.agent_type || 'agent';
     const desc = sub.Description || sub.description || '';
     const startedAt = sub.StartedAt || sub.started_at || '';
-    const statusCls = isDone ? 'subagent-done' : 'subagent-running';
-    html += `<div class="subagent-summary-item ${statusCls}">`;
+    const dotClass = isDone ? 'status-dot--completed' : 'status-dot--running';
+    html += `<div class="subagent-pill">`;
+    html += `<span class="status-dot ${dotClass}"></span>`;
     html += `<span class="subagent-type">${escapeHtml(type)}</span>`;
     if (desc) html += `<span class="subagent-desc">${escapeHtml(desc)}</span>`;
     if (startedAt) html += `<span class="subagent-time">${durationFromTimestamp(startedAt)}</span>`;
@@ -204,8 +225,7 @@ async function loadTabContent(tab, agentId) {
       let html = '<div class="activity-filter-bar">';
       for (const f of ['all', 'human', 'assistant', 'tool']) {
         const cls = f === activityFilter ? ' active' : '';
-        const icon = f === 'all' ? '' : (ICONS[f] || '');
-        html += `<button class="activity-filter-btn${cls}" data-filter="${f}">${icon} ${f}</button>`;
+        html += `<button class="activity-filter-btn${cls}" data-filter="${f}">${f}</button>`;
       }
       html += '</div><div class="activity-log">';
 
@@ -401,7 +421,7 @@ async function loadTabContent(tab, agentId) {
           });
           if (truncated) {
             bodyEl.insertAdjacentHTML('beforeend',
-              '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-subtle)">'
+              '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-default)">'
               + 'Showing first ' + maxLines + ' lines of ' + lines.length + ' total</div>');
           }
         } catch {
