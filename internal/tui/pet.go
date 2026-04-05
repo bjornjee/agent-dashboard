@@ -14,7 +14,6 @@ type petState int
 const (
 	petIdle petState = iota
 	petWalking
-	petSitting
 	petDrowsy
 	petSleeping
 	petEating
@@ -49,16 +48,10 @@ var petFrames = map[petState][][]string{
 		{" ^   ^", "(o . o)", " (u u)~"},
 		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
-	petSitting: {
-		{" ^   ^", "(o . o)", " (u u)~"},
-		{" ^   ^", "(o . o)", " (u u)~"},
-		{" ^   ^", "(- . -)", " (u u)~"},
-		{" ^   ^", "(o . o)", " (u u)~"},
-	},
 	petDrowsy: {
 		{" ^   ^", "(- . -)", " (u u)~"},
 		{" ^   ^", "(- . -)", " (u u) ~"},
-		{" ^   ^", "(o . -)", " (u u)~"},
+		{" ^   ^", "(- . -)", " (u u)  ~"},
 		{" ^   ^", "(- . -)", " (u u) ~"},
 	},
 	petSleeping: {
@@ -68,10 +61,10 @@ var petFrames = map[petState][][]string{
 		{" ^   ^", "(- . -) zZ", " (u u)~"},
 	},
 	petEating: {
-		{" ^   ^", "(o . o)", " (u u)|~"},
-		{" ^   ^", "(o . o)", " (u u)|~"},
-		{" ^   ^", "(- . -)", " (u u)|~"},
-		{" ^   ^", "(o . o)", " (u u)| ~"},
+		{" ^   ^", "(o . o)", " (u u)/|~"},
+		{" ^   ^", "(o . o)", " (u u)/~"},
+		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 }
 
@@ -79,7 +72,6 @@ var petFrames = map[petState][][]string{
 var petStateDurations = map[petState]int{
 	petIdle:     20, // 8 seconds
 	petWalking:  16, // 6.4 seconds
-	petSitting:  16, // 6.4 seconds
 	petDrowsy:   12, // 4.8 seconds
 	petSleeping: 20, // 8 seconds
 	petEating:   16, // 6.4 seconds
@@ -151,8 +143,6 @@ func (p *petModel) advanceState() {
 	case petIdle:
 		p.state = petWalking
 	case petWalking:
-		p.state = petSitting
-	case petSitting:
 		p.state = petDrowsy
 	case petDrowsy:
 		p.state = petSleeping
