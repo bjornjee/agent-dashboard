@@ -720,3 +720,67 @@ func TestLogoutClearsCookie(t *testing.T) {
 	}
 	t.Error("expected session cookie to be cleared")
 }
+
+func TestSuggestionsEndpoint(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	// Create a temporary z-file with test entries
+	sessionsDir := t.TempDir()
+	cfg.Profile.SessionsDir = sessionsDir
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/suggestions")
+	if err != nil {
+		t.Fatalf("GET /api/suggestions: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var suggestions []string
+	if err := json.NewDecoder(resp.Body).Decode(&suggestions); err != nil {
+		t.Fatalf("decode suggestions: %v", err)
+	}
+	// With empty sessions dir, should return empty array
+	if len(suggestions) != 0 {
+		t.Errorf("expected 0 suggestions, got %d", len(suggestions))
+	}
+}
+
+func TestSuggestionsWithZFile(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	cfg.Profile.SessionsDir = t.TempDir()
+
+	// Point home dir at a temp dir with a .z file
+	homeDir := t.TempDir()
+	cfg.Profile.HomeDir = homeDir
+	os.WriteFile(filepath.Join(homeDir, ".z"), []byte(
+		"/tmp/project-a|100|1700000000\n/tmp/project-b|50|1700000000\n",
+	), 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/suggestions")
+	if err != nil {
+		t.Fatalf("GET /api/suggestions: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var suggestions []string
+	json.NewDecoder(resp.Body).Decode(&suggestions)
+	if len(suggestions) != 2 {
+		t.Fatalf("expected 2 suggestions, got %d: %v", len(suggestions), suggestions)
+	}
+	// Higher rank should come first
+	if suggestions[0] != "/tmp/project-a" {
+		t.Errorf("expected /tmp/project-a first, got %s", suggestions[0])
+	}
+}

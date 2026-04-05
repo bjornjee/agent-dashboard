@@ -121,6 +121,7 @@ type AgentProfile struct {
 	PlansDir       string // Plans: ~/.claude/plans
 	SessionsDir    string // Session index: ~/.claude/sessions
 	PluginCacheDir string // Plugin cache: ~/.claude/plugins/cache
+	HomeDir        string // User home directory
 }
 
 // Config holds all dashboard configuration.
