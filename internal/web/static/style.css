@@ -359,7 +359,7 @@ body {
   top: 0;
   z-index: 100;
   height: 48px;
-  background: var(--color-navbar-bg);
+  background: var(--bg-navbar, var(--bg-base));
   border-bottom: 0.5px solid var(--color-navbar-border);
   padding: 0 16px;
   display: flex;
