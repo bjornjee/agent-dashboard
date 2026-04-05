@@ -150,11 +150,17 @@ type DebugSettings struct {
 	KeyLog bool `toml:"key_log"` // write key/mouse/focus events to debug-keys.log
 }
 
+// ExperimentalSettings controls opt-in experimental features.
+type ExperimentalSettings struct {
+	AsciiPet bool `toml:"ascii_pet"` // show animated ASCII pet in left panel
+}
+
 // Settings holds all user-facing configuration loaded from settings.toml.
 type Settings struct {
 	Banner        BannerSettings       `toml:"banner"`
 	Notifications NotificationSettings `toml:"notifications"`
 	Debug         DebugSettings        `toml:"debug"`
+	Experimental  ExperimentalSettings `toml:"experimental"`
 }
 
 // TmuxWindowInfo holds a tmux window's index and name.

@@ -209,6 +209,10 @@ type model struct {
 
 	// Path validation for z suggestions (injectable for testing)
 	pathExists func(string) bool
+
+	// ASCII pet (experimental)
+	pet        petModel
+	petEnabled bool
 }
 
 // setStatus sets a timed status message. isError controls the display color.
@@ -442,17 +446,23 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		pathExists:        zsuggest.DirExists,
 		availableSkills:   skillList,
 		skillsAvailable:   hasSkills,
+		pet:               newPetModel(0),
+		petEnabled:        cfg.Settings.Experimental.AsciiPet,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		deferredStartup(m.statePath, m.db, m.cfg),
 		deferredQuote(m.db, m.cfg.Settings.Banner.ShowQuote),
 		tickEvery(),
 		checkGHAvailable(),
 		m.startupSpinner.Tick,
-	)
+	}
+	if m.petEnabled {
+		cmds = append(cmds, m.pet.Init())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -636,6 +646,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
 		}
 		return m, tea.Batch(cmds...)
+
+	case petTickMsg:
+		if m.petEnabled {
+			var cmd tea.Cmd
+			m.pet, cmd = m.pet.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	case spinner.TickMsg:
 		var cmds []tea.Cmd
@@ -980,8 +998,16 @@ func (m *model) resizeViewports() {
 	m.rightWidth = m.width - m.leftWidth - 4
 	panelHeight := m.height - 5 - m.bannerHeight()
 
+	agentListHeight := panelHeight
+	if m.petEnabled {
+		agentListHeight = panelHeight - petHeight
+		if agentListHeight < 3 {
+			agentListHeight = 3
+		}
+		m.pet.setWidth(m.leftWidth)
+	}
 	m.agentListVP.SetWidth(m.leftWidth)
-	m.agentListVP.SetHeight(panelHeight)
+	m.agentListVP.SetHeight(agentListHeight)
 
 	filesH, historyH, msgH := panelHeights(panelHeight, defaultHeaderLines)
 

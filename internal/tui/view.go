@@ -727,6 +727,18 @@ func (m model) renderLeftPanel() string {
 	if m.focusedVP == focusAgentList {
 		style = style.BorderForeground(themeSapphire)
 	}
+
+	if m.petEnabled {
+		content := lipgloss.JoinVertical(lipgloss.Left,
+			m.agentListVP.View(),
+			m.pet.View(),
+		)
+		return style.
+			Width(m.leftWidth + 2).
+			Height(panelHeight + 2).
+			Render(content)
+	}
+
 	return style.
 		Width(m.leftWidth + 2).
 		Height(panelHeight + 2).

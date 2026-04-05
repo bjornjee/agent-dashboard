@@ -23,6 +23,9 @@ func TestDefaultSettings(t *testing.T) {
 	if s.Notifications.SilentEvents {
 		t.Error("Notifications.SilentEvents should default to false")
 	}
+	if s.Experimental.AsciiPet {
+		t.Error("Experimental.AsciiPet should default to false")
+	}
 }
 
 func TestLoadSettings_MissingFile(t *testing.T) {
@@ -80,6 +83,19 @@ show_mascot = false
 	}
 	if !s.Banner.ShowQuote {
 		t.Error("ShowQuote should default to true when omitted")
+	}
+}
+
+func TestLoadSettings_ExperimentalAsciiPet(t *testing.T) {
+	dir := t.TempDir()
+	content := "[experimental]\nascii_pet = true\n"
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadSettings(dir)
+	if !s.Experimental.AsciiPet {
+		t.Error("expected Experimental.AsciiPet to be true")
 	}
 }
 
