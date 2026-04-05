@@ -310,42 +310,217 @@ body {
 .activity-human { color: var(--yellow); font-weight: 600; }
 .activity-assistant { color: var(--blue); font-weight: 600; }
 
-/* Diff */
-.diff-container {
-  font-family: 'SF Mono', 'Fira Code', monospace;
+/* Diff — layout */
+.diff-layout {
+  display: flex;
+  height: calc(100vh - 200px);
+  gap: 0;
+}
+
+.diff-sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: var(--surface0);
+  border-right: 1px solid var(--surface2);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.diff-sidebar-header {
+  padding: 10px 12px;
   font-size: 12px;
-  line-height: 1.5;
-  overflow-x: auto;
-}
-
-.diff-file-header {
-  background: var(--surface1);
-  padding: 6px 12px;
   font-weight: 600;
-  margin-top: 8px;
-  border-radius: 4px 4px 0 0;
+  color: var(--subtext0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--surface2);
+  position: sticky;
+  top: 0;
+  background: var(--surface0);
+  z-index: 1;
 }
 
-.diff-hunk-header {
-  background: var(--surface2);
-  color: var(--mauve);
-  padding: 2px 12px;
-  font-style: italic;
+.diff-sidebar-file {
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.diff-add {
+.diff-sidebar-file:hover {
+  background: var(--surface1);
+}
+
+.diff-sidebar-file.active {
+  background: var(--surface1);
+  border-left-color: var(--blue);
+}
+
+.diff-sidebar-dir {
+  color: var(--overlay0);
+}
+
+.diff-sidebar-name {
+  color: var(--text);
+}
+
+.diff-content {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+/* Diff — diff2html dark theme overrides */
+.diff-content .d2h-wrapper {
+  border: none;
+}
+
+.diff-content .d2h-file-header {
+  background: var(--surface1);
+  border-color: var(--surface2);
+  color: var(--text);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.diff-content .d2h-file-name-wrapper {
+  color: var(--text);
+}
+
+.diff-content .d2h-file-name {
+  color: var(--text);
+}
+
+.diff-content .d2h-diff-table {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+
+.diff-content .d2h-code-linenumber {
+  background: var(--surface0);
+  border-color: var(--surface2);
+  color: var(--overlay0);
+  cursor: default;
+  position: static;
+}
+
+.diff-content .d2h-code-line {
+  background: var(--base);
+  color: var(--text);
+}
+
+.diff-content .d2h-code-line-ctn {
+  color: var(--text);
+}
+
+/* Added lines */
+.diff-content .d2h-ins {
+  background: rgba(166, 209, 137, 0.08);
+  border-color: transparent;
+}
+
+.diff-content .d2h-ins .d2h-code-line {
+  background: rgba(166, 209, 137, 0.08);
+}
+
+.diff-content .d2h-ins .d2h-code-linenumber {
   background: rgba(166, 209, 137, 0.15);
   color: var(--green);
+  border-color: var(--surface2);
 }
 
-.diff-del {
+.diff-content .d2h-ins .d2h-code-line-ctn {
+  color: var(--text);
+}
+
+.diff-content ins {
+  background: rgba(166, 209, 137, 0.35);
+  text-decoration: none;
+}
+
+/* Deleted lines */
+.diff-content .d2h-del {
+  background: rgba(231, 130, 132, 0.08);
+  border-color: transparent;
+}
+
+.diff-content .d2h-del .d2h-code-line {
+  background: rgba(231, 130, 132, 0.08);
+}
+
+.diff-content .d2h-del .d2h-code-linenumber {
   background: rgba(231, 130, 132, 0.15);
   color: var(--red);
+  border-color: var(--surface2);
 }
 
-.diff-line {
-  padding: 0 12px;
-  white-space: pre;
+.diff-content .d2h-del .d2h-code-line-ctn {
+  color: var(--text);
+}
+
+.diff-content del {
+  background: rgba(231, 130, 132, 0.35);
+  text-decoration: none;
+}
+
+/* Hunk info */
+.diff-content .d2h-info {
+  background: var(--surface2);
+  border-color: var(--surface2);
+  color: var(--mauve);
+}
+
+/* Empty placeholder (side-by-side filler) */
+.diff-content .d2h-emptyplaceholder {
+  background: var(--surface0);
+  border-color: var(--surface2);
+}
+
+/* File diff borders */
+.diff-content .d2h-file-diff {
+  border-color: var(--surface2);
+}
+
+.diff-content .d2h-file-side-diff {
+  border-color: var(--surface2);
+}
+
+.diff-content .d2h-files-diff {
+  border: none;
+}
+
+/* Remove floating line number overlay */
+.diff-content .d2h-code-linenumber.d2h-move-handler {
+  position: static !important;
+}
+
+/* highlight.js overrides for dark theme */
+.diff-content .hljs {
+  background: transparent !important;
+  color: var(--text);
+}
+
+/* Mobile: stack sidebar above content */
+@media (max-width: 768px) {
+  .diff-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  .diff-sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--surface2);
+  }
+  .diff-content {
+    max-height: calc(100vh - 400px);
+  }
 }
 
 /* Plan */

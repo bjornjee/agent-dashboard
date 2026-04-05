@@ -255,7 +255,47 @@
           container.innerHTML = '<div class="empty-state"><p>No diff available</p></div>';
           return;
         }
-        container.innerHTML = '<div class="diff-container">' + renderDiffHtml(data.raw) + '</div>';
+
+        // Build file sidebar from parsed files
+        const files = data.files || [];
+        let sidebarHtml = '<div class="diff-sidebar"><div class="diff-sidebar-header">Files (' + files.length + ')</div>';
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          const name = f.path.split('/').pop();
+          const dir = f.path.substring(0, f.path.length - name.length);
+          sidebarHtml += '<div class="diff-sidebar-file" data-file-idx="' + i + '">'
+            + '<span class="diff-sidebar-dir">' + escapeHtml(dir) + '</span>'
+            + '<span class="diff-sidebar-name">' + escapeHtml(name) + '</span>'
+            + '</div>';
+        }
+        sidebarHtml += '</div>';
+
+        container.innerHTML = '<div class="diff-layout">' + sidebarHtml + '<div class="diff-content" id="diff-content"></div></div>';
+
+        // Render diff with Diff2HtmlUI for syntax highlighting
+        const diffTarget = document.getElementById('diff-content');
+        const diff2htmlUi = new Diff2HtmlUI(diffTarget, data.raw, {
+          drawFileList: false,
+          matching: 'words',
+          outputFormat: 'line-by-line',
+          colorScheme: 'dark',
+          highlight: true,
+        });
+        diff2htmlUi.draw();
+        diff2htmlUi.highlightCode();
+
+        // Click file in sidebar to scroll to it
+        container.querySelectorAll('.diff-sidebar-file').forEach(el => {
+          el.addEventListener('click', () => {
+            container.querySelectorAll('.diff-sidebar-file').forEach(f => f.classList.remove('active'));
+            el.classList.add('active');
+            const idx = parseInt(el.dataset.fileIdx, 10);
+            const fileHeaders = diffTarget.querySelectorAll('.d2h-file-wrapper');
+            if (fileHeaders[idx]) {
+              fileHeaders[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          });
+        });
         break;
       }
       case 'plan': {
@@ -307,24 +347,6 @@
     container.innerHTML = html;
   }
 
-  function renderDiffHtml(raw) {
-    const lines = raw.split('\n');
-    let html = '';
-    for (const line of lines) {
-      if (line.startsWith('diff --git')) {
-        html += `<div class="diff-file-header">${escapeHtml(line)}</div>`;
-      } else if (line.startsWith('@@')) {
-        html += `<div class="diff-hunk-header">${escapeHtml(line)}</div>`;
-      } else if (line.startsWith('+') && !line.startsWith('+++')) {
-        html += `<div class="diff-line diff-add">${escapeHtml(line)}</div>`;
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        html += `<div class="diff-line diff-del">${escapeHtml(line)}</div>`;
-      } else {
-        html += `<div class="diff-line">${escapeHtml(line)}</div>`;
-      }
-    }
-    return html;
-  }
 
   function renderMarkdown(md) {
     // Basic markdown rendering — headings, code blocks, bold, lists

@@ -58,6 +58,20 @@ type diffFile struct {
 	Status string `json:"status"` // "added", "modified", "deleted"
 }
 
+// findMergeBase returns the merge-base commit between HEAD and main/master,
+// or "HEAD" as a fallback (which shows only uncommitted changes).
+func findMergeBase(dir string) string {
+	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
+		out, err := exec.Command("git", "-C", dir, "merge-base", "HEAD", base).Output()
+		if err == nil {
+			if s := strings.TrimSpace(string(out)); s != "" {
+				return s
+			}
+		}
+	}
+	return "HEAD"
+}
+
 // handleDiff returns the git diff for an agent's working directory.
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
@@ -70,12 +84,29 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, diffResponse{})
 		return
 	}
-	cmd := exec.Command("git", "diff", "--no-color")
-	cmd.Dir = dir
+
+	base := findMergeBase(dir)
+	cmd := exec.Command("git", "-C", dir, "diff", base, "--no-color")
 	out, err := cmd.Output()
 	if err != nil {
 		writeJSON(w, http.StatusOK, diffResponse{})
 		return
+	}
+
+	// Include untracked files so new files appear in the diff.
+	untrackedOut, err := exec.Command("git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").Output()
+	if err == nil && len(strings.TrimSpace(string(untrackedOut))) > 0 {
+		for _, name := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
+			if name == "" {
+				continue
+			}
+			patch, _ := exec.Command("git", "-C", dir,
+				"diff", "--no-index", "--", "/dev/null", name).Output()
+			if len(patch) > 0 {
+				out = append(out, patch...)
+			}
+		}
 	}
 
 	// Parse file list from diff
