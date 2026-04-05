@@ -14,12 +14,45 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
 
+// sensitiveDirs lists directory base names that should never be sent to the
+// web client. These may contain credentials, keys, or other secrets.
+var sensitiveDirs = []string{
+	".ssh",
+	".gnupg",
+	".gpg",
+	".aws",
+	".docker",
+	".kube",
+	".config/gcloud",
+	".password-store",
+	".vault-token",
+	".credentials",
+}
+
+// isSensitivePath returns true if the path contains a sensitive directory
+// component that should not be exposed to the web client.
+func isSensitivePath(path string) bool {
+	for _, s := range sensitiveDirs {
+		if strings.Contains(path, "/"+s+"/") || strings.HasSuffix(path, "/"+s) {
+			return true
+		}
+	}
+	return false
+}
+
 // handleSuggestions returns frecency-ranked directory suggestions from ~/.z
 // or Claude Code session history. Returns all valid directories (not capped
 // at 5 like the TUI) since the browser's datalist filters client-side.
+// Sensitive paths (e.g. .ssh, .aws, .gnupg) are filtered out.
 func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	entries := zsuggest.LoadZEntriesWithHome(s.cfg.Profile.HomeDir, s.cfg.Profile.SessionsDir)
-	paths := zsuggest.RankAll(entries, zsuggest.DirExists)
+	all := zsuggest.RankAll(entries, zsuggest.DirExists)
+	var paths []string
+	for _, p := range all {
+		if !isSensitivePath(p) {
+			paths = append(paths, p)
+		}
+	}
 	if paths == nil {
 		paths = []string{}
 	}
