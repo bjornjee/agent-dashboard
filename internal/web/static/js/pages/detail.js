@@ -96,15 +96,21 @@ export async function renderDetail(app, agents, agentId, setView) {
   ], 'conversation');
 
   app.innerHTML = `
-    ${detailHeader}
-    <div id="vital-signs-container"></div>
-    <div class="subagent-pills-section" id="subagent-summary"></div>
-    ${tabs}
-    <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
-    <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
-    <div id="tab-diff" class="tab-content">${skeletonLoading(3)}</div>
-    <div id="tab-plan" class="tab-content">${skeletonLoading(3)}</div>
-    ${renderActionBar(agent)}
+    <div class="detail-layout">
+      <div class="detail-pinned">
+        ${detailHeader}
+        <div id="vital-signs-container"></div>
+        <div class="subagent-pills-section" id="subagent-summary"></div>
+        ${tabs}
+      </div>
+      <div class="detail-scroll">
+        <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
+        <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
+        <div id="tab-diff" class="tab-content">${skeletonLoading(3)}</div>
+        <div id="tab-plan" class="tab-content">${skeletonLoading(3)}</div>
+      </div>
+      ${renderActionBar(agent)}
+    </div>
   `;
 
   // Tab switching
