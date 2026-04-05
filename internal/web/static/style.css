@@ -487,8 +487,11 @@ body {
    ============================================ */
 .header-home {
   cursor: pointer;
-  text-decoration: none;
   color: inherit;
+  background: none;
+  border: none;
+  font: inherit;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;

@@ -32,7 +32,7 @@ function renderActionBar(agent) {
     actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}', event)` });
     actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}', event)` });
   } else if (st === 'question' || st === 'error') {
-    actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}', event)">`;
+    actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
     actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}', event)` });
   } else if (st === 'pr') {
     actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });

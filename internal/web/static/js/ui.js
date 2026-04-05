@@ -5,7 +5,7 @@ import { ICONS } from './icons.js';
 
 export const UI = {
   header(title, actions) {
-    return `<div class="header"><h1><a class="header-home" onclick="Dashboard.showList()">${ICONS.logo} ${escapeHtml(title)}</a></h1><div class="header-actions">${actions || ''}</div></div>`;
+    return `<div class="header"><h1><button class="header-home" onclick="Dashboard.showList()">${ICONS.logo} ${escapeHtml(title)}</button></h1><div class="header-actions">${actions || ''}</div></div>`;
   },
 
   spinner() {

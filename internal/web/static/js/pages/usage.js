@@ -4,7 +4,6 @@ import { ICONS } from '../icons.js';
 import { escapeHtml, repoName } from '../format.js';
 import { get } from '../api.js';
 
-
 export async function renderUsage(app, agents) {
   app.innerHTML = UI.header('Usage',
     UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
