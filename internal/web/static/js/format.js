@@ -15,18 +15,43 @@ export function duration(agent) {
   if (!agent.started_at) return '';
   const start = new Date(agent.started_at);
   const now = new Date();
-  const mins = Math.floor((now - start) / 60000);
-  if (mins < 60) return mins + 'm';
-  return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  const totalSecs = Math.floor((now - start) / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  if (mins >= 60) {
+    const hours = Math.floor(mins / 60);
+    return hours + 'h ' + (mins % 60) + 'm';
+  }
+  return mins + 'm ' + secs + 's';
 }
 
 export function durationFromTimestamp(ts) {
   if (!ts) return '';
   const start = new Date(ts);
   const now = new Date();
+  const totalSecs = Math.floor((now - start) / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  if (mins >= 60) {
+    const hours = Math.floor(mins / 60);
+    return hours + 'h ' + (mins % 60) + 'm';
+  }
+  return mins + 'm ' + secs + 's';
+}
+
+export function durationShort(agent) {
+  if (!agent.started_at) return '';
+  const start = new Date(agent.started_at);
+  const now = new Date();
   const mins = Math.floor((now - start) / 60000);
-  if (mins < 60) return mins + 'm';
-  return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  if (mins >= 60) return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  return mins + 'm';
+}
+
+export function formatCost(value) {
+  if (value == null || value <= 0) return '';
+  if (value >= 1000) return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$' + value.toFixed(2);
 }
 
 export function formatTime(iso) {
@@ -48,6 +73,12 @@ export function formatTimeShort(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return escapeHtml(iso);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
+export function formatTokens(count) {
+  if (!count) return '0';
+  if (count >= 1000) return (count / 1000).toFixed(1) + 'k';
+  return String(count);
 }
 
 export function stripMarkdown(s) {

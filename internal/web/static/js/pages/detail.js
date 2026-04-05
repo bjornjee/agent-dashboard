@@ -2,39 +2,47 @@
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { effectiveState } from '../state.js';
-import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, renderMarkdown, skeletonLoading } from '../format.js';
+import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 
 export { showModal, toast };
 
-function kindIcon(kind) {
+function timelineIcon(kind) {
   const svg = ICONS[kind] || '';
-  if (svg) return `<span class="activity-icon">${svg}</span>`;
-  return '<span class="activity-icon">&#8226;</span>';
+  const cls = kind === 'human' ? 'timeline-icon--human'
+    : kind === 'assistant' ? 'timeline-icon--assistant'
+    : 'timeline-icon--tool';
+  return `<div class="timeline-icon ${cls}">${svg}</div>`;
+}
+
+function kindLabel(kind) {
+  if (kind === 'human') return 'You';
+  if (kind === 'assistant') return 'Claude';
+  return 'Tool';
 }
 
 function renderActionBar(agent) {
   const st = effectiveState(agent);
   let actions = '';
 
-  actions += UI.btn('Open Claude', { variant: 'secondary', onclick: "Dashboard.openClaude()" });
+  actions += UI.btn('Open Claude', { variant: 'primary', onclick: "Dashboard.openClaude()" });
 
   if (st === 'permission' || st === 'plan') {
-    actions += UI.btn('Approve', { variant: 'primary', onclick: `Dashboard.approve('${agent.session_id}')` });
+    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}')` });
     actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}')` });
   } else if (st === 'question' || st === 'error') {
     actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
-    actions += UI.btn('Send', { variant: 'primary', onclick: `Dashboard.sendInput('${agent.session_id}')` });
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}')` });
   } else if (st === 'pr') {
     actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });
-    actions += UI.btn('Merge', { variant: 'primary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
+    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
   } else if (st === 'merged') {
     actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${agent.session_id}')` });
   }
 
   if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question') {
-    actions += UI.btn('Stop', { variant: 'danger', onclick: `Dashboard.confirmStop('${agent.session_id}')` });
+    actions += UI.stopBtn(`Dashboard.confirmStop('${agent.session_id}')`);
   }
 
   return `<div class="action-bar">${actions}</div>`;
@@ -43,23 +51,14 @@ function renderActionBar(agent) {
 let activityFilter = 'all';
 
 function applyActivityFilter(container) {
-  container.querySelectorAll('.activity-entry').forEach(el => {
-    if (activityFilter === 'all' || el.dataset.kind === activityFilter) {
+  container.querySelectorAll('.timeline-entry').forEach(el => {
+    const kind = el.dataset.kind;
+    if (!kind) return;
+    if (activityFilter === 'all' || kind === activityFilter) {
       el.classList.remove('hidden');
     } else {
       el.classList.add('hidden');
     }
-  });
-  container.querySelectorAll('.activity-tool-group').forEach(group => {
-    if (activityFilter === 'all' || activityFilter === 'tool') {
-      group.classList.remove('hidden');
-    } else {
-      group.classList.add('hidden');
-    }
-  });
-  container.querySelectorAll('.activity-turn').forEach(turn => {
-    const hasVisible = turn.querySelector('.activity-entry:not(.hidden)') || turn.querySelector('.activity-tool-group:not(.hidden)');
-    turn.classList.toggle('hidden', !hasVisible);
   });
 }
 
@@ -73,7 +72,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   const st = effectiveState(agent);
   const detailHeader = `
     <div class="detail-header">
-      ${UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })}
+      <button class="btn btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
       <div class="detail-title">
         <h2>${escapeHtml(repoName(agent))}</h2>
         ${UI.badge(st, st)}
@@ -83,7 +82,6 @@ export async function renderDetail(app, agents, agentId, setView) {
         ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
         ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
       </div>
-      <div class="subagent-summary" id="subagent-summary"></div>
     </div>
   `;
 
@@ -96,6 +94,8 @@ export async function renderDetail(app, agents, agentId, setView) {
 
   app.innerHTML = `
     ${detailHeader}
+    <div id="vital-signs-container"></div>
+    <div class="subagent-pills-section" id="subagent-summary"></div>
     ${tabs}
     <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
     <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
@@ -118,9 +118,26 @@ export async function renderDetail(app, agents, agentId, setView) {
     });
   });
 
-  // Load initial tab + subagents in parallel
+  // Load initial tab + subagents + vital signs in parallel
   loadTabContent('conversation', agentId);
   loadSubagentSummary(agentId);
+  loadVitalSigns(agentId, agent);
+}
+
+async function loadVitalSigns(agentId, agent) {
+  const container = document.getElementById('vital-signs-container');
+  if (!container) return;
+  try {
+    const usage = await get('/api/agents/' + agentId + '/usage');
+    const elapsed = agent.started_at ? duration(agent) : '';
+    container.innerHTML = UI.vitalSigns({
+      elapsed: elapsed,
+      tokens: (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0),
+      cost: usage ? usage.CostUSD : 0,
+    });
+  } catch {
+    container.innerHTML = '';
+  }
 }
 
 async function loadSubagentSummary(agentId) {
@@ -135,10 +152,7 @@ async function loadSubagentSummary(agentId) {
   const completed = subs.filter(s => s.Completed || s.completed).length;
   const running = subs.length - completed;
 
-  let html = `<div class="subagent-summary-header">${ICONS.subagent} <span>${subs.length} subagent${subs.length !== 1 ? 's' : ''}</span>`;
-  if (running > 0) html += ` <span class="badge badge-blue">${running} running</span>`;
-  if (completed > 0) html += ` <span class="badge badge-green">${completed} done</span>`;
-  html += '</div>';
+  let html = '';
 
   html += '<div class="subagent-summary-list">';
   for (const sub of subs) {
@@ -146,8 +160,9 @@ async function loadSubagentSummary(agentId) {
     const type = sub.AgentType || sub.agent_type || 'agent';
     const desc = sub.Description || sub.description || '';
     const startedAt = sub.StartedAt || sub.started_at || '';
-    const statusCls = isDone ? 'subagent-done' : 'subagent-running';
-    html += `<div class="subagent-summary-item ${statusCls}">`;
+    const dotClass = isDone ? 'status-dot--completed' : 'status-dot--running';
+    html += `<div class="subagent-pill">`;
+    html += `<span class="status-dot ${dotClass}"></span>`;
     html += `<span class="subagent-type">${escapeHtml(type)}</span>`;
     if (desc) html += `<span class="subagent-desc">${escapeHtml(desc)}</span>`;
     if (startedAt) html += `<span class="subagent-time">${durationFromTimestamp(startedAt)}</span>`;
@@ -204,8 +219,8 @@ async function loadTabContent(tab, agentId) {
       let html = '<div class="activity-filter-bar">';
       for (const f of ['all', 'human', 'assistant', 'tool']) {
         const cls = f === activityFilter ? ' active' : '';
-        const icon = f === 'all' ? '' : (ICONS[f] || '');
-        html += `<button class="activity-filter-btn${cls}" data-filter="${f}">${icon} ${f}</button>`;
+        const label = f === 'all' ? 'All' : f === 'human' ? 'Human' : f === 'assistant' ? 'Assistant' : 'Tool';
+        html += `<button class="activity-filter-btn${cls}" data-filter="${f}">${label}</button>`;
       }
       html += '</div><div class="activity-log">';
 
@@ -223,13 +238,11 @@ async function loadTabContent(tab, agentId) {
       if (currentTurn.length > 0) turns.push(currentTurn);
 
       for (const turn of turns) {
-        html += '<div class="activity-turn">';
         let toolGroup = [];
         for (const entry of turn) {
           const kind = entry.Kind || entry.kind;
           const content = entry.Content || entry.content || '';
           const time = entry.Timestamp || entry.timestamp || '';
-          const toolName = entry.ToolName || entry.tool_name || '';
 
           if (kind === 'tool') {
             toolGroup.push(entry);
@@ -242,25 +255,26 @@ async function loadTabContent(tab, agentId) {
           }
 
           const truncated = content.length > 200;
-          const display = truncated ? escapeHtml(content.substring(0, 200)) + '...' : escapeHtml(content);
-          html += `<div class="activity-entry" data-kind="${kind}">`;
-          html += `<div class="activity-entry-header">${kindIcon(kind)} <span class="activity-kind">${kind}</span><span class="activity-time">${formatTimeShort(time)}</span></div>`;
+          const displayContent = truncated ? content.substring(0, 200) + '...' : content;
+          html += `<div class="timeline-entry activity-entry" data-kind="${kind}">`;
+          html += timelineIcon(kind);
+          html += '<div class="timeline-content">';
+          html += `<div class="timeline-header"><span class="timeline-title">${kindLabel(kind)}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></div>`;
           if (kind === 'assistant') {
-            html += `<div class="activity-entry-content">${renderMarkdown(truncated ? content.substring(0, 200) + '...' : content)}</div>`;
+            html += `<div class="timeline-detail">${renderMarkdown(displayContent)}</div>`;
           } else {
-            html += `<div class="activity-entry-content">${display}</div>`;
+            html += `<div class="timeline-detail">${escapeHtml(displayContent)}</div>`;
           }
           if (truncated) {
             html += `<span data-full="${escapeHtml(content)}" data-truncated="true" style="display:none"></span>`;
             html += `<button class="btn btn-ghost btn-sm" onclick="Dashboard.toggleExpand(this)">Show more</button>`;
           }
-          html += '</div>';
+          html += '</div></div>';
         }
         // Flush remaining tool group
         if (toolGroup.length > 0) {
           html += renderToolGroup(toolGroup);
         }
-        html += '</div>';
       }
       html += '</div>';
       container.innerHTML = html;
@@ -401,7 +415,7 @@ async function loadTabContent(tab, agentId) {
           });
           if (truncated) {
             bodyEl.insertAdjacentHTML('beforeend',
-              '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-subtle)">'
+              '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-default)">'
               + 'Showing first ' + maxLines + ' lines of ' + lines.length + ' total</div>');
           }
         } catch {
@@ -538,22 +552,24 @@ function renderToolGroup(tools) {
   if (tools.length === 0) return '';
   const first = tools[0];
   const time = first.Timestamp || first.timestamp || '';
-  let html = '<div class="activity-tool-group">';
-  html += `<details><summary class="tool-group-summary">${kindIcon('tool')} <span class="activity-kind">${tools.length} tool call${tools.length !== 1 ? 's' : ''}</span><span class="activity-time">${formatTimeShort(time)}</span></summary>`;
+  let html = '<div class="timeline-entry activity-tool-group" data-kind="tool">';
+  html += timelineIcon('tool');
+  html += '<div class="timeline-content">';
+  html += `<details><summary class="tool-group-summary"><span class="timeline-title">${tools.length} tool call${tools.length !== 1 ? 's' : ''}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></summary>`;
   for (const entry of tools) {
     const content = entry.Content || entry.content || '';
     const toolName = entry.ToolName || entry.tool_name || '';
     const truncated = content.length > 200;
     const display = truncated ? escapeHtml(content.substring(0, 200)) + '...' : escapeHtml(content);
-    html += `<div class="activity-entry" data-kind="tool">`;
-    html += `<div class="activity-entry-header"><span class="activity-kind tool-name">${escapeHtml(toolName)}</span></div>`;
-    html += `<div class="activity-entry-content">${display}</div>`;
+    html += `<div class="tool-call">`;
+    html += `<div class="tool-call__name">${escapeHtml(toolName)}</div>`;
+    html += `<div class="timeline-detail">${display}</div>`;
     if (truncated) {
       html += `<span data-full="${escapeHtml(content)}" data-truncated="true" style="display:none"></span>`;
       html += `<button class="btn btn-ghost btn-sm" onclick="Dashboard.toggleExpand(this)">Show more</button>`;
     }
     html += '</div>';
   }
-  html += '</details></div>';
+  html += '</details></div></div>';
   return html;
 }

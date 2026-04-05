@@ -1,21 +1,21 @@
 // Agent state mappings and helpers.
 
 export const STATE_BADGE = {
-  permission: 'red', plan: 'red',
-  question: 'yellow', error: 'yellow',
-  running: 'blue',
-  idle_prompt: 'green', done: 'green',
-  pr: 'purple',
-  merged: 'teal',
+  permission: 'blocked', plan: 'blocked',
+  question: 'waiting', error: 'waiting',
+  running: 'running',
+  idle_prompt: 'review', done: 'review',
+  pr: 'pr',
+  merged: 'merged',
 };
 
 export const STATE_BORDER = {
-  permission: 'var(--status-red)', plan: 'var(--status-red)',
-  question: 'var(--status-yellow)', error: 'var(--status-yellow)',
-  running: 'var(--status-blue)',
-  idle_prompt: 'var(--status-green)', done: 'var(--status-green)',
-  pr: 'var(--status-purple)',
-  merged: 'var(--status-teal)',
+  permission: 'var(--accent-red)', plan: 'var(--accent-red)',
+  question: 'var(--accent-amber)', error: 'var(--accent-amber)',
+  running: 'var(--accent-green)',
+  idle_prompt: 'var(--accent-green)', done: 'var(--accent-green)',
+  pr: 'var(--accent-indigo)',
+  merged: 'var(--text-tertiary)',
 };
 
 export function statePriority(state) {
