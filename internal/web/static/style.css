@@ -1128,10 +1128,6 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 .diff-sidebar-name { color: var(--text-primary); }
 .diff-sidebar-dir { color: var(--text-tertiary); }
 
-.diff-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.diff-status-dot-added { background: var(--accent-green); }
-.diff-status-dot-modified { background: var(--accent-amber); }
-.diff-status-dot-deleted { background: var(--accent-red); }
 .diff-stats { margin-left: auto; font-size: 10px; white-space: nowrap; flex-shrink: 0; }
 .diff-stats-add { color: var(--accent-green); }
 .diff-stats-del { color: var(--accent-red); }

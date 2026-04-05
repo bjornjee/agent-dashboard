@@ -42,10 +42,11 @@ async function loadUsageData() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const periodTotal = days.reduce((sum, d) => sum + d.cost_usd, 0);
 
-  // Delta: compare today vs yesterday
+  // Delta: compare today vs yesterday by exact date
   const todayCost = data.today_cost || 0;
-  const yesterday = days.length >= 2 ? days[days.length - 2] : null;
-  const delta = buildDelta(todayCost, yesterday ? yesterday.cost_usd : null);
+  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const yesterdayEntry = days.find(d => d.date === yesterdayStr);
+  const delta = buildDelta(todayCost, yesterdayEntry ? yesterdayEntry.cost_usd : null);
 
   const periodLabel = currentRange === 0 ? 'All time' : 'This period';
   const metricsHtml = UI.metricsStrip([

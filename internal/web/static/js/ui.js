@@ -117,7 +117,7 @@ export const UI = {
   },
 
   subagentRow(sub) {
-    const statusColor = STATE_BADGE[sub.status] || 'running';
+    const statusColor = sub.status === 'completed' ? 'completed' : sub.status === 'failed' ? 'failed' : 'running';
     const name = escapeHtml(sub.name || sub.type || 'subagent');
     const task = sub.task ? escapeHtml(sub.task) : '';
     const dur = sub.started_at ? durationFromTimestamp(sub.started_at) : '';
