@@ -14,10 +14,10 @@ export function renderList(app, agents) {
   }
 
   const order = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
-  let html = UI.header('Agent Dashboard',
-    UI.btn('Usage', { variant: 'ghost', onclick: "Dashboard.showUsage()" })
-    + `<button class="btn-outlined" onclick="Dashboard.showCreate()">+ New</button>`
-  );
+  let html = UI.header('Agent Dashboard', {
+    actions: [{ label: 'Usage', onclick: 'Dashboard.showUsage()' }],
+    cta: { label: '+ New', onclick: 'Dashboard.showCreate()' },
+  });
   html += '<div class="agent-list">';
 
   if (agents.length === 0) {

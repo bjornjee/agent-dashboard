@@ -53,7 +53,7 @@ export const Theme = {
     const effective = next === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : next;
     this.apply(effective);
     // Update toggle button icon
-    const btn = document.querySelector('.btn-theme-toggle');
+    const btn = document.querySelector('.header-icon-btn');
     if (btn) btn.innerHTML = this.getIcon();
   },
 

@@ -5,8 +5,24 @@ import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
 
 export const UI = {
-  header(title, actions) {
-    return `<div class="header"><h1><button class="header-home" onclick="Dashboard.showList()">${ICONS.logo} ${escapeHtml(title)}</button></h1><div class="header-actions"><button class="btn-theme-toggle" onclick="Dashboard.cycleTheme()" title="Toggle theme" aria-label="Toggle theme">${Theme.getIcon()}</button>${actions || ''}</div></div>`;
+  header(title, opts) {
+    const o = opts || {};
+    const actions = o.actions || [];
+    const showToggle = o.showThemeToggle !== false;
+    let controls = '';
+    for (const a of actions) {
+      controls += `<button class="header-text-btn" onclick="${a.onclick}">${a.label}</button>`;
+    }
+    if (actions.length && (showToggle || o.cta)) {
+      controls += '<div class="header-divider"></div>';
+    }
+    if (showToggle) {
+      controls += `<button class="header-icon-btn" onclick="Dashboard.cycleTheme()" title="Toggle theme" aria-label="Toggle theme">${Theme.getIcon()}</button>`;
+    }
+    if (o.cta) {
+      controls += `<button class="header-cta" onclick="${o.cta.onclick}">${o.cta.label}</button>`;
+    }
+    return `<div class="header"><button class="header-logo" onclick="Dashboard.showList()" aria-label="Home">${ICONS.logo}</button><span class="header-title">${escapeHtml(title)}</span><div class="header-controls">${controls}</div></div>`;
   },
 
   spinner() {

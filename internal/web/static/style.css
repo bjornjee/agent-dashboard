@@ -88,6 +88,15 @@
   --badge-pr-text: #C4B5FD;
   --badge-merged-text: #5EEAD4;
   --card-hover-gradient: rgba(28, 33, 48, 0.3);
+
+  /* Navbar (always dark, no light-theme overrides) */
+  --color-navbar-bg: #2A2724;
+  --color-text-on-dark: #F7F5F2;
+  --color-navbar-muted: #9C8F7E;
+  --color-navbar-divider: #3D3730;
+  --color-navbar-hover: rgba(255, 255, 255, 0.06);
+  --color-accent-hover: #4338CA;
+  --color-accent-light: #EEF2FF;
 }
 
 /* ============================================
@@ -244,30 +253,7 @@ body {
   background: var(--accent-red);
 }
 
-/* "+ New" button */
-.btn-outlined {
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  border: 1px solid var(--border-hover);
-  background: transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--transition-default);
-}
-.btn-outlined:hover { background: var(--bg-elevated); }
-
-.btn-theme-toggle {
-  width: 36px; height: 36px;
-  border-radius: var(--radius-sm);
-  background: transparent; border: none;
-  color: var(--text-muted); cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: color var(--transition-default), background var(--transition-default);
-  flex-shrink: 0;
-}
-.btn-theme-toggle:hover { color: var(--text-primary); background: var(--bg-elevated); }
+/* Header control buttons — see .header-* block below */
 
 /* ============================================
    COMPONENT: Status Badge
@@ -371,49 +357,98 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--bg-navbar, var(--bg-base));
-  border-bottom: 1px solid var(--border-default);
-  height: 56px;
-  padding: 0 var(--space-6);
+  height: 48px;
+  background: var(--color-navbar-bg);
+  border-bottom: 0.5px solid var(--color-navbar-hover);
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0;
 }
 
-[data-theme="light"] .header {
-  color: #F7F5F2;
-  border-bottom-color: transparent;
+.header-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--accent-indigo);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 10px;
+  border: none;
+  cursor: pointer;
+  padding: 0;
 }
 
-[data-theme="light"] .header h1,
-[data-theme="light"] .header a,
-[data-theme="light"] .header button {
-  color: #F7F5F2;
-}
-
-[data-theme="light"] .header .btn-theme-toggle {
-  color: rgba(247, 245, 242, 0.7);
-}
-
-[data-theme="light"] .header .btn-theme-toggle:hover {
-  color: #F7F5F2;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.header h1 {
-  font-size: 20px;
+.header-title {
+  font-size: 14px;
   font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
+  color: var(--color-text-on-dark);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.header-actions {
+.header-controls {
   display: flex;
-  gap: var(--space-2);
+  align-items: center;
+  gap: 4px;
 }
+
+.header-text-btn {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-navbar-muted);
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-default);
+}
+.header-text-btn:hover { background: var(--color-navbar-hover); }
+
+.header-divider {
+  width: 0.5px;
+  height: 18px;
+  background: var(--color-navbar-divider);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.header-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-navbar-muted);
+  transition: background var(--transition-default);
+}
+.header-icon-btn:hover { background: var(--color-navbar-hover); }
+
+.header-cta {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-accent-light);
+  background: var(--accent-indigo);
+  border: none;
+  border-radius: 7px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.header-cta:hover { background: var(--color-accent-hover); }
+.header-cta:active { transform: scale(0.98); }
 
 /* ============================================
    COMPONENT: Tabs
@@ -585,25 +620,12 @@ body {
   margin-left: 4px;
 }
 
-.btn[disabled], .btn-outlined[disabled] {
+.btn[disabled] {
   opacity: 0.5;
   pointer-events: none;
 }
 
-/* ============================================
-   COMPONENT: Header home link
-   ============================================ */
-.header-home {
-  cursor: pointer;
-  color: inherit;
-  background: none;
-  border: none;
-  font: inherit;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+/* header-home removed — logo is now .header-logo */
 
 /* ============================================
    COMPONENT: Inline code
@@ -783,7 +805,7 @@ body {
 .detail-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 48px);
   overflow: hidden;
 }
 
@@ -1959,7 +1981,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 
 /* Safe area for mobile notch */
 @supports (padding-top: env(safe-area-inset-top)) {
-  .header { padding-top: env(safe-area-inset-top); height: calc(56px + env(safe-area-inset-top)); }
-  .detail-layout { height: calc(100vh - 56px - env(safe-area-inset-top)); }
+  .header { padding-top: env(safe-area-inset-top); height: calc(48px + env(safe-area-inset-top)); }
+  .detail-layout { height: calc(100vh - 48px - env(safe-area-inset-top)); }
   .action-bar { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 }
