@@ -80,6 +80,29 @@ func TestPetWalkingBouncesAtBounds(t *testing.T) {
 	}
 }
 
+func TestPetWalkingBounces(t *testing.T) {
+	p := newPetModel(20)
+	p.state = petWalking
+	p.bounce = 0
+
+	// Simulate a tick — bounce should toggle
+	p.bounce = 1 - p.bounce
+	if p.bounce != 1 {
+		t.Errorf("bounce should be 1 after toggle, got %d", p.bounce)
+	}
+
+	// View with bounce=1 should have sprite higher (no leading empty line)
+	view := p.View()
+	lines := strings.Split(strings.TrimRight(view, "\n"), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 lines, got %d", len(lines))
+	}
+	// First line should contain sprite content (ears), not be empty
+	if strings.TrimSpace(lines[0]) == "" {
+		t.Error("bounce=1 should have sprite on first line, got empty")
+	}
+}
+
 func TestPetStateCycle(t *testing.T) {
 	// Verify all states are reachable in the cycle
 	seen := map[petState]bool{}

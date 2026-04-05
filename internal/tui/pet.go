@@ -22,8 +22,8 @@ const (
 const petSpriteWidth = 10
 
 // petHeight is the number of lines the pet panel occupies:
-// 3 sprite lines + 1 trailing newline from View() = 4.
-const petHeight = 4
+// 1 bounce headroom + 3 sprite lines + 1 trailing newline = 5.
+const petHeight = 5
 
 // petTickInterval controls the animation frame rate.
 const petTickInterval = 250 * time.Millisecond
@@ -38,8 +38,8 @@ var petFrames = map[petState][][]string{
 		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 	petWalking: {
-		{" ^   ^", "(o . o) >", " /> <  ~"},
-		{" ^   ^", "(o . o)>", " > <\\  ~"},
+		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 	petSitting: {
 		{" ^   ^", "(o . o)", " (\" \")/~"},
@@ -67,6 +67,7 @@ type petModel struct {
 	x             int
 	direction     int // 1 = right, -1 = left
 	width         int
+	bounce        int // 0 = on ground, 1 = in air (walking only)
 }
 
 // newPetModel creates a pet model for the given panel width.
@@ -99,9 +100,12 @@ func (p petModel) Update(msg tea.Msg) (petModel, tea.Cmd) {
 		p.frame = (p.frame + 1) % len(frames)
 	}
 
-	// Update position for walking state
+	// Update position and bounce for walking state
 	if p.state == petWalking {
 		p.updatePosition()
+		p.bounce = 1 - p.bounce // toggle 0 ↔ 1
+	} else {
+		p.bounce = 0
 	}
 
 	// Check state transition
@@ -148,6 +152,8 @@ func (p *petModel) updatePosition() {
 }
 
 // View renders the pet as a string.
+// Output is always 4 lines (petHeight - 1 for trailing newline).
+// When bouncing, the sprite shifts up and empty space appears below.
 func (p petModel) View() string {
 	frames := petFrames[p.state]
 	if len(frames) == 0 {
@@ -160,10 +166,26 @@ func (p petModel) View() string {
 		Foreground(themeOverlay1).
 		Faint(true)
 
+	const spriteLines = 3
+	topPad := 1 - p.bounce  // on ground: 1 empty line above; bouncing: 0
+	botPad := p.bounce       // on ground: 0 below; bouncing: 1 empty line below
+	_ = botPad               // used implicitly: spriteLines + topPad + botPad = 4
+
 	var sb strings.Builder
+	for i := 0; i < topPad; i++ {
+		sb.WriteString("\n")
+	}
 	for _, line := range sprite {
 		padding := strings.Repeat(" ", p.x)
 		sb.WriteString(style.Render(padding + line))
+		sb.WriteString("\n")
+	}
+	for i := 0; i < spriteLines+topPad; i++ {
+		// already counted
+	}
+	// Bottom padding to fill remaining lines
+	remaining := (petHeight - 1) - topPad - spriteLines
+	for i := 0; i < remaining; i++ {
 		sb.WriteString("\n")
 	}
 	return sb.String()
