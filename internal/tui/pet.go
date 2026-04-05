@@ -15,9 +15,9 @@ const (
 	petIdle petState = iota
 	petWalking
 	petSitting
-	petLounging
-	petDaydream
+	petDrowsy
 	petSleeping
+	petEating
 )
 
 // petSpriteWidth is the character width of the widest sprite.
@@ -34,6 +34,7 @@ const petTickInterval = 400 * time.Millisecond
 type petTickMsg struct{}
 
 // Red panda frames per state.
+// All sprites share the same 3-line body shape for visual consistency.
 var petFrames = map[petState][][]string{
 	petIdle: {
 		{" ^   ^", "(o . o)", " (u u)~"},
@@ -44,30 +45,33 @@ var petFrames = map[petState][][]string{
 		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 	petSitting: {
-		{" ^   ^", "(o . o)", " (\" \")/~"},
+		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(- . o)", " (u u)~"}, // blink
+		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(o . -)", " (u u)~"}, // wink
 	},
-	petLounging: {
-		{" ^   ^", "(- . -)~~", "  \"\"\"\""},
-		{" ^   ^", "(- . -) ~~", "  \"\"\"\""},
-	},
-	petDaydream: {
-		{"    . *", " ^   ^", "(o . o)~~"},
-		{"     *", " ^   ^", "(o . o) ~~"},
+	petDrowsy: {
+		{" ^   ^", "(- . -)", " (u u)~"},
+		{" ^   ^", "(- . -)", " (u u) ~"},
 	},
 	petSleeping: {
 		{" ^   ^", "(- . -) z", " (u u)~"},
 		{" ^   ^", "(- . -) zZ", " (u u)~"},
 	},
+	petEating: {
+		{" ^   ^", "(o . o)~", " (u u)/|"},
+		{" ^   ^", "(o .o )~", " (u u)/|"},
+	},
 }
 
 // State durations in ticks before transitioning.
 var petStateDurations = map[petState]int{
-	petIdle:     20, // 5 seconds
-	petWalking:  16, // 4 seconds
-	petSitting:  12, // 3 seconds
-	petLounging: 20, // 5 seconds
-	petDaydream: 20, // 5 seconds
-	petSleeping: 24, // 6 seconds
+	petIdle:     20, // 8 seconds
+	petWalking:  16, // 6.4 seconds
+	petSitting:  16, // 6.4 seconds
+	petDrowsy:   12, // 4.8 seconds
+	petSleeping: 20, // 8 seconds
+	petEating:   16, // 6.4 seconds
 }
 
 // petModel is a self-contained Bubble Tea sub-model for the ASCII pet.
@@ -130,6 +134,7 @@ func (p petModel) Update(msg tea.Msg) (petModel, tea.Cmd) {
 }
 
 // advanceState moves to the next state in the cycle.
+// idle → walk → sit → drowsy → sleep → eating → idle
 func (p *petModel) advanceState() {
 	switch p.state {
 	case petIdle:
@@ -137,12 +142,12 @@ func (p *petModel) advanceState() {
 	case petWalking:
 		p.state = petSitting
 	case petSitting:
-		p.state = petLounging
-	case petLounging:
-		p.state = petDaydream
-	case petDaydream:
+		p.state = petDrowsy
+	case petDrowsy:
 		p.state = petSleeping
 	case petSleeping:
+		p.state = petEating
+	case petEating:
 		p.state = petIdle
 	}
 	p.frame = 0
