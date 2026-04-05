@@ -9,6 +9,7 @@
   let currentTab = 'conversation';
   let eventSource = null;
   let activityFilter = 'all'; // 'all' | 'human' | 'assistant' | 'tool'
+  let navAbort = null; // AbortController for cancelling in-flight tab loads
 
   // --- SVG Icons ---
   const ICONS = {
@@ -267,7 +268,12 @@
   }
 
   // --- Render: Agent List ---
+  function cancelNav() {
+    if (navAbort) { navAbort.abort(); navAbort = null; }
+  }
+
   function renderList() {
+    cancelNav();
     currentView = 'list';
     const grouped = {};
     for (const agent of agents) {
@@ -336,6 +342,7 @@
 
   // --- Render: Agent Detail ---
   async function renderDetail(agentId) {
+    cancelNav();
     currentView = 'detail';
     selectedAgentId = agentId;
     const agent = agents.find(a => a.session_id === agentId);
@@ -397,6 +404,9 @@
   }
 
   async function loadTabContent(tab, agentId) {
+    cancelNav();
+    navAbort = new AbortController();
+    const signal = navAbort.signal;
     const container = document.getElementById('tab-' + tab);
     if (!container) return;
 
@@ -522,12 +532,25 @@
       }
       case 'diff': {
         const data = await get('/api/agents/' + agentId + '/diff');
+        if (signal.aborted) return;
         if (!data || !data.raw) {
           container.innerHTML = UI.emptyState(ICONS.fileDiff, 'No diff available', 'Changes will appear here once the agent modifies files');
           return;
         }
 
         const files = data.files || [];
+        // Split raw diff into per-file chunks
+        const rawLines = data.raw.split('\n');
+        const fileChunks = [];
+        let chunkStart = -1;
+        for (let i = 0; i < rawLines.length; i++) {
+          if (rawLines[i].startsWith('diff --git')) {
+            if (chunkStart >= 0) fileChunks.push(rawLines.slice(chunkStart, i).join('\n'));
+            chunkStart = i;
+          }
+        }
+        if (chunkStart >= 0) fileChunks.push(rawLines.slice(chunkStart).join('\n'));
+
         let sidebarHtml = '<div class="diff-sidebar"><div class="diff-sidebar-header">Files (' + files.length + ')</div>';
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
@@ -546,31 +569,58 @@
 
         container.innerHTML = '<div class="diff-layout">' + sidebarHtml + '<div class="diff-content" id="diff-content"></div></div>';
 
-        const diffTarget = document.getElementById('diff-content');
-        const diff2htmlUi = new Diff2HtmlUI(diffTarget, data.raw, {
-          drawFileList: false,
-          matching: 'words',
-          outputFormat: 'line-by-line',
-          colorScheme: 'dark',
-          highlight: true,
-        });
-        diff2htmlUi.draw();
-        diff2htmlUi.highlightCode();
+        // Render a single file's diff (lazy — only the selected file)
+        function renderFileDiff(idx) {
+          if (signal.aborted) return;
+          const diffTarget = document.getElementById('diff-content');
+          if (!diffTarget) return;
+          const chunk = fileChunks[idx];
+          if (!chunk) {
+            diffTarget.innerHTML = '<div class="empty-state"><div class="empty-state-title">Select a file</div></div>';
+            return;
+          }
+          // Show loading state immediately so UI stays responsive
+          diffTarget.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+          // Defer the heavy Diff2HtmlUI rendering to next frame
+          setTimeout(() => {
+            if (signal.aborted) return;
+            if (!document.getElementById('diff-content')) return;
+            // Limit very large chunks to avoid freezing
+            const lines = chunk.split('\n');
+            const maxLines = 2000;
+            const truncated = lines.length > maxLines;
+            const renderChunk = truncated ? lines.slice(0, maxLines).join('\n') : chunk;
+            diffTarget.innerHTML = '';
+            try {
+              const ui = new Diff2HtmlUI(diffTarget, renderChunk, {
+                drawFileList: false,
+                matching: 'none',
+                outputFormat: 'line-by-line',
+                colorScheme: 'dark',
+                highlight: false,
+              });
+              ui.draw();
+              if (truncated) {
+                diffTarget.insertAdjacentHTML('beforeend',
+                  '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-subtle)">'
+                  + 'Showing first ' + maxLines + ' lines of ' + lines.length + ' total</div>');
+              }
+            } catch (e) {
+              diffTarget.innerHTML = '<div class="empty-state"><div class="empty-state-title">Diff too large to render</div></div>';
+            }
+          }, 0);
+        }
 
         container.querySelectorAll('.diff-sidebar-file').forEach(el => {
           el.addEventListener('click', () => {
             container.querySelectorAll('.diff-sidebar-file').forEach(f => f.classList.remove('active'));
             el.classList.add('active');
-            const idx = parseInt(el.dataset.fileIdx, 10);
-            const fileHeaders = diffTarget.querySelectorAll('.d2h-file-wrapper');
-            if (fileHeaders[idx]) {
-              fileHeaders[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            renderFileDiff(parseInt(el.dataset.fileIdx, 10));
           });
         });
 
-        const firstWrapper = diffTarget.querySelector('.d2h-file-wrapper');
-        if (firstWrapper) firstWrapper.scrollIntoView({ block: 'start' });
+        // Show sidebar immediately, defer first file render
+        setTimeout(() => renderFileDiff(0), 10);
         break;
       }
       case 'plan': {
