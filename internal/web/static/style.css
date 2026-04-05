@@ -1,36 +1,36 @@
 /* Agent Dashboard — Professional dark theme */
 :root {
-  /* Background layers — deep navy */
-  --bg-base: #0B0F1A;
-  --bg-surface: #131929;
-  --bg-elevated: #1C2540;
-  --bg-overlay: #243052;
+  /* Background layers — dim navy */
+  --bg-base: #0D1120;
+  --bg-surface: #141E35;
+  --bg-elevated: #1B2744;
+  --bg-overlay: #253354;
 
   /* Borders */
-  --border-subtle: #1e2d50;
-  --border-default: #2A3660;
-  --border-strong: #3a4a72;
+  --border-subtle: #1E2D4A;
+  --border-default: #1E2D4A;
+  --border-strong: #2A3D5A;
 
   /* Text */
-  --text-primary: #E8EEFF;
-  --text-secondary: #6B7CA4;
-  --text-tertiary: #4a5a80;
+  --text-primary: #B8C4DC;
+  --text-secondary: #7A8FAD;
+  --text-tertiary: #5A6A8A;
 
   /* Accent */
-  --accent: #3B82F6;
-  --accent-hover: #2563EB;
-  --accent-muted: #3B82F622;
-  --accent-text: #93C5FD;
+  --accent: #4A7CC7;
+  --accent-hover: #3A6AB5;
+  --accent-muted: #3A6B9E22;
+  --accent-text: #D6E4FF;
 
   /* Status */
   --status-red: #f87171;
   --status-red-muted: rgba(248, 113, 113, 0.12);
   --status-green: #6EE7B7;
   --status-green-muted: rgba(110, 231, 183, 0.12);
-  --status-yellow: #facc15;
-  --status-yellow-muted: rgba(250, 204, 21, 0.10);
+  --status-yellow: #94A3B8;
+  --status-yellow-muted: rgba(148, 163, 184, 0.10);
   --status-blue: #93C5FD;
-  --status-blue-muted: #3B82F622;
+  --status-blue-muted: #3A6B9E22;
   --status-purple: #a78bfa;
   --status-purple-muted: rgba(167, 139, 250, 0.12);
   --status-teal: #2dd4bf;
