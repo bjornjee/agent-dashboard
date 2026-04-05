@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-const { describe, it } = require('node:test');
+const { describe, it, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, readSettingsBool, loadNotificationSettings, ALERTING_NOTIFICATION_TYPES, ALERTING_ERRORS } = require('./desktop-notify');
+const { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, getTerminalBundleId, getAgentState, ALERTING_NOTIFICATION_TYPES, ALERTING_ERRORS } = require('./desktop-notify');
 const { extractSessionWindow } = require(path.resolve(__dirname, '..', '..', 'packages', 'tmux'));
 
 describe('stripMarkdown', () => {
@@ -138,93 +138,94 @@ describe('shouldAlert', () => {
   });
 });
 
-describe('readSettingsBool', () => {
-  it('reads true value from TOML', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
-    fs.writeFileSync(path.join(dir, 'settings.toml'), '[notifications]\nenabled = true\n');
-    const orig = process.env.AGENT_DASHBOARD_DIR;
-    process.env.AGENT_DASHBOARD_DIR = dir;
-    try {
-      assert.equal(readSettingsBool('enabled', false), true);
-    } finally {
-      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
-      else process.env.AGENT_DASHBOARD_DIR = orig;
-      fs.rmSync(dir, { recursive: true });
-    }
+describe('getTerminalBundleId', () => {
+  it('returns Ghostty bundle ID', () => {
+    assert.equal(getTerminalBundleId('ghostty'), 'com.mitchellh.ghostty');
   });
 
-  it('reads false value from TOML', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
-    fs.writeFileSync(path.join(dir, 'settings.toml'), '[notifications]\nenabled = false\n');
-    const orig = process.env.AGENT_DASHBOARD_DIR;
-    process.env.AGENT_DASHBOARD_DIR = dir;
-    try {
-      assert.equal(readSettingsBool('enabled', true), false);
-    } finally {
-      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
-      else process.env.AGENT_DASHBOARD_DIR = orig;
-      fs.rmSync(dir, { recursive: true });
-    }
+  it('returns iTerm2 bundle ID', () => {
+    assert.equal(getTerminalBundleId('iTerm.app'), 'com.googlecode.iterm2');
   });
 
-  it('returns default when file is missing', () => {
-    const orig = process.env.AGENT_DASHBOARD_DIR;
-    process.env.AGENT_DASHBOARD_DIR = '/nonexistent/path';
-    try {
-      assert.equal(readSettingsBool('enabled', false), false);
-      assert.equal(readSettingsBool('enabled', true), true);
-    } finally {
-      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
-      else process.env.AGENT_DASHBOARD_DIR = orig;
-    }
+  it('returns Terminal.app bundle ID', () => {
+    assert.equal(getTerminalBundleId('Apple_Terminal'), 'com.apple.Terminal');
   });
 
-  it('returns default when key is absent', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
-    fs.writeFileSync(path.join(dir, 'settings.toml'), '[banner]\nshow_mascot = true\n');
-    const orig = process.env.AGENT_DASHBOARD_DIR;
-    process.env.AGENT_DASHBOARD_DIR = dir;
-    try {
-      assert.equal(readSettingsBool('enabled', false), false);
-    } finally {
-      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
-      else process.env.AGENT_DASHBOARD_DIR = orig;
-      fs.rmSync(dir, { recursive: true });
-    }
+  it('returns WezTerm bundle ID', () => {
+    assert.equal(getTerminalBundleId('WezTerm'), 'com.github.wez.wezterm');
+  });
+
+  it('returns undefined for unknown terminals', () => {
+    assert.equal(getTerminalBundleId('unknown'), undefined);
+    assert.equal(getTerminalBundleId(undefined), undefined);
+    assert.equal(getTerminalBundleId(''), undefined);
   });
 });
 
-describe('loadNotificationSettings', () => {
-  it('returns all false when file is missing', () => {
-    const orig = process.env.AGENT_DASHBOARD_DIR;
-    process.env.AGENT_DASHBOARD_DIR = '/nonexistent/path';
+describe('getAgentState', () => {
+  it('returns "needs permission" for permission_prompt notification', () => {
+    assert.equal(getAgentState({ hook_event_name: 'Notification', notification_type: 'permission_prompt' }), 'needs permission');
+  });
+
+  it('returns "idle" for idle_prompt notification', () => {
+    assert.equal(getAgentState({ hook_event_name: 'Notification', notification_type: 'idle_prompt' }), 'idle');
+  });
+
+  it('returns "needs input" for elicitation_dialog notification', () => {
+    assert.equal(getAgentState({ hook_event_name: 'Notification', notification_type: 'elicitation_dialog' }), 'needs input');
+  });
+
+  it('returns "notification" for other notification types', () => {
+    assert.equal(getAgentState({ hook_event_name: 'Notification', notification_type: 'progress' }), 'notification');
+  });
+
+  it('returns "done" for Stop without transcript', () => {
+    assert.equal(getAgentState({ hook_event_name: 'Stop' }), 'done');
+  });
+
+  it('returns "asked a question" for Stop with AskUserQuestion in transcript', () => {
+    const tmp = path.join(os.tmpdir(), `test-transcript-${Date.now()}-ask.jsonl`);
+    const entry = { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'AskUserQuestion' }] } };
+    fs.writeFileSync(tmp, JSON.stringify(entry) + '\n');
     try {
-      const s = loadNotificationSettings();
-      assert.equal(s.enabled, false);
-      assert.equal(s.sound, false);
-      assert.equal(s.silentEvents, false);
+      assert.equal(getAgentState({ hook_event_name: 'Stop', transcript_path: tmp }), 'asked a question');
     } finally {
-      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
-      else process.env.AGENT_DASHBOARD_DIR = orig;
+      fs.unlinkSync(tmp);
     }
   });
 
-  it('reads all three settings', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-test-'));
-    fs.writeFileSync(path.join(dir, 'settings.toml'),
-      '[notifications]\nenabled = true\nsound = true\nsilent_events = true\n');
-    const orig = process.env.AGENT_DASHBOARD_DIR;
-    process.env.AGENT_DASHBOARD_DIR = dir;
+  it('returns "plan ready" for Stop with ExitPlanMode in transcript', () => {
+    const tmp = path.join(os.tmpdir(), `test-transcript-${Date.now()}-plan.jsonl`);
+    const entry = { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'ExitPlanMode' }] } };
+    fs.writeFileSync(tmp, JSON.stringify(entry) + '\n');
     try {
-      const s = loadNotificationSettings();
-      assert.equal(s.enabled, true);
-      assert.equal(s.sound, true);
-      assert.equal(s.silentEvents, true);
+      assert.equal(getAgentState({ hook_event_name: 'Stop', transcript_path: tmp }), 'plan ready');
     } finally {
-      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DIR;
-      else process.env.AGENT_DASHBOARD_DIR = orig;
-      fs.rmSync(dir, { recursive: true });
+      fs.unlinkSync(tmp);
     }
+  });
+
+  it('returns "done" for Stop with non-alerting tools in transcript', () => {
+    const tmp = path.join(os.tmpdir(), `test-transcript-${Date.now()}-done.jsonl`);
+    const entry = { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read' }] } };
+    fs.writeFileSync(tmp, JSON.stringify(entry) + '\n');
+    try {
+      assert.equal(getAgentState({ hook_event_name: 'Stop', transcript_path: tmp }), 'done');
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+
+  it('returns "rate limited" for rate_limit StopFailure', () => {
+    assert.equal(getAgentState({ hook_event_name: 'StopFailure', error: 'rate_limit' }), 'rate limited');
+  });
+
+  it('returns "error" for other StopFailure errors', () => {
+    assert.equal(getAgentState({ hook_event_name: 'StopFailure', error: 'unknown' }), 'error');
+  });
+
+  it('returns undefined for unknown events', () => {
+    assert.equal(getAgentState({ hook_event_name: 'PreToolUse' }), undefined);
   });
 });
 
