@@ -426,6 +426,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.textInput, cmd = m.textInput.Update(msg)
 			m.updateRightContent()
+			m.messageVP.GotoBottom()
 			return m, cmd
 		}
 	}
