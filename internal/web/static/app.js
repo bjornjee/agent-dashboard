@@ -303,6 +303,7 @@
             ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
             ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
             ${agent.current_tool ? '<span class="agent-current-tool">' + escapeHtml(agent.current_tool) + '</span>' : ''}
+            <span class="agent-cost" data-agent-id="${agent.session_id}"></span>
           </div>
           ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(stripMarkdown(agent.last_message_preview)) + '</div>' : ''}
         `;
@@ -317,6 +318,20 @@
 
     html += '</div>';
     app.innerHTML = html;
+    loadAgentCosts();
+  }
+
+  async function loadAgentCosts() {
+    const els = document.querySelectorAll('.agent-cost[data-agent-id]');
+    if (!els.length) return;
+    await Promise.all(Array.from(els).map(async (el) => {
+      try {
+        const u = await get('/api/agents/' + el.dataset.agentId + '/usage');
+        if (u && u.CostUSD > 0) {
+          el.textContent = '$' + u.CostUSD.toFixed(2);
+        }
+      } catch { /* ignore */ }
+    }));
   }
 
   // --- Render: Agent Detail ---
@@ -606,12 +621,26 @@
   }
 
   function applyActivityFilter(container) {
+    // Filter individual entries
     container.querySelectorAll('.activity-entry').forEach(el => {
       if (activityFilter === 'all' || el.dataset.kind === activityFilter) {
         el.classList.remove('hidden');
       } else {
         el.classList.add('hidden');
       }
+    });
+    // Show/hide tool groups based on filter
+    container.querySelectorAll('.activity-tool-group').forEach(group => {
+      if (activityFilter === 'all' || activityFilter === 'tool') {
+        group.classList.remove('hidden');
+      } else {
+        group.classList.add('hidden');
+      }
+    });
+    // Hide entire turns if all children are hidden
+    container.querySelectorAll('.activity-turn').forEach(turn => {
+      const hasVisible = turn.querySelector('.activity-entry:not(.hidden)') || turn.querySelector('.activity-tool-group:not(.hidden)');
+      turn.classList.toggle('hidden', !hasVisible);
     });
   }
 
@@ -743,12 +772,20 @@
     }
     chartHtml += '</div>';
 
+    // Compute "This Week" total from daily data
+    const weekTotal = days.reduce((sum, d) => sum + d.cost_usd, 0);
+
     document.querySelector('.usage-view').innerHTML = `
       <div class="usage-summary">
         <div class="usage-card">
           <div class="usage-card-icon">${ICONS.calendar}</div>
           <div class="usage-card-value">$${(data.today_cost || 0).toFixed(2)}</div>
           <div class="usage-card-label">Today</div>
+        </div>
+        <div class="usage-card">
+          <div class="usage-card-icon">${ICONS.chart}</div>
+          <div class="usage-card-value">$${weekTotal.toFixed(2)}</div>
+          <div class="usage-card-label">This Week</div>
         </div>
         <div class="usage-card">
           <div class="usage-card-icon">${ICONS.sigma}</div>
@@ -761,7 +798,55 @@
         ${yAxisHtml}
         ${chartHtml}
       </div>
+      <h3 class="usage-chart-title" style="margin-top:24px">Per-Agent Breakdown</h3>
+      <div id="usage-agent-breakdown"><div class="loading"><span class="spinner"></span></div></div>
     `;
+
+    // Fetch per-agent cost breakdown
+    loadAgentBreakdown();
+  }
+
+  async function loadAgentBreakdown() {
+    const container = document.getElementById('usage-agent-breakdown');
+    if (!container) return;
+    // Fetch usage for each active agent in parallel
+    const results = await Promise.all(
+      agents.map(async (agent) => {
+        try {
+          const u = await get('/api/agents/' + agent.session_id + '/usage');
+          return { agent, usage: u };
+        } catch { return null; }
+      })
+    );
+    const valid = results.filter(r => r && r.usage && r.usage.CostUSD > 0);
+    valid.sort((a, b) => b.usage.CostUSD - a.usage.CostUSD);
+
+    if (valid.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-tertiary);font-size:13px;padding:8px 0">No per-agent cost data available</div>';
+      return;
+    }
+
+    let html = '<table class="usage-breakdown-table"><thead><tr><th>Agent</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cache</th><th class="num">Cost</th></tr></thead><tbody>';
+    for (const r of valid) {
+      const name = repoName(r.agent);
+      const u = r.usage;
+      const fmtTokens = (n) => {
+        if (!n) return '0';
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+        return String(n);
+      };
+      html += `<tr>
+        <td>${escapeHtml(name)}</td>
+        <td><span class="badge badge-blue">${escapeHtml(u.Model || r.agent.model || '?')}</span></td>
+        <td class="num">${fmtTokens(u.InputTokens)}</td>
+        <td class="num">${fmtTokens(u.OutputTokens)}</td>
+        <td class="num">${fmtTokens((u.CacheReadTokens || 0) + (u.CacheWriteTokens || 0))}</td>
+        <td class="num">$${u.CostUSD.toFixed(2)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
   }
 
   // --- Create agent view ---
@@ -779,10 +864,19 @@
           <datalist id="folder-suggestions">
             ${folders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
           </datalist>
+          <div id="folder-hint" class="form-hint"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Skill (optional)</label>
-          <input id="create-skill" class="action-input" style="width:100%" placeholder="e.g. feature, chore">
+          <select id="create-skill" class="action-input" style="width:100%">
+            <option value="">None</option>
+            <option value="feature">feature</option>
+            <option value="chore">chore</option>
+            <option value="bugfix">bugfix</option>
+            <option value="refactor">refactor</option>
+            <option value="test">test</option>
+            <option value="docs">docs</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label">Message (optional)</label>
@@ -791,6 +885,28 @@
         <div style="margin-top:8px">${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent()" })}</div>
       </div>
     `;
+
+    // Inline folder validation
+    const folderInput = document.getElementById('create-folder');
+    const folderHint = document.getElementById('folder-hint');
+    if (folderInput && folderHint) {
+      folderInput.addEventListener('input', () => {
+        const val = folderInput.value.trim();
+        if (!val) {
+          folderHint.textContent = '';
+          folderHint.className = 'form-hint';
+        } else if (!val.startsWith('/')) {
+          folderHint.textContent = 'Path should be absolute (start with /)';
+          folderHint.className = 'form-hint form-hint-error';
+        } else if (folders.length > 0 && folders.includes(val)) {
+          folderHint.textContent = 'Known folder';
+          folderHint.className = 'form-hint form-hint-ok';
+        } else {
+          folderHint.textContent = '';
+          folderHint.className = 'form-hint';
+        }
+      });
+    }
   }
 
   // --- Public API ---

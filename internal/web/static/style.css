@@ -364,6 +364,9 @@ body {
   white-space: nowrap;
 }
 
+.agent-cost { color: var(--status-green); font-family: var(--font-mono); font-size: 11px; }
+.agent-cost:empty { display: none; }
+
 .agent-current-tool {
   background: var(--accent-muted);
   color: var(--accent-text);
@@ -517,6 +520,7 @@ body {
 .activity-tool-summary::before { content: '\25B6'; font-size: 8px; transition: transform 0.15s; display: inline-block; }
 details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .activity-entry-tool { padding-left: 8px; border-left: 1px solid var(--border-subtle); margin-left: 8px; }
+.activity-turn.hidden, .activity-tool-group.hidden { display: none; }
 
 /* ============================================
    VIEW: Diff
@@ -710,7 +714,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 
 .usage-summary {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 16px;
 }
@@ -771,6 +775,22 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
   white-space: nowrap;
 }
 
+/* Usage breakdown table */
+.usage-breakdown-table {
+  width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px;
+}
+.usage-breakdown-table th {
+  text-align: left; font-size: 11px; font-weight: 600; color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 8px;
+  border-bottom: 1px solid var(--border-default);
+}
+.usage-breakdown-table td {
+  padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary);
+}
+.usage-breakdown-table .num { text-align: right; font-family: var(--font-mono); font-size: 12px; }
+.usage-breakdown-table th.num { text-align: right; }
+.usage-breakdown-table tr:hover td { background: var(--bg-elevated); }
+
 /* ============================================
    VIEW: Create Agent
    ============================================ */
@@ -789,6 +809,15 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
   display: block; font-size: 11px; font-weight: 600;
   color: var(--text-secondary); margin-bottom: 6px;
   text-transform: uppercase; letter-spacing: 0.5px;
+}
+.form-hint { font-size: 11px; margin-top: 4px; min-height: 16px; }
+.form-hint-error { color: var(--status-red); }
+.form-hint-ok { color: var(--status-green); }
+
+.create-form-card select.action-input {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8b94' stroke-width='2'%3E%3Cpolyline points='6,9 12,15 18,9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
 }
 
 /* ============================================
