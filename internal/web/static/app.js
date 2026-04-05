@@ -12,7 +12,7 @@
 
   // --- SVG Icons ---
   const ICONS = {
-    logo: '<svg width="24" height="24" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="var(--blue)"/><text x="256" y="360" font-family="-apple-system,system-ui,sans-serif" font-size="320" font-weight="700" fill="#232634" text-anchor="middle">A</text></svg>',
+    logo: '<svg width="24" height="24" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="var(--accent)"/><text x="256" y="360" font-family="-apple-system,system-ui,sans-serif" font-size="320" font-weight="700" fill="#fff" text-anchor="middle">A</text></svg>',
     robot: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="8" width="18" height="12" rx="2"/><circle cx="9" cy="14" r="1.5"/><circle cx="15" cy="14" r="1.5"/><path d="M12 2v4M8 8V6a4 4 0 018 0v2"/></svg>',
     chat: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
     clipboard: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',
@@ -20,6 +20,76 @@
     activity: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>',
     chart: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
     subagent: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/></svg>',
+    // Inline activity icons (small, 16x16)
+    human: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>',
+    assistant: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="12" rx="2"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M12 2v4"/></svg>',
+    tool: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>',
+    calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    sigma: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 7V4H6l6 8-6 8h12v-3"/></svg>',
+  };
+
+  // --- State → badge color mapping ---
+  const STATE_BADGE = {
+    permission: 'red', plan: 'red',
+    question: 'yellow', error: 'yellow',
+    running: 'blue',
+    idle_prompt: 'green', done: 'green',
+    pr: 'purple',
+    merged: 'teal',
+  };
+
+  // --- State → border color CSS var ---
+  const STATE_BORDER = {
+    permission: 'var(--status-red)', plan: 'var(--status-red)',
+    question: 'var(--status-yellow)', error: 'var(--status-yellow)',
+    running: 'var(--status-blue)',
+    idle_prompt: 'var(--status-green)', done: 'var(--status-green)',
+    pr: 'var(--status-purple)',
+    merged: 'var(--status-teal)',
+  };
+
+  // --- UI Component Factory ---
+  const UI = {
+    header(title, actions) {
+      return `<div class="header"><h1>${ICONS.logo} ${escapeHtml(title)}</h1><div class="header-actions">${actions || ''}</div></div>`;
+    },
+
+    btn(label, opts) {
+      const v = (opts && opts.variant) || 'secondary';
+      const onclick = (opts && opts.onclick) ? ` onclick="${opts.onclick}"` : '';
+      const id = (opts && opts.id) ? ` id="${opts.id}"` : '';
+      return `<button class="btn btn-${v}"${id}${onclick}>${label}</button>`;
+    },
+
+    badge(text, state) {
+      const color = STATE_BADGE[state] || 'blue';
+      return `<span class="badge badge-${color}">${escapeHtml(text)}</span>`;
+    },
+
+    card(content, opts) {
+      const border = (opts && opts.borderColor) ? `border-left: 3px solid ${opts.borderColor};` : '';
+      const onclick = (opts && opts.onclick) ? ` onclick="${opts.onclick}"` : '';
+      const cls = (opts && opts.className) ? ' ' + opts.className : '';
+      return `<div class="card${cls}" style="${border}"${onclick}>${content}</div>`;
+    },
+
+    tabs(items, activeTab) {
+      let html = '<div class="tabs">';
+      for (const item of items) {
+        const cls = item.key === activeTab ? ' active' : '';
+        html += `<button class="tab${cls}" data-tab="${item.key}">${escapeHtml(item.label)}</button>`;
+      }
+      html += '</div>';
+      return html;
+    },
+
+    stateGroupLabel(group, count) {
+      return `<div class="state-group-label"><span class="state-dot state-dot-${group}"></span>${group} (${count})</div>`;
+    },
+
+    emptyState(icon, title, subtitle) {
+      return `<div class="empty-state">${icon}<div class="empty-state-title">${escapeHtml(title)}</div><div class="empty-state-subtitle">${escapeHtml(subtitle)}</div></div>`;
+    },
   };
 
   // --- API helpers ---
@@ -121,7 +191,6 @@
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // Format ISO timestamp to relative or short absolute
   function formatTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -136,7 +205,6 @@
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) + ', ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
-  // Format ISO timestamp to HH:MM:SS
   function formatTimeShort(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -144,29 +212,22 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   }
 
-  // Strip markdown markers for plain-text previews
   function stripMarkdown(s) {
     if (!s) return '';
     return s
-      .replace(/```[\s\S]*?```/g, '')   // fenced code blocks
-      .replace(/`([^`]+)`/g, '$1')       // inline code
-      .replace(/^#{1,6}\s+/gm, '')       // headings
-      .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
-      .replace(/__([^_]+)__/g, '$1')     // bold alt
-      .replace(/\*([^*]+)\*/g, '$1')     // italic
-      .replace(/_([^_]+)_/g, '$1')       // italic alt
-      .replace(/^[-*+]\s+/gm, '')        // list markers
-      .replace(/\n{2,}/g, ' ')           // collapse blank lines
-      .replace(/\n/g, ' ')              // single newlines to space
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/_([^_]+)_/g, '$1')
+      .replace(/^[-*+]\s+/gm, '')
+      .replace(/\n{2,}/g, ' ')
+      .replace(/\n/g, ' ')
       .trim();
   }
 
-  // Consistent empty state with icon
-  function emptyState(icon, title, subtitle) {
-    return `<div class="empty-state">${icon}<div class="empty-state-title">${escapeHtml(title)}</div><div class="empty-state-subtitle">${escapeHtml(subtitle)}</div></div>`;
-  }
-
-  // Skeleton loading blocks
   function skeletonLoading(count) {
     let html = '<div style="padding:12px">';
     for (let i = 0; i < count; i++) {
@@ -178,7 +239,6 @@
     return html;
   }
 
-  // Markdown rendering via marked.js with DOMPurify sanitization
   function renderMarkdown(md) {
     if (typeof marked !== 'undefined') {
       try {
@@ -187,7 +247,6 @@
         return '<div class="markdown-body">' + safe + '</div>';
       } catch (e) { /* fallback */ }
     }
-    // Fallback: basic regex rendering
     let html = escapeHtml(md);
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -200,14 +259,11 @@
     return '<div class="markdown-body">' + html + '</div>';
   }
 
-  // Activity kind icons
+  // Activity kind icons — SVG instead of emoji
   function kindIcon(kind) {
-    switch (kind) {
-      case 'human': return '<span class="activity-icon">&#128100;</span>';
-      case 'assistant': return '<span class="activity-icon">&#129302;</span>';
-      case 'tool': return '<span class="activity-icon">&#128295;</span>';
-      default: return '<span class="activity-icon">&#8226;</span>';
-    }
+    const svg = ICONS[kind] || '';
+    if (svg) return `<span class="activity-icon">${svg}</span>`;
+    return '<span class="activity-icon">&#8226;</span>';
   }
 
   // --- Render: Agent List ---
@@ -221,46 +277,44 @@
     }
 
     const order = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
-    let html = `
-      <div class="header">
-        <h1>${ICONS.logo} Agent Dashboard</h1>
-        <div class="header-actions">
-          <button class="btn-ghost" onclick="Dashboard.showUsage()">Usage</button>
-          <button class="btn-ghost" onclick="Dashboard.showCreate()">+ New</button>
-        </div>
-      </div>
-      <div class="agent-list">
-    `;
+    let html = UI.header('Agent Dashboard',
+      UI.btn('Usage', { variant: 'ghost', onclick: "Dashboard.showUsage()" })
+      + UI.btn('+ New', { variant: 'ghost', onclick: "Dashboard.showCreate()" })
+    );
+    html += '<div class="agent-list">';
 
     if (agents.length === 0) {
-      html += emptyState(ICONS.robot, 'No agents running', 'Create a new agent to get started');
+      html += UI.emptyState(ICONS.robot, 'No agents running', 'Create a new agent to get started');
     }
 
     for (const group of order) {
       if (!grouped[group] || grouped[group].length === 0) continue;
-      html += `<div class="state-group"><div class="state-group-label"><span class="state-dot state-dot-${group}"></span>${group} (${grouped[group].length})</div>`;
+      html += `<div class="state-group">${UI.stateGroupLabel(group, grouped[group].length)}`;
       for (const agent of grouped[group]) {
         const st = effectiveState(agent);
-        html += `
-          <div class="agent-card agent-card-border-${st}" onclick="Dashboard.selectAgent('${agent.session_id}')">
-            <div class="agent-card-header">
-              <span class="agent-name">${escapeHtml(repoName(agent))}</span>
-              <span class="badge badge-${st}">${st}</span>
-            </div>
-            <div class="agent-meta">
-              ${agent.branch ? '<span>' + escapeHtml(agent.branch) + '</span>' : ''}
-              ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
-              ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
-              ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
-            </div>
-            ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(stripMarkdown(agent.last_message_preview)) + '</div>' : ''}
+        const cardContent = `
+          <div class="agent-card-header">
+            <span class="agent-name">${escapeHtml(repoName(agent))}</span>
+            ${UI.badge(st, st)}
           </div>
+          <div class="agent-meta">
+            ${agent.branch ? '<span>' + escapeHtml(agent.branch) + '</span>' : ''}
+            ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
+            ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
+            ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
+          </div>
+          ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(stripMarkdown(agent.last_message_preview)) + '</div>' : ''}
         `;
+        html += UI.card(cardContent, {
+          borderColor: STATE_BORDER[st] || 'var(--border-subtle)',
+          onclick: `Dashboard.selectAgent('${agent.session_id}')`,
+          className: 'agent-card',
+        });
       }
-      html += `</div>`;
+      html += '</div>';
     }
 
-    html += `</div>`;
+    html += '</div>';
     app.innerHTML = html;
   }
 
@@ -272,12 +326,12 @@
     if (!agent) { renderList(); return; }
 
     const st = effectiveState(agent);
-    app.innerHTML = `
+    const detailHeader = `
       <div class="detail-header">
-        <button class="detail-back" onclick="Dashboard.showList()">&larr; Back</button>
+        ${UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })}
         <div class="detail-title">
           <h2>${escapeHtml(repoName(agent))}</h2>
-          <span class="badge badge-${st}">${st}</span>
+          ${UI.badge(st, st)}
         </div>
         <div class="detail-meta">
           ${agent.branch ? '<span>' + escapeHtml(agent.branch) + '</span>' : ''}
@@ -285,14 +339,20 @@
           ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
         </div>
       </div>
-      <div class="tabs">
-        <button class="tab active" data-tab="conversation">Chat</button>
-        <button class="tab" data-tab="activity">Activity</button>
-        <button class="tab" data-tab="diff">Diff</button>
-        <button class="tab" data-tab="plan">Plan</button>
-        <button class="tab" data-tab="files">Files</button>
-        <button class="tab" data-tab="subagents">Subagents</button>
-      </div>
+    `;
+
+    const tabs = UI.tabs([
+      { key: 'conversation', label: 'Chat' },
+      { key: 'activity', label: 'Activity' },
+      { key: 'diff', label: 'Diff' },
+      { key: 'plan', label: 'Plan' },
+      { key: 'files', label: 'Files' },
+      { key: 'subagents', label: 'Subagents' },
+    ], 'conversation');
+
+    app.innerHTML = `
+      ${detailHeader}
+      ${tabs}
       <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
       <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
       <div id="tab-diff" class="tab-content">${skeletonLoading(3)}</div>
@@ -328,7 +388,7 @@
       case 'conversation': {
         const entries = await get('/api/agents/' + agentId + '/conversation');
         if (!entries || entries.length === 0) {
-          container.innerHTML = emptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
+          container.innerHTML = UI.emptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
           return;
         }
         let html = '<div class="conversation">';
@@ -337,7 +397,6 @@
           const role = entry.Role || entry.role;
           const content = entry.Content || entry.content || '';
           const time = entry.Timestamp || entry.timestamp || '';
-          // Role label when role changes
           if (role !== lastRole) {
             html += `<div class="msg-role-label">${role === 'human' ? 'You' : 'Claude'}</div>`;
             lastRole = role;
@@ -356,10 +415,9 @@
       case 'activity': {
         const entries = await get('/api/agents/' + agentId + '/activity');
         if (!entries || entries.length === 0) {
-          container.innerHTML = emptyState(ICONS.activity, 'No activity yet', 'Tool calls and messages will appear here');
+          container.innerHTML = UI.emptyState(ICONS.activity, 'No activity yet', 'Tool calls and messages will appear here');
           return;
         }
-        // Filter bar
         let html = '<div class="activity-filter-bar">';
         for (const f of ['all', 'human', 'assistant', 'tool']) {
           html += `<button class="activity-filter-btn${activityFilter === f ? ' active' : ''}" data-filter="${f}">${f}</button>`;
@@ -372,26 +430,22 @@
           const content = e.Content || e.content || '';
           const time = e.Timestamp || e.timestamp || '';
           const cls = 'activity-' + kind;
-          // Separator between turns (when going back to human)
           if (kind === 'human' && lastKind && lastKind !== 'human') {
             html += '<hr class="activity-separator">';
           }
           lastKind = kind;
-          // Truncation for long entries
           const truncated = content.length > 200;
           const displayContent = truncated ? content.substring(0, 200) + '...' : content;
           html += `<div class="activity-entry" data-kind="${kind}">`
             + kindIcon(kind)
             + `<span class="activity-time">${formatTimeShort(time)}</span> `
             + `<span class="${cls}" data-full="${escapeHtml(content)}" data-truncated="true">${escapeHtml(displayContent)}</span>`
-            + (truncated ? ` <button class="activity-expand-btn" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
+            + (truncated ? ` <button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
             + `</div>`;
         }
         html += '</div>';
         container.innerHTML = html;
-        // Apply current filter
         applyActivityFilter(container);
-        // Filter button handlers
         container.querySelectorAll('.activity-filter-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             activityFilter = btn.dataset.filter;
@@ -405,11 +459,10 @@
       case 'diff': {
         const data = await get('/api/agents/' + agentId + '/diff');
         if (!data || !data.raw) {
-          container.innerHTML = emptyState(ICONS.fileDiff, 'No diff available', 'Changes will appear here once the agent modifies files');
+          container.innerHTML = UI.emptyState(ICONS.fileDiff, 'No diff available', 'Changes will appear here once the agent modifies files');
           return;
         }
 
-        // Build file sidebar from parsed files (stats come from server)
         const files = data.files || [];
         let sidebarHtml = '<div class="diff-sidebar"><div class="diff-sidebar-header">Files (' + files.length + ')</div>';
         for (let i = 0; i < files.length; i++) {
@@ -429,7 +482,6 @@
 
         container.innerHTML = '<div class="diff-layout">' + sidebarHtml + '<div class="diff-content" id="diff-content"></div></div>';
 
-        // Render diff with Diff2HtmlUI for syntax highlighting
         const diffTarget = document.getElementById('diff-content');
         const diff2htmlUi = new Diff2HtmlUI(diffTarget, data.raw, {
           drawFileList: false,
@@ -441,7 +493,6 @@
         diff2htmlUi.draw();
         diff2htmlUi.highlightCode();
 
-        // Click file in sidebar to scroll to it
         container.querySelectorAll('.diff-sidebar-file').forEach(el => {
           el.addEventListener('click', () => {
             container.querySelectorAll('.diff-sidebar-file').forEach(f => f.classList.remove('active'));
@@ -454,7 +505,6 @@
           });
         });
 
-        // Auto-scroll to first file
         const firstWrapper = diffTarget.querySelector('.d2h-file-wrapper');
         if (firstWrapper) firstWrapper.scrollIntoView({ block: 'start' });
         break;
@@ -462,7 +512,7 @@
       case 'plan': {
         const data = await get('/api/agents/' + agentId + '/plan');
         if (!data || !data.content) {
-          container.innerHTML = emptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
+          container.innerHTML = UI.emptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
           return;
         }
         container.innerHTML = '<div class="plan-content">' + renderMarkdown(data.content) + '</div>';
@@ -471,7 +521,7 @@
       case 'subagents': {
         const subs = await get('/api/agents/' + agentId + '/subagents');
         if (!subs || subs.length === 0) {
-          container.innerHTML = emptyState(ICONS.subagent, 'No subagents', 'Subagents appear when the main agent delegates work');
+          container.innerHTML = UI.emptyState(ICONS.subagent, 'No subagents', 'Subagents appear when the main agent delegates work');
           return;
         }
         let html = '<div class="subagent-list">';
@@ -481,12 +531,13 @@
           const desc = sub.Description || sub.description || '';
           const startedAt = sub.StartedAt || sub.started_at || '';
           const statusBadge = completed
-            ? '<span class="badge badge-done">completed</span>'
-            : '<span class="badge badge-running">running</span>';
-          const icon = completed ? '&#10003;' : '&#9654;';
-          const iconColor = completed ? 'var(--green)' : 'var(--blue)';
-          html += `<div class="subagent-card">
-            <div class="subagent-card-icon" style="color:${iconColor}">${icon}</div>
+            ? UI.badge('completed', 'done')
+            : UI.badge('running', 'running');
+          const iconSvg = completed
+            ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-green)" stroke-width="2"><polyline points="20,6 9,17 4,12"/></svg>'
+            : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-blue)" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>';
+          const cardContent = `
+            <div class="subagent-card-icon">${iconSvg}</div>
             <div class="subagent-card-body">
               <div class="subagent-card-title">${escapeHtml(type)} ${statusBadge}</div>
               ${desc ? '<div class="subagent-card-desc">' + escapeHtml(desc) + '</div>' : ''}
@@ -495,7 +546,8 @@
                 ${startedAt ? '<span>' + durationFromTimestamp(startedAt) + '</span>' : ''}
               </div>
             </div>
-          </div>`;
+          `;
+          html += `<div class="subagent-card">${cardContent}</div>`;
         }
         html += '</div>';
         container.innerHTML = html;
@@ -504,7 +556,6 @@
     }
   }
 
-  // Apply activity filter
   function applyActivityFilter(container) {
     container.querySelectorAll('.activity-entry').forEach(el => {
       if (activityFilter === 'all' || el.dataset.kind === activityFilter) {
@@ -520,11 +571,10 @@
     if (!container) return;
     const files = agent.files_changed || [];
     if (files.length === 0) {
-      container.innerHTML = emptyState(ICONS.fileDiff, 'No files changed', 'Modified files will appear here');
+      container.innerHTML = UI.emptyState(ICONS.fileDiff, 'No files changed', 'Modified files will appear here');
       return;
     }
 
-    // Parse files and group by directory
     const parsed = files.map(f => {
       let status = 'modified';
       let name = f;
@@ -537,7 +587,6 @@
       return { status, name, fileName, dir, original: f };
     });
 
-    // Group by directory
     const dirs = {};
     for (const f of parsed) {
       if (!dirs[f.dir]) dirs[f.dir] = [];
@@ -558,7 +607,6 @@
     }
     html += '</div>';
     container.innerHTML = html;
-    // Attach click handlers via addEventListener (avoids onclick injection)
     container.querySelectorAll('.file-item[data-file-name]').forEach(el => {
       el.addEventListener('click', () => {
         Dashboard.goToFileDiff(el.dataset.fileName);
@@ -571,25 +619,23 @@
     const st = effectiveState(agent);
     let actions = '';
 
-    // Claude deep link
-    actions += `<button class="action-btn action-btn-claude" onclick="Dashboard.openClaude()">Open Claude</button>`;
+    actions += UI.btn('Open Claude', { variant: 'secondary', onclick: "Dashboard.openClaude()" });
 
     if (st === 'permission' || st === 'plan') {
-      actions += `<button class="action-btn action-btn-approve" onclick="Dashboard.approve('${agent.session_id}')">Approve</button>`;
-      actions += `<button class="action-btn action-btn-reject" onclick="Dashboard.reject('${agent.session_id}')">Reject</button>`;
+      actions += UI.btn('Approve', { variant: 'primary', onclick: `Dashboard.approve('${agent.session_id}')` });
+      actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}')` });
     } else if (st === 'question' || st === 'error') {
       actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
-      actions += `<button class="action-btn action-btn-send" onclick="Dashboard.sendInput('${agent.session_id}')">Send</button>`;
+      actions += UI.btn('Send', { variant: 'primary', onclick: `Dashboard.sendInput('${agent.session_id}')` });
     } else if (st === 'pr') {
-      actions += `<button class="action-btn action-btn-open-pr" onclick="Dashboard.openPR('${agent.session_id}')">Open PR</button>`;
-      actions += `<button class="action-btn action-btn-merge" onclick="Dashboard.confirmMerge('${agent.session_id}')">Merge</button>`;
+      actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });
+      actions += UI.btn('Merge', { variant: 'primary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
     } else if (st === 'merged') {
-      actions += `<button class="action-btn action-btn-close" onclick="Dashboard.confirmClose('${agent.session_id}')">Close</button>`;
+      actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${agent.session_id}')` });
     }
 
-    // Stop button always present for running agents
     if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question') {
-      actions += `<button class="action-btn action-btn-stop" onclick="Dashboard.confirmStop('${agent.session_id}')">Stop</button>`;
+      actions += UI.btn('Stop', { variant: 'danger', onclick: `Dashboard.confirmStop('${agent.session_id}')` });
     }
 
     return `<div class="action-bar">${actions}</div>`;
@@ -604,8 +650,8 @@
         <h3>${escapeHtml(title)}</h3>
         <p>${escapeHtml(message)}</p>
         <div class="modal-actions">
-          <button class="modal-cancel" id="modal-cancel">Cancel</button>
-          <button class="modal-confirm" id="modal-confirm">Confirm</button>
+          ${UI.btn('Cancel', { variant: 'ghost', id: 'modal-cancel' })}
+          ${UI.btn('Confirm', { variant: 'danger', id: 'modal-confirm' })}
         </div>
       </div>
     `;
@@ -621,15 +667,9 @@
   // --- Usage view ---
   async function renderUsage() {
     currentView = 'usage';
-    app.innerHTML = `
-      <div class="header">
-        <h1>${ICONS.logo} Usage</h1>
-        <div class="header-actions">
-          <button class="btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
-        </div>
-      </div>
-      <div class="usage-view"><div class="loading"><span class="spinner"></span></div></div>
-    `;
+    app.innerHTML = UI.header('Usage',
+      UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
+    ) + '<div class="usage-view"><div class="loading"><span class="spinner"></span></div></div>';
 
     const data = await get('/api/usage/daily');
     if (!data) return;
@@ -637,7 +677,6 @@
     const days = data.days || [];
     const maxCost = Math.max(...days.map(d => d.cost_usd), 0.01);
 
-    // Y-axis labels
     const ySteps = 4;
     let yAxisHtml = '<div class="usage-y-axis">';
     for (let i = ySteps; i >= 0; i--) {
@@ -649,7 +688,7 @@
     let chartHtml = '<div class="usage-chart">';
     for (const day of days) {
       const height = Math.max(2, (day.cost_usd / maxCost) * 100);
-      const label = day.date.slice(5); // MM-DD
+      const label = day.date.slice(5);
       const value = '$' + day.cost_usd.toFixed(2);
       chartHtml += `<div class="usage-bar" style="height:${height}%"><span class="usage-bar-value">${value}</span><span class="usage-bar-label">${label}</span></div>`;
     }
@@ -658,12 +697,12 @@
     document.querySelector('.usage-view').innerHTML = `
       <div class="usage-summary">
         <div class="usage-card">
-          <div class="usage-card-icon">&#128197;</div>
+          <div class="usage-card-icon">${ICONS.calendar}</div>
           <div class="usage-card-value">$${(data.today_cost || 0).toFixed(2)}</div>
           <div class="usage-card-label">Today</div>
         </div>
         <div class="usage-card">
-          <div class="usage-card-icon">&#8721;</div>
+          <div class="usage-card-icon">${ICONS.sigma}</div>
           <div class="usage-card-value">$${(data.total_cost || 0).toFixed(2)}</div>
           <div class="usage-card-label">All Time</div>
         </div>
@@ -679,16 +718,11 @@
   // --- Create agent view ---
   function renderCreate() {
     currentView = 'create';
-    // Gather recent folders from existing agents
     const folders = [...new Set(agents.map(a => a.cwd).filter(Boolean))];
 
-    app.innerHTML = `
-      <div class="header">
-        <h1>${ICONS.logo} New Agent</h1>
-        <div class="header-actions">
-          <button class="btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
-        </div>
-      </div>
+    app.innerHTML = UI.header('New Agent',
+      UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
+    ) + `
       <div class="create-form-card">
         <div class="form-group">
           <label class="form-label">Folder</label>
@@ -705,28 +739,17 @@
           <label class="form-label">Message (optional)</label>
           <textarea id="create-message" class="action-input" style="width:100%;min-height:80px;resize:vertical" placeholder="What should the agent do?"></textarea>
         </div>
-        <button class="btn-primary" style="width:100%" onclick="Dashboard.createAgent()">Create Agent</button>
+        ${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent()" })}
       </div>
     `;
   }
 
-  // --- Public API (exposed as Dashboard global) ---
+  // --- Public API ---
   window.Dashboard = {
-    showList() {
-      renderList();
-    },
-
-    showUsage() {
-      renderUsage();
-    },
-
-    showCreate() {
-      renderCreate();
-    },
-
-    selectAgent(id) {
-      renderDetail(id);
-    },
+    showList() { renderList(); },
+    showUsage() { renderUsage(); },
+    showCreate() { renderCreate(); },
+    selectAgent(id) { renderDetail(id); },
 
     async approve(id) {
       const result = await post('/api/agents/' + id + '/approve');
@@ -778,9 +801,7 @@
       });
     },
 
-    openClaude() {
-      window.open('https://claude.ai', '_blank');
-    },
+    openClaude() { window.open('https://claude.ai', '_blank'); },
 
     openPR(id) {
       const agent = agents.find(a => a.session_id === id);
@@ -808,7 +829,6 @@
       }
     },
 
-    // Toggle expand/collapse for truncated activity entries
     toggleExpand(btn) {
       const span = btn.previousElementSibling;
       if (!span) return;
@@ -825,9 +845,7 @@
       }
     },
 
-    // Navigate from Files tab to Diff tab and scroll to file
     goToFileDiff(fileName) {
-      // Switch to diff tab
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       const diffTab = document.querySelector('.tab[data-tab="diff"]');
@@ -836,7 +854,6 @@
         diffTab.classList.add('active');
         diffContent.classList.add('active');
         currentTab = 'diff';
-        // Find matching file in sidebar and click it
         const sidebarFiles = diffContent.querySelectorAll('.diff-sidebar-file');
         for (const el of sidebarFiles) {
           if (el.getAttribute('title') === fileName || el.getAttribute('title')?.endsWith(fileName)) {
@@ -850,15 +867,11 @@
 
   // Configure marked.js if available
   if (typeof marked !== 'undefined') {
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-    });
+    marked.setOptions({ breaks: true, gfm: true });
   }
 
   // --- Init ---
   async function init() {
-    // Load initial agents
     const data = await get('/api/agents');
     if (data) agents = data;
     renderList();
