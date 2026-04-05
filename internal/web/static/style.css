@@ -658,7 +658,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-file-name-wrapper { color: var(--text-primary); }
 .diff-content .d2h-file-name { color: var(--text-primary); }
 .diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; }
-.diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; position: sticky; left: 0; z-index: 1; text-align: right; vertical-align: top; }
+.diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; }
 .diff-content .d2h-code-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-line-ctn { color: var(--text-primary); }
 
@@ -681,12 +681,12 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-file-diff { border-color: var(--border-subtle); }
 .diff-content .d2h-file-side-diff { border-color: var(--border-subtle); }
 .diff-content .d2h-files-diff { border: none; }
-.diff-content .d2h-code-linenumber.d2h-move-handler { position: sticky !important; left: 0; z-index: 1; }
+.diff-content .d2h-code-linenumber.d2h-move-handler { cursor: default; }
 .diff-content .hljs { background: transparent !important; color: var(--text-primary); }
 
 /* Side-by-side layout */
 .diff-content .d2h-file-side-diff { width: 50%; display: inline-block; vertical-align: top; }
-.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; position: sticky; left: 0; z-index: 1; text-align: right; vertical-align: top; }
+.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; }
 .diff-content .d2h-code-side-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-side-line .d2h-code-line-ctn { color: var(--text-primary); }
 
