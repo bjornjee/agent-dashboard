@@ -296,6 +296,16 @@ async function loadTabContent(tab, agentId) {
       }
       if (chunkStart >= 0) fileChunks.push(rawLines.slice(chunkStart).join('\n'));
 
+      // Totals for summary bar
+      const totalAdds = files.reduce((s, f) => s + (f.additions || 0), 0);
+      const totalDels = files.reduce((s, f) => s + (f.deletions || 0), 0);
+
+      // View mode from localStorage
+      let viewMode = localStorage.getItem('diff-view-mode') || 'side-by-side';
+      // Force unified on narrow screens
+      if (window.innerWidth <= 768) viewMode = 'line-by-line';
+
+      // Build sidebar
       const dirGroups = {};
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
@@ -329,60 +339,186 @@ async function loadTabContent(tab, agentId) {
       }
       sidebarHtml += '</div>';
 
-      container.innerHTML = '<div class="diff-layout">' + sidebarHtml + '<div class="diff-content" id="diff-content"></div></div>';
-
-      function renderFileDiff(idx) {
-        if (signal.aborted) return;
-        const diffTarget = document.getElementById('diff-content');
-        if (!diffTarget) return;
-        const chunk = fileChunks[idx];
-        if (!chunk) {
-          diffTarget.innerHTML = '<div class="empty-state"><div class="empty-state-title">Select a file</div></div>';
-          return;
-        }
-        diffTarget.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
-        setTimeout(() => {
-          if (signal.aborted) return;
-          if (!document.getElementById('diff-content')) return;
-          const lines = chunk.split('\n');
-          const maxLines = 2000;
-          const truncated = lines.length > maxLines;
-          const renderChunk = truncated ? lines.slice(0, maxLines).join('\n') : chunk;
-          diffTarget.innerHTML = '';
-          try {
-            const ui = new Diff2HtmlUI(diffTarget, renderChunk, {
-              drawFileList: false,
-              matching: 'words',
-              outputFormat: 'side-by-side',
-              colorScheme: 'dark',
-              highlight: true,
-            });
-            ui.draw();
-            requestAnimationFrame(() => {
-              if (!signal.aborted) {
-                try { ui.highlightCode(); } catch { /* ignore */ }
-              }
-            });
-            if (truncated) {
-              diffTarget.insertAdjacentHTML('beforeend',
-                '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-subtle)">'
-                + 'Showing first ' + maxLines + ' lines of ' + lines.length + ' total</div>');
-            }
-          } catch (e) {
-            diffTarget.innerHTML = '<div class="empty-state"><div class="empty-state-title">Diff too large to render</div></div>';
-          }
-        }, 0);
+      // Build file section shells
+      let sectionsHtml = '';
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const status = ['added', 'modified', 'deleted'].includes(f.status) ? f.status : 'modified';
+        const adds = f.additions || 0;
+        const dels = f.deletions || 0;
+        sectionsHtml += '<div class="diff-file-section" data-file-idx="' + i + '" id="diff-file-' + i + '">'
+          + '<div class="diff-file-header">'
+          + '<span class="diff-file-chevron expanded">&#9656;</span>'
+          + '<span class="diff-status-dot diff-status-dot-' + status + '"></span>'
+          + '<span class="diff-file-path">' + escapeHtml(f.path) + '</span>'
+          + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
+          + '</div>'
+          + '<div class="diff-file-body"><div class="loading"><span class="spinner"></span></div></div>'
+          + '</div>';
       }
 
-      container.querySelectorAll('.diff-sidebar-file').forEach(el => {
-        el.addEventListener('click', () => {
-          container.querySelectorAll('.diff-sidebar-file').forEach(f => f.classList.remove('active'));
-          el.classList.add('active');
-          renderFileDiff(parseInt(el.dataset.fileIdx, 10));
+      // Summary bar
+      const summaryHtml = '<div class="diff-summary-bar">'
+        + '<span>Showing ' + files.length + ' changed file' + (files.length !== 1 ? 's' : '')
+        + ' with <span class="diff-stats-add">+' + totalAdds + '</span> addition' + (totalAdds !== 1 ? 's' : '')
+        + ' and <span class="diff-stats-del">-' + totalDels + '</span> deletion' + (totalDels !== 1 ? 's' : '') + '</span>'
+        + '<div class="diff-view-toggle">'
+        + '<button class="diff-toggle-btn' + (viewMode === 'side-by-side' ? ' active' : '') + '" data-mode="side-by-side">Split</button>'
+        + '<button class="diff-toggle-btn' + (viewMode === 'line-by-line' ? ' active' : '') + '" data-mode="line-by-line">Unified</button>'
+        + '</div></div>';
+
+      container.innerHTML = '<div class="diff-view">'
+        + summaryHtml
+        + '<div class="diff-layout">' + sidebarHtml
+        + '<div class="diff-content" id="diff-content">' + sectionsHtml + '</div>'
+        + '</div></div>';
+
+      // Lazy render with IntersectionObserver
+      const rendered = new Set();
+      const diffContent = document.getElementById('diff-content');
+
+      function renderSingleFile(bodyEl, idx) {
+        const chunk = fileChunks[idx];
+        if (!chunk) { bodyEl.innerHTML = ''; return; }
+        const lines = chunk.split('\n');
+        const maxLines = 2000;
+        const truncated = lines.length > maxLines;
+        const renderChunk = truncated ? lines.slice(0, maxLines).join('\n') : chunk;
+        bodyEl.innerHTML = '';
+        try {
+          const ui = new Diff2HtmlUI(bodyEl, renderChunk, {
+            drawFileList: false,
+            matching: 'words',
+            outputFormat: viewMode,
+            colorScheme: 'dark',
+            highlight: true,
+          });
+          ui.draw();
+          requestAnimationFrame(() => {
+            if (!signal.aborted) {
+              try { ui.highlightCode(); } catch { /* ignore */ }
+            }
+          });
+          if (truncated) {
+            bodyEl.insertAdjacentHTML('beforeend',
+              '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-subtle)">'
+              + 'Showing first ' + maxLines + ' lines of ' + lines.length + ' total</div>');
+          }
+        } catch {
+          bodyEl.innerHTML = '<div class="empty-state"><div class="empty-state-title">Diff too large to render</div></div>';
+        }
+      }
+
+      const lazyObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idx = parseInt(entry.target.dataset.fileIdx, 10);
+            if (!rendered.has(idx)) {
+              rendered.add(idx);
+              const body = entry.target.querySelector('.diff-file-body');
+              if (body && body.style.display !== 'none') renderSingleFile(body, idx);
+              lazyObserver.unobserve(entry.target);
+            }
+          }
+        }
+      }, { root: diffContent, rootMargin: '200px' });
+
+      container.querySelectorAll('.diff-file-section').forEach(el => {
+        lazyObserver.observe(el);
+      });
+
+      // Scroll spy with debounce for sidebar clicks
+      let ignoreSpyUntil = 0;
+      const spyObserver = new IntersectionObserver((entries) => {
+        if (Date.now() < ignoreSpyUntil) return;
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idx = entry.target.dataset.fileIdx;
+            container.querySelectorAll('.diff-sidebar-file').forEach(f => {
+              f.classList.toggle('active', f.dataset.fileIdx === idx);
+            });
+          }
+        }
+      }, { root: diffContent, threshold: 0.1 });
+
+      container.querySelectorAll('.diff-file-section').forEach(el => {
+        spyObserver.observe(el);
+      });
+
+      // Clean up observers on navigation
+      signal.addEventListener('abort', () => {
+        lazyObserver.disconnect();
+        spyObserver.disconnect();
+      }, { once: true });
+
+      // File header collapse/expand
+      container.querySelectorAll('.diff-file-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const section = header.parentElement;
+          const body = section.querySelector('.diff-file-body');
+          const chevron = header.querySelector('.diff-file-chevron');
+          const isCollapsed = body.style.display === 'none';
+          body.style.display = isCollapsed ? '' : 'none';
+          chevron.classList.toggle('expanded', isCollapsed);
+          // Trigger lazy render if expanding an unrendered file
+          if (isCollapsed) {
+            const idx = parseInt(section.dataset.fileIdx, 10);
+            if (!rendered.has(idx)) {
+              rendered.add(idx);
+              renderSingleFile(body, idx);
+            }
+          }
         });
       });
 
-      setTimeout(() => renderFileDiff(0), 10);
+      // Sidebar click → scroll to file
+      container.querySelectorAll('.diff-sidebar-file').forEach(el => {
+        el.addEventListener('click', () => {
+          ignoreSpyUntil = Date.now() + 600;
+          container.querySelectorAll('.diff-sidebar-file').forEach(f => f.classList.remove('active'));
+          el.classList.add('active');
+          const idx = parseInt(el.dataset.fileIdx, 10);
+          const section = document.getElementById('diff-file-' + idx);
+          if (section) {
+            // Expand if collapsed
+            const body = section.querySelector('.diff-file-body');
+            if (body && body.style.display === 'none') {
+              body.style.display = '';
+              section.querySelector('.diff-file-chevron').classList.add('expanded');
+              if (!rendered.has(idx)) {
+                rendered.add(idx);
+                renderSingleFile(body, idx);
+              }
+            }
+            // Scroll within the diff-content container, not the whole page
+            const dc = document.getElementById('diff-content');
+            if (dc) {
+              dc.scrollTop = section.offsetTop - dc.offsetTop;
+            }
+          }
+        });
+      });
+
+      // Unified/split toggle
+      container.querySelectorAll('.diff-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const mode = btn.dataset.mode;
+          if (mode === viewMode) return;
+          viewMode = mode;
+          localStorage.setItem('diff-view-mode', mode);
+          container.querySelectorAll('.diff-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+          // Re-render only expanded files
+          rendered.clear();
+          container.querySelectorAll('.diff-file-section').forEach(section => {
+            const body = section.querySelector('.diff-file-body');
+            if (body && body.style.display !== 'none') {
+              body.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+              lazyObserver.observe(section);
+            }
+          });
+        });
+      });
+
       break;
     }
     case 'plan': {

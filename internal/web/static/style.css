@@ -525,9 +525,46 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 /* ============================================
    VIEW: Diff
    ============================================ */
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 200px);
+}
+
+.diff-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.diff-view-toggle { display: inline-flex; gap: 0; border-radius: var(--radius-sm); overflow: hidden; }
+.diff-toggle-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.diff-toggle-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.diff-toggle-btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: none; }
+.diff-toggle-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.diff-toggle-btn:hover:not(.active) { background: var(--bg-overlay); }
+
 .diff-layout {
   display: flex;
-  height: calc(100vh - 200px);
+  flex: 1;
+  min-height: 0;
   gap: 0;
 }
 
@@ -618,8 +655,8 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-file-header { background: var(--bg-elevated); border-color: var(--border-subtle); color: var(--text-primary); position: sticky; top: 0; z-index: 2; }
 .diff-content .d2h-file-name-wrapper { color: var(--text-primary); }
 .diff-content .d2h-file-name { color: var(--text-primary); }
-.diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; }
-.diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; position: static; }
+.diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; }
+.diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; position: sticky; left: 0; z-index: 1; min-width: 40px; text-align: right; vertical-align: top; padding: 0 8px; }
 .diff-content .d2h-code-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-line-ctn { color: var(--text-primary); }
 
@@ -642,12 +679,12 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-file-diff { border-color: var(--border-subtle); }
 .diff-content .d2h-file-side-diff { border-color: var(--border-subtle); }
 .diff-content .d2h-files-diff { border: none; }
-.diff-content .d2h-code-linenumber.d2h-move-handler { position: static !important; }
+.diff-content .d2h-code-linenumber.d2h-move-handler { position: sticky !important; left: 0; z-index: 1; }
 .diff-content .hljs { background: transparent !important; color: var(--text-primary); }
 
 /* Side-by-side layout */
 .diff-content .d2h-file-side-diff { width: 50%; display: inline-block; vertical-align: top; }
-.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; }
+.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; position: sticky; left: 0; z-index: 1; min-width: 40px; text-align: right; vertical-align: top; padding: 0 8px; }
 .diff-content .d2h-code-side-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-side-line .d2h-code-line-ctn { color: var(--text-primary); }
 
@@ -666,7 +703,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-del .d2h-code-line-ctn del { background: rgba(248, 113, 113, 0.30); text-decoration: none; border-radius: 2px; }
 
 /* Hunk/function context header */
-.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--accent-text); }
+.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--accent-text); position: sticky; top: 37px; z-index: 2; }
 .diff-content .d2h-code-side-emptyplaceholder { background: var(--bg-surface); }
 
 /* Hide diff2html UI artifacts */
@@ -674,11 +711,53 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-file-header .d2h-file-stats,
 .diff-content .d2h-tag { display: none; }
 
+/* File sections (GitHub-style inline) */
+.diff-file-section { border-bottom: 1px solid var(--border-subtle); }
+.diff-file-section:last-child { border-bottom: none; }
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  user-select: none;
+}
+.diff-file-header:hover { background: var(--bg-overlay); }
+.diff-file-path {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.diff-file-chevron {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.diff-file-chevron.expanded { transform: rotate(90deg); }
+.diff-file-body { /* container for diff2html output */ }
+.diff-file-body .d2h-file-header { display: none; }
+.diff-file-body .d2h-wrapper { border: none; }
+.diff-file-body .d2h-files-diff { border: none; }
+
 /* Mobile diff */
 @media (max-width: 768px) {
-  .diff-layout { flex-direction: column; height: auto; }
+  .diff-view { height: auto; }
+  .diff-summary-bar { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .diff-layout { flex-direction: column; }
   .diff-sidebar { width: 100%; min-width: unset; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border-subtle); }
-  .diff-content { max-height: calc(100vh - 400px); }
+  .diff-content { max-height: none; }
+  .diff-toggle-btn[data-mode="side-by-side"] { display: none; }
 }
 
 /* ============================================
