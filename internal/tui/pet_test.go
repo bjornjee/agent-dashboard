@@ -18,12 +18,11 @@ func TestNewPetModel(t *testing.T) {
 	}
 }
 
-func TestPetView_ContainsStickFigure(t *testing.T) {
+func TestPetView_ContainsRedPanda(t *testing.T) {
 	p := newPetModel(20)
 	view := p.View()
-	// The stick figure should contain the head "O"
-	if !strings.Contains(view, "O") {
-		t.Errorf("pet view should contain stick figure head 'O', got:\n%s", view)
+	if !strings.Contains(view, "(o . o)") {
+		t.Errorf("pet view should contain red panda face, got:\n%s", view)
 	}
 }
 

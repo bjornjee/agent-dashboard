@@ -18,12 +18,12 @@ const (
 	petSleeping
 )
 
-// petSpriteWidth is the character width of the widest stick figure sprite.
-const petSpriteWidth = 6
+// petSpriteWidth is the character width of the widest sprite.
+const petSpriteWidth = 10
 
 // petHeight is the number of lines the pet panel occupies:
-// 1 separator + 3 sprite lines + 1 trailing newline from View() = 5.
-const petHeight = 5
+// 3 sprite lines + 1 trailing newline from View() = 4.
+const petHeight = 4
 
 // petTickInterval controls the animation frame rate.
 const petTickInterval = 250 * time.Millisecond
@@ -31,22 +31,22 @@ const petTickInterval = 250 * time.Millisecond
 // petTickMsg is sent on each animation frame.
 type petTickMsg struct{}
 
-// Stick figure frames per state.
+// Red panda frames per state.
 var petFrames = map[petState][][]string{
 	petIdle: {
-		{" O ", "/|\\", "/ \\"},
-		{" O ", "/|\\", " | "},
+		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 	petWalking: {
-		{" O ", "/|\\", "/ \\"},
-		{" O ", "/|\\", " |\\"},
+		{" ^   ^", "(o . o) >", " /> <  ~"},
+		{" ^   ^", "(o . o)>", " > <\\  ~"},
 	},
 	petSitting: {
-		{" O ", "/|\\", "/  "},
+		{" ^   ^", "(o . o)", " (\" \")/~"},
 	},
 	petSleeping: {
-		{" O  ", "/|\\ z", "/  "},
-		{" O   ", "/|\\ zZ", "/  "},
+		{" ^   ^", "(- . -) z", " (u u)~"},
+		{" ^   ^", "(- . -) zZ", " (u u)~"},
 	},
 }
 

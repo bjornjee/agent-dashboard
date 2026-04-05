@@ -729,13 +729,8 @@ func (m model) renderLeftPanel() string {
 	}
 
 	if m.petEnabled {
-		separator := lipgloss.NewStyle().
-			Foreground(themeOverlay0).
-			Width(m.leftWidth + 2).
-			Render(strings.Repeat("─", m.leftWidth+2))
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			m.agentListVP.View(),
-			separator,
 			m.pet.View(),
 		)
 		return style.
