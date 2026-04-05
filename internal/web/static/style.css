@@ -1734,6 +1734,63 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .diff-toggle-btn[data-mode="side-by-side"] { display: none; }
 }
 
+/* Mobile diff summary (replaces diff viewer on narrow screens) */
+.mobile-diff-summary {
+  padding: var(--space-4);
+}
+.mobile-diff-stats {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+.mobile-diff-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-4);
+  max-height: 300px;
+  overflow-y: auto;
+}
+.mobile-diff-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+.mobile-diff-file-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.mobile-pr-link {
+  display: block;
+  text-align: center;
+  padding: 14px var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.mobile-pr-link--active {
+  background: var(--accent-green);
+  color: #fff;
+}
+.mobile-pr-link--active:hover {
+  background: var(--accent-green-hover, #1a7f37);
+}
+.mobile-pr-link--inactive {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-weight: 400;
+  font-size: 13px;
+}
+
 /* Mobile */
 @media (max-width: 480px) {
   .vital-signs {
