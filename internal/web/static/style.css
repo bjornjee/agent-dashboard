@@ -933,14 +933,9 @@ body {
 }
 
 /* Legacy activity entry styles (fallback) */
-.activity-entry { padding: 4px 0; line-height: 1.5; }
-.activity-entry.hidden { display: none; }
 .activity-time { color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; }
 .activity-kind { font-weight: 500; color: var(--text-secondary); }
 .tool-name { color: var(--code-text); font-family: var(--font-mono); }
-.activity-entry-content { color: var(--text-muted); font-size: 13px; margin-top: 2px; line-height: 20px; }
-.activity-entry-header { display: flex; align-items: center; gap: var(--space-2); }
-.activity-icon { display: inline-flex; align-items: center; width: 20px; justify-content: center; margin-right: 4px; color: var(--text-tertiary); }
 
 /* Activity filter pills */
 .activity-filter-bar {
