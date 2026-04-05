@@ -537,7 +537,6 @@ async function loadTabContent(tab, agentId) {
 
       // Wrap toggle
       const wrapInput = container.querySelector('.toggle-switch__input[data-key="diff-wrap-lines"]');
-      const diffContent = document.getElementById('diff-content');
       if (wrapInput && diffContent) {
         if (sessionStorage.getItem('diff-wrap-lines') === 'true') diffContent.classList.add('diff-wrap');
         wrapInput.addEventListener('change', () => {
