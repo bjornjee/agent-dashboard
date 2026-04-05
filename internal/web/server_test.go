@@ -720,3 +720,153 @@ func TestLogoutClearsCookie(t *testing.T) {
 	}
 	t.Error("expected session cookie to be cleared")
 }
+
+func TestSuggestionsEndpoint(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	// Point to empty dirs so no real ~/.z or sessions are loaded
+	cfg.Profile.SessionsDir = t.TempDir()
+	cfg.Profile.HomeDir = t.TempDir()
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/suggestions")
+	if err != nil {
+		t.Fatalf("GET /api/suggestions: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var suggestions []string
+	if err := json.NewDecoder(resp.Body).Decode(&suggestions); err != nil {
+		t.Fatalf("decode suggestions: %v", err)
+	}
+	// With empty sessions dir, should return empty array
+	if len(suggestions) != 0 {
+		t.Errorf("expected 0 suggestions, got %d", len(suggestions))
+	}
+}
+
+func TestSuggestionsWithZFile(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	cfg.Profile.SessionsDir = t.TempDir()
+
+	// Create real directories so DirExists passes
+	dirA := filepath.Join(t.TempDir(), "project-a")
+	dirB := filepath.Join(t.TempDir(), "project-b")
+	os.MkdirAll(dirA, 0700)
+	os.MkdirAll(dirB, 0700)
+
+	// Point home dir at a temp dir with a .z file
+	homeDir := t.TempDir()
+	cfg.Profile.HomeDir = homeDir
+	os.WriteFile(filepath.Join(homeDir, ".z"), []byte(
+		fmt.Sprintf("%s|100|1700000000\n%s|50|1700000000\n", dirA, dirB),
+	), 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/suggestions")
+	if err != nil {
+		t.Fatalf("GET /api/suggestions: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var suggestions []string
+	if err := json.NewDecoder(resp.Body).Decode(&suggestions); err != nil {
+		t.Fatalf("decode suggestions: %v", err)
+	}
+	if len(suggestions) != 2 {
+		t.Fatalf("expected 2 suggestions, got %d: %v", len(suggestions), suggestions)
+	}
+	// Higher rank should come first (both in same time bucket)
+	if suggestions[0] != dirA {
+		t.Errorf("expected %s first, got %s", dirA, suggestions[0])
+	}
+}
+
+func TestSuggestionsFiltersSensitivePaths(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	cfg.Profile.SessionsDir = t.TempDir()
+
+	// Create directories including sensitive ones
+	base := t.TempDir()
+	safeDir := filepath.Join(base, "my-project")
+	sshDir := filepath.Join(base, ".ssh")
+	awsDir := filepath.Join(base, ".aws")
+	os.MkdirAll(safeDir, 0700)
+	os.MkdirAll(sshDir, 0700)
+	os.MkdirAll(awsDir, 0700)
+
+	homeDir := t.TempDir()
+	cfg.Profile.HomeDir = homeDir
+	os.WriteFile(filepath.Join(homeDir, ".z"), []byte(
+		fmt.Sprintf("%s|100|1700000000\n%s|90|1700000000\n%s|80|1700000000\n", safeDir, sshDir, awsDir),
+	), 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/suggestions")
+	if err != nil {
+		t.Fatalf("GET /api/suggestions: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var suggestions []string
+	if err := json.NewDecoder(resp.Body).Decode(&suggestions); err != nil {
+		t.Fatalf("decode suggestions: %v", err)
+	}
+	if len(suggestions) != 1 {
+		t.Fatalf("expected 1 suggestion (sensitive filtered), got %d: %v", len(suggestions), suggestions)
+	}
+	if suggestions[0] != safeDir {
+		t.Errorf("expected %s, got %s", safeDir, suggestions[0])
+	}
+}
+
+func TestIsSensitivePath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/Users/me/.ssh", true},
+		{"/Users/me/.ssh/keys", true},
+		{"/Users/me/.aws", true},
+		{"/Users/me/.aws/config", true},
+		{"/Users/me/.gnupg", true},
+		{"/Users/me/.docker", true},
+		{"/Users/me/.kube", true},
+		{"/Users/me/.gitconfig", true},
+		{"/Users/me/.vimrc", true},
+		{"/Users/me/.vim", true},
+		{"/Users/me/.vim/plugged", true},
+		{"/Users/me/.zshrc", true},
+		{"/Users/me/.netrc", true},
+		{"/Users/me/.npmrc", true},
+		{"/Users/me/.gemini", true},
+		{"/Users/me/.Trash", true},
+		{"/Users/me/.Trash/old-stuff", true},
+		{"/Users/me/code/project", false},
+		{"/Users/me/.dotfiles", false},
+		{"/Users/me/.claude/plugins", false},
+		{"/Users/me/.config/ghostty", false},
+		{"/Users/me/.config/gcloud", true},
+		{"/Users/me/.config/gcloud/configs", true},
+	}
+	for _, tt := range tests {
+		if got := isSensitivePath(tt.path); got != tt.want {
+			t.Errorf("isSensitivePath(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}

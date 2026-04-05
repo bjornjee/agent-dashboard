@@ -148,6 +148,31 @@ func DirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+// RankAll returns all entry paths ranked by frecency, optionally filtering
+// out paths that fail pathExists. Unlike FilterZSuggestions, there is no
+// result cap — intended for use with client-side filtering (e.g. HTML datalist).
+func RankAll(entries []Entry, pathExists func(string) bool) []string {
+	type scored struct {
+		path  string
+		score float64
+	}
+	var matches []scored
+	for _, e := range entries {
+		if pathExists != nil && !pathExists(e.Path) {
+			continue
+		}
+		matches = append(matches, scored{path: e.Path, score: Frecency(e)})
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].score > matches[j].score
+	})
+	result := make([]string, len(matches))
+	for i, m := range matches {
+		result[i] = m.path
+	}
+	return result
+}
+
 // FilterZSuggestions returns up to 5 paths matching the query, ranked by frecency.
 // Matching is case-insensitive substring of the path.
 // If pathExists is non-nil, entries whose paths fail the check are excluded.

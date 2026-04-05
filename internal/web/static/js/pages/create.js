@@ -1,9 +1,10 @@
 // Create agent view.
 import { UI } from '../ui.js';
 import { escapeHtml } from '../format.js';
+import { get } from '../api.js';
 
 export function renderCreate(app, agents) {
-  const folders = [...new Set(agents.map(a => a.cwd).filter(Boolean))];
+  const agentFolders = [...new Set(agents.map(a => a.cwd).filter(Boolean))];
 
   app.innerHTML = UI.header('New Agent',
     UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
@@ -13,7 +14,7 @@ export function renderCreate(app, agents) {
         <label class="form-label">Folder</label>
         <input id="create-folder" class="action-input" style="width:100%" placeholder="/path/to/repo" list="folder-suggestions">
         <datalist id="folder-suggestions">
-          ${folders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
+          ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
         </datalist>
         <div class="form-hint" id="folder-hint"></div>
       </div>
@@ -36,6 +37,22 @@ export function renderCreate(app, agents) {
     </div>
   `;
 
+  // Fetch zsuggest entries and merge with agent folders
+  get('/api/suggestions').then(suggestions => {
+    if (!suggestions || !Array.isArray(suggestions)) return;
+    const datalist = document.getElementById('folder-suggestions');
+    if (!datalist) return;
+
+    // Merge: zsuggest first (frecency-ranked), then agent folders not already in the list
+    const seen = new Set(suggestions);
+    const merged = [...suggestions];
+    for (const f of agentFolders) {
+      if (!seen.has(f)) merged.push(f);
+    }
+
+    datalist.innerHTML = merged.map(f => `<option value="${escapeHtml(f)}">`).join('');
+  });
+
   const folderInput = document.getElementById('create-folder');
   const folderHint = document.getElementById('folder-hint');
   if (folderInput && folderHint) {
@@ -47,7 +64,7 @@ export function renderCreate(app, agents) {
       } else if (!val.startsWith('/')) {
         folderHint.textContent = 'Path should be absolute (start with /)';
         folderHint.className = 'form-hint form-hint-error';
-      } else if (folders.length > 0 && folders.includes(val)) {
+      } else if (agentFolders.length > 0 && agentFolders.includes(val)) {
         folderHint.textContent = 'Known folder';
         folderHint.className = 'form-hint form-hint-ok';
       } else {

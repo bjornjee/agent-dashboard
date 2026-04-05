@@ -66,5 +66,6 @@ func defaultClaudeProfile() domain.AgentProfile {
 		PlansDir:       filepath.Join(base, "plans"),
 		SessionsDir:    filepath.Join(base, "sessions"),
 		PluginCacheDir: filepath.Join(base, "plugins", "cache"),
+		HomeDir:        home,
 	}
 }
