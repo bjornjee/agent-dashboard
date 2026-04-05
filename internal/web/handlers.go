@@ -333,7 +333,17 @@ func (s *Server) handleDailyUsage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, dailyUsageResponse{})
 		return
 	}
-	since := time.Now().AddDate(0, 0, -7)
+	daysParam := r.URL.Query().Get("days")
+	numDays := 7
+	switch daysParam {
+	case "30":
+		numDays = 30
+	case "90":
+		numDays = 90
+	case "0":
+		numDays = 365 * 10 // all time
+	}
+	since := time.Now().AddDate(0, 0, -numDays)
 	days := s.db.CostByDay(since)
 	today := time.Now().Format("2006-01-02")
 

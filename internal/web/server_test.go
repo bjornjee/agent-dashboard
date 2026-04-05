@@ -486,6 +486,26 @@ func TestDailyUsageEndpoint(t *testing.T) {
 	}
 }
 
+func TestDailyUsageDaysParam(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	for _, days := range []string{"7", "30", "90", "0"} {
+		resp, err := http.Get(ts.URL + "/api/usage/daily?days=" + days)
+		if err != nil {
+			t.Fatalf("GET daily usage days=%s: %v", days, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("days=%s: expected 200, got %d", days, resp.StatusCode)
+		}
+	}
+}
+
 func TestSSEEndpoint(t *testing.T) {
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()

@@ -3,37 +3,69 @@ import { UI } from '../ui.js';
 import { escapeHtml, repoName, formatTokens, formatCostFull, formatDateShort } from '../format.js';
 import { get } from '../api.js';
 
+const RANGE_OPTIONS = [
+  { label: '7d', value: 7 },
+  { label: '30d', value: 30 },
+  { label: '90d', value: 90 },
+  { label: 'All', value: 0 },
+];
+
+const RANGE_LABELS = { 7: 'Last 7 days', 30: 'Last 30 days', 90: 'Last 90 days', 0: 'All time' };
+
+let currentAgents = [];
+let currentRange = 7;
+
 export async function renderUsage(app, agents) {
+  currentAgents = agents;
   app.innerHTML = UI.header('Usage',
     UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
   ) + '<div class="usage-view">' + UI.loadingBlock() + '</div>';
 
-  const data = await get('/api/usage/daily');
+  await loadUsageData();
+}
+
+// Exposed globally for onclick from dateRangeSelector
+window.Dashboard = window.Dashboard || {};
+window.Dashboard.setUsageRange = async function(days) {
+  if (days === currentRange) return;
+  currentRange = days;
+  const chartSection = document.getElementById('usage-chart-section');
+  if (chartSection) chartSection.innerHTML = UI.loadingBlock();
+  await loadUsageData();
+};
+
+async function loadUsageData() {
+  const data = await get('/api/usage/daily?days=' + currentRange);
   if (!data) return;
 
   const days = data.days || [];
   const todayStr = new Date().toISOString().slice(0, 10);
-  const weekTotal = days.reduce((sum, d) => sum + d.cost_usd, 0);
+  const periodTotal = days.reduce((sum, d) => sum + d.cost_usd, 0);
 
   // Delta: compare today vs yesterday
   const todayCost = data.today_cost || 0;
   const yesterday = days.length >= 2 ? days[days.length - 2] : null;
   const delta = buildDelta(todayCost, yesterday ? yesterday.cost_usd : null);
 
+  const periodLabel = currentRange === 0 ? 'All time' : 'This period';
   const metricsHtml = UI.metricsStrip([
     { label: 'Today', value: formatCostFull(todayCost), delta },
-    { label: 'This week', value: formatCostFull(weekTotal) },
+    { label: periodLabel, value: formatCostFull(periodTotal) },
     { label: 'All time', value: formatCostFull(data.total_cost || 0) },
   ]);
 
+  const rangeSelector = UI.dateRangeSelector(RANGE_OPTIONS, currentRange, 'Dashboard.setUsageRange');
   const chartHtml = buildChart(days, todayStr);
-  const chartCard = UI.chartContainer('Last 7 days', chartHtml);
+  const chartCard = UI.chartContainer(RANGE_LABELS[currentRange] || 'Usage', chartHtml, rangeSelector);
 
-  document.querySelector('.usage-view').innerHTML =
-    metricsHtml + chartCard +
+  const view = document.querySelector('.usage-view');
+  if (!view) return;
+  view.innerHTML =
+    metricsHtml +
+    '<div id="usage-chart-section">' + chartCard + '</div>' +
     '<div id="usage-agent-breakdown">' + UI.loadingBlock() + '</div>';
 
-  loadAgentBreakdown(agents);
+  loadAgentBreakdown(currentAgents);
 }
 
 function buildDelta(todayCost, yesterdayCost) {

@@ -814,9 +814,10 @@ body {
 .msg-human {
   max-width: 75%;
   margin-left: auto;
-  background: #2563EB;
-  color: #FFFFFF;
-  border-radius: 16px 16px 4px 16px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: var(--text-secondary);
+  border-radius: 14px 14px 4px 14px;
   align-self: flex-end;
 }
 
@@ -834,7 +835,7 @@ body {
   margin-top: 4px;
 }
 
-.msg-human .msg-time { color: rgba(255, 255, 255, 0.5); }
+.msg-human .msg-time { color: var(--text-tertiary); }
 
 .msg-assistant .markdown-body { color: var(--text-secondary); }
 .msg-assistant .markdown-body code { background: var(--code-bg); color: var(--code-text); }
@@ -1032,6 +1033,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   flex-wrap: wrap;
 }
 
+.diff-controls { display: flex; align-items: center; gap: 12px; }
 .diff-view-toggle { display: inline-flex; gap: 0; border-radius: var(--radius-sm); overflow: hidden; }
 .diff-toggle-btn {
   padding: 4px 12px;
