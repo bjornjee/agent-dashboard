@@ -704,8 +704,8 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-del .d2h-code-side-line del,
 .diff-content .d2h-del .d2h-code-line-ctn del { background: rgba(248, 113, 113, 0.30); text-decoration: none; border-radius: 2px; }
 
-/* Hunk/function context header */
-.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--accent-text); }
+/* Hide hunk headers — not useful without collapsible sections */
+.diff-content .d2h-info { display: none; }
 .diff-content .d2h-code-side-emptyplaceholder { background: var(--bg-surface); }
 
 /* Hide diff2html UI artifacts */
