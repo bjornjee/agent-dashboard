@@ -54,8 +54,10 @@ type diffResponse struct {
 }
 
 type diffFile struct {
-	Path   string `json:"path"`
-	Status string `json:"status"` // "added", "modified", "deleted"
+	Path      string `json:"path"`
+	Status    string `json:"status"` // "added", "modified", "deleted"
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
 }
 
 // findMergeBase returns the merge-base commit between HEAD and main/master,
@@ -109,14 +111,42 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Parse file list from diff
+	// Parse file list from diff with accurate status and line counts
 	var files []diffFile
-	for _, line := range strings.Split(string(out), "\n") {
+	lines := strings.Split(string(out), "\n")
+	for i, line := range lines {
 		if strings.HasPrefix(line, "diff --git") {
 			parts := strings.Fields(line)
 			if len(parts) >= 4 {
 				path := strings.TrimPrefix(parts[3], "b/")
-				files = append(files, diffFile{Path: path, Status: "modified"})
+				status := "modified"
+				// Scan lines after diff header for status indicators
+				for j := i + 1; j < len(lines) && j < i+5; j++ {
+					if strings.HasPrefix(lines[j], "new file mode") {
+						status = "added"
+						break
+					}
+					if strings.HasPrefix(lines[j], "deleted file mode") {
+						status = "deleted"
+						break
+					}
+					if strings.HasPrefix(lines[j], "diff --git") {
+						break
+					}
+				}
+				// Count additions and deletions for this file
+				adds, dels := 0, 0
+				for j := i + 1; j < len(lines); j++ {
+					if j > i && strings.HasPrefix(lines[j], "diff --git") {
+						break
+					}
+					if strings.HasPrefix(lines[j], "+") && !strings.HasPrefix(lines[j], "+++") {
+						adds++
+					} else if strings.HasPrefix(lines[j], "-") && !strings.HasPrefix(lines[j], "---") {
+						dels++
+					}
+				}
+				files = append(files, diffFile{Path: path, Status: status, Additions: adds, Deletions: dels})
 			}
 		}
 	}

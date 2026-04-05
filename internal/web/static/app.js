@@ -8,6 +8,19 @@
   let currentView = 'list'; // 'list' | 'detail' | 'usage' | 'create'
   let currentTab = 'conversation';
   let eventSource = null;
+  let activityFilter = 'all'; // 'all' | 'human' | 'assistant' | 'tool'
+
+  // --- SVG Icons ---
+  const ICONS = {
+    logo: '<svg width="24" height="24" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="var(--blue)"/><text x="256" y="360" font-family="-apple-system,system-ui,sans-serif" font-size="320" font-weight="700" fill="#232634" text-anchor="middle">A</text></svg>',
+    robot: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="8" width="18" height="12" rx="2"/><circle cx="9" cy="14" r="1.5"/><circle cx="15" cy="14" r="1.5"/><path d="M12 2v4M8 8V6a4 4 0 018 0v2"/></svg>',
+    chat: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+    clipboard: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',
+    fileDiff: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="12" y1="12" x2="12" y2="18"/></svg>',
+    activity: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>',
+    chart: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+    subagent: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/></svg>',
+  };
 
   // --- API helpers ---
   async function api(method, path, body) {
@@ -94,9 +107,107 @@
     return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
   }
 
+  function durationFromTimestamp(ts) {
+    if (!ts) return '';
+    const start = new Date(ts);
+    const now = new Date();
+    const mins = Math.floor((now - start) / 60000);
+    if (mins < 60) return mins + 'm';
+    return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  }
+
   function escapeHtml(s) {
     if (!s) return '';
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Format ISO timestamp to relative or short absolute
+  function formatTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return escapeHtml(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return diffMins + 'm ago';
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return diffHours + 'h ago';
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) + ', ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  // Format ISO timestamp to HH:MM:SS
+  function formatTimeShort(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  }
+
+  // Strip markdown markers for plain-text previews
+  function stripMarkdown(s) {
+    if (!s) return '';
+    return s
+      .replace(/```[\s\S]*?```/g, '')   // fenced code blocks
+      .replace(/`([^`]+)`/g, '$1')       // inline code
+      .replace(/^#{1,6}\s+/gm, '')       // headings
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
+      .replace(/__([^_]+)__/g, '$1')     // bold alt
+      .replace(/\*([^*]+)\*/g, '$1')     // italic
+      .replace(/_([^_]+)_/g, '$1')       // italic alt
+      .replace(/^[-*+]\s+/gm, '')        // list markers
+      .replace(/\n{2,}/g, ' ')           // collapse blank lines
+      .replace(/\n/g, ' ')              // single newlines to space
+      .trim();
+  }
+
+  // Consistent empty state with icon
+  function emptyState(icon, title, subtitle) {
+    return `<div class="empty-state">${icon}<div class="empty-state-title">${escapeHtml(title)}</div><div class="empty-state-subtitle">${escapeHtml(subtitle)}</div></div>`;
+  }
+
+  // Skeleton loading blocks
+  function skeletonLoading(count) {
+    let html = '<div style="padding:12px">';
+    for (let i = 0; i < count; i++) {
+      const w = 40 + Math.random() * 50;
+      const align = i % 2 === 0 ? 'margin-left:auto' : '';
+      html += `<div class="skeleton skeleton-block" style="width:${w}%;${align}"></div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // Markdown rendering via marked.js with DOMPurify sanitization
+  function renderMarkdown(md) {
+    if (typeof marked !== 'undefined') {
+      try {
+        const raw = marked.parse(md);
+        const safe = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(raw) : escapeHtml(md);
+        return '<div class="markdown-body">' + safe + '</div>';
+      } catch (e) { /* fallback */ }
+    }
+    // Fallback: basic regex rendering
+    let html = escapeHtml(md);
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/\n/g, '<br>');
+    return '<div class="markdown-body">' + html + '</div>';
+  }
+
+  // Activity kind icons
+  function kindIcon(kind) {
+    switch (kind) {
+      case 'human': return '<span class="activity-icon">&#128100;</span>';
+      case 'assistant': return '<span class="activity-icon">&#129302;</span>';
+      case 'tool': return '<span class="activity-icon">&#128295;</span>';
+      default: return '<span class="activity-icon">&#8226;</span>';
+    }
   }
 
   // --- Render: Agent List ---
@@ -112,26 +223,26 @@
     const order = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
     let html = `
       <div class="header">
-        <h1>Agent Dashboard</h1>
+        <h1>${ICONS.logo} Agent Dashboard</h1>
         <div class="header-actions">
-          <button class="header-btn" onclick="Dashboard.showUsage()">Usage</button>
-          <button class="header-btn" onclick="Dashboard.showCreate()">+ New</button>
+          <button class="btn-ghost" onclick="Dashboard.showUsage()">Usage</button>
+          <button class="btn-ghost" onclick="Dashboard.showCreate()">+ New</button>
         </div>
       </div>
       <div class="agent-list">
     `;
 
     if (agents.length === 0) {
-      html += `<div class="empty-state"><h2>No agents running</h2><p>Create a new agent to get started</p></div>`;
+      html += emptyState(ICONS.robot, 'No agents running', 'Create a new agent to get started');
     }
 
     for (const group of order) {
       if (!grouped[group] || grouped[group].length === 0) continue;
-      html += `<div class="state-group"><div class="state-group-label">${group} (${grouped[group].length})</div>`;
+      html += `<div class="state-group"><div class="state-group-label"><span class="state-dot state-dot-${group}"></span>${group} (${grouped[group].length})</div>`;
       for (const agent of grouped[group]) {
         const st = effectiveState(agent);
         html += `
-          <div class="agent-card" onclick="Dashboard.selectAgent('${agent.session_id}')">
+          <div class="agent-card agent-card-border-${st}" onclick="Dashboard.selectAgent('${agent.session_id}')">
             <div class="agent-card-header">
               <span class="agent-name">${escapeHtml(repoName(agent))}</span>
               <span class="badge badge-${st}">${st}</span>
@@ -142,7 +253,7 @@
               ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
               ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
             </div>
-            ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(agent.last_message_preview) + '</div>' : ''}
+            ${agent.last_message_preview ? '<div class="agent-preview">' + escapeHtml(stripMarkdown(agent.last_message_preview)) + '</div>' : ''}
           </div>
         `;
       }
@@ -182,12 +293,12 @@
         <button class="tab" data-tab="files">Files</button>
         <button class="tab" data-tab="subagents">Subagents</button>
       </div>
-      <div id="tab-conversation" class="tab-content active"><div class="loading"><span class="spinner"></span></div></div>
-      <div id="tab-activity" class="tab-content"><div class="loading"><span class="spinner"></span></div></div>
-      <div id="tab-diff" class="tab-content"><div class="loading"><span class="spinner"></span></div></div>
-      <div id="tab-plan" class="tab-content"><div class="loading"><span class="spinner"></span></div></div>
+      <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
+      <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
+      <div id="tab-diff" class="tab-content">${skeletonLoading(3)}</div>
+      <div id="tab-plan" class="tab-content">${skeletonLoading(3)}</div>
       <div id="tab-files" class="tab-content"></div>
-      <div id="tab-subagents" class="tab-content"><div class="loading"><span class="spinner"></span></div></div>
+      <div id="tab-subagents" class="tab-content">${skeletonLoading(2)}</div>
       ${renderActionBar(agent)}
     `;
 
@@ -217,16 +328,25 @@
       case 'conversation': {
         const entries = await get('/api/agents/' + agentId + '/conversation');
         if (!entries || entries.length === 0) {
-          container.innerHTML = '<div class="empty-state"><p>No conversation yet</p></div>';
+          container.innerHTML = emptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
           return;
         }
         let html = '<div class="conversation">';
+        let lastRole = '';
         for (const entry of entries) {
           const role = entry.Role || entry.role;
-          const cls = role === 'human' ? 'msg-human' : 'msg-assistant';
           const content = entry.Content || entry.content || '';
           const time = entry.Timestamp || entry.timestamp || '';
-          html += `<div class="msg ${cls}">${escapeHtml(content)}<div class="msg-time">${escapeHtml(time)}</div></div>`;
+          // Role label when role changes
+          if (role !== lastRole) {
+            html += `<div class="msg-role-label">${role === 'human' ? 'You' : 'Claude'}</div>`;
+            lastRole = role;
+          }
+          if (role === 'human') {
+            html += `<div class="msg msg-human">${escapeHtml(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+          } else {
+            html += `<div class="msg msg-assistant">${renderMarkdown(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+          }
         }
         html += '</div>';
         container.innerHTML = html;
@@ -236,36 +356,73 @@
       case 'activity': {
         const entries = await get('/api/agents/' + agentId + '/activity');
         if (!entries || entries.length === 0) {
-          container.innerHTML = '<div class="empty-state"><p>No activity yet</p></div>';
+          container.innerHTML = emptyState(ICONS.activity, 'No activity yet', 'Tool calls and messages will appear here');
           return;
         }
-        let html = '<div class="activity-log">';
+        // Filter bar
+        let html = '<div class="activity-filter-bar">';
+        for (const f of ['all', 'human', 'assistant', 'tool']) {
+          html += `<button class="activity-filter-btn${activityFilter === f ? ' active' : ''}" data-filter="${f}">${f}</button>`;
+        }
+        html += '</div>';
+        html += '<div class="activity-log">';
+        let lastKind = '';
         for (const e of entries) {
           const kind = e.Kind || e.kind || 'tool';
+          const content = e.Content || e.content || '';
+          const time = e.Timestamp || e.timestamp || '';
           const cls = 'activity-' + kind;
-          html += `<div class="activity-entry"><span class="activity-time">[${escapeHtml(e.Timestamp || e.timestamp || '')}]</span> <span class="${cls}">${escapeHtml(e.Content || e.content || '')}</span></div>`;
+          // Separator between turns (when going back to human)
+          if (kind === 'human' && lastKind && lastKind !== 'human') {
+            html += '<hr class="activity-separator">';
+          }
+          lastKind = kind;
+          // Truncation for long entries
+          const truncated = content.length > 200;
+          const displayContent = truncated ? content.substring(0, 200) + '...' : content;
+          html += `<div class="activity-entry" data-kind="${kind}">`
+            + kindIcon(kind)
+            + `<span class="activity-time">${formatTimeShort(time)}</span> `
+            + `<span class="${cls}" data-full="${escapeHtml(content)}" data-truncated="true">${escapeHtml(displayContent)}</span>`
+            + (truncated ? ` <button class="activity-expand-btn" onclick="Dashboard.toggleExpand(this)">Show more</button>` : '')
+            + `</div>`;
         }
         html += '</div>';
         container.innerHTML = html;
+        // Apply current filter
+        applyActivityFilter(container);
+        // Filter button handlers
+        container.querySelectorAll('.activity-filter-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            activityFilter = btn.dataset.filter;
+            container.querySelectorAll('.activity-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyActivityFilter(container);
+          });
+        });
         break;
       }
       case 'diff': {
         const data = await get('/api/agents/' + agentId + '/diff');
         if (!data || !data.raw) {
-          container.innerHTML = '<div class="empty-state"><p>No diff available</p></div>';
+          container.innerHTML = emptyState(ICONS.fileDiff, 'No diff available', 'Changes will appear here once the agent modifies files');
           return;
         }
 
-        // Build file sidebar from parsed files
+        // Build file sidebar from parsed files (stats come from server)
         const files = data.files || [];
         let sidebarHtml = '<div class="diff-sidebar"><div class="diff-sidebar-header">Files (' + files.length + ')</div>';
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
           const name = f.path.split('/').pop();
           const dir = f.path.substring(0, f.path.length - name.length);
-          sidebarHtml += '<div class="diff-sidebar-file" data-file-idx="' + i + '">'
-            + '<span class="diff-sidebar-dir">' + escapeHtml(dir) + '</span>'
-            + '<span class="diff-sidebar-name">' + escapeHtml(name) + '</span>'
+          const status = f.status || 'modified';
+          const adds = f.additions || 0;
+          const dels = f.deletions || 0;
+          sidebarHtml += '<div class="diff-sidebar-file' + (i === 0 ? ' active' : '') + '" data-file-idx="' + i + '" title="' + escapeHtml(f.path) + '">'
+            + '<span class="diff-status-dot diff-status-dot-' + status + '"></span>'
+            + '<span class="diff-sidebar-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(dir) + '<strong>' + escapeHtml(name) + '</strong></span>'
+            + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
             + '</div>';
         }
         sidebarHtml += '</div>';
@@ -296,12 +453,16 @@
             }
           });
         });
+
+        // Auto-scroll to first file
+        const firstWrapper = diffTarget.querySelector('.d2h-file-wrapper');
+        if (firstWrapper) firstWrapper.scrollIntoView({ block: 'start' });
         break;
       }
       case 'plan': {
         const data = await get('/api/agents/' + agentId + '/plan');
         if (!data || !data.content) {
-          container.innerHTML = '<div class="empty-state"><p>No plan available</p></div>';
+          container.innerHTML = emptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
           return;
         }
         container.innerHTML = '<div class="plan-content">' + renderMarkdown(data.content) + '</div>';
@@ -310,16 +471,31 @@
       case 'subagents': {
         const subs = await get('/api/agents/' + agentId + '/subagents');
         if (!subs || subs.length === 0) {
-          container.innerHTML = '<div class="empty-state"><p>No subagents</p></div>';
+          container.innerHTML = emptyState(ICONS.subagent, 'No subagents', 'Subagents appear when the main agent delegates work');
           return;
         }
         let html = '<div class="subagent-list">';
         for (const sub of subs) {
-          const icon = sub.Completed || sub.completed ? '&#10003;' : '&#9654;';
-          const cls = sub.Completed || sub.completed ? 'subagent-icon-completed' : 'subagent-icon-running';
-          const type = sub.AgentType || sub.agent_type || '';
+          const completed = sub.Completed || sub.completed;
+          const type = sub.AgentType || sub.agent_type || 'agent';
           const desc = sub.Description || sub.description || '';
-          html += `<div class="subagent-item"><span class="${cls}">${icon}</span> <strong>${escapeHtml(type)}</strong>: ${escapeHtml(desc)}</div>`;
+          const startedAt = sub.StartedAt || sub.started_at || '';
+          const statusBadge = completed
+            ? '<span class="badge badge-done">completed</span>'
+            : '<span class="badge badge-running">running</span>';
+          const icon = completed ? '&#10003;' : '&#9654;';
+          const iconColor = completed ? 'var(--green)' : 'var(--blue)';
+          html += `<div class="subagent-card">
+            <div class="subagent-card-icon" style="color:${iconColor}">${icon}</div>
+            <div class="subagent-card-body">
+              <div class="subagent-card-title">${escapeHtml(type)} ${statusBadge}</div>
+              ${desc ? '<div class="subagent-card-desc">' + escapeHtml(desc) + '</div>' : ''}
+              <div class="subagent-card-meta">
+                ${startedAt ? '<span>' + formatTime(startedAt) + '</span>' : ''}
+                ${startedAt ? '<span>' + durationFromTimestamp(startedAt) + '</span>' : ''}
+              </div>
+            </div>
+          </div>`;
         }
         html += '</div>';
         container.innerHTML = html;
@@ -328,44 +504,66 @@
     }
   }
 
+  // Apply activity filter
+  function applyActivityFilter(container) {
+    container.querySelectorAll('.activity-entry').forEach(el => {
+      if (activityFilter === 'all' || el.dataset.kind === activityFilter) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+  }
+
   function renderFilesTab(agent) {
     const container = document.getElementById('tab-files');
     if (!container) return;
     const files = agent.files_changed || [];
     if (files.length === 0) {
-      container.innerHTML = '<div class="empty-state"><p>No files changed</p></div>';
+      container.innerHTML = emptyState(ICONS.fileDiff, 'No files changed', 'Modified files will appear here');
       return;
     }
-    let html = '<div class="files-list">';
-    for (const f of files) {
-      let cls = 'file-modified';
-      if (f.startsWith('+')) cls = 'file-added';
-      else if (f.startsWith('-')) cls = 'file-deleted';
-      html += `<div class="file-item ${cls}">${escapeHtml(f)}</div>`;
+
+    // Parse files and group by directory
+    const parsed = files.map(f => {
+      let status = 'modified';
+      let name = f;
+      if (f.startsWith('+')) { status = 'added'; name = f.substring(1); }
+      else if (f.startsWith('-')) { status = 'deleted'; name = f.substring(1); }
+      else if (f.startsWith('~')) { name = f.substring(1); }
+      const parts = name.split('/');
+      const fileName = parts.pop();
+      const dir = parts.join('/') || '.';
+      return { status, name, fileName, dir, original: f };
+    });
+
+    // Group by directory
+    const dirs = {};
+    for (const f of parsed) {
+      if (!dirs[f.dir]) dirs[f.dir] = [];
+      dirs[f.dir].push(f);
+    }
+
+    let html = `<div class="files-summary">${files.length} file${files.length !== 1 ? 's' : ''} changed</div>`;
+    html += '<div class="files-list">';
+    for (const [dir, dirFiles] of Object.entries(dirs)) {
+      html += `<details class="files-dir-group" open><summary>${escapeHtml(dir)}/</summary>`;
+      for (const f of dirFiles) {
+        html += `<div class="file-item" data-file-name="${escapeHtml(f.name)}">`
+          + `<span class="file-status-icon file-status-${f.status}"></span>`
+          + escapeHtml(f.fileName)
+          + `</div>`;
+      }
+      html += '</details>';
     }
     html += '</div>';
     container.innerHTML = html;
-  }
-
-
-  function renderMarkdown(md) {
-    // Basic markdown rendering — headings, code blocks, bold, lists
-    let html = escapeHtml(md);
-    // Code blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Headers
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    // Lists
-    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-    // Line breaks
-    html = html.replace(/\n/g, '<br>');
-    return html;
+    // Attach click handlers via addEventListener (avoids onclick injection)
+    container.querySelectorAll('.file-item[data-file-name]').forEach(el => {
+      el.addEventListener('click', () => {
+        Dashboard.goToFileDiff(el.dataset.fileName);
+      });
+    });
   }
 
   // --- Action bar ---
@@ -425,9 +623,9 @@
     currentView = 'usage';
     app.innerHTML = `
       <div class="header">
-        <h1>Usage</h1>
+        <h1>${ICONS.logo} Usage</h1>
         <div class="header-actions">
-          <button class="header-btn" onclick="Dashboard.showList()">&larr; Back</button>
+          <button class="btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
         </div>
       </div>
       <div class="usage-view"><div class="loading"><span class="spinner"></span></div></div>
@@ -439,27 +637,42 @@
     const days = data.days || [];
     const maxCost = Math.max(...days.map(d => d.cost_usd), 0.01);
 
+    // Y-axis labels
+    const ySteps = 4;
+    let yAxisHtml = '<div class="usage-y-axis">';
+    for (let i = ySteps; i >= 0; i--) {
+      const val = (maxCost / ySteps * i);
+      yAxisHtml += `<span class="usage-y-label">$${val < 1 ? val.toFixed(2) : val.toFixed(1)}</span>`;
+    }
+    yAxisHtml += '</div>';
+
     let chartHtml = '<div class="usage-chart">';
     for (const day of days) {
       const height = Math.max(2, (day.cost_usd / maxCost) * 100);
       const label = day.date.slice(5); // MM-DD
-      chartHtml += `<div class="usage-bar" style="height:${height}%"><span class="usage-bar-label">${label}</span></div>`;
+      const value = '$' + day.cost_usd.toFixed(2);
+      chartHtml += `<div class="usage-bar" style="height:${height}%"><span class="usage-bar-value">${value}</span><span class="usage-bar-label">${label}</span></div>`;
     }
     chartHtml += '</div>';
 
     document.querySelector('.usage-view').innerHTML = `
       <div class="usage-summary">
         <div class="usage-card">
+          <div class="usage-card-icon">&#128197;</div>
           <div class="usage-card-value">$${(data.today_cost || 0).toFixed(2)}</div>
           <div class="usage-card-label">Today</div>
         </div>
         <div class="usage-card">
+          <div class="usage-card-icon">&#8721;</div>
           <div class="usage-card-value">$${(data.total_cost || 0).toFixed(2)}</div>
           <div class="usage-card-label">All Time</div>
         </div>
       </div>
-      <h3 style="margin-bottom:8px">Last 7 Days</h3>
-      ${chartHtml}
+      <h3 class="usage-chart-title">Last 7 Days</h3>
+      <div class="usage-chart-container">
+        ${yAxisHtml}
+        ${chartHtml}
+      </div>
     `;
   }
 
@@ -471,28 +684,28 @@
 
     app.innerHTML = `
       <div class="header">
-        <h1>New Agent</h1>
+        <h1>${ICONS.logo} New Agent</h1>
         <div class="header-actions">
-          <button class="header-btn" onclick="Dashboard.showList()">&larr; Back</button>
+          <button class="btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
         </div>
       </div>
-      <div style="padding:16px">
-        <div style="margin-bottom:16px">
-          <label style="display:block;font-size:13px;color:var(--subtext0);margin-bottom:4px">Folder</label>
+      <div class="create-form-card">
+        <div class="form-group">
+          <label class="form-label">Folder</label>
           <input id="create-folder" class="action-input" style="width:100%" placeholder="/path/to/repo" list="folder-suggestions">
           <datalist id="folder-suggestions">
             ${folders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
           </datalist>
         </div>
-        <div style="margin-bottom:16px">
-          <label style="display:block;font-size:13px;color:var(--subtext0);margin-bottom:4px">Skill (optional)</label>
+        <div class="form-group">
+          <label class="form-label">Skill (optional)</label>
           <input id="create-skill" class="action-input" style="width:100%" placeholder="e.g. feature, chore">
         </div>
-        <div style="margin-bottom:16px">
-          <label style="display:block;font-size:13px;color:var(--subtext0);margin-bottom:4px">Message (optional)</label>
+        <div class="form-group">
+          <label class="form-label">Message (optional)</label>
           <textarea id="create-message" class="action-input" style="width:100%;min-height:80px;resize:vertical" placeholder="What should the agent do?"></textarea>
         </div>
-        <button class="action-btn action-btn-approve" style="width:100%;max-width:none" onclick="Dashboard.createAgent()">Create Agent</button>
+        <button class="btn-primary" style="width:100%" onclick="Dashboard.createAgent()">Create Agent</button>
       </div>
     `;
   }
@@ -570,10 +783,8 @@
     },
 
     openPR(id) {
-      // TODO: construct GitHub PR URL from agent branch
       const agent = agents.find(a => a.session_id === id);
       if (agent && agent.branch) {
-        // Try to open GitHub compare page
         toast('Opening PR page...', 'success');
       }
     },
@@ -596,7 +807,54 @@
         toast('Failed: ' + (result?.error || 'unknown'), 'error');
       }
     },
+
+    // Toggle expand/collapse for truncated activity entries
+    toggleExpand(btn) {
+      const span = btn.previousElementSibling;
+      if (!span) return;
+      const full = span.getAttribute('data-full');
+      const isTruncated = span.getAttribute('data-truncated') === 'true';
+      if (isTruncated) {
+        span.textContent = full;
+        span.setAttribute('data-truncated', 'false');
+        btn.textContent = 'Show less';
+      } else {
+        span.textContent = full.substring(0, 200) + '...';
+        span.setAttribute('data-truncated', 'true');
+        btn.textContent = 'Show more';
+      }
+    },
+
+    // Navigate from Files tab to Diff tab and scroll to file
+    goToFileDiff(fileName) {
+      // Switch to diff tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      const diffTab = document.querySelector('.tab[data-tab="diff"]');
+      const diffContent = document.getElementById('tab-diff');
+      if (diffTab && diffContent) {
+        diffTab.classList.add('active');
+        diffContent.classList.add('active');
+        currentTab = 'diff';
+        // Find matching file in sidebar and click it
+        const sidebarFiles = diffContent.querySelectorAll('.diff-sidebar-file');
+        for (const el of sidebarFiles) {
+          if (el.getAttribute('title') === fileName || el.getAttribute('title')?.endsWith(fileName)) {
+            el.click();
+            break;
+          }
+        }
+      }
+    },
   };
+
+  // Configure marked.js if available
+  if (typeof marked !== 'undefined') {
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+    });
+  }
 
   // --- Init ---
   async function init() {
