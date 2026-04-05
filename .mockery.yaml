@@ -1,0 +1,10 @@
+with-expecter: false
+dir: internal/mocks
+outpkg: mocks
+packages:
+  github.com/bjornjee/agent-dashboard/internal/tmux:
+    interfaces:
+      Runner:
+  github.com/bjornjee/agent-dashboard/internal/tui:
+    interfaces:
+      GitRunner:

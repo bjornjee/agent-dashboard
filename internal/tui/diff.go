@@ -3,7 +3,6 @@ package tui
 import (
 	"bytes"
 	"context"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -23,7 +22,7 @@ func findMergeBase(dir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
-		out, err := exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "HEAD", base).Output()
+		out, err := gitRunner.Output(ctx, "git", "-C", dir, "merge-base", "HEAD", base)
 		if err == nil {
 			if s := bytes.TrimSpace(out); len(s) > 0 {
 				return string(s)
@@ -37,14 +36,14 @@ func findMergeBase(dir string) string {
 // files so that newly created files appear in the diff viewer.
 func loadDiff(ctx context.Context, dir string) ([]*gitdiff.File, error) {
 	base := findMergeBase(dir)
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", base).Output()
+	out, err := gitRunner.Output(ctx, "git", "-C", dir, "diff", base)
 	if err != nil {
 		return nil, err
 	}
 
 	// Also collect untracked files so new files show in the diff.
-	untrackedOut, err := exec.CommandContext(ctx, "git", "-C", dir,
-		"ls-files", "--others", "--exclude-standard").Output()
+	untrackedOut, err := gitRunner.Output(ctx, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard")
 	if err == nil && len(bytes.TrimSpace(untrackedOut)) > 0 {
 		// Generate a unified diff for each untracked file via git diff --no-index.
 		for _, name := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
@@ -53,8 +52,8 @@ func loadDiff(ctx context.Context, dir string) ([]*gitdiff.File, error) {
 			}
 			// git diff --no-index /dev/null <file> exits 1 when there are diffs,
 			// so we ignore the exit code and just use stdout.
-			patch, _ := exec.CommandContext(ctx, "git", "-C", dir,
-				"diff", "--no-index", "--", "/dev/null", name).Output()
+			patch, _ := gitRunner.Output(ctx, "git", "-C", dir,
+				"diff", "--no-index", "--", "/dev/null", name)
 			if len(patch) > 0 {
 				out = append(out, patch...)
 			}

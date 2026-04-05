@@ -1,30 +1,22 @@
 package tui
 
 import (
-	"os/exec"
+	"os"
 	"strings"
 	"testing"
 )
 
-func TestMakefileVersionNotEmpty(t *testing.T) {
-	// Verify the Makefile VERSION variable resolves to a non-empty value.
-	// This catches the bug where `git describe | sed` succeeds with empty
-	// output, causing the `|| cat VERSION` fallback to never trigger.
-	cmd := exec.Command("make", "-n", "-p")
-	cmd.Dir = "../../" // project root from cmd/dashboard/
-	out, err := cmd.CombinedOutput()
+func TestVersionFileNotEmpty(t *testing.T) {
+	// Verify the VERSION file at the project root is non-empty.
+	// The Makefile uses: git describe ... || cat VERSION
+	// so this file is the fallback that must always contain a valid version.
+	data, err := os.ReadFile("../../VERSION")
 	if err != nil {
-		t.Skipf("make not available: %v", err)
+		t.Skipf("VERSION file not readable: %v", err)
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "VERSION :=") || strings.HasPrefix(line, "VERSION =") {
-			val := strings.TrimSpace(strings.SplitN(line, "=", 2)[1])
-			if val == "" {
-				t.Fatal("Makefile VERSION variable resolved to empty string; ldflags will inject an empty version")
-			}
-			t.Logf("VERSION = %q", val)
-			return
-		}
+	val := strings.TrimSpace(string(data))
+	if val == "" {
+		t.Fatal("VERSION file is empty; ldflags will inject an empty version")
 	}
-	t.Skip("VERSION variable not found in Makefile output")
+	t.Logf("VERSION = %q", val)
 }

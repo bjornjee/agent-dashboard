@@ -1,36 +1,27 @@
 package tmux
 
 import (
-	"context"
-	"github.com/bjornjee/agent-dashboard/internal/domain"
-	"os/exec"
-	"strings"
 	"testing"
-	"time"
+
+	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/stretchr/testify/mock"
 )
 
-// runTmux is a test helper that runs a tmux command with a timeout.
-func runTmux(args ...string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, "tmux", args...).Run()
+// withMockRunner swaps the package-level runner with a testify mock
+// and restores the real ExecRunner when the test finishes.
+func withMockRunner(t *testing.T) *mocks.MockRunner {
+	t.Helper()
+	m := mocks.NewMockRunner(t)
+	orig := runner
+	runner = m
+	t.Cleanup(func() { runner = orig })
+	return m
 }
 
-// tmuxFirstWindow returns the first window index in a session (respects base-index).
-func tmuxFirstWindow(session string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-t", session,
-		"-F", "#{window_index}").Output()
-	if err != nil {
-		return "0"
-	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) > 0 {
-		return lines[0]
-	}
-	return "0"
-}
+// ---------------------------------------------------------------------------
+// Pure unit tests (no tmux interaction)
+// ---------------------------------------------------------------------------
 
 func TestValidateTarget(t *testing.T) {
 	valid := []string{
@@ -255,192 +246,6 @@ func Test_parsePaneTargetsOutput(t *testing.T) {
 	}
 }
 
-func TestTmuxResolvePaneID_EnvSet(t *testing.T) {
-	t.Setenv("TMUX_PANE", "%42")
-	got := TmuxResolvePaneID()
-	if got != "%42" {
-		t.Errorf("TmuxResolvePaneID() = %q, want %%42", got)
-	}
-}
-
-func TestTmuxResolvePaneID_EnvEmpty(t *testing.T) {
-	if !TmuxIsAvailable() {
-		t.Skip("tmux not available")
-	}
-	t.Setenv("TMUX_PANE", "")
-	got := TmuxResolvePaneID()
-	// When TMUX_PANE is unset, display-message only works if the test
-	// process is running inside an attached tmux client. If not (e.g.
-	// worktrees, CI, detached sessions), it returns empty — that's fine.
-	if got != "" && got[0] != '%' {
-		t.Errorf("TmuxResolvePaneID() = %q, expected %%N format", got)
-	}
-}
-
-func TestTmuxNewWindow_MultipleWindows(t *testing.T) {
-	if !TmuxIsAvailable() {
-		t.Skip("tmux not available")
-	}
-
-	// Regression test: TmuxNewWindow must work when the session already has
-	// multiple windows. Previously, passing "-t session" (without trailing
-	// colon) caused tmux to try inserting at the current window index,
-	// failing with "index N in use" when a client was attached.
-	session := "test-new-window"
-	dir := t.TempDir()
-
-	if err := runTmux("new-session", "-d", "-s", session, "-x", "80", "-y", "24"); err != nil {
-		t.Fatalf("new-session: %v", err)
-	}
-	defer runTmux("kill-session", "-t", session)
-
-	// Fill up several windows
-	_ = runTmux("new-window", "-t", session+":")
-	_ = runTmux("new-window", "-t", session+":")
-
-	target, err := TmuxNewWindow(session, "test-win", dir)
-	if err != nil {
-		t.Fatalf("TmuxNewWindow failed: %v", err)
-	}
-	if target == "" {
-		t.Fatal("expected non-empty target")
-	}
-	if err := ValidateTarget(target); err != nil {
-		t.Errorf("returned invalid target %q: %v", target, err)
-	}
-}
-
-func TestTmuxZoomPane(t *testing.T) {
-	if !TmuxIsAvailable() {
-		t.Skip("tmux not available")
-	}
-
-	session := "test-zoom-pane"
-	dir := t.TempDir()
-
-	if err := runTmux("new-session", "-d", "-s", session, "-x", "80", "-y", "24", "-c", dir); err != nil {
-		t.Fatalf("new-session: %v", err)
-	}
-	defer runTmux("kill-session", "-t", session)
-
-	// Create a second pane so zoom is meaningful
-	winIdx := tmuxFirstWindow(session)
-	sw := session + ":" + winIdx
-	if err := runTmux("split-window", "-t", sw, "-c", dir, "-d"); err != nil {
-		t.Fatalf("split-window: %v", err)
-	}
-
-	// Get the first pane's actual index (respects pane-base-index)
-	ctx0, cancel0 := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel0()
-	paneOut, err := exec.CommandContext(ctx0, "tmux", "list-panes", "-t", sw,
-		"-F", "#{pane_index}").Output()
-	if err != nil {
-		t.Fatalf("list-panes: %v", err)
-	}
-	firstPane := strings.Split(strings.TrimSpace(string(paneOut)), "\n")[0]
-	target := sw + "." + firstPane
-
-	if err := TmuxZoomPane(target); err != nil {
-		t.Fatalf("TmuxZoomPane failed: %v", err)
-	}
-
-	// Verify the pane is zoomed
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux",
-		"display-message", "-p", "-t", target, "#{window_zoomed_flag}").Output()
-	if err != nil {
-		t.Fatalf("display-message failed: %v", err)
-	}
-	if strings.TrimSpace(string(out)) != "1" {
-		t.Errorf("expected pane to be zoomed (flag=1), got %q", strings.TrimSpace(string(out)))
-	}
-}
-
-func TestTmuxSplitWindow_AppliesEvenLayout(t *testing.T) {
-	if !TmuxIsAvailable() {
-		t.Skip("tmux not available")
-	}
-
-	session := "test-split-layout"
-	dir := t.TempDir()
-
-	if err := runTmux("new-session", "-d", "-s", session, "-x", "80", "-y", "24", "-c", dir); err != nil {
-		t.Fatalf("new-session: %v", err)
-	}
-	defer runTmux("kill-session", "-t", session)
-
-	winIdx := tmuxFirstWindow(session)
-	sw := session + ":" + winIdx
-	_, err := TmuxSplitWindow(sw, dir)
-	if err != nil {
-		t.Fatalf("TmuxSplitWindow failed: %v", err)
-	}
-
-	// After split + even layout, both panes should exist
-	count, err := TmuxCountPanes(sw)
-	if err != nil {
-		t.Fatalf("TmuxCountPanes failed: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("expected 2 panes, got %d", count)
-	}
-}
-
-func TestTmuxKillPane_AppliesEvenLayout(t *testing.T) {
-	if !TmuxIsAvailable() {
-		t.Skip("tmux not available")
-	}
-
-	session := "test-kill-layout"
-	dir := t.TempDir()
-
-	if err := runTmux("new-session", "-d", "-s", session, "-x", "80", "-y", "24", "-c", dir); err != nil {
-		t.Fatalf("new-session: %v", err)
-	}
-	defer runTmux("kill-session", "-t", session)
-
-	// Create 3 panes total
-	winIdx := tmuxFirstWindow(session)
-	sw := session + ":" + winIdx
-	if err := runTmux("split-window", "-t", sw, "-c", dir, "-d"); err != nil {
-		t.Fatalf("split-window 1: %v", err)
-	}
-	if err := runTmux("split-window", "-t", sw, "-c", dir, "-d"); err != nil {
-		t.Fatalf("split-window 2: %v", err)
-	}
-
-	countBefore, err := TmuxCountPanes(sw)
-	if err != nil {
-		t.Fatalf("TmuxCountPanes before: %v", err)
-	}
-	if countBefore != 3 {
-		t.Fatalf("expected 3 panes before kill, got %d", countBefore)
-	}
-
-	// Find the last pane index dynamically (respects pane-base-index)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	paneOut, pErr := exec.CommandContext(ctx, "tmux", "list-panes", "-t", sw,
-		"-F", "#{pane_index}").Output()
-	if pErr != nil {
-		t.Fatalf("list-panes: %v", pErr)
-	}
-	paneLines := strings.Split(strings.TrimSpace(string(paneOut)), "\n")
-	lastPane := paneLines[len(paneLines)-1]
-
-	// Kill the last pane
-	if err := TmuxKillPane(sw + "." + lastPane); err != nil {
-		t.Fatalf("TmuxKillPane failed: %v", err)
-	}
-
-	countAfter, _ := TmuxCountPanes(sw)
-	if countAfter != 2 {
-		t.Errorf("expected 2 panes after kill, got %d", countAfter)
-	}
-}
-
 func TestExtractSessionWindow(t *testing.T) {
 	tests := []struct {
 		input string
@@ -459,4 +264,149 @@ func TestExtractSessionWindow(t *testing.T) {
 			t.Errorf("ExtractSessionWindow(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Mocked tests (using testify mock Runner — no exec at all)
+// ---------------------------------------------------------------------------
+
+func TestTmuxResolvePaneID_EnvSet(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%42")
+	got := TmuxResolvePaneID()
+	if got != "%42" {
+		t.Errorf("TmuxResolvePaneID() = %q, want %%42", got)
+	}
+}
+
+func TestTmuxResolvePaneID_EnvEmpty(t *testing.T) {
+	m := withMockRunner(t)
+	m.On("Output", mock.Anything, "display-message", "-p", "#{pane_id}").
+		Return([]byte("%99\n"), nil)
+
+	t.Setenv("TMUX_PANE", "")
+	got := TmuxResolvePaneID()
+	if got != "%99" {
+		t.Errorf("TmuxResolvePaneID() = %q, want %%99", got)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestTmuxNewWindow_MultipleWindows(t *testing.T) {
+	m := withMockRunner(t)
+	m.On("Output", mock.Anything,
+		"new-window", "-t", "test-new-window:", "-n", "test-win", "-c", mock.AnythingOfType("string"),
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("test-new-window:3.0"), nil)
+
+	target, err := TmuxNewWindow("test-new-window", "test-win", t.TempDir())
+	if err != nil {
+		t.Fatalf("TmuxNewWindow failed: %v", err)
+	}
+	if target == "" {
+		t.Fatal("expected non-empty target")
+	}
+	if err := ValidateTarget(target); err != nil {
+		t.Errorf("returned invalid target %q: %v", target, err)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestTmuxZoomPane(t *testing.T) {
+	m := withMockRunner(t)
+	m.On("Run", mock.Anything, "resize-pane", "-Z", "-t", "test-zoom:1.0").
+		Return(nil)
+
+	if err := TmuxZoomPane("test-zoom:1.0"); err != nil {
+		t.Fatalf("TmuxZoomPane failed: %v", err)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestTmuxSplitWindow_AppliesEvenLayout(t *testing.T) {
+	m := withMockRunner(t)
+
+	// split-window returns new pane target
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "test-split:1", "-c", mock.AnythingOfType("string"),
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("test-split:1.1"), nil)
+
+	// TmuxEvenLayout called after split
+	m.On("Run", mock.Anything, "select-layout", "-t", "test-split:1", "tiled").
+		Return(nil)
+
+	// TmuxCountPanes to verify
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "test-split:1", "-F", "#{pane_index}",
+	).Return([]byte("0\n1\n"), nil)
+
+	_, err := TmuxSplitWindow("test-split:1", t.TempDir())
+	if err != nil {
+		t.Fatalf("TmuxSplitWindow failed: %v", err)
+	}
+
+	count, err := TmuxCountPanes("test-split:1")
+	if err != nil {
+		t.Fatalf("TmuxCountPanes failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 panes, got %d", count)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestTmuxKillPane_AppliesEvenLayout(t *testing.T) {
+	m := withMockRunner(t)
+
+	// TmuxCountPanes before kill (3 panes)
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "test-kill:1", "-F", "#{pane_index}",
+	).Return([]byte("0\n1\n2\n"), nil).Once()
+
+	// kill-pane
+	m.On("Run", mock.Anything, "kill-pane", "-t", "test-kill:1.2").
+		Return(nil)
+
+	// TmuxEvenLayout after kill
+	m.On("Run", mock.Anything, "select-layout", "-t", "test-kill:1", "tiled").
+		Return(nil)
+
+	// TmuxCountPanes after kill (2 panes)
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "test-kill:1", "-F", "#{pane_index}",
+	).Return([]byte("0\n1\n"), nil).Once()
+
+	countBefore, err := TmuxCountPanes("test-kill:1")
+	if err != nil {
+		t.Fatalf("TmuxCountPanes before: %v", err)
+	}
+	if countBefore != 3 {
+		t.Fatalf("expected 3 panes before kill, got %d", countBefore)
+	}
+
+	if err := TmuxKillPane("test-kill:1.2"); err != nil {
+		t.Fatalf("TmuxKillPane failed: %v", err)
+	}
+
+	countAfter, _ := TmuxCountPanes("test-kill:1")
+	if countAfter != 2 {
+		t.Errorf("expected 2 panes after kill, got %d", countAfter)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestTmuxCountPanes(t *testing.T) {
+	m := withMockRunner(t)
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "test:1", "-F", "#{pane_index}",
+	).Return([]byte("0\n1\n"), nil)
+
+	count, err := TmuxCountPanes("test:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2, got %d", count)
+	}
+	m.AssertExpectations(t)
 }
