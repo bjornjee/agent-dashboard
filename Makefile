@@ -10,6 +10,7 @@ build: ## Build the dashboard binary
 
 build-web: ## Build the web server binary
 	go build -o bin/agent-dashboard-web ./cmd/web/
+	@if [ "$$(uname)" = "Darwin" ]; then codesign -s - bin/agent-dashboard-web; fi
 
 fmt: ## Auto-format Go source files
 	gofmt -w .
