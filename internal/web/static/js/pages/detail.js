@@ -5,6 +5,7 @@ import { effectiveState } from '../state.js';
 import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
+import { Theme } from '../theme.js';
 
 export { showModal, toast };
 
@@ -447,7 +448,7 @@ async function loadTabContent(tab, agentId) {
             drawFileList: false,
             matching: 'words',
             outputFormat: viewMode,
-            colorScheme: 'dark',
+            colorScheme: Theme.getEffective(),
             highlight: true,
           });
           ui.draw();

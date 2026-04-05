@@ -2,10 +2,11 @@
 import { escapeHtml, formatCost, formatCostFull, formatTokens, formatDateShort, durationFromTimestamp } from './format.js';
 import { STATE_BADGE } from './state.js';
 import { ICONS } from './icons.js';
+import { Theme } from './theme.js';
 
 export const UI = {
   header(title, actions) {
-    return `<div class="header"><h1><button class="header-home" onclick="Dashboard.showList()">${ICONS.logo} ${escapeHtml(title)}</button></h1><div class="header-actions">${actions || ''}</div></div>`;
+    return `<div class="header"><h1><button class="header-home" onclick="Dashboard.showList()">${ICONS.logo} ${escapeHtml(title)}</button></h1><div class="header-actions"><button class="btn-theme-toggle" onclick="Dashboard.cycleTheme()" title="Toggle theme" aria-label="Toggle theme">${Theme.getIcon()}</button>${actions || ''}</div></div>`;
   },
 
   spinner() {
