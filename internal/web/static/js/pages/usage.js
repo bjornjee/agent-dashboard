@@ -17,7 +17,7 @@ let currentRange = 7;
 
 export async function renderUsage(app, agents) {
   currentAgents = agents;
-  app.innerHTML = UI.header('Usage',
+  app.innerHTML = UI.header('Agent Dashboard',
     UI.btn('&larr; Back', { variant: 'ghost', onclick: "Dashboard.showList()" })
   ) + '<div class="usage-view">' + UI.loadingBlock() + '</div>';
 
