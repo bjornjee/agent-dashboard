@@ -877,6 +877,8 @@ body {
   color: var(--text-tertiary);
   margin-left: auto;
   flex-shrink: 0;
+  min-width: 56px;
+  text-align: right;
 }
 
 .timeline-detail {
