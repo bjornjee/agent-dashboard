@@ -34,3 +34,6 @@ tmp/
 # Test/tool artifacts
 .playwright-mcp/
 screenshots/
+
+# Development screenshots (root-level)
+/*.png

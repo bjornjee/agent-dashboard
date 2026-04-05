@@ -1,12 +1,14 @@
 # agent-dashboard
 
-A tmux-integrated TUI for monitoring Claude Code agents across sessions, built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe.
+A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
 
 https://github.com/user-attachments/assets/736b633f-93d7-4d83-8c9a-fd7ebc598a89
 
-Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
+Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
 
 ## Features
+
+### TUI (terminal)
 
 - **Real-time agent monitoring** — agents grouped by state (needs attention, running, completed) with live tmux pane capture
 - **Subagent tree** — expand/collapse/dismiss subagent nodes under parent agents
@@ -15,7 +17,8 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
-- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr)
+- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr, rca)
+- **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
 - **Quick reply** — send free-text responses directly to agent panes
 - **GitHub PR workflow** — open existing PR diff, create new PR, or merge via `gh` CLI (falls back to browser)
 - **Status feedback** — colour-coded success/error messages in the help bar for user actions
@@ -24,6 +27,17 @@ Reads agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (wri
 - **Pixel art banner** — axolotl rendered with half-block Unicode characters
 - **Singleton lock** — prevents multiple dashboard instances from running simultaneously
 - **Semantic versioning** — version injected at build time via `-ldflags`
+
+### Mobile remote control
+
+A companion PWA (`cmd/web/`) for managing agents from your phone over your local network:
+
+- **Agent list and detail views** — same state grouping as the TUI, with conversation timeline and diff viewer
+- **Full remote control** — approve/reject permissions, reply to questions, send numbered options, stop agents, open PRs, merge, and close — all from your phone
+- **Session creation** — create new agent sessions with z-plugin suggestions and skill selection
+- **Usage dashboard** — token breakdown and cost tracking
+- **Google OAuth** — optional single-user authentication so only you can access the dashboard
+- **Installable PWA** — add to home screen for a native app feel with offline caching via service worker
 
 ## Prerequisites
 
@@ -143,6 +157,12 @@ show_quote  = false   # hide the daily quote (default: true)
 enabled       = true  # enable desktop notifications from adapter hooks (default: false)
 sound         = true  # play a sound with notifications (default: false)
 silent_events = true  # suppress event-level notifications (default: false)
+
+[debug]
+key_log = false       # write key/mouse/focus events to debug-keys.log (default: false)
+
+[experimental]
+ascii_pet = false     # show animated ASCII pet in the left panel (default: false)
 ```
 
 | Section | Key | Default | Description |
@@ -152,6 +172,8 @@ silent_events = true  # suppress event-level notifications (default: false)
 | `notifications` | `enabled` | `false` | Enable desktop notifications from adapter hooks |
 | `notifications` | `sound` | `false` | Play a sound with notifications |
 | `notifications` | `silent_events` | `false` | Suppress event-level notifications |
+| `debug` | `key_log` | `false` | Write key/mouse/focus events to `debug-keys.log` |
+| `experimental` | `ascii_pet` | `false` | Show animated ASCII pet in the left panel |
 
 ## Environment Variables
 
@@ -164,12 +186,16 @@ silent_events = true  # suppress event-level notifications (default: false)
 ## Development
 
 ```bash
-make build                        # Build binary to bin/ (version from git tag or VERSION file)
+make build                        # Build TUI binary to bin/ (version from git tag or VERSION file)
+make build-web                    # Build web server binary to bin/
 make fmt                          # Auto-format Go source files
 make vet                          # Check formatting + run go vet
 make test                         # Run all tests (vets first)
+make test-race                    # Run tests with race detector
 make install                      # Build + install binary + adapter (default: claude-code)
 make install ADAPTER=claude-code  # Specify adapter explicitly
+make install-web                  # Install web server binary to ~/.local/bin/
+make web                          # Run web server locally on port 8390
 make seed                         # Create fake agent state for testing
 make clean                        # Remove build artifacts and state
 make help                         # Show all available targets
@@ -198,7 +224,9 @@ agent-dashboard/
 ├── go.mod / go.sum
 ├── cmd/
 │   ├── dashboard/
-│   │   └── main.go                    # entry point (imports internal packages)
+│   │   └── main.go                    # TUI entry point
+│   ├── web/
+│   │   └── main.go                    # web server entry point (Google OAuth, SSE)
 │   └── populate-quotes/
 │       └── main.go                    # bulk quote fetcher for SQLite cache
 ├── internal/                          # core packages (see below)
@@ -233,11 +261,14 @@ internal/
 │   ├── banner.go                      # axolotl pixel art + quote display
 │   ├── helpers.go                     # text wrapping, markdown rendering
 │   ├── wrapped_input.go              # soft-wrap text input helper
+│   ├── pet.go                         # animated ASCII pet (red panda)
+│   ├── runner.go                      # exec.Command interface for testability
 │   ├── styles.go                      # Catppuccin Frappe theme
 │   ├── catppuccin-frappe.json         # chroma syntax theme
 │   ├── version.go                     # build-time version variable
 │   └── *_test.go                      # tests
 ├── usage/                             # token counting + pricing
+├── web/                               # web server, handlers, OAuth, SSE, static assets
 └── zsuggest/                          # z-plugin frecency suggestions
 ```
 
@@ -270,7 +301,8 @@ adapters/claude-code/
 │   ├── chore/                         # non-code changes
 │   ├── refactor/                      # refactoring
 │   ├── pr/                            # PR workflow
-│   └── investigate/                   # investigation
+│   ├── investigate/                   # investigation
+│   └── rca/                           # root cause analysis
 └── agents/                            # pre-configured agent definitions
     ├── build-error-resolver.md
     ├── code-reviewer.md
@@ -295,6 +327,7 @@ adapters/claude-code/
 | [sqlx](https://github.com/jmoiron/sqlx) | SQL query helper |
 | [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure Go SQLite |
 | [fsnotify](https://github.com/fsnotify/fsnotify) | File system watcher |
+| [oauth2](https://pkg.go.dev/golang.org/x/oauth2) | Google OAuth for mobile web companion |
 
 ## Works Best With
 
