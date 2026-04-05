@@ -5,6 +5,7 @@ import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
 import { UI } from './js/ui.js';
+import { Theme } from './js/theme.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -131,6 +132,8 @@ window.Dashboard = {
     });
   },
 
+  cycleTheme() { Theme.cycle(); },
+
   openClaude() { window.open('https://claude.ai', '_blank'); },
 
   openPR(id) {
@@ -179,6 +182,10 @@ window.Dashboard = {
     }
   },
 };
+
+// --- Init ---
+// --- Theme ---
+Theme.init();
 
 // --- Init ---
 async function init() {
