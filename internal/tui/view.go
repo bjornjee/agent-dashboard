@@ -1082,6 +1082,7 @@ func (m model) renderHelpBar() string {
 	}
 	parts = append(parts, boldStyle.Render("x")+" close")
 	parts = append(parts, boldStyle.Render("d")+" diff")
+	parts = append(parts, boldStyle.Render("o")+" open")
 	parts = append(parts, boldStyle.Render("g")+" PR")
 	parts = append(parts, boldStyle.Render("h")+" help")
 	parts = append(parts, boldStyle.Render("q")+" quit")
@@ -1168,6 +1169,7 @@ func (m model) renderHelpOverlay() string {
 	lines = append(lines, line("enter", "Jump to agent pane"))
 	lines = append(lines, line("r", "Reply to agent"))
 	lines = append(lines, line("e", "Open editor"))
+	lines = append(lines, line("o", "Open dir in tmux window"))
 	lines = append(lines, line("a", "Create new session"))
 	lines = append(lines, line("x", "Close/dismiss agent"))
 	if m.ghAvailable {

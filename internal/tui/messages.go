@@ -35,6 +35,10 @@ type subagentsMsg struct {
 }
 type planMsg struct{ content string }
 type openEditorMsg struct{ err error }
+type openWorktreeMsg struct {
+	err error
+	dir string
+}
 type openPRMsg struct {
 	err   error
 	hasPR bool // true when an existing PR was found (vs compare URL)
