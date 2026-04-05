@@ -612,12 +612,17 @@
             try {
               const ui = new Diff2HtmlUI(diffTarget, renderChunk, {
                 drawFileList: false,
-                matching: 'none',
+                matching: 'words',
                 outputFormat: 'side-by-side',
                 colorScheme: 'dark',
-                highlight: false,
+                highlight: true,
               });
               ui.draw();
+              requestAnimationFrame(() => {
+                if (!signal.aborted) {
+                  try { ui.highlightCode(); } catch { /* ignore */ }
+                }
+              });
               if (truncated) {
                 diffTarget.insertAdjacentHTML('beforeend',
                   '<div style="padding:12px 16px;color:var(--text-secondary);font-size:13px;border-top:1px solid var(--border-subtle)">'

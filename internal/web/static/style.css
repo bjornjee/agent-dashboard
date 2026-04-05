@@ -637,8 +637,7 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-del .d2h-code-line-ctn { color: var(--text-primary); }
 .diff-content del { background: rgba(248, 113, 113, 0.25); text-decoration: none; }
 
-/* Hunk info */
-.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--status-purple); }
+/* Hunk info (overridden by sticky rule in side-by-side section) */
 .diff-content .d2h-emptyplaceholder { background: var(--bg-surface); border-color: var(--border-subtle); }
 .diff-content .d2h-file-diff { border-color: var(--border-subtle); }
 .diff-content .d2h-file-side-diff { border-color: var(--border-subtle); }
@@ -649,7 +648,26 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 /* Side-by-side layout */
 .diff-content .d2h-file-side-diff { width: 50%; display: inline-block; vertical-align: top; }
 .diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; }
-.diff-content .d2h-code-side-line { background: var(--bg-base); }
+.diff-content .d2h-code-side-line { background: var(--bg-base); color: var(--text-primary); }
+.diff-content .d2h-code-side-line .d2h-code-line-ctn { color: var(--text-primary); }
+
+/* Side-by-side added lines */
+.diff-content .d2h-ins .d2h-code-side-line { background: rgba(74, 222, 128, 0.08); }
+.diff-content .d2h-ins .d2h-code-side-linenumber { background: rgba(74, 222, 128, 0.15); color: var(--status-green); }
+
+/* Side-by-side deleted lines */
+.diff-content .d2h-del .d2h-code-side-line { background: rgba(248, 113, 113, 0.08); }
+.diff-content .d2h-del .d2h-code-side-linenumber { background: rgba(248, 113, 113, 0.15); color: var(--status-red); }
+
+/* Inline word-level highlights */
+.diff-content .d2h-ins .d2h-code-side-line ins,
+.diff-content .d2h-ins .d2h-code-line-ctn ins { background: rgba(74, 222, 128, 0.30); text-decoration: none; border-radius: 2px; }
+.diff-content .d2h-del .d2h-code-side-line del,
+.diff-content .d2h-del .d2h-code-line-ctn del { background: rgba(248, 113, 113, 0.30); text-decoration: none; border-radius: 2px; }
+
+/* Sticky hunk/function context header */
+.diff-content .d2h-info { background: var(--bg-overlay); border-color: var(--border-subtle); color: var(--accent-text); position: sticky; top: 38px; z-index: 1; }
+.diff-content .d2h-code-side-emptyplaceholder { background: var(--bg-surface); }
 
 /* Hide diff2html UI artifacts */
 .diff-content .d2h-file-header label,
