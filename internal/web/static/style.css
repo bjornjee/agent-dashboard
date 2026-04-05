@@ -1748,6 +1748,34 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .progress-segments { flex-basis: 100%; }
   .subagent-summary-list { flex-direction: column; }
   .subagent-pill { max-width: 100%; }
+
+  /* Usage: metrics strip stacks on mobile */
+  .usage-metrics {
+    flex-direction: column;
+    gap: 0;
+    padding: 12px 16px;
+  }
+  .usage-metric {
+    padding: 8px 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .usage-metric:last-child { border-bottom: none; }
+  .usage-metric:first-child { padding-top: 0; }
+  .usage-metric:last-child { padding-bottom: 0; }
+
+  /* Usage: chart card header wraps */
+  .usage-chart-card { padding: 16px; }
+  .usage-chart-card__header { flex-wrap: wrap; gap: 8px; }
+  .date-range-selector { flex-wrap: wrap; }
+
+  /* Usage: chart x-axis labels smaller */
+  .usage-bar-label { font-size: 9px; }
+  .usage-bar-today-label { font-size: 8px; bottom: -30px; }
+  .usage-chart { height: 130px; }
+
+  /* Usage: table card */
+  .usage-table-container { padding: 16px; }
 }
 
 /* Safe area for mobile notch */
