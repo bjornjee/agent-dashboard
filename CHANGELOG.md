@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.6.0](https://github.com/bjornjee/agent-dashboard/compare/v0.5.0...v0.6.0) (2026-04-05)
+
+
+### Features
+
+* add 'o' hotkey to open agent directory in new tmux window ([#140](https://github.com/bjornjee/agent-dashboard/issues/140)) ([9c08aa7](https://github.com/bjornjee/agent-dashboard/commit/9c08aa7b6fec712b46f732cfaa70d3b3cccb86e7))
+* add light mode theme with system preference detection ([#158](https://github.com/bjornjee/agent-dashboard/issues/158)) ([bc2b8d1](https://github.com/bjornjee/agent-dashboard/commit/bc2b8d1c1de19c9df780e899550c200964fcad48))
+* add loading spinners, home nav, and view state persistence ([#153](https://github.com/bjornjee/agent-dashboard/issues/153)) ([f3a6522](https://github.com/bjornjee/agent-dashboard/commit/f3a65225eaea53d862d2730aa297e851b41013d5))
+* add paste (Cmd+V) support to input boxes ([#150](https://github.com/bjornjee/agent-dashboard/issues/150)) ([d9a2f47](https://github.com/bjornjee/agent-dashboard/commit/d9a2f477ea6f49a42338b2aab68fc7a5855c82f3))
+* add zsuggest directory suggestions to web create dropdown ([#151](https://github.com/bjornjee/agent-dashboard/issues/151)) ([6d7b454](https://github.com/bjornjee/agent-dashboard/commit/6d7b4542f0c1fa5b34cb6f083738a1c64f3f5a74))
+* experimental ASCII pet in TUI left panel ([#156](https://github.com/bjornjee/agent-dashboard/issues/156)) ([179b12c](https://github.com/bjornjee/agent-dashboard/commit/179b12c612a6c3403785333a22219814b598fb35))
+* force inline diffs on mobile viewports ([#155](https://github.com/bjornjee/agent-dashboard/issues/155)) ([03c1128](https://github.com/bjornjee/agent-dashboard/commit/03c112815e8a0850993080d03eeb8d5e7b7869d3))
+* port enhanced desktop notifications from skills repo ([#141](https://github.com/bjornjee/agent-dashboard/issues/141)) ([c74ed3a](https://github.com/bjornjee/agent-dashboard/commit/c74ed3a65d91d64608b159444b4c7065daa1c1ef))
+* revamp UI with designer spec ([#152](https://github.com/bjornjee/agent-dashboard/issues/152)) ([1ea73c8](https://github.com/bjornjee/agent-dashboard/commit/1ea73c84b84f2fa3bae461c76e1440c493e01ad0))
+* rework web header to match UI spec ([#160](https://github.com/bjornjee/agent-dashboard/issues/160)) ([b445fa0](https://github.com/bjornjee/agent-dashboard/commit/b445fa08d635833646a758b11d231f0564e6ce8e))
+* UI/UX design spec v2 refinements ([#154](https://github.com/bjornjee/agent-dashboard/issues/154)) ([83ff112](https://github.com/bjornjee/agent-dashboard/commit/83ff112748c04e21606cc29cdcd34bd728e4385f))
+* web dashboard for mobile access ([#137](https://github.com/bjornjee/agent-dashboard/issues/137)) ([41dc78f](https://github.com/bjornjee/agent-dashboard/commit/41dc78f9ef3d16013ef05da34e199551519b71d7))
+
+
+### Bug Fixes
+
+* ad-hoc codesign binary on macOS to survive sleep/wake ([#142](https://github.com/bjornjee/agent-dashboard/issues/142)) ([95646b2](https://github.com/bjornjee/agent-dashboard/commit/95646b2c02ed32fe1c1e179fc18f624bc6075923))
+* add crash diagnostics for silent dashboard termination ([#136](https://github.com/bjornjee/agent-dashboard/issues/136)) ([4a5d6d8](https://github.com/bjornjee/agent-dashboard/commit/4a5d6d8e75bbb5f78569285a2768e517b54de14c))
+* detect interview (question) after plan by comparing tool positions ([#138](https://github.com/bjornjee/agent-dashboard/issues/138)) ([f3502ef](https://github.com/bjornjee/agent-dashboard/commit/f3502efc320a385a2234bd60fb5cdf6f9d9013f5))
+* disable CGO in make test to avoid AMFI kills on macOS ([#144](https://github.com/bjornjee/agent-dashboard/issues/144)) ([a38e9c2](https://github.com/bjornjee/agent-dashboard/commit/a38e9c237a6f6a7ddc4a4313643c8ac06ea3a91c))
+* polish web dashboard UI across all screens ([#143](https://github.com/bjornjee/agent-dashboard/issues/143)) ([f726633](https://github.com/bjornjee/agent-dashboard/commit/f7266331633cb37f4c9aa00edaaee3fd336ea368))
+* resolve version from git tags before VERSION file ([#134](https://github.com/bjornjee/agent-dashboard/issues/134)) ([4b90d3b](https://github.com/bjornjee/agent-dashboard/commit/4b90d3b786e168edf320e31cdb28754829b0a42a))
+* wrap reply input text correctly and keep it visible in viewport ([#139](https://github.com/bjornjee/agent-dashboard/issues/139)) ([cd184bf](https://github.com/bjornjee/agent-dashboard/commit/cd184bfc01f1a062130015a1451201a3f28402c7))
+
 ## [0.5.0](https://github.com/bjornjee/agent-dashboard/compare/v0.4.0...v0.5.0) (2026-04-04)
 
 
