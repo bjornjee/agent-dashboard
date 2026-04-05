@@ -52,3 +52,10 @@ func (r *execGitRunner) Start(name string, args ...string) error {
 // gitRunner is the package-level runner used by all tui command functions.
 // Tests replace this with a mock.
 var gitRunner GitRunner = &execGitRunner{}
+
+// setTestGitRunner swaps the package-level gitRunner and returns a restore function.
+func setTestGitRunner(r GitRunner) func() {
+	orig := gitRunner
+	gitRunner = r
+	return func() { gitRunner = orig }
+}

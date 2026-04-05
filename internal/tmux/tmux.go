@@ -40,6 +40,14 @@ func (r *ExecRunner) Run(ctx context.Context, args ...string) error {
 // Tests replace this with a mock.
 var runner Runner = &ExecRunner{}
 
+// SetTestRunner swaps the package-level runner and returns a restore function.
+// This allows test packages outside of tmux to inject a mock runner.
+func SetTestRunner(r Runner) func() {
+	orig := runner
+	runner = r
+	return func() { runner = orig }
+}
+
 // SilentRun runs a command with stdout and stderr discarded.
 // This prevents child processes from writing to the terminal,
 // which could inject escape sequences that bubbletea misinterprets as keys.
