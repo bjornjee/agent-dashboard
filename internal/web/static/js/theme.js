@@ -42,7 +42,7 @@ export const Theme = {
     if (link) link.href = mode === 'light' ? HLJS_LIGHT : HLJS_DARK;
     // Update meta theme-color
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = mode === 'light' ? '#FFFFFF' : '#0B0E14';
+    if (meta) meta.content = mode === 'light' ? '#2A2724' : '#0B0E14';
   },
 
   cycle() {
