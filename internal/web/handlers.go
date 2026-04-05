@@ -27,6 +27,18 @@ var sensitiveDirs = []string{
 	".password-store",
 	".vault-token",
 	".credentials",
+	".gitconfig",
+	".git-credentials",
+	".vimrc",
+	".vim",
+	".zshrc",
+	".zsh_history",
+	".bash_history",
+	".bashrc",
+	".bash_profile",
+	".netrc",
+	".npmrc",
+	".pypirc",
 }
 
 // isSensitivePath returns true if the path contains a sensitive directory
