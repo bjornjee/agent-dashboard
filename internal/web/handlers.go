@@ -39,6 +39,8 @@ var sensitiveDirs = []string{
 	".netrc",
 	".npmrc",
 	".pypirc",
+	".gemini",
+	".Trash",
 }
 
 // isSensitivePath returns true if the path contains a sensitive directory
