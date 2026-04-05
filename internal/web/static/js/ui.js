@@ -5,7 +5,15 @@ import { ICONS } from './icons.js';
 
 export const UI = {
   header(title, actions) {
-    return `<div class="header"><h1>${ICONS.logo} ${escapeHtml(title)}</h1><div class="header-actions">${actions || ''}</div></div>`;
+    return `<div class="header"><h1><button class="header-home" onclick="Dashboard.showList()">${ICONS.logo} ${escapeHtml(title)}</button></h1><div class="header-actions">${actions || ''}</div></div>`;
+  },
+
+  spinner() {
+    return '<span class="spinner spinner-inline"></span>';
+  },
+
+  loadingBlock() {
+    return '<div class="loading"><span class="spinner"></span></div>';
   },
 
   btn(label, opts) {

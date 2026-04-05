@@ -33,7 +33,7 @@ export function renderCreate(app, agents) {
         <label class="form-label">Message (optional)</label>
         <textarea id="create-message" class="action-input" style="width:100%;min-height:80px;resize:vertical" placeholder="What should the agent do?"></textarea>
       </div>
-      <div style="margin-top:8px">${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent()" })}</div>
+      <div style="margin-top:8px">${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent(event)" })}</div>
     </div>
   `;
 

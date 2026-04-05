@@ -29,11 +29,11 @@ function renderActionBar(agent) {
   actions += UI.btn('Open Claude', { variant: 'primary', onclick: "Dashboard.openClaude()" });
 
   if (st === 'permission' || st === 'plan') {
-    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}')` });
-    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}')` });
+    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}', event)` });
+    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}', event)` });
   } else if (st === 'question' || st === 'error') {
     actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
-    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}')` });
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}', event)` });
   } else if (st === 'pr') {
     actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });
     actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
@@ -367,7 +367,7 @@ async function loadTabContent(tab, agentId) {
           + '<span class="diff-file-path">' + escapeHtml(f.path) + '</span>'
           + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
           + '</div>'
-          + '<div class="diff-file-body"><div class="loading"><span class="spinner"></span></div></div>'
+          + '<div class="diff-file-body">' + UI.loadingBlock() + '</div>'
           + '</div>';
       }
 
@@ -526,7 +526,7 @@ async function loadTabContent(tab, agentId) {
           container.querySelectorAll('.diff-file-section').forEach(section => {
             const body = section.querySelector('.diff-file-body');
             if (body && body.style.display !== 'none') {
-              body.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+              body.innerHTML = UI.loadingBlock();
               lazyObserver.observe(section);
             }
           });
