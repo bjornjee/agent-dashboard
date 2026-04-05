@@ -551,19 +551,37 @@
         }
         if (chunkStart >= 0) fileChunks.push(rawLines.slice(chunkStart).join('\n'));
 
-        let sidebarHtml = '<div class="diff-sidebar"><div class="diff-sidebar-header">Files (' + files.length + ')</div>';
+        // Group files by directory for collapsible tree
+        const dirGroups = {};
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
-          const name = f.path.split('/').pop();
-          const dir = f.path.substring(0, f.path.length - name.length);
-          const status = f.status || 'modified';
-          const adds = f.additions || 0;
-          const dels = f.deletions || 0;
-          sidebarHtml += '<div class="diff-sidebar-file' + (i === 0 ? ' active' : '') + '" data-file-idx="' + i + '" title="' + escapeHtml(f.path) + '">'
-            + '<span class="diff-status-dot diff-status-dot-' + status + '"></span>'
-            + '<span class="diff-sidebar-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(dir) + '<strong>' + escapeHtml(name) + '</strong></span>'
-            + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
-            + '</div>';
+          const parts = f.path.split('/');
+          const fileName = parts.pop();
+          const dir = parts.join('/') || '.';
+          if (!dirGroups[dir]) dirGroups[dir] = [];
+          dirGroups[dir].push({ ...f, fileName, idx: i });
+        }
+
+        let sidebarHtml = '<div class="diff-sidebar"><div class="diff-sidebar-header">Files (' + files.length + ')</div>';
+        for (const [dir, dirFiles] of Object.entries(dirGroups)) {
+          const dirAdds = dirFiles.reduce((s, f) => s + (f.additions || 0), 0);
+          const dirDels = dirFiles.reduce((s, f) => s + (f.deletions || 0), 0);
+          sidebarHtml += '<details class="diff-dir-group" open>'
+            + '<summary class="diff-dir-summary">'
+            + '<span class="diff-dir-name">' + escapeHtml(dir) + '</span>'
+            + '<span class="diff-stats"><span class="diff-stats-add">+' + dirAdds + '</span> <span class="diff-stats-del">-' + dirDels + '</span></span>'
+            + '</summary>';
+          for (const f of dirFiles) {
+            const status = f.status || 'modified';
+            const adds = f.additions || 0;
+            const dels = f.deletions || 0;
+            sidebarHtml += '<div class="diff-sidebar-file' + (f.idx === 0 ? ' active' : '') + '" data-file-idx="' + f.idx + '" title="' + escapeHtml(f.path) + '">'
+              + '<span class="diff-status-dot diff-status-dot-' + status + '"></span>'
+              + '<span class="diff-sidebar-name">' + escapeHtml(f.fileName) + '</span>'
+              + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
+              + '</div>';
+          }
+          sidebarHtml += '</details>';
         }
         sidebarHtml += '</div>';
 
@@ -595,7 +613,7 @@
               const ui = new Diff2HtmlUI(diffTarget, renderChunk, {
                 drawFileList: false,
                 matching: 'none',
-                outputFormat: 'line-by-line',
+                outputFormat: 'side-by-side',
                 colorScheme: 'dark',
                 highlight: false,
               });

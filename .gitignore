@@ -30,3 +30,7 @@ Thumbs.db
 # Temporary
 *.tmp
 tmp/
+
+# Test/tool artifacts
+.playwright-mcp/
+screenshots/

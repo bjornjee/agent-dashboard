@@ -554,8 +554,33 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
   z-index: 1;
 }
 
-.diff-sidebar-file {
+.diff-dir-group { border-bottom: 1px solid var(--border-subtle); }
+.diff-dir-group:last-child { border-bottom: none; }
+.diff-dir-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.diff-dir-summary::-webkit-details-marker { display: none; }
+.diff-dir-summary::before {
+  content: '\25B6';
+  font-size: 8px;
+  transition: transform 0.15s;
+  color: var(--text-tertiary);
+}
+.diff-dir-group[open] > .diff-dir-summary::before { transform: rotate(90deg); }
+.diff-dir-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-dir-summary .diff-stats { font-weight: 400; }
+
+.diff-sidebar-file {
+  padding: 5px 12px 5px 24px;
   font-size: 12px;
   cursor: pointer;
   border-left: 2px solid transparent;
@@ -620,6 +645,11 @@ details[open] > .activity-tool-summary::before { transform: rotate(90deg); }
 .diff-content .d2h-files-diff { border: none; }
 .diff-content .d2h-code-linenumber.d2h-move-handler { position: static !important; }
 .diff-content .hljs { background: transparent !important; color: var(--text-primary); }
+
+/* Side-by-side layout */
+.diff-content .d2h-file-side-diff { width: 50%; display: inline-block; vertical-align: top; }
+.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-tertiary); cursor: default; }
+.diff-content .d2h-code-side-line { background: var(--bg-base); }
 
 /* Hide diff2html UI artifacts */
 .diff-content .d2h-file-header label,
