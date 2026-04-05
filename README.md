@@ -2,7 +2,7 @@
 
 A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
 
-https://github.com/user-attachments/assets/736b633f-93d7-4d83-8c9a-fd7ebc598a89
+https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
 
 Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
