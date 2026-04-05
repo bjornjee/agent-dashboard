@@ -11,7 +11,19 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
+	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
+
+// handleSuggestions returns frecency-ranked directory suggestions from ~/.z
+// or Claude Code session history.
+func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
+	entries := zsuggest.LoadZEntriesWithHome(s.cfg.Profile.HomeDir, s.cfg.Profile.SessionsDir)
+	paths := zsuggest.FilterZSuggestions("", entries, nil)
+	if paths == nil {
+		paths = []string{}
+	}
+	writeJSON(w, http.StatusOK, paths)
+}
 
 // CommandRunner abstracts subprocess execution for git/gh commands
 // so tests can swap in a mock.

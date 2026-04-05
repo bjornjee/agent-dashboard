@@ -725,9 +725,9 @@ func TestSuggestionsEndpoint(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
 
-	// Create a temporary z-file with test entries
-	sessionsDir := t.TempDir()
-	cfg.Profile.SessionsDir = sessionsDir
+	// Point to empty dirs so no real ~/.z or sessions are loaded
+	cfg.Profile.SessionsDir = t.TempDir()
+	cfg.Profile.HomeDir = t.TempDir()
 
 	srv := NewServer(cfg, nil, ServerOptions{})
 	ts := httptest.NewServer(srv.Handler())
