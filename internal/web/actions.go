@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -169,9 +168,7 @@ func (s *Server) handleMerge(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", "pr", "merge", agent.Branch, "--squash")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	out, err := cmdRunner.CombinedOutput(ctx, dir, "gh", "pr", "merge", agent.Branch, "--squash")
 	if err != nil {
 		detail := strings.TrimSpace(string(out))
 		msg := "gh pr merge failed"
@@ -289,13 +286,9 @@ func repoFromPath(path string) string {
 
 // firstTmuxSession returns the name of the first available tmux session.
 func firstTmuxSession() (string, error) {
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	sessions, err := tmux.TmuxListSessions()
 	if err != nil {
-		return "", fmt.Errorf("no tmux sessions: %w", err)
+		return "", err
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 0 || lines[0] == "" {
-		return "", fmt.Errorf("no tmux sessions found")
-	}
-	return lines[0], nil
+	return sessions[0], nil
 }

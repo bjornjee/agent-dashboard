@@ -208,6 +208,21 @@ func ResolveTarget(paneID string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// TmuxListSessions returns the names of all tmux sessions.
+func TmuxListSessions() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	out, err := runner.Output(ctx, "list-sessions", "-F", "#{session_name}")
+	if err != nil {
+		return nil, fmt.Errorf("no tmux sessions: %w", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) == 0 || lines[0] == "" {
+		return nil, fmt.Errorf("no tmux sessions found")
+	}
+	return lines, nil
+}
+
 // tmuxPaneCwd returns the current working directory of a tmux pane by its
 // pane ID (%N format). Returns "" if the pane doesn't exist or on error.
 func tmuxPaneCwd(paneID string) string {
