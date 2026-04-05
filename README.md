@@ -4,6 +4,7 @@ A tmux-integrated TUI and mobile web companion for monitoring and controlling Cl
 
 https://github.com/user-attachments/assets/736b633f-93d7-4d83-8c9a-fd7ebc598a89
 
+
 Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
 
 ## Features
