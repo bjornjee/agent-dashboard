@@ -269,10 +269,9 @@ func TestTmuxResolvePaneID_EnvEmpty(t *testing.T) {
 	}
 	t.Setenv("TMUX_PANE", "")
 	got := TmuxResolvePaneID()
-	// In a real tmux session, should resolve to a pane ID like %N
-	if got == "" {
-		t.Error("TmuxResolvePaneID() returned empty when tmux is available")
-	}
+	// When TMUX_PANE is unset, display-message only works if the test
+	// process is running inside an attached tmux client. If not (e.g.
+	// worktrees, CI, detached sessions), it returns empty — that's fine.
 	if got != "" && got[0] != '%' {
 		t.Errorf("TmuxResolvePaneID() = %q, expected %%N format", got)
 	}

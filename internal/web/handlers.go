@@ -54,8 +54,10 @@ type diffResponse struct {
 }
 
 type diffFile struct {
-	Path   string `json:"path"`
-	Status string `json:"status"` // "added", "modified", "deleted"
+	Path      string `json:"path"`
+	Status    string `json:"status"` // "added", "modified", "deleted"
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
 }
 
 // findMergeBase returns the merge-base commit between HEAD and main/master,
@@ -109,20 +111,86 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Parse file list from diff
-	var files []diffFile
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "diff --git") {
-			parts := strings.Fields(line)
-			if len(parts) >= 4 {
-				path := strings.TrimPrefix(parts[3], "b/")
-				files = append(files, diffFile{Path: path, Status: "modified"})
+	// Build set of gitignored paths to filter out
+	ignored := make(map[string]bool)
+	if ignOut, err := exec.Command("git", "-C", dir,
+		"ls-files", "--others", "--ignored", "--exclude-standard", "--directory").Output(); err == nil {
+		for _, p := range strings.Split(strings.TrimSpace(string(ignOut)), "\n") {
+			p = strings.TrimSuffix(strings.TrimSpace(p), "/")
+			if p != "" {
+				ignored[p] = true
 			}
 		}
 	}
 
+	// Parse file list from diff with accurate status and line counts
+	var files []diffFile
+	lines := strings.Split(string(out), "\n")
+	// Also rebuild raw diff excluding ignored files
+	var filteredLines []string
+	skipUntilNext := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, "diff --git") {
+			parts := strings.Fields(line)
+			path := ""
+			if len(parts) >= 4 {
+				path = strings.TrimPrefix(parts[3], "b/")
+			}
+
+			// Check if this file is gitignored
+			isIgnored := false
+			if path != "" {
+				for ig := range ignored {
+					if path == ig || strings.HasPrefix(path, ig+"/") {
+						isIgnored = true
+						break
+					}
+				}
+			}
+			skipUntilNext = isIgnored
+			if isIgnored {
+				continue
+			}
+
+			status := "modified"
+			// Scan lines after diff header for status indicators
+			for j := i + 1; j < len(lines) && j < i+5; j++ {
+				if strings.HasPrefix(lines[j], "new file mode") {
+					status = "added"
+					break
+				}
+				if strings.HasPrefix(lines[j], "deleted file mode") {
+					status = "deleted"
+					break
+				}
+				if strings.HasPrefix(lines[j], "diff --git") {
+					break
+				}
+			}
+			// Count additions and deletions for this file
+			adds, dels := 0, 0
+			for j := i + 1; j < len(lines); j++ {
+				if j > i && strings.HasPrefix(lines[j], "diff --git") {
+					break
+				}
+				if strings.HasPrefix(lines[j], "+") && !strings.HasPrefix(lines[j], "+++") {
+					adds++
+				} else if strings.HasPrefix(lines[j], "-") && !strings.HasPrefix(lines[j], "---") {
+					dels++
+				}
+			}
+			files = append(files, diffFile{Path: path, Status: status, Additions: adds, Deletions: dels})
+		}
+		if !skipUntilNext {
+			filteredLines = append(filteredLines, line)
+		}
+	}
+
+	// Use filtered output
+	filteredRaw := strings.Join(filteredLines, "\n")
+
 	writeJSON(w, http.StatusOK, diffResponse{
-		Raw:   string(out),
+		Raw:   filteredRaw,
 		Files: files,
 	})
 }
