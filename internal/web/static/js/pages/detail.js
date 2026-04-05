@@ -8,10 +8,18 @@ import { showModal, toast } from '../modal.js';
 
 export { showModal, toast };
 
-function kindIcon(kind) {
+function timelineIcon(kind) {
   const svg = ICONS[kind] || '';
-  if (svg) return `<span class="activity-icon">${svg}</span>`;
-  return '<span class="activity-icon">&#8226;</span>';
+  const cls = kind === 'human' ? 'timeline-icon--human'
+    : kind === 'assistant' ? 'timeline-icon--assistant'
+    : 'timeline-icon--tool';
+  return `<div class="timeline-icon ${cls}">${svg}</div>`;
+}
+
+function kindLabel(kind) {
+  if (kind === 'human') return 'You';
+  if (kind === 'assistant') return 'Claude';
+  return 'Tool';
 }
 
 function renderActionBar(agent) {
@@ -43,23 +51,14 @@ function renderActionBar(agent) {
 let activityFilter = 'all';
 
 function applyActivityFilter(container) {
-  container.querySelectorAll('.activity-entry').forEach(el => {
-    if (activityFilter === 'all' || el.dataset.kind === activityFilter) {
+  container.querySelectorAll('.timeline-entry').forEach(el => {
+    const kind = el.dataset.kind;
+    if (!kind) return;
+    if (activityFilter === 'all' || kind === activityFilter) {
       el.classList.remove('hidden');
     } else {
       el.classList.add('hidden');
     }
-  });
-  container.querySelectorAll('.activity-tool-group').forEach(group => {
-    if (activityFilter === 'all' || activityFilter === 'tool') {
-      group.classList.remove('hidden');
-    } else {
-      group.classList.add('hidden');
-    }
-  });
-  container.querySelectorAll('.activity-turn').forEach(turn => {
-    const hasVisible = turn.querySelector('.activity-entry:not(.hidden)') || turn.querySelector('.activity-tool-group:not(.hidden)');
-    turn.classList.toggle('hidden', !hasVisible);
   });
 }
 
@@ -83,11 +82,8 @@ export async function renderDetail(app, agents, agentId, setView) {
         ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
         ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
       </div>
-      <div class="subagent-summary" id="subagent-summary"></div>
     </div>
   `;
-
-  const vitalSignsPlaceholder = '<div id="vital-signs-container"></div>';
 
   const tabs = UI.tabs([
     { key: 'conversation', label: 'Chat' },
@@ -98,7 +94,8 @@ export async function renderDetail(app, agents, agentId, setView) {
 
   app.innerHTML = `
     ${detailHeader}
-    ${vitalSignsPlaceholder}
+    <div id="vital-signs-container"></div>
+    <div class="subagent-pills-section" id="subagent-summary"></div>
     ${tabs}
     <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
     <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
@@ -155,10 +152,7 @@ async function loadSubagentSummary(agentId) {
   const completed = subs.filter(s => s.Completed || s.completed).length;
   const running = subs.length - completed;
 
-  let html = `<div class="subagent-summary-header">${ICONS.subagent} <span>${subs.length} subagent${subs.length !== 1 ? 's' : ''}</span>`;
-  if (running > 0) html += ` <span class="badge badge-running">${running} running</span>`;
-  if (completed > 0) html += ` <span class="badge badge-completed">${completed} done</span>`;
-  html += '</div>';
+  let html = '';
 
   html += '<div class="subagent-summary-list">';
   for (const sub of subs) {
@@ -225,7 +219,8 @@ async function loadTabContent(tab, agentId) {
       let html = '<div class="activity-filter-bar">';
       for (const f of ['all', 'human', 'assistant', 'tool']) {
         const cls = f === activityFilter ? ' active' : '';
-        html += `<button class="activity-filter-btn${cls}" data-filter="${f}">${f}</button>`;
+        const label = f === 'all' ? 'All' : f === 'human' ? 'Human' : f === 'assistant' ? 'Assistant' : 'Tool';
+        html += `<button class="activity-filter-btn${cls}" data-filter="${f}">${label}</button>`;
       }
       html += '</div><div class="activity-log">';
 
@@ -243,13 +238,11 @@ async function loadTabContent(tab, agentId) {
       if (currentTurn.length > 0) turns.push(currentTurn);
 
       for (const turn of turns) {
-        html += '<div class="activity-turn">';
         let toolGroup = [];
         for (const entry of turn) {
           const kind = entry.Kind || entry.kind;
           const content = entry.Content || entry.content || '';
           const time = entry.Timestamp || entry.timestamp || '';
-          const toolName = entry.ToolName || entry.tool_name || '';
 
           if (kind === 'tool') {
             toolGroup.push(entry);
@@ -262,25 +255,26 @@ async function loadTabContent(tab, agentId) {
           }
 
           const truncated = content.length > 200;
-          const display = truncated ? escapeHtml(content.substring(0, 200)) + '...' : escapeHtml(content);
-          html += `<div class="activity-entry" data-kind="${kind}">`;
-          html += `<div class="activity-entry-header">${kindIcon(kind)} <span class="activity-kind">${kind}</span><span class="activity-time">${formatTimeShort(time)}</span></div>`;
+          const displayContent = truncated ? content.substring(0, 200) + '...' : content;
+          html += `<div class="timeline-entry activity-entry" data-kind="${kind}">`;
+          html += timelineIcon(kind);
+          html += '<div class="timeline-content">';
+          html += `<div class="timeline-header"><span class="timeline-title">${kindLabel(kind)}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></div>`;
           if (kind === 'assistant') {
-            html += `<div class="activity-entry-content">${renderMarkdown(truncated ? content.substring(0, 200) + '...' : content)}</div>`;
+            html += `<div class="timeline-detail">${renderMarkdown(displayContent)}</div>`;
           } else {
-            html += `<div class="activity-entry-content">${display}</div>`;
+            html += `<div class="timeline-detail">${escapeHtml(displayContent)}</div>`;
           }
           if (truncated) {
             html += `<span data-full="${escapeHtml(content)}" data-truncated="true" style="display:none"></span>`;
             html += `<button class="btn btn-ghost btn-sm" onclick="Dashboard.toggleExpand(this)">Show more</button>`;
           }
-          html += '</div>';
+          html += '</div></div>';
         }
         // Flush remaining tool group
         if (toolGroup.length > 0) {
           html += renderToolGroup(toolGroup);
         }
-        html += '</div>';
       }
       html += '</div>';
       container.innerHTML = html;
@@ -558,22 +552,24 @@ function renderToolGroup(tools) {
   if (tools.length === 0) return '';
   const first = tools[0];
   const time = first.Timestamp || first.timestamp || '';
-  let html = '<div class="activity-tool-group">';
-  html += `<details><summary class="tool-group-summary">${kindIcon('tool')} <span class="activity-kind">${tools.length} tool call${tools.length !== 1 ? 's' : ''}</span><span class="activity-time">${formatTimeShort(time)}</span></summary>`;
+  let html = '<div class="timeline-entry activity-tool-group" data-kind="tool">';
+  html += timelineIcon('tool');
+  html += '<div class="timeline-content">';
+  html += `<details><summary class="tool-group-summary"><span class="timeline-title">${tools.length} tool call${tools.length !== 1 ? 's' : ''}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></summary>`;
   for (const entry of tools) {
     const content = entry.Content || entry.content || '';
     const toolName = entry.ToolName || entry.tool_name || '';
     const truncated = content.length > 200;
     const display = truncated ? escapeHtml(content.substring(0, 200)) + '...' : escapeHtml(content);
-    html += `<div class="activity-entry" data-kind="tool">`;
-    html += `<div class="activity-entry-header"><span class="activity-kind tool-name">${escapeHtml(toolName)}</span></div>`;
-    html += `<div class="activity-entry-content">${display}</div>`;
+    html += `<div class="tool-call">`;
+    html += `<div class="tool-call__name">${escapeHtml(toolName)}</div>`;
+    html += `<div class="timeline-detail">${display}</div>`;
     if (truncated) {
       html += `<span data-full="${escapeHtml(content)}" data-truncated="true" style="display:none"></span>`;
       html += `<button class="btn btn-ghost btn-sm" onclick="Dashboard.toggleExpand(this)">Show more</button>`;
     }
     html += '</div>';
   }
-  html += '</details></div>';
+  html += '</details></div></div>';
   return html;
 }

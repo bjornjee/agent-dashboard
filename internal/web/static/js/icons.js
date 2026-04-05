@@ -1,6 +1,6 @@
 // SVG icon constants used across the dashboard.
 export const ICONS = {
-  logo: '<svg width="24" height="24" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="var(--accent)"/><text x="256" y="360" font-family="-apple-system,system-ui,sans-serif" font-size="320" font-weight="700" fill="#fff" text-anchor="middle">A</text></svg>',
+  logo: '<svg width="24" height="24" viewBox="0 0 512 512" style="border-radius:6px"><rect width="512" height="512" rx="96" fill="var(--accent-indigo)"/><text x="256" y="360" font-family="-apple-system,system-ui,sans-serif" font-size="320" font-weight="500" fill="#fff" text-anchor="middle">A</text></svg>',
   robot: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="8" width="18" height="12" rx="2"/><circle cx="9" cy="14" r="1.5"/><circle cx="15" cy="14" r="1.5"/><path d="M12 2v4M8 8V6a4 4 0 018 0v2"/></svg>',
   chat: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
   clipboard: '<svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',

@@ -714,17 +714,14 @@ body {
 .progress-segment--pending { background: rgba(255, 255, 255, 0.06); }
 
 /* ============================================
-   COMPONENT: Subagent Pills
+   COMPONENT: Subagent Pills Section
    ============================================ */
-.subagent-summary { margin-top: var(--space-2); }
-.subagent-summary:empty { display: none; }
-.subagent-summary-header {
-  display: flex; align-items: center; gap: var(--space-2);
-  font-size: 13px; color: var(--text-secondary); padding: 4px 0;
+.subagent-pills-section {
+  padding: 0 var(--space-6);
 }
-.subagent-summary-header svg { width: 16px; height: 16px; flex-shrink: 0; }
+.subagent-pills-section:empty { display: none; }
 .subagent-summary-list {
-  display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2);
+  display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) 0;
 }
 
 .subagent-pill {
@@ -837,6 +834,8 @@ body {
   background: rgba(255, 255, 255, 0.015);
 }
 
+.timeline-entry.hidden { display: none; }
+
 .timeline-icon {
   width: 28px;
   height: 28px;
@@ -852,7 +851,7 @@ body {
 .timeline-icon--assistant { background: rgba(129, 140, 248, 0.12); color: #818CF8; }
 .timeline-icon--tool { background: rgba(107, 114, 128, 0.1); color: #9CA3AF; }
 
-.timeline-icon svg { width: 12px; height: 12px; }
+.timeline-icon svg { width: 14px; height: 14px; }
 
 .timeline-content {
   flex: 1;
@@ -974,19 +973,17 @@ body {
   font-weight: 500;
 }
 
-/* Turn grouping */
-.activity-turn { border-left: 2px solid var(--border-subtle); padding-left: 10px; margin-bottom: 12px; }
-.activity-turn:last-child { margin-bottom: 0; }
-.activity-tool-group { margin: 4px 0; }
+/* Tool group within timeline */
+.activity-tool-group.hidden { display: none; }
 .tool-group-summary {
   font-size: 12px; font-weight: 500; color: var(--text-tertiary);
-  cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 4px;
+  cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 6px;
   list-style: none; font-family: var(--font-primary);
 }
 .tool-group-summary::-webkit-details-marker { display: none; }
-.tool-group-summary::before { content: '\25B6'; font-size: 8px; transition: transform 0.15s; display: inline-block; }
+.tool-group-summary::before { content: '\25B6'; font-size: 8px; transition: transform var(--transition-default); display: inline-block; }
 details[open] > .tool-group-summary::before { transform: rotate(90deg); }
-.activity-turn.hidden, .activity-tool-group.hidden { display: none; }
+.tool-group-summary:hover { color: var(--text-muted); }
 
 /* ============================================
    VIEW: Diff
