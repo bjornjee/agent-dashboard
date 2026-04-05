@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -564,8 +563,7 @@ func (m model) loadPlan() tea.Cmd {
 
 func openEditor(editor, dir string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command(editor, dir)
-		return openEditorMsg{err: tmux.SilentStart(cmd)}
+		return openEditorMsg{err: gitRunner.Start(editor, dir)}
 	}
 }
 
@@ -583,7 +581,7 @@ func openWorktreeWindowCmd(session, branch, dir string) tea.Cmd {
 func gitRemoteURL(dir string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "remote", "get-url", "origin").Output()
+	out, err := gitRunner.Output(ctx, "git", "-C", dir, "remote", "get-url", "origin")
 	if err != nil {
 		return "", err
 	}
@@ -621,7 +619,7 @@ func parseGitHubRepo(remoteURL string) (owner, repo string, ok bool) {
 func gitDefaultBranch(dir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "symbolic-ref", "refs/remotes/origin/HEAD").Output()
+	out, err := gitRunner.Output(ctx, "git", "-C", dir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err == nil {
 		ref := strings.TrimSpace(string(out))
 		// refs/remotes/origin/main -> main
@@ -647,7 +645,7 @@ func buildPRURL(owner, repo, base, branch string) string {
 func ghIsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	return tmux.SilentRun(exec.CommandContext(ctx, "gh", "auth", "status")) == nil
+	return gitRunner.SilentRun(ctx, "gh", "auth", "status") == nil
 }
 
 // checkGHAvailable returns a command that asynchronously checks gh auth status
@@ -664,10 +662,8 @@ func checkGHAvailable() tea.Cmd {
 func ghExistingPRURL(dir, branch string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", "pr", "view", branch,
+	out, err := gitRunner.CombinedOutputDir(ctx, dir, "gh", "pr", "view", branch,
 		"--json", "url", "-q", ".url")
-	cmd.Dir = dir
-	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
@@ -706,8 +702,7 @@ func openPR(dir, branch string) tea.Cmd {
 		if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" {
 			return openPRMsg{err: fmt.Errorf("refusing to open unexpected URL: %s", prURL)}
 		}
-		cmd := exec.Command("open", prURL)
-		return openPRMsg{err: tmux.SilentStart(cmd), hasPR: existing != ""}
+		return openPRMsg{err: gitRunner.Start("open", prURL), hasPR: existing != ""}
 	}
 }
 
@@ -717,9 +712,7 @@ func mergePR(dir, branch string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "gh", "pr", "merge", branch, "--squash")
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
+		out, err := gitRunner.CombinedOutputDir(ctx, dir, "gh", "pr", "merge", branch, "--squash")
 		if err != nil {
 			detail := strings.TrimSpace(string(out))
 			if detail != "" {
@@ -758,8 +751,8 @@ func postMergeCleanup(paneID, sessionID, stateDir, cwd, worktreeCwd, branch stri
 
 		// 2. Remove worktree if applicable
 		if worktreeCwd != "" {
-			cmd := exec.CommandContext(ctx, "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd)
-			if out, err := cmd.CombinedOutput(); err != nil {
+			out, err := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd)
+			if err != nil {
 				// If git worktree remove failed, try removing the directory directly as fallback.
 				if rmErr := os.RemoveAll(worktreeCwd); rmErr != nil {
 					detail := strings.TrimSpace(string(out))
@@ -767,30 +760,29 @@ func postMergeCleanup(paneID, sessionID, stateDir, cwd, worktreeCwd, branch stri
 				}
 			}
 
-			cmd = exec.CommandContext(ctx, "git", "-C", cwd, "worktree", "prune")
-			if out, err := cmd.CombinedOutput(); err != nil {
+			out, err = gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "worktree", "prune")
+			if err != nil {
 				detail := strings.TrimSpace(string(out))
 				return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "worktree prune"}
 			}
 		}
 
 		// 3. Checkout default branch
-		cmd := exec.CommandContext(ctx, "git", "-C", cwd, "checkout", defaultBranch)
-		if out, err := cmd.CombinedOutput(); err != nil {
+		out, err := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "checkout", defaultBranch)
+		if err != nil {
 			detail := strings.TrimSpace(string(out))
 			return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "checkout " + defaultBranch}
 		}
 
 		// 4. Pull default branch
-		cmd = exec.CommandContext(ctx, "git", "-C", cwd, "pull", "origin", defaultBranch)
-		if out, err := cmd.CombinedOutput(); err != nil {
+		out, err = gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "pull", "origin", defaultBranch)
+		if err != nil {
 			detail := strings.TrimSpace(string(out))
 			return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "pull origin " + defaultBranch}
 		}
 
 		// 5. Delete local branch (ignore errors — GitHub may have already deleted it)
-		cmd = exec.CommandContext(ctx, "git", "-C", cwd, "branch", "-d", branch)
-		_ = cmd.Run()
+		_ = gitRunner.RunDir(ctx, "", "git", "-C", cwd, "branch", "-d", branch)
 
 		// 6. Remove agent state file
 		_ = state.RemoveAgent(stateDir, sessionID)
