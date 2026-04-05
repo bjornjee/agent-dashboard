@@ -35,32 +35,43 @@ type petTickMsg struct{}
 
 // Red panda frames per state.
 // All sprites share the same 3-line body shape for visual consistency.
+// Each state has 3-4 frames with gradual changes to avoid flip-card effect.
 var petFrames = map[petState][][]string{
 	petIdle: {
 		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(o . o)", " (u u) ~"},
+		{" ^   ^", "(o . o)", " (u u)  ~"},
 		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 	petWalking: {
 		{" ^   ^", "(o . o)", " (u u)~"},
 		{" ^   ^", "(o . o)", " (u u) ~"},
+		{" ^   ^", "(o . o)", " (u u)~"},
+		{" ^   ^", "(o . o)", " (u u) ~"},
 	},
 	petSitting: {
 		{" ^   ^", "(o . o)", " (u u)~"},
-		{" ^   ^", "(- . o)", " (u u)~"}, // blink
 		{" ^   ^", "(o . o)", " (u u)~"},
-		{" ^   ^", "(o . -)", " (u u)~"}, // wink
+		{" ^   ^", "(- . -)", " (u u)~"},
+		{" ^   ^", "(o . o)", " (u u)~"},
 	},
 	petDrowsy: {
 		{" ^   ^", "(- . -)", " (u u)~"},
 		{" ^   ^", "(- . -)", " (u u) ~"},
+		{" ^   ^", "(o . -)", " (u u)~"},
+		{" ^   ^", "(- . -)", " (u u) ~"},
 	},
 	petSleeping: {
+		{" ^   ^", "(- . -)", " (u u)~"},
 		{" ^   ^", "(- . -) z", " (u u)~"},
+		{" ^   ^", "(- . -) z", " (u u) ~"},
 		{" ^   ^", "(- . -) zZ", " (u u)~"},
 	},
 	petEating: {
-		{" ^   ^", "(o . o)~", " (u u)/|"},
-		{" ^   ^", "(o .o )~", " (u u)/|"},
+		{" ^   ^", "(o . o)", " (u u)|~"},
+		{" ^   ^", "(o . o)", " (u u)|~"},
+		{" ^   ^", "(- . -)", " (u u)|~"},
+		{" ^   ^", "(o . o)", " (u u)| ~"},
 	},
 }
 
