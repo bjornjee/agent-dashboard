@@ -49,6 +49,7 @@ function renderActionBar(agent) {
 }
 
 let activityFilter = 'all';
+let currentPRUrl = '';
 
 function applyActivityFilter(container) {
   container.querySelectorAll('.timeline-entry').forEach(el => {
@@ -68,6 +69,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);
   if (!agent) { window.Dashboard.showList(); return; }
+  currentPRUrl = agent.pr_url || '';
 
   const st = effectiveState(agent);
   const detailHeader = `
@@ -303,8 +305,7 @@ async function loadTabContent(tab, agentId) {
         const files = data.files || [];
         const totalAdds = files.reduce((s, f) => s + (f.additions || 0), 0);
         const totalDels = files.reduce((s, f) => s + (f.deletions || 0), 0);
-        const agent = agents.find(a => a.session_id === agentId);
-        const prUrl = agent && agent.pr_url ? agent.pr_url + '/files' : '';
+        const prUrl = currentPRUrl ? currentPRUrl + '/files' : '';
         const hasPR = !!prUrl;
 
         let html = '<div class="mobile-diff-summary">';
