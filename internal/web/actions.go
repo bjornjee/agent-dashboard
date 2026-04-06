@@ -250,25 +250,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build command with optional skill and message.
-	// Long prompts are written to a temp file and sourced to avoid
-	// tmux/PTY paste buffer truncation.
+	// Build command with optional skill and message
 	cmd := s.cfg.Profile.Command
 	prompt := buildPrompt(req.Skill, req.Message)
 	if prompt != "" {
-		f, fErr := os.CreateTemp("", "ad-prompt-*.sh")
-		if fErr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create prompt file: %v", fErr)})
-			return
-		}
-		if _, fErr = f.WriteString(s.cfg.Profile.Command + " " + shellQuote(prompt) + "\n"); fErr != nil {
-			f.Close()
-			os.Remove(f.Name())
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("write prompt file: %v", fErr)})
-			return
-		}
-		f.Close()
-		cmd = ". " + shellQuote(f.Name()) + " ; rm -f " + shellQuote(f.Name())
+		cmd = cmd + " " + shellQuote(prompt)
 	}
 
 	if err := tmux.TmuxSendKeys(target, cmd); err != nil {

@@ -160,24 +160,29 @@ func TmuxSelectPane(target string) error {
 	return runner.Run(ctx, "select-pane", "-t", target)
 }
 
+// sendKeysChunkSize is the maximum number of bytes sent per send-keys call.
+// tmux silently truncates text beyond its internal paste/input buffer (~1 KB).
+const sendKeysChunkSize = 512
+
 // TmuxSendKeys sends text literally to a tmux pane, followed by Enter.
-// It uses set-buffer + paste-buffer instead of send-keys -l to avoid
-// truncation of long prompts (tmux's send-keys input buffer is limited).
+// Long text is split into chunks to avoid tmux's input buffer truncation.
 func TmuxSendKeys(target, text string) error {
-	bufName := "agent-dashboard-paste"
-	ctx1, cancel1 := context.WithTimeout(context.Background(), Timeout)
-	defer cancel1()
-	if err := runner.Run(ctx1, "set-buffer", "-b", bufName, "--", text); err != nil {
-		return err
+	for len(text) > 0 {
+		chunk := text
+		if len(chunk) > sendKeysChunkSize {
+			chunk = text[:sendKeysChunkSize]
+		}
+		text = text[len(chunk):]
+		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+		err := runner.Run(ctx, "send-keys", "-l", "-t", target, chunk)
+		cancel()
+		if err != nil {
+			return err
+		}
 	}
-	ctx2, cancel2 := context.WithTimeout(context.Background(), Timeout)
-	defer cancel2()
-	if err := runner.Run(ctx2, "paste-buffer", "-b", bufName, "-d", "-p", "-t", target); err != nil {
-		return err
-	}
-	ctx3, cancel3 := context.WithTimeout(context.Background(), Timeout)
-	defer cancel3()
-	return runner.Run(ctx3, "send-keys", "-t", target, "Enter")
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	return runner.Run(ctx, "send-keys", "-t", target, "Enter")
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.

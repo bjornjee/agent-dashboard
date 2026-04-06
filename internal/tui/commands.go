@@ -519,23 +519,11 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		}
 
 		// Build the command with optional initial prompt.
-		// Long prompts get written to a temp file and sourced to avoid
-		// tmux/PTY paste buffer truncation. The file is self-cleaning.
+		// The prompt is shell-quoted so metacharacters (>, |, &, etc.)
+		// are passed literally to the claude CLI as a single argument.
 		cmd := profile.Command
 		if prompt := buildPrompt(skill, message); prompt != "" {
-			f, fErr := os.CreateTemp("", "ad-prompt-*.sh")
-			if fErr != nil {
-				return createSessionMsg{err: fmt.Errorf("create prompt file: %w", fErr)}
-			}
-			// Write the full shell command with proper quoting.
-			if _, fErr = f.WriteString(profile.Command + " " + shellQuote(prompt) + "\n"); fErr != nil {
-				f.Close()
-				os.Remove(f.Name())
-				return createSessionMsg{err: fmt.Errorf("write prompt file: %w", fErr)}
-			}
-			f.Close()
-			// Source the file in the pane's shell, then clean up.
-			cmd = ". " + shellQuote(f.Name()) + " ; rm -f " + shellQuote(f.Name())
+			cmd = profile.Command + " " + shellQuote(prompt)
 		}
 
 		if sendErr := tmux.TmuxSendKeys(newTarget, cmd); sendErr != nil {
