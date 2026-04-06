@@ -112,32 +112,35 @@ const (
 
 // dinoGameHeight is the maximum lines the game needs:
 // 1 score + playRows + 1 ground.
-// playRows = dinoStandHeight + jumpPeak where jumpPeak = v*(v+1)/2.
-// With jumpVelocity=3 → peak=6, playRows = 5+6 = 11, total = 13.
+// playRows = dinoStandHeight + jumpPeak.
+// With jumpVelocity=4, gravity=2: Y goes 4→6→6→4→0, peak=6.
+// playRows = 5 + 6 = 11, total = 13.
 const dinoGameHeight = 13
 
 // -- Physics constants --
 
 const (
-	jumpVelocity    = 3
-	gravity         = 1
+	jumpVelocity    = 4
+	gravity         = 2 // faster arc so dino doesn't float into obstacles
 	maxSpeed        = 5
 	baseSpeed       = 1
 	speedUpInterval = 80
 	minSpawnGap     = 25 // enough cols between obstacles to react and land
 	maxSpawnGap     = 50
+	duckDuration    = 6 // auto-release duck after this many ticks
 )
 
 // -- Game model --
 
 type dinoGameModel struct {
-	state   dinoGameState
-	width   int
-	height  int
-	pose    dinoPose
-	dinoY   int // vertical offset from ground (0 = ground, positive = up)
-	jumpVel int
-	frame   int // animation frame counter
+	state     dinoGameState
+	width     int
+	height    int
+	pose      dinoPose
+	dinoY     int // vertical offset from ground (0 = ground, positive = up)
+	jumpVel   int
+	frame     int // animation frame counter
+	duckTicks int // ticks remaining in duck; 0 = not ducking
 
 	obstacles  []obstacle
 	groundOff  int
@@ -206,6 +209,7 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 		case "down":
 			if d.dinoY == 0 {
 				d.pose = dinoDucking
+				d.duckTicks = duckDuration
 			}
 		case "esc", "q":
 			return d, func() tea.Msg { return dinoExitMsg{} }
@@ -244,6 +248,15 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 			d.dinoY = 0
 			d.jumpVel = 0
 			d.pose = dinoRunning
+		}
+	}
+
+	// Auto-release duck after timer expires
+	if d.isDucking() {
+		d.duckTicks--
+		if d.duckTicks <= 0 {
+			d.pose = dinoRunning
+			d.duckTicks = 0
 		}
 	}
 
