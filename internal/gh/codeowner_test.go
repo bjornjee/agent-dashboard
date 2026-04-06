@@ -41,8 +41,8 @@ func TestIsCodeOwner(t *testing.T) {
 
 	r := &fakeRunner{
 		responses: map[string]string{
-			"gh":        "alice\n",
-			"git":  dir + "\n",
+			"gh":  "alice\n",
+			"git": dir + "\n",
 		},
 	}
 
@@ -61,8 +61,8 @@ func TestIsCodeOwner_NotOwner(t *testing.T) {
 
 	r := &fakeRunner{
 		responses: map[string]string{
-			"gh":        "charlie\n",
-			"git":  dir + "\n",
+			"gh":  "charlie\n",
+			"git": dir + "\n",
 		},
 	}
 
@@ -95,8 +95,8 @@ func TestMergeArgs_CodeOwner(t *testing.T) {
 
 	r := &fakeRunner{
 		responses: map[string]string{
-			"gh":        "alice\n",
-			"git":  dir + "\n",
+			"gh":  "alice\n",
+			"git": dir + "\n",
 		},
 	}
 
@@ -122,8 +122,8 @@ func TestMergeArgs_NotCodeOwner(t *testing.T) {
 
 	r := &fakeRunner{
 		responses: map[string]string{
-			"gh":        "charlie\n",
-			"git":  dir + "\n",
+			"gh":  "charlie\n",
+			"git": dir + "\n",
 		},
 	}
 

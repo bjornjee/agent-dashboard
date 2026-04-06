@@ -12,9 +12,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
-	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
