@@ -154,6 +154,7 @@ type DebugSettings struct {
 // ExperimentalSettings controls opt-in experimental features.
 type ExperimentalSettings struct {
 	AsciiPet bool `toml:"ascii_pet"` // show animated ASCII pet in left panel
+	DinoGame bool `toml:"dino_game"` // enable Chrome-style dino runner game
 }
 
 // Settings holds all user-facing configuration loaded from settings.toml.

@@ -686,7 +686,7 @@ func (m model) View() tea.View {
 		v := tea.NewView(content)
 		v.AltScreen = true
 		switch m.mode {
-		case modeReply, modeCreateFolder, modeCreateSkill, modeCreateMessage:
+		case modeReply, modeCreateFolder, modeCreateSkill, modeCreateMessage, modeDinoGame:
 			v.MouseMode = tea.MouseModeNone
 		default:
 			v.MouseMode = tea.MouseModeCellMotion
@@ -704,6 +704,12 @@ func (m model) View() tea.View {
 		overlay := m.renderHelpOverlay()
 		helpBar := m.renderHelpBar()
 		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, overlay, helpBar))
+	}
+
+	if m.mode == modeDinoGame {
+		gameView := m.dino.View()
+		helpBar := m.renderHelpBar()
+		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, gameView, helpBar))
 	}
 
 	var left, right string
@@ -1025,6 +1031,13 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, boldStyle.Render("q/d/esc")+" close")
 		parts = append(parts, boldStyle.Render("h")+" help")
 		return m.composeHelpBarWithStatus(helpStyle.Render("  " + strings.Join(parts, "  ")))
+	}
+
+	if m.mode == modeDinoGame {
+		parts = append(parts, boldStyle.Render("space")+" jump")
+		parts = append(parts, boldStyle.Render("↓")+" duck")
+		parts = append(parts, boldStyle.Render("esc")+" exit")
+		return m.truncateHelpBar(parts)
 	}
 
 	if m.mode == modeConfirmMerge {

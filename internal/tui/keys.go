@@ -216,6 +216,13 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.modeResetAt = time.Now()
 	}
 
+	// Dino game mode: route all keys to game
+	if m.mode == modeDinoGame {
+		var cmd tea.Cmd
+		m.dino, cmd = m.dino.Update(msg)
+		return m, cmd
+	}
+
 	// Create folder mode
 	if m.mode == modeCreateFolder {
 		switch key {
@@ -937,6 +944,12 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.selectedSugg = 0
 		m.updateRightContent()
 		return m, focusCmd
+	case "G":
+		if m.dinoEnabled {
+			m.mode = modeDinoGame
+			m.dino = newDinoGameModel(m.width, m.height-2)
+			return m, nil
+		}
 	case "y", "n":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
 			es := agent.State

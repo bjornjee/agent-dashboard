@@ -213,6 +213,10 @@ type model struct {
 	// ASCII pet (experimental)
 	pet        petModel
 	petEnabled bool
+
+	// Dino game (experimental)
+	dino        dinoGameModel
+	dinoEnabled bool
 }
 
 // setStatus sets a timed status message. isError controls the display color.
@@ -448,6 +452,8 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		skillsAvailable:   hasSkills,
 		pet:               newPetModel(0),
 		petEnabled:        cfg.Settings.Experimental.AsciiPet,
+		dino:              newDinoGameModel(0, 0),
+		dinoEnabled:       cfg.Settings.Experimental.DinoGame,
 	}
 }
 
@@ -653,6 +659,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pet, cmd = m.pet.Update(msg)
 			return m, cmd
 		}
+		return m, nil
+
+	case dinoTickMsg:
+		if m.mode == modeDinoGame {
+			var cmd tea.Cmd
+			m.dino, cmd = m.dino.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	case dinoExitMsg:
+		m.mode = modeNormal
 		return m, nil
 
 	case spinner.TickMsg:
@@ -1006,6 +1024,7 @@ func (m *model) resizeViewports() {
 		}
 		m.pet.setWidth(m.leftWidth)
 	}
+	m.dino = m.dino.withSize(m.width, m.height-2)
 	m.agentListVP.SetWidth(m.leftWidth)
 	m.agentListVP.SetHeight(agentListHeight)
 
