@@ -18,7 +18,19 @@ import (
 // -- Content Builders --
 
 func (m *model) updateLeftContent() {
-	m.agentListVP.SetContent(m.agentListContent())
+	content, selectedLine := m.agentListContentWithLine()
+	m.agentListVP.SetContent(content)
+
+	// Auto-scroll: keep selected item visible in the viewport
+	vpHeight := m.agentListVP.Height()
+	if vpHeight > 0 && selectedLine >= 0 {
+		yOff := m.agentListVP.YOffset()
+		if selectedLine < yOff {
+			m.agentListVP.SetYOffset(selectedLine)
+		} else if selectedLine >= yOff+vpHeight {
+			m.agentListVP.SetYOffset(selectedLine - vpHeight + 1)
+		}
+	}
 }
 
 func (m *model) updateRightContent() {
@@ -172,7 +184,16 @@ func (m *model) updateRightContent() {
 }
 
 func (m model) agentListContent() string {
+	content, _ := m.agentListContentWithLine()
+	return content
+}
+
+// agentListContentWithLine renders the agent list and returns both the content
+// string and the line number (0-based) of the first line of the selected node.
+// Returns -1 if no node is selected.
+func (m model) agentListContentWithLine() (string, int) {
 	var lines []string
+	selectedLine := -1
 
 	if len(m.treeNodes) == 0 {
 		if !m.startupDone {
@@ -180,14 +201,23 @@ func (m model) agentListContent() string {
 		} else {
 			lines = append(lines, "  No agents found")
 		}
-		return strings.Join(lines, "\n")
+		return strings.Join(lines, "\n"), -1
 	}
 
 	lastGroup := -1
 	for nodeIdx, node := range m.treeNodes {
 		agent := m.agents[node.AgentIdx]
 
+		// Determine group for this node (used for group collapsing)
+		effState := agent.State
+		nodeGroup := agentGroup(agent)
+
 		if node.Sub != nil {
+			// Skip subagents in collapsed groups
+			if m.collapsedGroups[nodeGroup] {
+				continue
+			}
+
 			// Subagent node
 			isLast := true
 			// Check if this is the last subagent in the list
@@ -223,6 +253,9 @@ func (m model) agentListContent() string {
 				subLabel += ": " + desc
 			}
 
+			if nodeIdx == m.selected {
+				selectedLine = len(lines)
+			}
 			line := fmt.Sprintf("    %s %s %s", helpStyle.Render(prefix), subIcon, subLabel)
 			if nodeIdx == m.selected {
 				line = highlightLine(line, m.leftWidth)
@@ -232,11 +265,7 @@ func (m model) agentListContent() string {
 		}
 
 		// Parent agent node
-		effState := agent.State
-		group := domain.StatePriority[effState]
-		if group == 0 {
-			group = 3
-		}
+		group := nodeGroup
 
 		if group != lastGroup {
 			if lastGroup != -1 {
@@ -250,9 +279,37 @@ func (m model) agentListContent() string {
 					color color.Color
 				}{"PLAN", planColor}
 			}
-			lines = append(lines, " "+lipgloss.NewStyle().
-				Foreground(hdr.color).Bold(true).Render(hdr.label))
+
+			// Count agents in this group
+			groupCount := 0
+			for _, n := range m.treeNodes {
+				if n.Sub != nil {
+					continue
+				}
+				a := m.agents[n.AgentIdx]
+				g := domain.StatePriority[a.State]
+				if g == 0 {
+					g = 3
+				}
+				if g == group {
+					groupCount++
+				}
+			}
+
+			if m.collapsedGroups[group] {
+				lines = append(lines, " "+lipgloss.NewStyle().
+					Foreground(hdr.color).Bold(true).Render(hdr.label)+
+					helpStyle.Render(fmt.Sprintf(" [%d] ▸", groupCount)))
+			} else {
+				lines = append(lines, " "+lipgloss.NewStyle().
+					Foreground(hdr.color).Bold(true).Render(hdr.label))
+			}
 			lastGroup = group
+		}
+
+		// Skip agent content if group is collapsed
+		if m.collapsedGroups[group] {
+			continue
 		}
 
 		si := stateIcons[effState]
@@ -283,6 +340,9 @@ func (m model) agentListContent() string {
 		}
 
 		icon := lipgloss.NewStyle().Foreground(si.color).Render(si.icon)
+		if nodeIdx == m.selected {
+			selectedLine = len(lines)
+		}
 		line := fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayRepo, duration)
 
 		if nodeIdx == m.selected {
@@ -325,7 +385,7 @@ func (m model) agentListContent() string {
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), selectedLine
 }
 
 func (m model) filesContent(agent domain.Agent) string {
@@ -721,6 +781,38 @@ func (m model) View() tea.View {
 	return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, main, help))
 }
 
+// agentListWithScrollHints wraps the agent list viewport view with scroll
+// indicators (▲/▼) when content overflows above or below the visible area.
+func (m model) agentListWithScrollHints() string {
+	view := m.agentListVP.View()
+	totalLines := m.agentListVP.TotalLineCount()
+	vpHeight := m.agentListVP.Height()
+	yOff := m.agentListVP.YOffset()
+
+	if totalLines <= vpHeight {
+		return view // no overflow, no hints needed
+	}
+
+	hintStyle := lipgloss.NewStyle().Foreground(themeOverlay1).Faint(true)
+
+	var parts []string
+
+	if yOff > 0 {
+		hint := hintStyle.Render(fmt.Sprintf("  ▲ %d more", yOff))
+		parts = append(parts, ansi.Truncate(hint, m.leftWidth, "…"))
+	}
+
+	parts = append(parts, view)
+
+	below := totalLines - yOff - vpHeight
+	if below > 0 {
+		hint := hintStyle.Render(fmt.Sprintf("  ▼ %d more", below))
+		parts = append(parts, ansi.Truncate(hint, m.leftWidth, "…"))
+	}
+
+	return strings.Join(parts, "\n")
+}
+
 func (m model) renderLeftPanel() string {
 	panelHeight := m.height - 5 - m.bannerHeight()
 	style := borderStyle
@@ -742,7 +834,7 @@ func (m model) renderLeftPanel() string {
 		if listH > 0 {
 			m.agentListVP.SetHeight(listH)
 			content = lipgloss.JoinVertical(lipgloss.Left,
-				m.agentListVP.View(),
+				m.agentListWithScrollHints(),
 				m.dino.View(),
 			)
 		} else {
@@ -756,7 +848,7 @@ func (m model) renderLeftPanel() string {
 
 	if m.petEnabled {
 		content := lipgloss.JoinVertical(lipgloss.Left,
-			m.agentListVP.View(),
+			m.agentListWithScrollHints(),
 			m.pet.View(),
 		)
 		return style.
@@ -768,7 +860,7 @@ func (m model) renderLeftPanel() string {
 	return style.
 		Width(m.leftWidth + 2).
 		Height(panelHeight + 2).
-		Render(m.agentListVP.View())
+		Render(m.agentListWithScrollHints())
 }
 
 func (m model) renderRightPanel() string {
@@ -1223,6 +1315,7 @@ func (m model) renderHelpOverlay() string {
 		lines = append(lines, line("m", "Mark merged + send cleanup"))
 	}
 	lines = append(lines, line("c", "Collapse/expand subagents"))
+	lines = append(lines, line("C", "Collapse/expand status group"))
 	lines = append(lines, "")
 
 	// View Controls

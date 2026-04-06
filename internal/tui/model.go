@@ -109,10 +109,11 @@ type model struct {
 	agentCaches map[string]*agentCache
 
 	// Subagent tree
-	agentSubagents map[string][]domain.SubagentInfo // parentTarget → subagents
-	collapsed      map[string]bool                  // parentTarget → collapsed state
-	dismissed      map[string]bool                  // "parentTarget:agentID" → dismissed
-	subActivity    []domain.ActivityEntry           // activity log for selected subagent
+	agentSubagents  map[string][]domain.SubagentInfo // parentTarget → subagents
+	collapsed       map[string]bool                  // parentTarget → collapsed state
+	dismissed       map[string]bool                  // "parentTarget:agentID" → dismissed
+	collapsedGroups map[int]bool                     // group priority → collapsed state
+	subActivity     []domain.ActivityEntry           // activity log for selected subagent
 
 	// Plan content for selected agent
 	planContent  string
@@ -250,6 +251,28 @@ func (m *model) buildTree() {
 	}
 }
 
+// agentGroup returns the status group priority for the given agent.
+func agentGroup(agent domain.Agent) int {
+	group := domain.StatePriority[agent.State]
+	if group == 0 {
+		group = 3
+	}
+	return group
+}
+
+// isNodeInCollapsedGroup reports whether the tree node at index i belongs to
+// a status group that is currently collapsed.
+func (m model) isNodeInCollapsedGroup(i int) bool {
+	if i < 0 || i >= len(m.treeNodes) {
+		return false
+	}
+	node := m.treeNodes[i]
+	if node.AgentIdx >= len(m.agents) {
+		return false
+	}
+	return m.collapsedGroups[agentGroup(m.agents[node.AgentIdx])]
+}
+
 // selectedIdentity returns the identity of the currently selected tree node:
 // the agent Target and (if a subagent is selected) the domain.SubagentInfo.AgentID.
 func (m model) selectedIdentity() (target string, subID string) {
@@ -296,7 +319,7 @@ func (m *model) restoreSelection(target, subID string) {
 // Returns the index of the next parent, or stays at current if none found.
 func (m model) nextParentIndex(dir int) int {
 	for i := m.selected + dir; i >= 0 && i < len(m.treeNodes); i += dir {
-		if m.treeNodes[i].Sub == nil {
+		if m.treeNodes[i].Sub == nil && !m.isNodeInCollapsedGroup(i) {
 			return i
 		}
 	}
@@ -444,6 +467,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		agentSubagents:    make(map[string][]domain.SubagentInfo),
 		collapsed:         make(map[string]bool),
 		dismissed:         make(map[string]bool),
+		collapsedGroups:   make(map[int]bool),
 		quote:             "",
 		quoteAuthor:       "",
 		nowFunc:           time.Now,

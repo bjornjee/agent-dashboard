@@ -2104,3 +2104,168 @@ func TestSetStatus_SetsFields(t *testing.T) {
 		t.Errorf("setStatus(true) mismatch: msg=%q err=%v tick=%d", m.statusMsg, m.statusIsError, m.statusMsgTick)
 	}
 }
+
+func TestAutoScroll_SelectedNodeStaysVisible(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	// Create enough agents to overflow a small viewport
+	for i := 0; i < 20; i++ {
+		m.agents = append(m.agents, domain.Agent{
+			Target:  fmt.Sprintf("main:%d.0", i),
+			Window:  i,
+			Pane:    0,
+			State:   "running",
+			Branch:  fmt.Sprintf("feat/branch-%d", i),
+			Session: fmt.Sprintf("session-%d", i),
+		})
+	}
+	m.buildTree()
+	m.leftWidth = 50
+	m.agentListVP.SetWidth(50)
+	m.agentListVP.SetHeight(10) // small viewport
+
+	// Select last node
+	m.selected = len(m.treeNodes) - 1
+	m.updateLeftContent()
+
+	yOff := m.agentListVP.YOffset()
+	if yOff == 0 {
+		t.Error("expected viewport to scroll down for last selected node, but YOffset is 0")
+	}
+
+	// Select first node — selectedLine will be 1 (line 0 is the group header)
+	// so scrolling puts the selected line in view, which may be YOffset 0 or 1
+	m.selected = 0
+	m.updateLeftContent()
+
+	if m.agentListVP.YOffset() > 1 {
+		t.Errorf("expected viewport near top for first node, got YOffset=%d", m.agentListVP.YOffset())
+	}
+}
+
+func TestCollapsedGroup_HidesAgentsInRenderedContent(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Session: "running-agent"},
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "idle_prompt", Session: "review-agent"},
+	}
+	m.buildTree()
+	m.leftWidth = 60
+
+	// Before collapse: both agents visible
+	content := m.agentListContent()
+	if !strings.Contains(content, "RUNNING") {
+		t.Error("expected RUNNING header in content")
+	}
+
+	// Collapse the RUNNING group (priority 3)
+	m.collapsedGroups[3] = true
+	content = m.agentListContent()
+
+	// Header should still be visible with count
+	if !strings.Contains(content, "RUNNING") {
+		t.Error("expected RUNNING header to remain after collapse")
+	}
+	if !strings.Contains(content, "▸") {
+		t.Error("expected collapse indicator ▸ in collapsed group header")
+	}
+
+	// Agent content should be hidden
+	if strings.Contains(content, "1.0") {
+		t.Error("agent pane ID should be hidden when group is collapsed")
+	}
+}
+
+func TestCollapsedGroup_NavigationSkipsCollapsedNodes(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},    // group 2
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},     // group 3
+		{Target: "main:3.0", Window: 3, Pane: 0, State: "idle_prompt"}, // group 4
+	}
+	m.buildTree()
+	m.leftWidth = 60
+
+	// Collapse group 3 (RUNNING)
+	m.collapsedGroups[3] = true
+
+	// Start at first node (question, group 2)
+	m.selected = 0
+	if m.isNodeInCollapsedGroup(0) {
+		t.Error("node 0 (question) should not be in collapsed group")
+	}
+	if !m.isNodeInCollapsedGroup(1) {
+		t.Error("node 1 (running) should be in collapsed group")
+	}
+	if m.isNodeInCollapsedGroup(2) {
+		t.Error("node 2 (idle_prompt) should not be in collapsed group")
+	}
+}
+
+func TestIsNodeInCollapsedGroup(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
+	}
+	m.buildTree()
+
+	// Not collapsed
+	if m.isNodeInCollapsedGroup(0) {
+		t.Error("node should not be in collapsed group when group is not collapsed")
+	}
+
+	// Collapse group 3 (running)
+	m.collapsedGroups[3] = true
+	if !m.isNodeInCollapsedGroup(0) {
+		t.Error("node should be in collapsed group after collapsing group 3")
+	}
+
+	// Out of bounds
+	if m.isNodeInCollapsedGroup(-1) {
+		t.Error("out-of-bounds index should return false")
+	}
+	if m.isNodeInCollapsedGroup(999) {
+		t.Error("out-of-bounds index should return false")
+	}
+}
+
+func TestScrollHints_ShownWhenOverflow(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	for i := 0; i < 20; i++ {
+		m.agents = append(m.agents, domain.Agent{
+			Target:  fmt.Sprintf("main:%d.0", i),
+			Window:  i,
+			Pane:    0,
+			State:   "running",
+			Branch:  fmt.Sprintf("feat/branch-%d", i),
+			Session: fmt.Sprintf("session-%d", i),
+		})
+	}
+	m.buildTree()
+	m.leftWidth = 50
+	m.agentListVP.SetWidth(50)
+	m.agentListVP.SetHeight(5) // tiny viewport
+
+	// Set content at top
+	m.selected = 0
+	m.updateLeftContent()
+	view := m.agentListWithScrollHints()
+
+	// Should have bottom scroll hint
+	if !strings.Contains(view, "▼") {
+		t.Error("expected ▼ scroll hint when content overflows below")
+	}
+	// Should NOT have top scroll hint at position 0
+	if strings.Contains(view, "▲") {
+		t.Error("should not have ▲ scroll hint when at top")
+	}
+
+	// Scroll to bottom
+	m.selected = len(m.treeNodes) - 1
+	m.updateLeftContent()
+	view = m.agentListWithScrollHints()
+
+	// Should have top scroll hint
+	if !strings.Contains(view, "▲") {
+		t.Error("expected ▲ scroll hint when content overflows above")
+	}
+}
