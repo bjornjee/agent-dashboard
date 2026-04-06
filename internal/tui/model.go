@@ -1024,7 +1024,7 @@ func (m *model) resizeViewports() {
 		}
 		m.pet.setWidth(m.leftWidth)
 	}
-	m.dino = m.dino.withSize(m.width, m.height-2)
+	m.dino = m.dino.withSize(m.leftWidth, petHeight)
 	m.agentListVP.SetWidth(m.leftWidth)
 	m.agentListVP.SetHeight(agentListHeight)
 

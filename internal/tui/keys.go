@@ -947,7 +947,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "G":
 		if m.dinoEnabled {
 			m.mode = modeDinoGame
-			m.dino = newDinoGameModel(m.width, m.height-2)
+			m.dino = newDinoGameModel(m.leftWidth, petHeight)
 			return m, nil
 		}
 	case "y", "n":

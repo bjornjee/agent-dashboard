@@ -686,7 +686,7 @@ func (m model) View() tea.View {
 		v := tea.NewView(content)
 		v.AltScreen = true
 		switch m.mode {
-		case modeReply, modeCreateFolder, modeCreateSkill, modeCreateMessage, modeDinoGame:
+		case modeReply, modeCreateFolder, modeCreateSkill, modeCreateMessage:
 			v.MouseMode = tea.MouseModeNone
 		default:
 			v.MouseMode = tea.MouseModeCellMotion
@@ -704,12 +704,6 @@ func (m model) View() tea.View {
 		overlay := m.renderHelpOverlay()
 		helpBar := m.renderHelpBar()
 		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, overlay, helpBar))
-	}
-
-	if m.mode == modeDinoGame {
-		gameView := m.dino.View()
-		helpBar := m.renderHelpBar()
-		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, gameView, helpBar))
 	}
 
 	var left, right string
@@ -734,10 +728,16 @@ func (m model) renderLeftPanel() string {
 		style = style.BorderForeground(themeSapphire)
 	}
 
-	if m.petEnabled {
+	if m.petEnabled || m.mode == modeDinoGame {
+		var bottomPanel string
+		if m.mode == modeDinoGame {
+			bottomPanel = m.dino.View()
+		} else {
+			bottomPanel = m.pet.View()
+		}
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			m.agentListVP.View(),
-			m.pet.View(),
+			bottomPanel,
 		)
 		return style.
 			Width(m.leftWidth + 2).
