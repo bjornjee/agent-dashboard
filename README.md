@@ -71,12 +71,13 @@ cd agent-dashboard
 ./install.sh --build
 ```
 
-### Step 2: Register the plugin
+### Step 2: Register the marketplace and install the plugin
 
 In any Claude Code session, run:
 
 ```
-/plugin add bjornjee/agent-dashboard
+/marketplace add bjornjee/agent-dashboard
+/plugin install agent-dashboard@agent-dashboard
 ```
 
 Then restart Claude Code sessions for hooks and skills to take effect.
@@ -88,7 +89,8 @@ Then restart Claude Code sessions for hooks and skills to take effect.
 In any Claude Code session, run:
 
 ```
-/plugin remove agent-dashboard
+/plugin uninstall agent-dashboard@agent-dashboard
+/marketplace remove agent-dashboard
 ```
 
 ### Step 2: Remove the binary and state
