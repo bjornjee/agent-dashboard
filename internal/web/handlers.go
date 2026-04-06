@@ -10,9 +10,19 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
+	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
+
+// handleSkills returns the list of discovered plugin skills.
+func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request) {
+	discovered := skills.DiscoverSkills(s.cfg.Profile.PluginCacheDir)
+	if discovered == nil {
+		discovered = []string{}
+	}
+	writeJSON(w, http.StatusOK, discovered)
+}
 
 // sensitiveDirs lists directory base names that should never be sent to the
 // web client. These may contain credentials, keys, or other secrets.

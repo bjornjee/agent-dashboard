@@ -68,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents/{id}/usage", s.requireAuth(s.handleUsage))
 	mux.HandleFunc("GET /api/agents/{id}/subagents", s.requireAuth(s.handleSubagents))
 	mux.HandleFunc("GET /api/usage/daily", s.requireAuth(s.handleDailyUsage))
+	mux.HandleFunc("GET /api/skills", s.requireAuth(s.handleSkills))
 	mux.HandleFunc("GET /api/suggestions", s.requireAuth(s.handleSuggestions))
 
 	// Action routes (require session + CSRF header)
