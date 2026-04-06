@@ -161,16 +161,23 @@ func TmuxSelectPane(target string) error {
 }
 
 // TmuxSendKeys sends text literally to a tmux pane, followed by Enter.
-// The -l flag prevents tmux from interpreting key names (e.g. "Enter", "Escape").
+// It uses set-buffer + paste-buffer instead of send-keys -l to avoid
+// truncation of long prompts (tmux's send-keys input buffer is limited).
 func TmuxSendKeys(target, text string) error {
+	bufName := "agent-dashboard-paste"
 	ctx1, cancel1 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel1()
-	if err := runner.Run(ctx1, "send-keys", "-l", "-t", target, text); err != nil {
+	if err := runner.Run(ctx1, "set-buffer", "-b", bufName, "--", text); err != nil {
 		return err
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel2()
-	return runner.Run(ctx2, "send-keys", "-t", target, "Enter")
+	if err := runner.Run(ctx2, "paste-buffer", "-b", bufName, "-d", "-t", target); err != nil {
+		return err
+	}
+	ctx3, cancel3 := context.WithTimeout(context.Background(), Timeout)
+	defer cancel3()
+	return runner.Run(ctx3, "send-keys", "-t", target, "Enter")
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.
