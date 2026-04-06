@@ -1,15 +1,15 @@
 @import "color_schemes/agent-dashboard";
 
-// --- Dark overrides ---
-$body-background-color:  $zinc-950;
-$sidebar-color:          $zinc-900;
-$body-text-color:        $zinc-400;
-$body-heading-color:     $zinc-050;
-$nav-child-link-color:   $zinc-500;
-$border-color:           $zinc-800;
-$code-background-color:  $zinc-900;
-$search-background-color:$zinc-900;
-$search-result-preview-color: $zinc-500;
-$link-color:             $indigo-400;
-$link-hover-color:       $indigo-300;
-$feedback-color:         $indigo-400;
+// --- Dark overrides (Claude.ai inspired) ---
+$body-background-color:  $warm-900;
+$sidebar-color:          $warm-950;
+$body-text-color:        $warm-300;
+$body-heading-color:     $warm-050;
+$nav-child-link-color:   $warm-400;
+$border-color:           rgba(222, 220, 209, 0.12);
+$code-background-color:  $warm-800;
+$search-background-color:$warm-800;
+$search-result-preview-color: $warm-400;
+$link-color:             $terra-400;
+$link-hover-color:       $terra-300;
+$feedback-color:         $warm-700;

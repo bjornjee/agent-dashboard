@@ -3,33 +3,25 @@
 // =============================================================
 // Raw colour tokens are defined in custom/setup.scss (loaded first)
 
-// --- Theme variable overrides ---
-$body-background-color: $zinc-050;
+$body-background-color: $warm-050;
 $sidebar-color:         #ffffff;
-$body-text-color:       $zinc-700;
-$body-heading-color:    $zinc-950;
-$nav-child-link-color:  $zinc-500;
-$search-result-preview-color: $zinc-500;
+$body-text-color:       $warm-700;
+$body-heading-color:    $warm-950;
+$nav-child-link-color:  $warm-500;
+$search-result-preview-color: $warm-500;
 
-// Links
-$link-color:            $indigo-600;
-$link-hover-color:      $indigo-500;
+$link-color:            $terra-600;
+$link-hover-color:      $terra-500;
 
-// Navigation
 $nav-width:             16.5rem;
 
-// Search feedback highlight
-$feedback-color:        $indigo-500;
+$feedback-color:        $terra-500;
 
-// Code
-$code-background-color: $zinc-100;
+$code-background-color: $warm-100;
 $code-font-size:        13px;
 
-// Search
 $search-background-color: #ffffff;
 
-// Borders
-$border-color:          $zinc-200;
+$border-color:          $warm-200;
 
-// Buttons
-$btn-primary-color:     $indigo-600;
+$btn-primary-color:     $terra-500;

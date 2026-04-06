@@ -77,7 +77,7 @@ figure.highlight {
     margin: 0;
     overflow-x: auto;
     line-height: 1.6;
-    background-color: #111113;
+    background-color: $warm-850;
     color: $zinc-300;
 
     code {
@@ -128,11 +128,11 @@ div.highlighter-rouge:hover .copy-code-button {
   .k, .kd, .kn, .kp, .kr, .kt   { color: #c678dd; }  // keywords — purple
   .s, .s1, .s2, .sb, .sc, .sd,
   .sh, .sx                        { color: #98c379; }  // strings — green
-  .nf, .nx                        { color: #818cf8; }  // functions — indigo
+  .nf, .nx                        { color: #e39479; }  // functions — terracotta
   .nc, .nn                        { color: #e5c07b; }  // classes/namespaces — gold
   .c, .c1, .cm, .cs               { color: #5c6370; font-style: italic; } // comments
   .mi, .mf, .mh, .mo, .il        { color: #d19a66; }  // numbers — orange
-  .o, .ow                         { color: #a5b4fc; }  // operators — light indigo
+  .o, .ow                         { color: #d19a66; }  // operators — warm orange
   .nb                             { color: #e5c07b; }  // builtins
   .na                             { color: #d19a66; }  // attributes
   .p                              { color: #abb2bf; }  // punctuation
@@ -162,7 +162,7 @@ div.highlighter-rouge:hover .copy-code-button {
     transform: translateX(-50%);
     width: 600px;
     height: 400px;
-    background: radial-gradient(ellipse, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+    background: radial-gradient(ellipse, rgba(217, 119, 87, 0.08) 0%, transparent 70%);
     pointer-events: none;
   }
 }
@@ -256,10 +256,10 @@ div.highlighter-rouge:hover .copy-code-button {
   &--primary {
     background: linear-gradient(135deg, $indigo-500, $indigo-600);
     color: #ffffff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(217, 119, 87, 0.3);
     &:hover {
       background: linear-gradient(135deg, $indigo-400, $indigo-500);
-      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3), 0 0 0 1px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 2px 8px rgba(217, 119, 87, 0.3), 0 0 0 1px rgba(217, 119, 87, 0.4);
       color: #ffffff;
       text-decoration: none;
       transform: translateY(-1px);
@@ -308,7 +308,7 @@ div.highlighter-rouge:hover .copy-code-button {
     pre {
       margin: 0;
       padding: 0.75rem 1rem;
-      background: #111113;
+      background: $warm-850;
       border-radius: 8px;
       border: 1px solid $zinc-800;
       overflow-x: auto;
@@ -371,8 +371,8 @@ div.highlighter-rouge:hover .copy-code-button {
   }
 
   &:hover {
-    border-color: rgba(99, 102, 241, 0.3);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.06);
+    border-color: rgba(217, 119, 87, 0.3);
+    box-shadow: 0 4px 12px rgba(217, 119, 87, 0.06);
 
     &::before {
       background: $indigo-500;
@@ -418,7 +418,7 @@ div.highlighter-rouge:hover .copy-code-button {
   font-size: 14px;
   line-height: 1.55;
   margin-bottom: 2rem;
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(217, 119, 87, 0.15);
 
   a {
     color: $indigo-600;
@@ -442,24 +442,60 @@ div.highlighter-rouge:hover .copy-code-button {
   }
 }
 
-// Active page — indigo left border
+// Active page — subtle warm background pill (Claude docs style)
 .nav-list-item.active > .nav-list-link {
-  border-left: 2px solid $indigo-500;
-  padding-left: 10px;
-  font-weight: 600;
-  color: $zinc-950;
-  background-color: rgba(99, 102, 241, 0.06);
+  font-weight: 600 !important;
+  color: $warm-050 !important;
+  background-color: rgba(222, 220, 209, 0.08) !important;
+  background-image: none !important;
+  border-radius: 6px;
+  border-left: none !important;
 }
 
-// Section category headers
-.nav-list .nav-list-item .nav-list-link {
-  font-size: 14px;
-  padding: 4px 0 4px 12px;
-  border-radius: 4px;
-  transition: background 0.15s ease;
+// Top-level section headers (Getting Started, Guides, etc.)
+.site-nav > .nav-list > .nav-list-item > .nav-list-link {
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: $warm-400;
+  margin-top: 1rem;
+  padding: 6px 12px;
 
   &:hover {
-    background: rgba(99, 102, 241, 0.06);
+    color: $warm-200;
+    background: transparent;
+  }
+}
+
+// First section header — no top margin
+.site-nav > .nav-list > .nav-list-item:first-child > .nav-list-link {
+  margin-top: 0;
+}
+
+// All nav links — clean, minimal
+.nav-list .nav-list-item .nav-list-link {
+  font-size: 14px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+  color: $warm-400;
+  border-left: none;
+
+  &:hover {
+    background: rgba(222, 220, 209, 0.06);
+    color: $warm-200;
+  }
+}
+
+// Child nav links — slightly indented, smaller
+.nav-list .nav-list .nav-list-link {
+  font-size: 13px;
+  padding-left: 24px;
+  color: $warm-500;
+
+  &:hover {
+    color: $warm-300;
   }
 }
 
@@ -468,8 +504,18 @@ div.highlighter-rouge:hover .copy-code-button {
   font-family: $heading-font-family;
   font-weight: 700;
   font-size: 18px !important;
-  color: $zinc-950;
+  color: $warm-050;
   letter-spacing: -0.02em;
+}
+
+// Sidebar background — clean, no gradient
+.side-bar {
+  border-right: 1px solid rgba(222, 220, 209, 0.08);
+}
+
+// Nav expander arrows — muted
+.nav-list-expander {
+  color: $warm-600;
 }
 
 // --------------- Tables ---------------
@@ -497,7 +543,7 @@ div.highlighter-rouge:hover .copy-code-button {
   }
 
   tbody tr:hover {
-    background: rgba(99, 102, 241, 0.03);
+    background: rgba(217, 119, 87, 0.03);
   }
 
   // Keybinding keys — monospace + pill style
@@ -524,8 +570,8 @@ div.highlighter-rouge:hover .copy-code-button {
     border-color: $zinc-800;
 
     &:hover {
-      border-color: rgba(99, 102, 241, 0.3);
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+      border-color: rgba(217, 119, 87, 0.3);
+      box-shadow: 0 4px 12px rgba(217, 119, 87, 0.08);
     }
   }
 
@@ -534,15 +580,15 @@ div.highlighter-rouge:hover .copy-code-button {
   }
 
   .feature-icon {
-    &--cyan   { background: rgba(99, 102, 241, 0.15); color: $indigo-400; }
+    &--cyan   { background: rgba(217, 119, 87, 0.15); color: $indigo-400; }
     &--green  { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
     &--amber  { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
     &--purple { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
   }
 
   .tip-callout {
-    background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.15);
+    background: rgba(217, 119, 87, 0.08);
+    border-color: rgba(217, 119, 87, 0.15);
     color: $indigo-300;
 
     a { color: $indigo-300; }
@@ -577,12 +623,12 @@ div.highlighter-rouge:hover .copy-code-button {
   }
 
   .site-title {
-    color: $zinc-050;
+    color: $warm-050;
   }
 
   .nav-list-item.active > .nav-list-link {
-    color: $zinc-050;
-    background-color: rgba(99, 102, 241, 0.08);
+    color: $warm-050;
+    background-color: rgba(222, 220, 209, 0.1);
   }
 
   .demo-section .demo-embed {
