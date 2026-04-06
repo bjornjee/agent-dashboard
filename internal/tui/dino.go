@@ -138,9 +138,9 @@ const dinoGameHeight = 17
 // -- Physics constants --
 
 const (
-	jumpVelocity     = 4
-	gravity          = 1  // tuned so 8-tick airtime clears danger zone at all speeds
-	duckDefaultTicks = 12 // default duck expiry in ticks (~600ms) to cover initial key repeat delay
+	jumpVelocity      = 4
+	gravity           = 1  // tuned so 8-tick airtime clears danger zone at all speeds
+	duckFallbackTicks = 12 // fallback duck hold for terminals without key release (~600ms)
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
 	baseSpeed10    = 20 // 2.0 col/tick — tuned so jump clears 10-col danger zone
@@ -157,16 +157,15 @@ const (
 // -- Game model --
 
 type dinoGameModel struct {
-	state        dinoGameState
-	width        int
-	height       int
-	pose         dinoPose
-	dinoY        int // vertical offset from ground (0 = ground, positive = up)
-	jumpVel      int
-	frame        int       // animation frame counter
-	duckTicks    int       // ticks remaining in duck; 0 = not ducking
-	lastDownTime time.Time // timestamp of last "down" key press
-	duckExpiry   int       // adaptive expiry in ticks (3× measured repeat gap)
+	state         dinoGameState
+	width         int
+	height        int
+	pose          dinoPose
+	dinoY         int // vertical offset from ground (0 = ground, positive = up)
+	jumpVel       int
+	frame         int  // animation frame counter
+	hasKeyRelease bool // true if terminal supports key release events (Kitty protocol)
+	duckTicks     int  // fallback timer for terminals without key release support
 
 	obstacles  []obstacle
 	groundOff  int
@@ -232,8 +231,13 @@ func (d dinoGameModel) Update(msg tea.Msg) (dinoGameModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dinoTickMsg:
 		return d.tick()
+	case tea.KeyboardEnhancementsMsg:
+		d.hasKeyRelease = msg.SupportsEventTypes()
+		return d, nil
 	case tea.KeyPressMsg:
 		return d.handleKey(msg)
+	case tea.KeyReleaseMsg:
+		return d.handleKeyRelease(msg)
 	}
 	return d, nil
 }
@@ -264,28 +268,20 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 	case dinoPlaying:
 		switch key {
 		case " ", "space", "up":
-			if d.dinoY == 0 && !d.isDucking() {
+			if d.dinoY == 0 {
+				if d.isDucking() {
+					d.pose = dinoRunning
+				}
 				d.jumpVel = jumpVelocity
 				d.dinoY = d.jumpVel
 				d.pose = dinoJumping
 			}
 		case "down":
 			if d.dinoY == 0 {
-				now := time.Now()
-				gap := now.Sub(d.lastDownTime)
-				d.lastDownTime = now
-				if gap > 0 && gap < 500*time.Millisecond {
-					// Adaptive: 3× the measured repeat gap, converted to ticks
-					ticks := int((3 * gap) / dinoTickInterval)
-					if ticks < 2 {
-						ticks = 2
-					}
-					d.duckExpiry = ticks
-				} else {
-					d.duckExpiry = duckDefaultTicks
-				}
 				d.pose = dinoDucking
-				d.duckTicks = d.duckExpiry
+				if !d.hasKeyRelease {
+					d.duckTicks = duckFallbackTicks
+				}
 			}
 		case "esc", "q":
 			return d, func() tea.Msg { return dinoExitMsg{} }
@@ -308,6 +304,13 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 	return d, nil
 }
 
+func (d dinoGameModel) handleKeyRelease(msg tea.KeyReleaseMsg) (dinoGameModel, tea.Cmd) {
+	if d.state == dinoPlaying && msg.String() == "down" && d.isDucking() {
+		d.pose = dinoRunning
+	}
+	return d, nil
+}
+
 func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 	if d.state != dinoPlaying {
 		return d, nil
@@ -327,12 +330,11 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 		}
 	}
 
-	// Auto-release duck after timer expires
-	if d.isDucking() {
+	// Fallback duck timer for terminals without key release support
+	if d.isDucking() && !d.hasKeyRelease && d.duckTicks > 0 {
 		d.duckTicks--
 		if d.duckTicks <= 0 {
 			d.pose = dinoRunning
-			d.duckTicks = 0
 		}
 	}
 
@@ -393,8 +395,8 @@ func (d dinoGameModel) spawnObstacle() obstacle {
 			x:      d.width,
 			kind:   obstBird,
 			width:  5,
-			height: 2,
-			birdY:  dinoDuckHeight + rand.IntN(2), // fly above ducking dino (rows 3-4)
+			height: dinoGameHeight, // tall hitbox — birds can only be dodged by ducking, not jumping
+			birdY:  dinoDuckHeight, // fly just above ducking dino
 		}
 	case obstLargeCactus:
 		return obstacle{

@@ -107,14 +107,117 @@ func TestDinoDuckChangesPose(t *testing.T) {
 	}
 }
 
-func TestDinoCannotJumpWhileDucking(t *testing.T) {
+func TestDuckReleasedOnKeyRelease(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+	d.hasKeyRelease = true
+
+	d, _ = d.handleKey(downKey())
+	if d.pose != dinoDucking {
+		t.Fatalf("pose = %d, want dinoDucking", d.pose)
+	}
+
+	// Release down — should immediately stand
+	d, _ = d.handleKeyRelease(tea.KeyReleaseMsg(tea.Key{Code: tea.KeyDown}))
+	if d.pose != dinoRunning {
+		t.Errorf("pose = %d after down release, want dinoRunning", d.pose)
+	}
+}
+
+func TestDuckPersistsWithKeyRelease(t *testing.T) {
+	// With key release support, duck persists indefinitely (no fallback timer)
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+	d.hasKeyRelease = true
+	d.spawnTimer = 999
+
+	d, _ = d.handleKey(downKey())
+
+	for i := 0; i < 20; i++ {
+		d, _ = d.tick()
+		if d.state != dinoPlaying {
+			d.state = dinoPlaying
+			d.obstacles = nil
+		}
+	}
+	if d.pose != dinoDucking {
+		t.Errorf("pose = %d after 20 ticks, want dinoDucking (should persist until release)", d.pose)
+	}
+}
+
+func TestDuckFallbackTimerExpires(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+	d.hasKeyRelease = false
+	d.spawnTimer = 999
+
+	d, _ = d.handleKey(downKey())
+	if d.duckTicks != duckFallbackTicks {
+		t.Fatalf("duckTicks = %d, want %d", d.duckTicks, duckFallbackTicks)
+	}
+
+	for i := 0; i < duckFallbackTicks+1; i++ {
+		d, _ = d.tick()
+		if d.state != dinoPlaying {
+			d.state = dinoPlaying
+			d.obstacles = nil
+		}
+	}
+	if d.pose != dinoRunning {
+		t.Errorf("pose = %d, want dinoRunning after fallback timer", d.pose)
+	}
+}
+
+func TestDuckFallbackResetOnRepeat(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+	d.hasKeyRelease = false
+	d.spawnTimer = 999
+
+	d, _ = d.handleKey(downKey())
+
+	// Tick partway
+	for i := 0; i < duckFallbackTicks-1; i++ {
+		d, _ = d.tick()
+		if d.state != dinoPlaying {
+			d.state = dinoPlaying
+			d.obstacles = nil
+		}
+	}
+	if d.pose != dinoDucking {
+		t.Fatalf("should still be ducking")
+	}
+
+	// Repeat resets timer
+	d, _ = d.handleKey(downKey())
+	if d.duckTicks != duckFallbackTicks {
+		t.Errorf("duckTicks = %d after repeat, want %d", d.duckTicks, duckFallbackTicks)
+	}
+}
+
+func TestKeyboardEnhancementsMsg(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	if d.hasKeyRelease {
+		t.Error("hasKeyRelease should be false by default")
+	}
+
+	d, _ = d.Update(tea.KeyboardEnhancementsMsg{Flags: 0x2}) // KittyReportEventTypes = 0x2
+	if !d.hasKeyRelease {
+		t.Error("hasKeyRelease should be true after KeyboardEnhancementsMsg with event types")
+	}
+}
+
+func TestSpaceCancelsDuckAndJumps(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
 
 	d, _ = d.handleKey(downKey())
 	d, _ = d.handleKey(spaceKey())
-	if d.dinoY != 0 {
-		t.Error("should not be able to jump while ducking")
+	if d.pose == dinoDucking {
+		t.Error("space should cancel duck")
+	}
+	if d.dinoY == 0 {
+		t.Error("space should trigger jump after cancelling duck")
 	}
 }
 
@@ -295,6 +398,92 @@ func TestCollisionForgivenessDecreases(t *testing.T) {
 	}
 	if off1 >= off0 {
 		t.Errorf("collision offset should shrink: %d -> %d", off0, off1)
+	}
+}
+
+func upKey() tea.KeyPressMsg { return tea.KeyPressMsg{Code: tea.KeyUp} }
+
+func TestDuckCancelledByUpKey(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+
+	// Start ducking
+	d, _ = d.handleKey(downKey())
+	if d.pose != dinoDucking {
+		t.Fatalf("pose = %d, want dinoDucking", d.pose)
+	}
+
+	// Press up — should immediately cancel duck and stand
+	d, _ = d.handleKey(upKey())
+	if d.pose == dinoDucking {
+		t.Error("pressing up while ducking should cancel duck immediately")
+	}
+}
+
+func TestDuckCancelledBySpaceThenJumps(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+
+	// Start ducking
+	d, _ = d.handleKey(downKey())
+	if d.pose != dinoDucking {
+		t.Fatalf("pose = %d, want dinoDucking", d.pose)
+	}
+
+	// Press space — should cancel duck and jump
+	d, _ = d.handleKey(spaceKey())
+	if d.pose == dinoDucking {
+		t.Error("pressing space while ducking should cancel duck")
+	}
+	if d.dinoY == 0 {
+		t.Error("pressing space while ducking should trigger a jump")
+	}
+}
+
+func TestBirdCannotBeJumpedOver(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+	d.spawnTimer = 999
+
+	// Spawn a bird via the game's spawner to get realistic values
+	bird := obstacle{
+		x:      dinoPosX,
+		kind:   obstBird,
+		width:  5,
+		height: dinoGameHeight, // tall hitbox as spawned
+		birdY:  dinoDuckHeight,
+	}
+	d.obstacles = []obstacle{bird}
+
+	// Simulate jump at peak height
+	d.dinoY = 10 // jump peak
+	d.pose = dinoJumping
+
+	if !d.checkCollision() {
+		t.Error("bird should collide with dino even at jump peak — birds must not be jumpable")
+	}
+}
+
+func TestBirdAvoidableByDucking(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.state = dinoPlaying
+	d.spawnTimer = 999
+
+	bird := obstacle{
+		x:      dinoPosX,
+		kind:   obstBird,
+		width:  5,
+		height: dinoGameHeight,
+		birdY:  dinoDuckHeight,
+	}
+	d.obstacles = []obstacle{bird}
+
+	// Ducking dino on the ground
+	d.dinoY = 0
+	d.pose = dinoDucking
+
+	if d.checkCollision() {
+		t.Error("ducking dino should avoid bird")
 	}
 }
 
