@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
@@ -92,17 +93,207 @@ func TestSlimHelpBarContainsHHelp(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
 	m := NewModel(testConfig(""), nil)
-	m.width = 80
-	m.height = 24
-	m.agents = []domain.Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
-	}
-	m.buildTree()
-	selectFirstAgent(&m)
+	m.width = 120
+	m.tmuxAvailable = true
 
 	bar := m.renderHelpBar()
 
-	if !strings.Contains(bar, "h") {
-		t.Error("normal help bar should contain 'h' hint for help")
+	if !strings.Contains(bar, "help") {
+		t.Error("slim help bar should contain 'help' hint")
+	}
+	// Should contain lifecycle essentials
+	if !strings.Contains(bar, "new") {
+		t.Error("slim help bar should contain 'new' hint")
+	}
+	if !strings.Contains(bar, "close") {
+		t.Error("slim help bar should contain 'close' hint")
+	}
+	// Should NOT contain the old verbose hints
+	if strings.Contains(bar, "editor") {
+		t.Error("slim help bar should not contain 'editor' — moved to overlay")
+	}
+	if strings.Contains(bar, "collapse") {
+		t.Error("slim help bar should not contain 'collapse' — moved to overlay")
+	}
+}
+
+func TestHelpBarWhenHelpVisible(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.helpVisible = true
+
+	bar := m.renderHelpBar()
+
+	if !strings.Contains(bar, "close") {
+		t.Error("help bar when helpVisible should contain 'close' hint")
+	}
+}
+
+func TestStatusLine_SuccessVsError(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+
+	// Success message should not be empty
+	m.statusMsg = "Reply sent"
+	m.statusIsError = false
+	s := m.statusLine()
+	if s == "" {
+		t.Error("expected non-empty status line for success message")
+	}
+	if !strings.Contains(s, "Reply sent") {
+		t.Errorf("expected status line to contain 'Reply sent', got %q", s)
+	}
+
+	// Error message should not be empty
+	m.statusMsg = "Key send failed: pane gone"
+	m.statusIsError = true
+	s = m.statusLine()
+	if s == "" {
+		t.Error("expected non-empty status line for error message")
+	}
+	if !strings.Contains(s, "Key send failed") {
+		t.Errorf("expected status line to contain 'Key send failed', got %q", s)
+	}
+}
+
+func TestHelpBarContainsStatusMessage(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	// Set a success status message
+	m.statusMsg = "Reply sent"
+	m.statusIsError = false
+
+	bar := m.renderHelpBar()
+	if !strings.Contains(bar, "Reply sent") {
+		t.Errorf("help bar should contain status message 'Reply sent', got %q", bar)
+	}
+}
+
+func TestHelpBarContainsSpawningSpinner(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.tmuxAvailable = true
+
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	bar := m.renderHelpBar()
+	if !strings.Contains(bar, "Spawning agent") {
+		t.Errorf("help bar should contain 'Spawning agent', got %q", bar)
+	}
+}
+
+func TestRightPanelDoesNotContainStatusLine(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+
+	m.statusMsg = "Reply sent"
+	m.statusIsError = false
+
+	panel := m.renderRightPanel()
+	if strings.Contains(panel, "Reply sent") {
+		t.Error("right panel should NOT contain status message — it should be in the help bar")
+	}
+}
+
+func TestPanelRenderedDimensions(t *testing.T) {
+	// lipgloss v2 includes borders in Width/Height, so rendered panels must
+	// account for the 2-char border frame. This test ensures the rendered
+	// left panel width equals leftWidth + 2 (content + borders).
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+
+	panel := m.renderLeftPanel()
+	lines := strings.Split(panel, "\n")
+	if len(lines) == 0 {
+		t.Fatal("rendered left panel has no lines")
+	}
+
+	expectedWidth := m.leftWidth + 2
+	for i, line := range lines {
+		w := lipgloss.Width(line)
+		if w != expectedWidth {
+			t.Errorf("left panel line %d: width %d, want %d", i, w, expectedWidth)
+			break
+		}
+	}
+
+	expectedHeight := m.height - 5 - m.bannerHeight() + 2
+	if len(lines) != expectedHeight {
+		t.Errorf("left panel height: got %d lines, want %d", len(lines), expectedHeight)
+	}
+}
+
+// -- MouseMode tests --
+
+func TestView_MouseModeCellMotion_InNormalMode(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	v := m.View()
+	if v.MouseMode != tea.MouseModeCellMotion {
+		t.Errorf("expected MouseModeCellMotion in normal mode, got %v", v.MouseMode)
+	}
+}
+
+func TestView_MouseModeNone_InTextInputModes(t *testing.T) {
+	textInputModes := []struct {
+		name string
+		mode int
+	}{
+		{"reply", modeReply},
+		{"createFolder", modeCreateFolder},
+		{"createSkill", modeCreateSkill},
+		{"createMessage", modeCreateMessage},
+	}
+	for _, tt := range textInputModes {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(testConfig(t.TempDir()), nil)
+			m.width = 120
+			m.height = 40
+			m.resizeViewports()
+			m.mode = tt.mode
+
+			v := m.View()
+			if v.MouseMode != tea.MouseModeNone {
+				t.Errorf("expected MouseModeNone in %s mode, got %v", tt.name, v.MouseMode)
+			}
+		})
+	}
+}
+
+func TestView_MouseModeCellMotion_InConfirmMode(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeConfirmClose
+
+	v := m.View()
+	if v.MouseMode != tea.MouseModeCellMotion {
+		t.Errorf("expected MouseModeCellMotion in confirm mode, got %v", v.MouseMode)
 	}
 }
