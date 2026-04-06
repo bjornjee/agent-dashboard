@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.7.0](https://github.com/bjornjee/agent-dashboard/compare/v0.6.0...v0.7.0) (2026-04-06)
+
+
+### Features
+
+* add experimental dino runner game ([#174](https://github.com/bjornjee/agent-dashboard/issues/174)) ([699b368](https://github.com/bjornjee/agent-dashboard/commit/699b3680a97e9bccc9fdcf8bd8e509d603bbb23b))
+* add GitHub Pages documentation site with just-the-docs ([#166](https://github.com/bjornjee/agent-dashboard/issues/166)) ([a955a54](https://github.com/bjornjee/agent-dashboard/commit/a955a5452fe6cfad6a0da421a4027680e9703d0a))
+* add progressive difficulty scaling to dino runner game ([#176](https://github.com/bjornjee/agent-dashboard/issues/176)) ([195125e](https://github.com/bjornjee/agent-dashboard/commit/195125ed79cc801e8f632902562daabc130b7c35))
+* beautify docs site with custom color scheme, typography, and feature cards ([#171](https://github.com/bjornjee/agent-dashboard/issues/171)) ([97e904a](https://github.com/bjornjee/agent-dashboard/commit/97e904a488e349d5555eb2763764441d776bfdfc))
+* professional indigo/zinc docs theme ([#175](https://github.com/bjornjee/agent-dashboard/issues/175)) ([72331d8](https://github.com/bjornjee/agent-dashboard/commit/72331d80cd185d37abe79455f233f2c956f49c2c))
+* redesign docs site with slate+cyan color scheme and custom homepage ([#172](https://github.com/bjornjee/agent-dashboard/issues/172)) ([35780a2](https://github.com/bjornjee/agent-dashboard/commit/35780a2b0e50706913510d9b7847cb85908c654a))
+* zero-clone installer and uninstall support ([#165](https://github.com/bjornjee/agent-dashboard/issues/165)) ([515da15](https://github.com/bjornjee/agent-dashboard/commit/515da150f6ce8a2e5b506b83ea0cc49c5edcb737))
+
+
+### Bug Fixes
+
+* annotate VERSION for release-please generic updater ([#162](https://github.com/bjornjee/agent-dashboard/issues/162)) ([857a9f5](https://github.com/bjornjee/agent-dashboard/commit/857a9f55d82383d653a8e3798595c29779446547))
+* CI test failures and pages deployment ([#168](https://github.com/bjornjee/agent-dashboard/issues/168)) ([01f48f9](https://github.com/bjornjee/agent-dashboard/commit/01f48f97149a3efbf594104171b541c935360cd3))
+* fetch tags before install so version stays current ([#164](https://github.com/bjornjee/agent-dashboard/issues/164)) ([3908c45](https://github.com/bjornjee/agent-dashboard/commit/3908c459e3b4b30d94d15e8a4ec0e85d89e10749))
+* improve dino game duck responsiveness and make birds unjumpable ([#179](https://github.com/bjornjee/agent-dashboard/issues/179)) ([d656db1](https://github.com/bjornjee/agent-dashboard/commit/d656db1040a075f15a947cdc070544153ab2e650))
+* match Claude Code slug convention for underscore paths ([#173](https://github.com/bjornjee/agent-dashboard/issues/173)) ([b22ce63](https://github.com/bjornjee/agent-dashboard/commit/b22ce63e3ff94739a70f9746162687675be6655c))
+* sidebar overflow navigation with auto-scroll and collapsible groups ([#177](https://github.com/bjornjee/agent-dashboard/issues/177)) ([78aaec6](https://github.com/bjornjee/agent-dashboard/commit/78aaec6da8344bdc50e5799c4cb7b7db87659b76))
+* sync web UI skills dropdown with discovered plugin skills ([#170](https://github.com/bjornjee/agent-dashboard/issues/170)) ([66a85f2](https://github.com/bjornjee/agent-dashboard/commit/66a85f20fffa24ce610666b1c008a95e68600577))
+
 ## [0.6.0](https://github.com/bjornjee/agent-dashboard/compare/v0.5.0...v0.6.0) (2026-04-05)
 
 
