@@ -113,16 +113,16 @@ const (
 // dinoGameHeight is the maximum lines the game needs:
 // 1 score + playRows + 1 ground.
 // playRows = dinoStandHeight + jumpPeak.
-// With jumpVelocity=4, gravity=2: Y goes 4→6→6→4→0, peak=6.
-// playRows = 5 + 6 = 11, total = 13.
-const dinoGameHeight = 13
+// With jumpVelocity=4, gravity=1: peak=10.
+// playRows = 5 + 10 = 15, total = 17.
+const dinoGameHeight = 17
 
 // -- Physics constants --
 
 const (
 	jumpVelocity = 4
-	gravity      = 2 // faster arc so dino doesn't float into obstacles
-	duckDuration = 6 // auto-release duck after this many ticks
+	gravity      = 1  // slow fall so dino stays airborne long enough to clear obstacles
+	duckDuration = 10 // auto-release duck after this many ticks (~500ms at 50ms/tick)
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
 	// e.g. speed10=10 means 1.0 col/tick, speed10=25 means 2.5 col/tick.
