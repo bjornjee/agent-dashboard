@@ -27,7 +27,9 @@ All keyboard shortcuts grouped by context. Press `h` in the dashboard to see thi
 | `g` | Open existing PR diff or create new PR |
 | `m` | Merge PR via `gh` CLI and send cleanup |
 | `a` | Create new agent session |
+| `o` | Open dir in tmux window |
 | `c` | Collapse/expand subagent tree |
+| `C` | Collapse/expand status group |
 | `x` | Dismiss subagent or close agent pane |
 | `p` | Toggle plan view |
 | `u` | Toggle usage dashboard |
