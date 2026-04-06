@@ -140,7 +140,7 @@ const dinoGameHeight = 17
 const (
 	jumpVelocity = 4
 	gravity      = 1  // tuned so 8-tick airtime clears danger zone at all speeds
-	duckDuration = 10 // auto-release duck after this many ticks (~500ms at 50ms/tick)
+	duckDefaultTicks = 12 // default duck expiry in ticks (~600ms) to cover initial key repeat delay
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
 	baseSpeed10    = 20 // 2.0 col/tick — tuned so jump clears 10-col danger zone
@@ -163,7 +163,9 @@ type dinoGameModel struct {
 	dinoY     int // vertical offset from ground (0 = ground, positive = up)
 	jumpVel   int
 	frame     int // animation frame counter
-	duckTicks int // ticks remaining in duck; 0 = not ducking
+	duckTicks    int       // ticks remaining in duck; 0 = not ducking
+	lastDownTime time.Time // timestamp of last "down" key press
+	duckExpiry   int       // adaptive expiry in ticks (3× measured repeat gap)
 
 	obstacles  []obstacle
 	groundOff  int
@@ -233,8 +235,21 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 			}
 		case "down":
 			if d.dinoY == 0 {
+				now := time.Now()
+				gap := now.Sub(d.lastDownTime)
+				d.lastDownTime = now
+				if gap > 0 && gap < 500*time.Millisecond {
+					// Adaptive: 3× the measured repeat gap, converted to ticks
+					ticks := int((3 * gap) / dinoTickInterval)
+					if ticks < 2 {
+						ticks = 2
+					}
+					d.duckExpiry = ticks
+				} else {
+					d.duckExpiry = duckDefaultTicks
+				}
 				d.pose = dinoDucking
-				d.duckTicks = duckDuration
+				d.duckTicks = d.duckExpiry
 			}
 		case "esc", "q":
 			return d, func() tea.Msg { return dinoExitMsg{} }
