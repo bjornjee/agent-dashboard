@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race install install-web uninstall package-adapter clean seed web help
+.PHONY: build build-web fmt vet test test-race install install-web uninstall clean seed web help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -37,15 +37,12 @@ test: vet ## Run all tests (vets first)
 test-race: vet ## Run tests with race detector (CI only, requires codesigned binaries)
 	go test -race ./...
 
-install: ## Build and install binary + adapter (ADAPTER=claude-code)
+install: ## Build and install binary from source
 	@git fetch origin --quiet 'refs/tags/*:refs/tags/*' --no-recurse-submodules 2>/dev/null || true
-	./install.sh --build --adapter $(ADAPTER)
+	./install.sh --build
 
-uninstall: ## Uninstall binary, adapter, and state
+uninstall: ## Remove binary and state directory
 	./uninstall.sh
-
-package-adapter: ## Package adapter for release (used by CI)
-	tar -czf agent-dashboard-adapter-claude-code.tar.gz -C adapters/claude-code .
 
 install-web: build-web ## Install web server binary
 	cp bin/agent-dashboard-web ~/.local/bin/

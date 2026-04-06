@@ -53,15 +53,17 @@ A companion PWA (`cmd/web/`) for managing agents from your phone over your local
 
 ## Install
 
-### Quick install (recommended)
+### Step 1: Install the binary
+
+Download the pre-built binary from the latest [GitHub Release](https://github.com/bjornjee/agent-dashboard/releases):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-This downloads the pre-built binary and Claude Code adapter from the latest [GitHub Release](https://github.com/bjornjee/agent-dashboard/releases), registers the plugin, and creates default settings. No Go toolchain required.
+The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. No Go toolchain required.
 
-### From source
+Or build from source (requires [Go 1.26+](https://go.dev/dl/)):
 
 ```bash
 git clone https://github.com/bjornjee/agent-dashboard
@@ -69,41 +71,33 @@ cd agent-dashboard
 ./install.sh --build
 ```
 
-Building from source requires [Go 1.26+](https://go.dev/dl/).
+### Step 2: Register the plugin
 
-### Claude Code plugin
-
-In a Claude Code session, run:
+In any Claude Code session, run:
 
 ```
 /plugin add bjornjee/agent-dashboard
 ```
 
-The installer:
-1. Downloads the pre-built binary to `~/.local/bin/agent-dashboard` (or builds from source with `--build`)
-2. Creates default settings at `~/.agent-dashboard/settings.toml`
-3. Installs the adapter to `~/.claude/plugins/cache/agent-dashboard/agent-dashboard/<version>/`
-4. Registers the plugin in `~/.claude/plugins/known_marketplaces.json`
-5. Registers the plugin in `~/.claude/plugins/installed_plugins.json`
-6. Enables the plugin in `~/.claude/settings.json`
-
-Restart Claude Code sessions after installation for hooks and skills to take effect.
+Then restart Claude Code sessions for hooks and skills to take effect.
 
 ## Uninstall
 
-From a repo checkout:
+### Step 1: Remove the plugin
 
-```bash
-make uninstall
+In any Claude Code session, run:
+
+```
+/plugin remove agent-dashboard
 ```
 
-Or standalone (no checkout needed):
+### Step 2: Remove the binary and state
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/uninstall.sh | sh
 ```
 
-This removes the binary, plugin cache, and deregisters from Claude Code. Pass `--yes` to skip the prompt for deleting `~/.agent-dashboard/` (which contains settings and usage data).
+Or from a repo checkout: `make uninstall`. Pass `--yes` to skip the prompt for deleting `~/.agent-dashboard/` (which contains settings and usage data).
 
 ### Optional: tmux keybinding
 
@@ -218,10 +212,8 @@ make fmt                          # Auto-format Go source files
 make vet                          # Check formatting + run go vet
 make test                         # Run all tests (vets first)
 make test-race                    # Run tests with race detector
-make install                      # Build + install binary + adapter (default: claude-code)
-make install ADAPTER=claude-code  # Specify adapter explicitly
-make uninstall                    # Remove binary, adapter, and state
-make package-adapter              # Package adapter for release (used by CI)
+make install                      # Build and install binary from source
+make uninstall                    # Remove binary and state directory
 make install-web                  # Install web server binary to ~/.local/bin/
 make web                          # Run web server locally on port 8390
 make seed                         # Create fake agent state for testing

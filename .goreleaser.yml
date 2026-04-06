@@ -21,10 +21,6 @@ archives:
 checksum:
   name_template: checksums.txt
 
-release:
-  extra_files:
-    - glob: agent-dashboard-adapter-claude-code.tar.gz
-
 changelog:
   disable: true
 
