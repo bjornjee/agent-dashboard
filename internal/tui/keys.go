@@ -772,30 +772,23 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "C":
-		// Toggle collapse on the status group of the currently selected agent
-		if agent := m.selectedAgent(); agent != nil {
-			group := agentGroup(*agent)
+		// Toggle collapse on the status group — works on both group headers and agents
+		group := m.selectedGroupHeader()
+		if group == 0 {
+			if agent := m.selectedAgent(); agent != nil {
+				group = agentGroup(*agent)
+			}
+		}
+		if group > 0 {
 			m.collapsedGroups[group] = !m.collapsedGroups[group]
-			// If we just collapsed the group, move selection to the next visible node
+			// If we just collapsed, move selection to the group's header node
 			if m.collapsedGroups[group] && m.isNodeInCollapsedGroup(m.selected) {
 				m.saveCurrentCache()
-				// Try forward first
-				found := false
-				for i := m.selected + 1; i < len(m.treeNodes); i++ {
-					if !m.isNodeInCollapsedGroup(i) {
+				// Find the header node for this group (scan backward)
+				for i := m.selected - 1; i >= 0; i-- {
+					if m.treeNodes[i].GroupHeader == group {
 						m.selected = i
-						found = true
 						break
-					}
-				}
-				if !found {
-					// Try backward
-					for i := m.selected - 1; i >= 0; i-- {
-						if !m.isNodeInCollapsedGroup(i) {
-							m.selected = i
-							found = true
-							break
-						}
 					}
 				}
 				m.restoreCurrentCache()

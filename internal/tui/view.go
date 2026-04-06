@@ -206,21 +206,70 @@ func (m model) agentListContentWithLine() (string, int) {
 
 	lastGroup := -1
 	for nodeIdx, node := range m.treeNodes {
-		agent := m.agents[node.AgentIdx]
+		// --- Group header node ---
+		if node.GroupHeader > 0 {
+			group := node.GroupHeader
+			if lastGroup != -1 {
+				lines = append(lines, "")
+			}
+			hdr := groupHeaders[group]
 
-		// Determine group for this node (used for group collapsing)
-		effState := agent.State
-		nodeGroup := agentGroup(agent)
-
-		if node.Sub != nil {
-			// Skip subagents in collapsed groups
-			if m.collapsedGroups[nodeGroup] {
-				continue
+			// Check if first agent in this group is "plan" for a special header
+			for _, n := range m.treeNodes {
+				if n.AgentIdx >= 0 && n.AgentIdx < len(m.agents) && agentGroup(m.agents[n.AgentIdx]) == group {
+					if m.agents[n.AgentIdx].State == "plan" {
+						hdr = struct {
+							label string
+							color color.Color
+						}{"PLAN", planColor}
+					}
+					break
+				}
 			}
 
-			// Subagent node
+			// Count agents in this group
+			groupCount := 0
+			for _, n := range m.treeNodes {
+				if n.AgentIdx >= 0 && n.AgentIdx < len(m.agents) && n.Sub == nil && n.GroupHeader == 0 {
+					if agentGroup(m.agents[n.AgentIdx]) == group {
+						groupCount++
+					}
+				}
+			}
+
+			if nodeIdx == m.selected {
+				selectedLine = len(lines)
+			}
+			var headerLine string
+			if m.collapsedGroups[group] {
+				headerLine = " " + lipgloss.NewStyle().
+					Foreground(hdr.color).Bold(true).Render(hdr.label) +
+					helpStyle.Render(fmt.Sprintf(" [%d] ▸", groupCount))
+			} else {
+				headerLine = " " + lipgloss.NewStyle().
+					Foreground(hdr.color).Bold(true).Render(hdr.label)
+			}
+			if nodeIdx == m.selected {
+				headerLine = highlightLine(headerLine, m.leftWidth)
+			}
+			lines = append(lines, headerLine)
+			lastGroup = group
+			continue
+		}
+
+		// Skip agents/subagents in collapsed groups
+		if node.AgentIdx < 0 || node.AgentIdx >= len(m.agents) {
+			continue
+		}
+		agent := m.agents[node.AgentIdx]
+		nodeGroup := agentGroup(agent)
+		if m.collapsedGroups[nodeGroup] {
+			continue
+		}
+
+		// --- Subagent node ---
+		if node.Sub != nil {
 			isLast := true
-			// Check if this is the last subagent in the list
 			for nextIdx := nodeIdx + 1; nextIdx < len(m.treeNodes); nextIdx++ {
 				next := m.treeNodes[nextIdx]
 				if next.AgentIdx != node.AgentIdx {
@@ -264,54 +313,8 @@ func (m model) agentListContentWithLine() (string, int) {
 			continue
 		}
 
-		// Parent agent node
-		group := nodeGroup
-
-		if group != lastGroup {
-			if lastGroup != -1 {
-				lines = append(lines, "")
-			}
-			hdr := groupHeaders[group]
-			// Use state-specific header for plan (shares priority 1 with permission)
-			if effState == "plan" {
-				hdr = struct {
-					label string
-					color color.Color
-				}{"PLAN", planColor}
-			}
-
-			// Count agents in this group
-			groupCount := 0
-			for _, n := range m.treeNodes {
-				if n.Sub != nil {
-					continue
-				}
-				a := m.agents[n.AgentIdx]
-				g := domain.StatePriority[a.State]
-				if g == 0 {
-					g = 3
-				}
-				if g == group {
-					groupCount++
-				}
-			}
-
-			if m.collapsedGroups[group] {
-				lines = append(lines, " "+lipgloss.NewStyle().
-					Foreground(hdr.color).Bold(true).Render(hdr.label)+
-					helpStyle.Render(fmt.Sprintf(" [%d] ▸", groupCount)))
-			} else {
-				lines = append(lines, " "+lipgloss.NewStyle().
-					Foreground(hdr.color).Bold(true).Render(hdr.label))
-			}
-			lastGroup = group
-		}
-
-		// Skip agent content if group is collapsed
-		if m.collapsedGroups[group] {
-			continue
-		}
-
+		// --- Parent agent node ---
+		effState := agent.State
 		si := stateIcons[effState]
 		if si.icon == "" {
 			si = stateIcons["idle_prompt"]
@@ -327,7 +330,6 @@ func (m model) agentListContentWithLine() (string, int) {
 			duration = state.FormatDuration(agent.UpdatedAt)
 		}
 
-		// Truncate repo name if needed (repo only, no branch on this line)
 		plainRepo := repo
 		if plainRepo == "" {
 			plainRepo = agent.Session
@@ -353,7 +355,7 @@ func (m model) agentListContentWithLine() (string, int) {
 
 		// Branch on its own line, indented to align under repo name
 		if agent.Branch != "" {
-			branchIndent := strings.Repeat(" ", 5+len(paneID)+1) // "   " + icon + " " + paneID + " "
+			branchIndent := strings.Repeat(" ", 5+len(paneID)+1)
 			maxBranch := m.leftWidth - len(branchIndent)
 			branchStr := agent.Branch
 			if maxBranch > 0 && len([]rune(branchStr)) > maxBranch {

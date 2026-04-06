@@ -25,17 +25,17 @@ func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
 		{AgentID: "ccc", AgentType: "Plan", Description: "third"},
 	}
 
-	// No dismissals — all 4 nodes (1 parent + 3 subs)
+	// No dismissals — all 5 nodes (1 header + 1 parent + 3 subs)
 	m.buildTree()
-	if len(m.treeNodes) != 4 {
-		t.Fatalf("expected 4 tree nodes, got %d", len(m.treeNodes))
+	if len(m.treeNodes) != 5 {
+		t.Fatalf("expected 5 tree nodes, got %d", len(m.treeNodes))
 	}
 
 	// Dismiss "bbb"
 	m.dismissed["main:1.0:bbb"] = true
 	m.buildTree()
-	if len(m.treeNodes) != 3 {
-		t.Fatalf("expected 3 tree nodes after dismiss, got %d", len(m.treeNodes))
+	if len(m.treeNodes) != 4 {
+		t.Fatalf("expected 4 tree nodes after dismiss, got %d", len(m.treeNodes))
 	}
 
 	// Verify dismissed node is not present
@@ -57,8 +57,8 @@ func TestBuildTree_CollapsedHidesSubs(t *testing.T) {
 
 	m.collapsed["main:1.0"] = true
 	m.buildTree()
-	if len(m.treeNodes) != 1 {
-		t.Fatalf("expected 1 tree node when collapsed, got %d", len(m.treeNodes))
+	if len(m.treeNodes) != 2 {
+		t.Fatalf("expected 2 tree nodes when collapsed (1 header + 1 parent), got %d", len(m.treeNodes))
 	}
 }
 
@@ -85,34 +85,34 @@ func TestNextParentAgent(t *testing.T) {
 		{AgentID: "bbb", AgentType: "Bash", Description: "sub2"},
 	}
 	m.buildTree()
-	// Tree: [parent0, sub-aaa, sub-bbb, parent1]
+	// Tree: [header(0), parent0(1), sub-aaa(2), sub-bbb(3), parent1(4)]
 
-	// From parent0 (idx 0), next parent should be parent1 (idx 3)
-	m.selected = 0
-	next := m.nextParentIndex(1)
-	if next != 3 {
-		t.Errorf("from parent0, expected next parent at index 3, got %d", next)
-	}
-
-	// From sub-aaa (idx 1), next parent should be parent1 (idx 3)
+	// From parent0 (idx 1), next parent should be parent1 (idx 4)
 	m.selected = 1
-	next = m.nextParentIndex(1)
-	if next != 3 {
-		t.Errorf("from sub-aaa, expected next parent at index 3, got %d", next)
+	next := m.nextParentIndex(1)
+	if next != 4 {
+		t.Errorf("from parent0, expected next parent at index 4, got %d", next)
 	}
 
-	// From parent1 (idx 3), next parent going down should stay at 3 (no more parents)
-	m.selected = 3
+	// From sub-aaa (idx 2), next parent should be parent1 (idx 4)
+	m.selected = 2
 	next = m.nextParentIndex(1)
-	if next != 3 {
-		t.Errorf("from last parent, expected to stay at 3, got %d", next)
+	if next != 4 {
+		t.Errorf("from sub-aaa, expected next parent at index 4, got %d", next)
 	}
 
-	// From parent1 (idx 3), prev parent should be parent0 (idx 0)
-	m.selected = 3
+	// From parent1 (idx 4), next parent going down should stay at 4 (no more parents)
+	m.selected = 4
+	next = m.nextParentIndex(1)
+	if next != 4 {
+		t.Errorf("from last parent, expected to stay at 4, got %d", next)
+	}
+
+	// From parent1 (idx 4), prev parent should be parent0 (idx 1)
+	m.selected = 4
 	next = m.nextParentIndex(-1)
-	if next != 0 {
-		t.Errorf("from parent1, expected prev parent at index 0, got %d", next)
+	if next != 1 {
+		t.Errorf("from parent1, expected prev parent at index 1, got %d", next)
 	}
 }
 
@@ -230,6 +230,7 @@ func TestReplyMode_ShowsInputBar(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
+	m.selected = 1 // index 0 is group header
 	m.tmuxAvailable = true
 	m.conversation = []domain.ConversationEntry{
 		{Role: "assistant", Content: "What should I do?", Timestamp: "2026-03-29T10:00:00Z"},
@@ -260,6 +261,7 @@ func TestReplyMode_KeystrokesUpdateViewport(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "question", Cwd: "/tmp"},
 	}
 	m.buildTree()
+	m.selected = 1 // index 0 is group header
 	m.tmuxAvailable = true
 	m.conversation = []domain.ConversationEntry{
 		{Role: "assistant", Content: "What should I do?", Timestamp: "2026-03-29T10:00:00Z"},
@@ -326,6 +328,7 @@ func TestReplyMode_PlanStateNoPrematureReplySent(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "plan", Cwd: "/tmp"},
 	}
 	m.buildTree()
+	m.selected = 1 // index 0 is group header
 	m.tmuxAvailable = true
 
 	// Enter reply mode on a plan-state agent (presses "r")
@@ -632,6 +635,7 @@ func TestPlanToggle(t *testing.T) {
 			{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
 		}
 		m.buildTree()
+		selectFirstAgent(&m)
 		m.tmuxAvailable = true
 		m.planContent = "# Test Plan\n\n## Steps\n1. Do A"
 		m.renderedPlan = renderPlanMarkdown(m.planContent, m.rightWidth-4)
@@ -696,7 +700,7 @@ func TestPlanToggle(t *testing.T) {
 			{AgentID: "sub1", AgentType: "Explore", Description: "test"},
 		}
 		m.buildTree()
-		m.selected = 1 // select subagent
+		m.selected = 2 // select subagent (header, parent, sub1)
 		result, _ := m.Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 		rm := result.(model)
 		if rm.planVisible {
@@ -802,6 +806,7 @@ func TestPlanVisible_AutoDismissOnStateChange(t *testing.T) {
 			{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
 		}
 		m.buildTree()
+		selectFirstAgent(&m)
 		m.planVisible = true
 		m.planContent = "# My Plan"
 		m.renderedPlan = "rendered"
@@ -827,6 +832,7 @@ func TestPlanVisible_AutoDismissOnStateChange(t *testing.T) {
 			{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
 		}
 		m.buildTree()
+		selectFirstAgent(&m)
 		m.planVisible = true
 		m.planContent = "# My Plan"
 		m.renderedPlan = "rendered"
@@ -1021,8 +1027,8 @@ func TestSelectionPinnedOnReorder(t *testing.T) {
 	}
 	m.buildTree()
 
-	// Select AgentB (running) at index 1
-	m.selected = 1
+	// Select AgentB (running) at index 3 (header-question, agent-question, header-running, agent-running)
+	m.selected = 3
 	selectedTarget := m.agents[m.treeNodes[m.selected].AgentIdx].Target
 	if selectedTarget != "main:2.0" {
 		t.Fatalf("expected selected target main:2.0, got %s", selectedTarget)
@@ -1062,11 +1068,11 @@ func TestSelectionPinned_SubagentPreserved(t *testing.T) {
 	}
 	m.buildTree()
 
-	// Select the subagent (index 1: main:1.0's subagent)
-	m.selected = 1
+	// Select the subagent (index 2: header-question, agent-question, sub-abc)
+	m.selected = 2
 	node := m.treeNodes[m.selected]
 	if node.Sub == nil || node.Sub.AgentID != "sub-abc" {
-		t.Fatal("expected subagent sub-abc at index 1")
+		t.Fatal("expected subagent sub-abc at index 2")
 	}
 
 	prevTarget, prevSubID := m.selectedIdentity()
@@ -1146,8 +1152,8 @@ func TestSelectedSubagent_PreservesIcon(t *testing.T) {
 		},
 	}
 	m.buildTree()
-	// Select the subagent (index 1, after parent at index 0)
-	m.selected = 1
+	// Select the subagent (index 2: header, parent, sub1)
+	m.selected = 2
 
 	content := m.agentListContent()
 
@@ -1204,7 +1210,7 @@ func TestCreateSessionMsg_PreservesSelection(t *testing.T) {
 			FilesChanged: []string{"+old_file.go"}},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header, index 1 is first agent
 
 	// Verify pre-condition: selected agent is main:1.0
 	if agent := m.selectedAgent(); agent == nil || agent.Target != "main:1.0" {
@@ -1238,7 +1244,7 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header, index 1 is first agent
 
 	// Simulate conversation loaded for agent A
 	m.conversation = []domain.ConversationEntry{
@@ -1250,7 +1256,7 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 
 	// Save agent A's state, switch to agent B
 	m.saveCurrentCache()
-	m.selected = 1
+	m.selected = 2 // second agent
 	m.restoreCurrentCache()
 
 	// Agent B should have empty state
@@ -1266,7 +1272,7 @@ func TestSaveRestoreCache_PreservesConversation(t *testing.T) {
 
 	// Switch back to agent A — state should be restored
 	m.saveCurrentCache()
-	m.selected = 0
+	m.selected = 1 // first agent
 	m.restoreCurrentCache()
 
 	if len(m.conversation) != 1 || m.conversation[0].Content != "Hello from agent A" {
@@ -1293,15 +1299,15 @@ func TestSaveRestoreCache_SubagentKey(t *testing.T) {
 		{AgentID: "sub1", AgentType: "Explore", Description: "test"},
 	}
 	m.buildTree()
-	// Tree: [parent, sub1]
+	// Tree: [header, parent, sub1]
 
 	// Select subagent
-	m.selected = 1
+	m.selected = 2
 	m.subActivity = []domain.ActivityEntry{{Kind: "tool", Content: "ls"}}
 	m.saveCurrentCache()
 
 	// Switch to parent
-	m.selected = 0
+	m.selected = 1
 	m.restoreCurrentCache()
 	if len(m.subActivity) != 0 {
 		t.Errorf("parent should not have subActivity, got %d entries", len(m.subActivity))
@@ -1309,7 +1315,7 @@ func TestSaveRestoreCache_SubagentKey(t *testing.T) {
 
 	// Switch back to subagent — activity should be restored
 	m.saveCurrentCache()
-	m.selected = 1
+	m.selected = 2
 	m.restoreCurrentCache()
 	if len(m.subActivity) != 1 {
 		t.Errorf("expected subagent activity to be restored, got %d entries", len(m.subActivity))
@@ -1350,10 +1356,10 @@ func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
 	m.buildTree()
 
 	// Populate caches for both agents
-	m.selected = 0
+	m.selected = 1 // first agent (index 0 is group header)
 	m.conversation = []domain.ConversationEntry{{Role: "assistant", Content: "A"}}
 	m.saveCurrentCache()
-	m.selected = 1
+	m.selected = 2 // second agent
 	m.conversation = []domain.ConversationEntry{{Role: "assistant", Content: "B"}}
 	m.saveCurrentCache()
 
@@ -1386,7 +1392,7 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header, index 1 is first agent
 
 	// Load conversation for agent A
 	m.conversation = []domain.ConversationEntry{
@@ -1399,16 +1405,16 @@ func TestNavigationDown_PreservesHistory(t *testing.T) {
 	result, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	rm := result.(model)
 
-	if rm.selected != 1 {
-		t.Fatalf("expected selected=1 after down, got %d", rm.selected)
+	if rm.selected != 2 {
+		t.Fatalf("expected selected=2 after down, got %d", rm.selected)
 	}
 
 	// Navigate back up to agent A
 	result, _ = rm.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	rm = result.(model)
 
-	if rm.selected != 0 {
-		t.Fatalf("expected selected=0 after up, got %d", rm.selected)
+	if rm.selected != 1 {
+		t.Fatalf("expected selected=1 after up, got %d", rm.selected)
 	}
 
 	// Agent A's conversation should be restored from cache
@@ -1427,7 +1433,7 @@ func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	// Populate with source and derived data
 	m.conversation = []domain.ConversationEntry{
@@ -1457,10 +1463,10 @@ func TestCacheDoesNotStoreDerivedFields(t *testing.T) {
 	}
 
 	// Switch to agent B and back — verify derived fields are zeroed on restore
-	m.selected = 1
+	m.selected = 2 // second agent
 	m.restoreCurrentCache()
 	m.saveCurrentCache()
-	m.selected = 0
+	m.selected = 1 // first agent
 	m.restoreCurrentCache()
 
 	// Ephemeral data should NOT be restored from cache
@@ -1488,7 +1494,7 @@ func TestRestoreCache_RegeneratesPlan(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "running", Cwd: "/tmp/b"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	// Set up plan content and save
 	m.planContent = "# My Plan\n\nSome content"
@@ -1497,12 +1503,12 @@ func TestRestoreCache_RegeneratesPlan(t *testing.T) {
 	m.saveCurrentCache()
 
 	// Switch to agent B
-	m.selected = 1
+	m.selected = 2
 	m.restoreCurrentCache()
 
 	// Switch back to agent A
 	m.saveCurrentCache()
-	m.selected = 0
+	m.selected = 1
 	m.restoreCurrentCache()
 
 	// planContent and planVisible should be restored
@@ -1531,8 +1537,8 @@ func TestCacheCapsSubActivity(t *testing.T) {
 	}
 	m.buildTree()
 
-	// Select subagent and set 500 activity entries
-	m.selected = 1
+	// Select subagent (index 2: header, parent, sub1)
+	m.selected = 2
 	entries := make([]domain.ActivityEntry, 500)
 	for i := range entries {
 		entries[i] = domain.ActivityEntry{Kind: "tool", Content: fmt.Sprintf("entry %d", i)}
@@ -1563,8 +1569,8 @@ func TestDismissedSubagentCachePruned(t *testing.T) {
 	}
 	m.buildTree()
 
-	// Cache subagent state
-	m.selected = 1
+	// Cache subagent state (index 2: header, parent, sub1)
+	m.selected = 2
 	m.subActivity = []domain.ActivityEntry{{Kind: "tool", Content: "ls"}}
 	m.saveCurrentCache()
 
@@ -1581,7 +1587,7 @@ func TestDismissedSubagentCachePruned(t *testing.T) {
 	newState := domain.StateFile{Agents: map[string]domain.Agent{
 		"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}}
-	m.selected = 0
+	m.selected = 1 // parent agent (index 0 is group header)
 	result, _ := m.Update(stateUpdatedMsg{state: newState})
 	rm := result.(model)
 
@@ -2188,16 +2194,25 @@ func TestCollapsedGroup_NavigationSkipsCollapsedNodes(t *testing.T) {
 	// Collapse group 3 (RUNNING)
 	m.collapsedGroups[3] = true
 
-	// Start at first node (question, group 2)
-	m.selected = 0
+	// Tree: [header-2(0), agent-question(1), header-3(2), agent-running(3), header-4(4), agent-idle_prompt(5)]
+	m.selected = 1
 	if m.isNodeInCollapsedGroup(0) {
-		t.Error("node 0 (question) should not be in collapsed group")
+		t.Error("node 0 (header-question) should not be in collapsed group")
 	}
-	if !m.isNodeInCollapsedGroup(1) {
-		t.Error("node 1 (running) should be in collapsed group")
+	if m.isNodeInCollapsedGroup(1) {
+		t.Error("node 1 (question agent) should not be in collapsed group")
 	}
 	if m.isNodeInCollapsedGroup(2) {
-		t.Error("node 2 (idle_prompt) should not be in collapsed group")
+		t.Error("node 2 (header-running) should not be in collapsed group (headers are always visible)")
+	}
+	if !m.isNodeInCollapsedGroup(3) {
+		t.Error("node 3 (running agent) should be in collapsed group")
+	}
+	if m.isNodeInCollapsedGroup(4) {
+		t.Error("node 4 (header-idle_prompt) should not be in collapsed group")
+	}
+	if m.isNodeInCollapsedGroup(5) {
+		t.Error("node 5 (idle_prompt agent) should not be in collapsed group")
 	}
 }
 
@@ -2208,15 +2223,21 @@ func TestIsNodeInCollapsedGroup(t *testing.T) {
 	}
 	m.buildTree()
 
-	// Not collapsed
+	// Not collapsed — node 0 is header, node 1 is agent
 	if m.isNodeInCollapsedGroup(0) {
-		t.Error("node should not be in collapsed group when group is not collapsed")
+		t.Error("header node should not be in collapsed group")
+	}
+	if m.isNodeInCollapsedGroup(1) {
+		t.Error("agent node should not be in collapsed group when group is not collapsed")
 	}
 
 	// Collapse group 3 (running)
 	m.collapsedGroups[3] = true
-	if !m.isNodeInCollapsedGroup(0) {
-		t.Error("node should be in collapsed group after collapsing group 3")
+	if m.isNodeInCollapsedGroup(0) {
+		t.Error("header node should never be in collapsed group")
+	}
+	if !m.isNodeInCollapsedGroup(1) {
+		t.Error("agent node should be in collapsed group after collapsing group 3")
 	}
 
 	// Out of bounds
