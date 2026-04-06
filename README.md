@@ -134,6 +134,7 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `Tab/Shift+Tab` | Cycle focus between panels |
 | `Ctrl+U/D` | Scroll focused panel (half-page) |
 | `r` | Reply to agent (free-text) |
+| `y` | Approve plan (plan-state agents) |
 | `e` | Open editor in agent's directory |
 | `d` | Show git diff (merge-base vs HEAD, syntax highlighted) |
 | `g` | Open existing PR diff or create new PR |

@@ -143,6 +143,11 @@ type model struct {
 	confirmPaneID    string // tmux pane ID (%N) pending close
 	confirmSessionID string // session_id of agent pending close
 
+	// Send-key confirmation (plan approve)
+	confirmSendPaneID string
+	confirmSendKey    string
+	confirmSendLabel  string
+
 	// Jump confirmation (guards against phantom enter from mouse escape sequences)
 	confirmJumpPaneID string // tmux pane ID for pending jump
 

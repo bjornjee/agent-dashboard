@@ -963,6 +963,87 @@ func TestConfirmCleanup_PhantomGuard(t *testing.T) {
 	}
 }
 
+func TestYKey_PlanAgent_EntersConfirmSend(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if cmd != nil {
+		t.Fatal("expected nil cmd from 'y' (should enter confirm mode)")
+	}
+	updated := result.(model)
+	if updated.mode != modeConfirmSend {
+		t.Errorf("expected modeConfirmSend, got %d", updated.mode)
+	}
+	if updated.confirmSendKey != "1" {
+		t.Errorf("expected confirmSendKey='1' for plan approve, got %q", updated.confirmSendKey)
+	}
+	if updated.confirmSendLabel != "Plan approved" {
+		t.Errorf("expected label 'Plan approved', got %q", updated.confirmSendLabel)
+	}
+}
+
+func TestYKey_NonPlanAgent_Ignored(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal for non-plan agent, got %d", updated.mode)
+	}
+}
+
+func TestConfirmSend_Enter_Sends(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "1"
+	m.confirmSendLabel = "Plan approved"
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected cmd after confirming send")
+	}
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after confirm, got %d", updated.mode)
+	}
+	if updated.confirmSendPaneID != "" {
+		t.Error("expected confirmSendPaneID to be cleared")
+	}
+}
+
+func TestConfirmSend_Esc_Cancels(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeConfirmSend
+	m.confirmSendPaneID = "%5"
+	m.confirmSendKey = "1"
+	m.statusMsg = "Approve plan?"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
+	}
+	if updated.confirmSendPaneID != "" {
+		t.Error("expected confirmSendPaneID to be cleared")
+	}
+	if updated.statusMsg != "" {
+		t.Errorf("expected empty status after cancel, got %q", updated.statusMsg)
+	}
+}
 
 func TestEnterKey_EntersConfirmJump(t *testing.T) {
 	// Pressing enter on a selected agent should enter modeConfirmJump,
@@ -1088,6 +1169,7 @@ func TestConfirmCooldown_RejectsPhantomConfirmation(t *testing.T) {
 	}{
 		{"merge_y", modeConfirmMerge, tea.KeyPressMsg{Code: 'y', Text: "y"}},
 		{"close_y", modeConfirmClose, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"send_enter", modeConfirmSend, tea.KeyPressMsg{Code: tea.KeyEnter}},
 		{"jump_y", modeConfirmJump, tea.KeyPressMsg{Code: 'y', Text: "y"}},
 		{"jump_enter", modeConfirmJump, tea.KeyPressMsg{Code: tea.KeyEnter}},
 	}
@@ -1284,8 +1366,6 @@ func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
 	}
 }
 
-
-
 func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
 	// When Enter submits in modeCreateMessage, a rapid follow-up Enter
 	// must be swallowed by PhantomFilter.
@@ -1360,8 +1440,6 @@ func TestMergeGH_PinsToMerged(t *testing.T) {
 	}
 }
 
-
-
 func TestEditorKey_SetsInFlightStatus(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.cfg.Editor = "vim"
@@ -1419,6 +1497,7 @@ func TestPhantomFilter_SwallowsDestructiveKeyDuringEscapeCooldown(t *testing.T) 
 		{Code: tea.KeyEnter},
 		{Code: 'r', Text: "r"},
 		{Code: 'm', Text: "m"},
+		{Code: 'y', Text: "y"},
 	}
 	for _, key := range destructiveKeys {
 		t.Run(key.String(), func(t *testing.T) {
@@ -1482,6 +1561,7 @@ func TestPhantomFilter_SwallowsConfirmKeyDuringConfirmCooldown(t *testing.T) {
 	}{
 		{"close_y", modeConfirmClose, tea.KeyPressMsg{Code: 'y', Text: "y"}},
 		{"merge_y", modeConfirmMerge, tea.KeyPressMsg{Code: 'y', Text: "y"}},
+		{"send_enter", modeConfirmSend, tea.KeyPressMsg{Code: tea.KeyEnter}},
 		{"jump_y", modeConfirmJump, tea.KeyPressMsg{Code: 'y', Text: "y"}},
 		{"jump_enter", modeConfirmJump, tea.KeyPressMsg{Code: tea.KeyEnter}},
 	}

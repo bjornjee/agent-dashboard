@@ -50,6 +50,7 @@ const modeResetCooldown = 100 * time.Millisecond
 // intentionally excluded so scrolling works immediately after mouse events.
 var phantomGuardedKeys = map[string]bool{
 	"x": true, "enter": true, "r": true, "m": true,
+	"y": true,
 }
 
 // PhantomFilter is a tea.WithFilter callback that swallows phantom keystrokes
@@ -84,7 +85,11 @@ func PhantomFilter(m tea.Model, msg tea.Msg) tea.Msg {
 			if keyStr == "y" {
 				return nil
 			}
-			case modeConfirmJump:
+		case modeConfirmSend:
+			if keyStr == "enter" {
+				return nil
+			}
+		case modeConfirmJump:
 			if keyStr == "y" || keyStr == "enter" {
 				return nil
 			}
@@ -522,6 +527,29 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Confirm send-key mode (plan approve)
+	if m.mode == modeConfirmSend {
+		switch key {
+		case "enter":
+			paneID := m.confirmSendPaneID
+			sendKey := m.confirmSendKey
+			label := m.confirmSendLabel
+			m.confirmSendPaneID = ""
+			m.confirmSendKey = ""
+			m.confirmSendLabel = ""
+			m.mode = modeNormal
+			m.clearStatus()
+			return m, sendRawKey(paneID, sendKey, label)
+		case "esc":
+			m.confirmSendPaneID = ""
+			m.confirmSendKey = ""
+			m.confirmSendLabel = ""
+			m.mode = modeNormal
+			m.clearStatus()
+			return m, nil
+		}
+		return m, nil
+	}
 
 	// Confirm jump mode (guards enter key against phantom keystrokes)
 	if m.mode == modeConfirmJump {
@@ -967,6 +995,19 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeDinoGame
 			m.dino = newDinoGameModel(m.leftWidth, dinoGameHeight)
 			return m, nil
+		}
+	case "y":
+		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
+			if agent.State == "plan" {
+				m.mode = modeConfirmSend
+				m.confirmEnteredAt = time.Now()
+				m.confirmSendPaneID = agent.TmuxPaneID
+				m.confirmSendKey = "1"
+				m.confirmSendLabel = "Plan approved"
+				m.statusMsg = "Approve plan? (Enter to confirm, Esc to cancel)"
+				m.statusMsgTick = -1 // pinned
+				return m, nil
+			}
 		}
 	}
 
