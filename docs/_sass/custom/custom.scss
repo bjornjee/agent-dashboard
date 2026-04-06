@@ -427,7 +427,20 @@ div.highlighter-rouge:hover .copy-code-button {
   }
 }
 
-// --------------- Sidebar ---------------
+// --------------- Sidebar layout ---------------
+// Fix: Just the Docs grows the sidebar with viewport and right-aligns nav content,
+// leaving dead space on the left. Override to use fixed width, flush left.
+
+@media (min-width: 66.5rem) {
+  .side-bar {
+    width: 16.5rem !important;
+    align-items: stretch !important;
+  }
+
+  .side-bar + .main {
+    margin-left: 16.5rem !important;
+  }
+}
 
 // Active page — indigo left border
 .nav-list-item.active > .nav-list-link {
