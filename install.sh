@@ -61,7 +61,7 @@ install_claude_code() {
   local version
   version=$(node -e "console.log(require('$REPO_DIR/adapters/$ADAPTER/.claude-plugin/plugin.json').version)" 2>/dev/null \
     || (cd "$REPO_DIR" && v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -z "$v" ] && { git fetch --tags --quiet 2>/dev/null; v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); }; [ -n "$v" ] && echo "$v") \
-    || cat "$REPO_DIR/VERSION" 2>/dev/null \
+    || sed 's/ *#.*//' "$REPO_DIR/VERSION" 2>/dev/null \
     || echo "0.0.0")
   local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$version"
   mkdir -p "$cache_dir"
