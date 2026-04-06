@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
+	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -707,12 +708,15 @@ func openPR(dir, branch string) tea.Cmd {
 }
 
 // mergePR runs `gh pr merge <branch> --squash` in the given directory.
+// If the authenticated user is a CODEOWNERS entry, --admin is appended
+// to bypass branch protection rules.
 // Branch deletion is left to the cleanup step.
 func mergePR(dir, branch string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		out, err := gitRunner.CombinedOutputDir(ctx, dir, "gh", "pr", "merge", branch, "--squash")
+		args := gh.MergeArgs(gitRunner, dir, branch)
+		out, err := gitRunner.CombinedOutputDir(ctx, dir, "gh", args...)
 		if err != nil {
 			detail := strings.TrimSpace(string(out))
 			if detail != "" {

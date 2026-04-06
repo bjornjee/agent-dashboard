@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
@@ -154,6 +155,8 @@ func (s *Server) handleClose(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMerge runs `gh pr merge --squash` for the agent's branch.
+// If the authenticated user is a CODEOWNERS entry, --admin is appended
+// to bypass branch protection rules.
 func (s *Server) handleMerge(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
@@ -168,7 +171,8 @@ func (s *Server) handleMerge(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	out, err := cmdRunner.CombinedOutput(ctx, dir, "gh", "pr", "merge", agent.Branch, "--squash")
+	args := gh.MergeArgs(cmdRunner, dir, agent.Branch)
+	out, err := cmdRunner.CombinedOutput(ctx, dir, "gh", args...)
 	if err != nil {
 		detail := strings.TrimSpace(string(out))
 		msg := "gh pr merge failed"
