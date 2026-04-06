@@ -124,8 +124,8 @@ const (
 	maxSpeed        = 5
 	baseSpeed       = 1
 	speedUpInterval = 80
-	minSpawnGap     = 15
-	maxSpawnGap     = 30
+	minSpawnGap     = 25 // enough cols between obstacles to react and land
+	maxSpawnGap     = 50
 )
 
 // -- Game model --
@@ -298,7 +298,7 @@ func (d dinoGameModel) spawnObstacle() obstacle {
 			kind:   obstBird,
 			width:  5,
 			height: 2,
-			birdY:  2 + rand.IntN(3),
+			birdY:  dinoDuckHeight + rand.IntN(2), // fly above ducking dino (rows 3-4)
 		}
 	case obstLargeCactus:
 		return obstacle{
