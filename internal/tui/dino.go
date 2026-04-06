@@ -101,19 +101,34 @@ var spriteBirdFrame1 = []string{
 	"  █  ",
 }
 
-// Sprite dimensions for collision detection.
+// Sprite visual position (for rendering).
+const dinoPosX = 4
+
+// Collision hitbox — smaller than visual sprites for forgiving gameplay.
+// Visual dino is 10 wide, but collision uses 6 (trimmed 2 each side).
 const (
-	dinoStandWidth  = 10
-	dinoStandHeight = 5
-	dinoDuckWidth   = 9
-	dinoDuckHeight  = 3
-	dinoPosX        = 4 // fixed horizontal position of the dino
+	dinoCollisionW   = 6
+	dinoStandHeight  = 5
+	dinoDuckCollW    = 6
+	dinoDuckHeight   = 3
+	dinoCollisionOff = 2 // offset from dinoPosX to start of collision box
 )
 
 // dinoGameHeight is the maximum lines the game needs:
 // 1 score + playRows + 1 ground.
 // playRows = dinoStandHeight + jumpPeak.
-// With jumpVelocity=4, gravity=1: peak=10.
+//
+// Jump math (v=4, g=1, discrete):
+//
+//	Y: 4→7→9→10→10→9→7→4→0  (8 ticks airborne, Y≥4)
+//	peak = 10
+//
+// Reaction zone math:
+//
+//	danger zone = dinoCollisionW + maxObstWidth = 6+6 = 12 cols
+//	base speed 2.0: 12/2 = 6 ticks to cross, 8 airborne → 4 col buffer ✓
+//	max speed 4.5:  12/4.5 ≈ 3 ticks to cross, 8 airborne → 22 col buffer ✓
+//
 // playRows = 5 + 10 = 15, total = 17.
 const dinoGameHeight = 17
 
@@ -121,18 +136,17 @@ const dinoGameHeight = 17
 
 const (
 	jumpVelocity = 4
-	gravity      = 1  // slow fall so dino stays airborne long enough to clear obstacles
+	gravity      = 1  // tuned so 8-tick airtime clears danger zone at all speeds
 	duckDuration = 10 // auto-release duck after this many ticks (~500ms at 50ms/tick)
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
-	// e.g. speed10=10 means 1.0 col/tick, speed10=25 means 2.5 col/tick.
-	baseSpeed10    = 10 // 1.0 col/tick
-	maxSpeed10     = 40 // 4.0 col/tick
+	baseSpeed10    = 20 // 2.0 col/tick — tuned so jump clears 12-col danger zone
+	maxSpeed10     = 45 // 4.5 col/tick
 	speedIncrement = 1  // +0.1 col/tick each interval
-	speedUpEvery   = 40 // ticks between speed bumps
+	speedUpEvery   = 50 // ticks between speed bumps
 
-	minSpawnGap = 25 // minimum ticks between spawns
-	maxSpawnGap = 50
+	minSpawnGap = 20 // minimum ticks between spawns
+	maxSpawnGap = 40
 )
 
 // -- Game model --
@@ -343,14 +357,15 @@ func (d dinoGameModel) spawnObstacle() obstacle {
 }
 
 func (d dinoGameModel) checkCollision() bool {
+	// Use forgiving collision box (smaller than visual sprite).
 	var dw, dh int
 	if d.isDucking() {
-		dw, dh = dinoDuckWidth, dinoDuckHeight
+		dw, dh = dinoDuckCollW, dinoDuckHeight
 	} else {
-		dw, dh = dinoStandWidth, dinoStandHeight
+		dw, dh = dinoCollisionW, dinoStandHeight
 	}
-	dx1 := dinoPosX
-	dx2 := dinoPosX + dw
+	dx1 := dinoPosX + dinoCollisionOff
+	dx2 := dx1 + dw
 	dy1 := d.dinoY
 	dy2 := d.dinoY + dh
 

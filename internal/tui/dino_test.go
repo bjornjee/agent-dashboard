@@ -157,7 +157,7 @@ func TestObstacleRemoval(t *testing.T) {
 func TestCollisionTriggersGameOver(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed10 = 10
+	d.speed10 = 20
 	d.spawnTimer = 999
 
 	d.obstacles = []obstacle{{
@@ -177,7 +177,7 @@ func TestCollisionTriggersGameOver(t *testing.T) {
 func TestNoCollisionWhenJumpingOver(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed10 = 10
+	d.speed10 = 20
 	d.spawnTimer = 999
 	d.dinoY = 10
 
@@ -196,7 +196,7 @@ func TestNoCollisionWhenJumpingOver(t *testing.T) {
 func TestScoreIncrementsEachTick(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed10 = 10
+	d.speed10 = 20
 	d.spawnTimer = 999
 
 	startScore := d.score
