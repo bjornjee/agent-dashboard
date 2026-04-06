@@ -38,6 +38,9 @@ jobs:
       - name: Run tests
         run: go test -race ./cmd/dashboard/...
 
+      - name: Package adapter
+        run: tar -czf agent-dashboard-adapter-claude-code.tar.gz -C adapters/claude-code .
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"

@@ -46,7 +46,6 @@ A companion PWA (`cmd/web/`) for managing agents from your phone over your local
 |------------|----------|---------|
 | [tmux](https://github.com/tmux/tmux) | Yes | Agent pane management and live capture |
 | [Claude Code](https://claude.com/claude-code) | Yes | The agents this dashboard monitors |
-| [Go 1.26+](https://go.dev/dl/) | Yes | Building the dashboard binary |
 | [Node.js 18+](https://nodejs.org/) | Yes | Claude Code adapter hooks |
 | [git](https://git-scm.com/) | Yes | Diff viewer, branch detection |
 | [GitHub CLI (`gh`)](https://cli.github.com/) | No | Detects existing PRs so `g` opens the diff page instead of creating a new PR |
@@ -54,7 +53,25 @@ A companion PWA (`cmd/web/`) for managing agents from your phone over your local
 
 ## Install
 
-### Option A: Claude Code plugin (recommended)
+### Quick install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
+```
+
+This downloads the pre-built binary and Claude Code adapter from the latest [GitHub Release](https://github.com/bjornjee/agent-dashboard/releases), registers the plugin, and creates default settings. No Go toolchain required.
+
+### From source
+
+```bash
+git clone https://github.com/bjornjee/agent-dashboard
+cd agent-dashboard
+./install.sh --build
+```
+
+Building from source requires [Go 1.26+](https://go.dev/dl/).
+
+### Claude Code plugin
 
 In a Claude Code session, run:
 
@@ -62,25 +79,31 @@ In a Claude Code session, run:
 /plugin add bjornjee/agent-dashboard
 ```
 
-### Option B: From source
-
-```bash
-git clone https://github.com/bjornjee/agent-dashboard
-cd agent-dashboard
-make install                        # defaults to claude-code adapter
-# make install ADAPTER=claude-code  # or specify explicitly
-```
-
 The installer:
-1. Builds the Go binary to `~/.local/bin/agent-dashboard`
+1. Downloads the pre-built binary to `~/.local/bin/agent-dashboard` (or builds from source with `--build`)
 2. Creates default settings at `~/.agent-dashboard/settings.toml`
-3. Clones the marketplace repo to `~/.claude/plugins/marketplaces/agent-dashboard/`
-4. Registers the marketplace in `~/.claude/plugins/known_marketplaces.json`
-5. Installs the adapter to `~/.claude/plugins/cache/agent-dashboard/agent-dashboard/<version>/`
-6. Registers the plugin in `~/.claude/plugins/installed_plugins.json`
-7. Enables the plugin in `~/.claude/settings.json`
+3. Installs the adapter to `~/.claude/plugins/cache/agent-dashboard/agent-dashboard/<version>/`
+4. Registers the plugin in `~/.claude/plugins/known_marketplaces.json`
+5. Registers the plugin in `~/.claude/plugins/installed_plugins.json`
+6. Enables the plugin in `~/.claude/settings.json`
 
 Restart Claude Code sessions after installation for hooks and skills to take effect.
+
+## Uninstall
+
+From a repo checkout:
+
+```bash
+make uninstall
+```
+
+Or standalone (no checkout needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/uninstall.sh | sh
+```
+
+This removes the binary, plugin cache, and deregisters from Claude Code. Pass `--yes` to skip the prompt for deleting `~/.agent-dashboard/` (which contains settings and usage data).
 
 ### Optional: tmux keybinding
 
@@ -186,6 +209,8 @@ ascii_pet = false     # show animated ASCII pet in the left panel (default: fals
 
 ## Development
 
+Development requires [Go 1.26+](https://go.dev/dl/) (not needed for binary installation).
+
 ```bash
 make build                        # Build TUI binary to bin/ (version from git tag or VERSION file)
 make build-web                    # Build web server binary to bin/
@@ -195,6 +220,8 @@ make test                         # Run all tests (vets first)
 make test-race                    # Run tests with race detector
 make install                      # Build + install binary + adapter (default: claude-code)
 make install ADAPTER=claude-code  # Specify adapter explicitly
+make uninstall                    # Remove binary, adapter, and state
+make package-adapter              # Package adapter for release (used by CI)
 make install-web                  # Install web server binary to ~/.local/bin/
 make web                          # Run web server locally on port 8390
 make seed                         # Create fake agent state for testing

@@ -1,75 +1,299 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+# ---------------------------------------------------------------------------
+# agent-dashboard installer
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
+#   ./install.sh              # download pre-built binary + adapter
+#   ./install.sh --build      # compile from source (requires Go, run from repo checkout)
+# ---------------------------------------------------------------------------
+
+REPO="bjornjee/agent-dashboard"
 BIN_DIR="$HOME/.local/bin"
-ADAPTER="${1:-claude-code}"
+STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
+ADAPTER="claude-code"
+BUILD_FROM_SOURCE=false
 
 # ---------------------------------------------------------------------------
-# Adapter install functions
+# Parse arguments
+# ---------------------------------------------------------------------------
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --build)   BUILD_FROM_SOURCE=true; shift ;;
+    --adapter) ADAPTER="$2"; shift 2 ;;
+    *)         ADAPTER="$1"; shift ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Helpers
 # ---------------------------------------------------------------------------
 
-install_claude_code() {
+info()  { printf '  %s\n' "$@"; }
+err()   { printf 'ERROR: %s\n' "$@" >&2; }
+step()  { printf '[%s] %s\n' "$1" "$2"; }
+
+check_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Returns 0 if version $1 >= $2 (major.minor comparison)
+version_ge() {
+  major1=$(echo "$1" | cut -d. -f1)
+  minor1=$(echo "$1" | cut -d. -f2)
+  major2=$(echo "$2" | cut -d. -f1)
+  minor2=$(echo "$2" | cut -d. -f2)
+  [ "$major1" -gt "$major2" ] 2>/dev/null && return 0
+  [ "$major1" -eq "$major2" ] 2>/dev/null && [ "$minor1" -ge "$minor2" ] 2>/dev/null && return 0
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Prerequisite checks
+# ---------------------------------------------------------------------------
+
+check_prerequisites() {
+  missing=""
+
+  if ! check_cmd tmux; then
+    missing="$missing  - tmux: https://github.com/tmux/tmux/wiki/Installing\n"
+  fi
+
+  if ! check_cmd node; then
+    missing="$missing  - node (18+): https://nodejs.org/\n"
+  else
+    node_ver=$(node -v 2>/dev/null | sed 's/^v//')
+    if ! version_ge "$node_ver" "18.0"; then
+      missing="$missing  - node 18+ (found $node_ver): https://nodejs.org/\n"
+    fi
+  fi
+
+  if ! check_cmd git; then
+    missing="$missing  - git: https://git-scm.com/\n"
+  fi
+
+  if [ "$BUILD_FROM_SOURCE" = true ]; then
+    if ! check_cmd go; then
+      missing="$missing  - go (1.26+): https://go.dev/dl/\n"
+    else
+      go_ver=$(go version 2>/dev/null | sed 's/.*go\([0-9][0-9.]*\).*/\1/')
+      if ! version_ge "$go_ver" "1.26"; then
+        missing="$missing  - go 1.26+ (found $go_ver): https://go.dev/dl/\n"
+      fi
+    fi
+  else
+    if ! check_cmd curl; then
+      missing="$missing  - curl: required for downloading release assets\n"
+    fi
+  fi
+
+  if [ -n "$missing" ]; then
+    err "Missing prerequisites:"
+    printf '%b' "$missing"
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Detect OS and architecture
+# ---------------------------------------------------------------------------
+
+detect_platform() {
+  OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+  case "$OS" in
+    darwin) OS="darwin" ;;
+    linux)  OS="linux" ;;
+    *)      err "Unsupported OS: $OS"; exit 1 ;;
+  esac
+
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    x86_64)       ARCH="amd64" ;;
+    amd64)        ARCH="amd64" ;;
+    arm64)        ARCH="arm64" ;;
+    aarch64)      ARCH="arm64" ;;
+    *)            err "Unsupported architecture: $ARCH"; exit 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Resolve latest release version
+# ---------------------------------------------------------------------------
+
+resolve_version() {
+  # Try gh CLI first (handles auth/rate limits), fall back to curl
+  if check_cmd gh; then
+    VERSION=$(gh api "repos/$REPO/releases/latest" --jq '.tag_name' 2>/dev/null | sed 's/^v//') || true
+  fi
+
+  if [ -z "${VERSION:-}" ]; then
+    VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+      | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p') || true
+  fi
+
+  if [ -z "${VERSION:-}" ]; then
+    err "Could not determine latest release version."
+    err "Check your internet connection or install from source with --build."
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Download and install binary
+# ---------------------------------------------------------------------------
+
+install_binary_download() {
+  step "1/4" "Downloading agent-dashboard v$VERSION ($OS/$ARCH)..."
+
+  tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' EXIT
+
+  asset="agent-dashboard_${VERSION}_${OS}_${ARCH}.tar.gz"
+  url="https://github.com/$REPO/releases/download/v${VERSION}/$asset"
+
+  if ! curl -fsSL "$url" -o "$tmpdir/$asset"; then
+    err "Failed to download $url"
+    if check_cmd go; then
+      info "Falling back to building from source..."
+      install_binary_build
+      return
+    fi
+    exit 1
+  fi
+
+  mkdir -p "$BIN_DIR"
+  tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+  cp "$tmpdir/agent-dashboard" "$BIN_DIR/agent-dashboard"
+
+  # Ad-hoc codesign on macOS to prevent AMFI/Gatekeeper issues
+  if [ "$OS" = "darwin" ]; then
+    codesign -f -s - "$BIN_DIR/agent-dashboard" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$BIN_DIR/agent-dashboard" 2>/dev/null || true
+  fi
+
+  info "Installed to $BIN_DIR/agent-dashboard"
+
+  rm -rf "$tmpdir"
+  trap - EXIT
+}
+
+install_binary_build() {
+  REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+  step "1/4" "Building agent-dashboard from source..."
+  cd "$REPO_DIR"
+  make build
+  mkdir -p "$BIN_DIR"
+  cp bin/agent-dashboard "$BIN_DIR/agent-dashboard"
+  info "Installed to $BIN_DIR/agent-dashboard"
+  cd - >/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# Download and install adapter
+# ---------------------------------------------------------------------------
+
+install_adapter_download() {
   local claude_dir="$HOME/.claude"
   local plugins_dir="$claude_dir/plugins"
-  local settings="$claude_dir/settings.json"
 
   if [ ! -d "$claude_dir" ]; then
-    echo "  WARNING: $claude_dir not found. Is Claude Code installed?"
-    echo "  You may need to add the plugin manually via: /plugin add bjornjee/agent-dashboard"
+    info "WARNING: $claude_dir not found. Is Claude Code installed?"
+    info "You may need to add the plugin manually via: /plugin add $REPO"
     return
   fi
 
-  # Ensure plugins directories exist
-  mkdir -p "$plugins_dir/marketplaces" "$plugins_dir/cache"
+  step "2/4" "Downloading adapter..."
 
-  # --- 1. Clone or update marketplace repo ---
-  local mkt_dir="$plugins_dir/marketplaces/agent-dashboard"
-  if [ -d "$mkt_dir/.git" ]; then
-    echo "  Updating marketplace repo..."
-    git -C "$mkt_dir" pull --ff-only --quiet 2>/dev/null || true
-  else
-    echo "  Cloning marketplace repo..."
-    rm -rf "$mkt_dir"
-    git clone --quiet https://github.com/bjornjee/agent-dashboard "$mkt_dir"
+  tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' EXIT
+
+  asset="agent-dashboard-adapter-${ADAPTER}.tar.gz"
+  url="https://github.com/$REPO/releases/download/v${VERSION}/$asset"
+
+  if ! curl -fsSL "$url" -o "$tmpdir/$asset"; then
+    err "Failed to download adapter: $url"
+    err "You can install the adapter manually via: /plugin add $REPO"
+    rm -rf "$tmpdir"
+    trap - EXIT
+    return
   fi
 
-  # --- 2. Register in known_marketplaces.json ---
-  local known="$plugins_dir/known_marketplaces.json"
-  local commit_sha
-  commit_sha=$(git -C "$mkt_dir" rev-parse HEAD 2>/dev/null || echo "")
-  local now
-  now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+  # Extract adapter to plugin cache
+  local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$VERSION"
+  mkdir -p "$cache_dir"
+  tar -xzf "$tmpdir/$asset" -C "$cache_dir"
+  info "Installed adapter v$VERSION to plugin cache"
 
-  node -e "
-    const fs = require('fs');
-    const p = '$known';
-    const k = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
-    k['agent-dashboard'] = {
-      source: { source: 'github', repo: 'bjornjee/agent-dashboard' },
-      installLocation: '$mkt_dir',
-      autoUpdate: true,
-      lastUpdated: '$now'
-    };
-    fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
-    console.log('  Updated known_marketplaces.json');
-  "
+  rm -rf "$tmpdir"
+  trap - EXIT
 
-  # --- 3. Install adapter to plugin cache ---
-  # Read version from the adapter's plugin.json (authoritative for Claude plugin),
-  # falling back to git tag, then the VERSION file, and finally 0.0.0.
+  register_plugin "$VERSION" "$cache_dir"
+}
+
+install_adapter_build() {
+  REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+  local claude_dir="$HOME/.claude"
+  local plugins_dir="$claude_dir/plugins"
+
+  if [ ! -d "$claude_dir" ]; then
+    info "WARNING: $claude_dir not found. Is Claude Code installed?"
+    info "You may need to add the plugin manually via: /plugin add $REPO"
+    return
+  fi
+
+  # Read version from the adapter's plugin.json, falling back to git tag, then VERSION file
   local version
   version=$(node -e "console.log(require('$REPO_DIR/adapters/$ADAPTER/.claude-plugin/plugin.json').version)" 2>/dev/null \
     || (cd "$REPO_DIR" && v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -z "$v" ] && { git fetch --tags --quiet 2>/dev/null; v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); }; [ -n "$v" ] && echo "$v") \
     || sed 's/ *#.*//' "$REPO_DIR/VERSION" 2>/dev/null \
     || echo "0.0.0")
+
+  step "2/4" "Installing adapter from source..."
   local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$version"
   mkdir -p "$cache_dir"
-  # Copy the adapter contents into the cache
-  cp -R "$REPO_DIR/adapters/claude-code/." "$cache_dir/"
-  echo "  Installed adapter v$version to plugin cache"
+  cp -R "$REPO_DIR/adapters/$ADAPTER/." "$cache_dir/"
+  info "Installed adapter v$version to plugin cache"
 
-  # --- 4. Register in installed_plugins.json ---
+  register_plugin "$version" "$cache_dir"
+}
+
+# ---------------------------------------------------------------------------
+# Register plugin in Claude Code
+# ---------------------------------------------------------------------------
+
+register_plugin() {
+  local version="$1"
+  local cache_dir="$2"
+  local claude_dir="$HOME/.claude"
+  local plugins_dir="$claude_dir/plugins"
+  local settings="$claude_dir/settings.json"
+  local now
+  now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+
+  # Ensure plugins directories exist
+  mkdir -p "$plugins_dir/marketplaces" "$plugins_dir/cache"
+
+  step "3/4" "Registering plugin..."
+
+  # --- Register in known_marketplaces.json ---
+  local known="$plugins_dir/known_marketplaces.json"
+  node -e "
+    const fs = require('fs');
+    const p = '$known';
+    const k = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
+    k['agent-dashboard'] = {
+      source: { source: 'github', repo: '$REPO' },
+      installLocation: '$cache_dir',
+      autoUpdate: true,
+      lastUpdated: '$now'
+    };
+    fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
+  "
+  info "Updated known_marketplaces.json"
+
+  # --- Register in installed_plugins.json ---
   local installed="$plugins_dir/installed_plugins.json"
   node -e "
     const fs = require('fs');
@@ -80,30 +304,27 @@ install_claude_code() {
 
     const key = 'agent-dashboard@agent-dashboard';
     const existing = d.plugins[key] || [];
-    // Find or create the user-scope entry
     let entry = existing.find(e => e.scope === 'user');
     const now = '$now';
     if (entry) {
       entry.installPath = '$cache_dir';
       entry.version = '$version';
       entry.lastUpdated = now;
-      entry.gitCommitSha = '$commit_sha';
     } else {
       existing.push({
         scope: 'user',
         installPath: '$cache_dir',
         version: '$version',
         installedAt: now,
-        lastUpdated: now,
-        gitCommitSha: '$commit_sha'
+        lastUpdated: now
       });
     }
     d.plugins[key] = existing;
     fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
-    console.log('  Updated installed_plugins.json');
   "
+  info "Updated installed_plugins.json"
 
-  # --- 5. Enable in settings.json ---
+  # --- Enable in settings.json ---
   if [ -f "$settings" ]; then
     node -e "
       const fs = require('fs');
@@ -121,9 +342,58 @@ install_claude_code() {
   fi
 }
 
-install_generic() {
-  echo "  Adapter '$1' has no automatic registration step."
-  echo "  See adapters/$1/README.md for setup instructions."
+# ---------------------------------------------------------------------------
+# Bootstrap settings
+# ---------------------------------------------------------------------------
+
+bootstrap_settings() {
+  step "4/4" "Bootstrapping settings..."
+  local settings_file="$STATE_DIR/settings.toml"
+  if [ ! -f "$settings_file" ]; then
+    mkdir -p "$STATE_DIR"
+
+    # Try adapter cache first (zero-clone install), then repo root (--build)
+    local example=""
+    local cache_dir="$HOME/.claude/plugins/cache/agent-dashboard/agent-dashboard"
+    if [ -d "$cache_dir" ]; then
+      # Find the settings template in the latest cached version
+      for d in "$cache_dir"/*/; do
+        if [ -f "${d}settings.example.toml" ]; then
+          example="${d}settings.example.toml"
+        fi
+      done
+    fi
+
+    # Fall back to repo root (available in --build mode)
+    if [ -z "$example" ] && [ -f "$(dirname "$0")/settings.example.toml" ]; then
+      example="$(dirname "$0")/settings.example.toml"
+    fi
+
+    if [ -n "$example" ]; then
+      cp "$example" "$settings_file"
+      info "Created $settings_file"
+    else
+      info "Could not find settings template, skipping."
+    fi
+  else
+    info "$settings_file already exists, skipping."
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# PATH check
+# ---------------------------------------------------------------------------
+
+check_path() {
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *)
+      echo ""
+      info "WARNING: $BIN_DIR is not on your PATH."
+      info "Add it to your shell profile:"
+      info "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -133,47 +403,21 @@ install_generic() {
 echo "=== agent-dashboard installer ==="
 echo ""
 
-# Validate adapter
-if [ ! -d "$REPO_DIR/adapters/$ADAPTER" ]; then
-  echo "ERROR: Unknown adapter '$ADAPTER'"
-  echo ""
-  echo "Available adapters:"
-  for d in "$REPO_DIR"/adapters/*/; do
-    [ -d "$d" ] && echo "  - $(basename "$d")"
-  done
-  exit 1
-fi
+check_prerequisites
 
-# 1. Build the Go binary
-echo "[1/3] Building agent-dashboard binary..."
-cd "$REPO_DIR"
-make build
-mkdir -p "$BIN_DIR"
-cp bin/agent-dashboard "$BIN_DIR/agent-dashboard"
-echo "  Installed to $BIN_DIR/agent-dashboard"
-
-# 2. Bootstrap default settings
-STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
-SETTINGS_FILE="$STATE_DIR/settings.toml"
-echo "[2/3] Bootstrapping settings..."
-if [ ! -f "$SETTINGS_FILE" ]; then
-  mkdir -p "$STATE_DIR"
-  cp "$REPO_DIR/settings.example.toml" "$SETTINGS_FILE"
-  echo "  Created $SETTINGS_FILE"
+if [ "$BUILD_FROM_SOURCE" = true ]; then
+  install_binary_build
+  install_adapter_build
 else
-  echo "  $SETTINGS_FILE already exists, skipping."
+  detect_platform
+  resolve_version
+  install_binary_download
+  install_adapter_download
 fi
 
-# 3. Install adapter
-echo "[3/3] Installing '$ADAPTER' adapter..."
-case "$ADAPTER" in
-  claude-code) install_claude_code ;;
-  *)           install_generic "$ADAPTER" ;;
-esac
+bootstrap_settings
+check_path
 
 echo ""
 echo "Done. Restart Claude Code sessions to activate hooks."
 echo "Run 'agent-dashboard' in a tmux pane to start the dashboard."
-echo ""
-echo "Alternative: install the plugin via Claude Code directly:"
-echo "  /plugin add bjornjee/agent-dashboard"
