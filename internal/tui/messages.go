@@ -85,6 +85,7 @@ const (
 	modeCreateFolder
 	modeCreateSkill   // skill selection step of create wizard
 	modeCreateMessage // message input step of create wizard
+	modeDinoGame      // full-screen dino runner game
 )
 
 // -- Viewport focus --
