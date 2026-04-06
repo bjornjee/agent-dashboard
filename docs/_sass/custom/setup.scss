@@ -1,8 +1,12 @@
-// Custom variables for component styles
-$green-accent: #3fb950;
-$green-dim: #238636;
-$green-subtle-bg: rgba(#3fb950, 0.1);
-$surface-elevated: #161b22;
-$surface-overlay: #1c2128;
-$text-muted: #8b949e;
-$border-subtle: #30363d;
+// Callout colour definitions for Just the Docs
+// These use distinct variable names to avoid colliding with the color scheme palette
+
+$cyan-000: #cffafe;
+$cyan-callout-100: #a5f3fc;
+$cyan-callout-200: #67e8f9;
+$cyan-callout-300: #22d3ee;
+
+$amber-000: #fef3c7;
+$amber-callout-100: #fde68a;
+$amber-callout-200: #fcd34d;
+$amber-callout-300: #fbbf24;

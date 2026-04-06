@@ -1,0 +1,141 @@
+---
+layout: default
+---
+
+<!-- Hero section -->
+<div class="hero-section">
+  <div class="hero-content">
+    <div class="hero-badges">
+      <a href="https://github.com/bjornjee/agent-dashboard/releases" class="hero-badge">
+        <span class="badge-dot badge-dot--green"></span>
+        Latest Release
+      </a>
+      <a href="https://github.com/bjornjee/agent-dashboard" class="hero-badge">
+        MIT License
+      </a>
+    </div>
+
+    <h1 class="hero-title">agent-dashboard</h1>
+    <p class="hero-tagline">
+      Monitor and control your Claude Code agents from terminal and phone.
+    </p>
+    <p class="hero-description">
+      A tmux-integrated TUI and mobile web companion that gives you real-time
+      visibility into every Claude Code agent running across your sessions.
+    </p>
+
+    <div class="hero-actions">
+      <a href="{{ '/getting-started/' | relative_url }}" class="btn-hero btn-hero--primary">
+        Get started
+      </a>
+      <a href="https://github.com/bjornjee/agent-dashboard" class="btn-hero btn-hero--outline">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: -2px; margin-right: 6px;">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Quick install -->
+<div class="quick-install">
+  <h2 class="quick-install__title">Quick install</h2>
+  <div class="install-steps">
+    <div class="install-step">
+      <div class="install-step__label">1. Install the binary</div>
+      <div class="install-step__code">
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh</code></pre>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="install-step__label">2. Register the Claude Code plugin</div>
+      <div class="install-step__code">
+        <pre><code>/marketplace add bjornjee/agent-dashboard
+/plugin install agent-dashboard@agent-dashboard</code></pre>
+      </div>
+    </div>
+    <div class="install-step">
+      <div class="install-step__label">3. Launch</div>
+      <div class="install-step__code">
+        <pre><code>agent-dashboard</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Demo -->
+{% if page.demo_video %}
+<div class="demo-section">
+  <h2>Demo</h2>
+  <div class="demo-embed">
+    {% if page.demo_image %}
+    <a href="{{ page.demo_video }}">
+      <img src="{{ page.demo_image }}" alt="agent-dashboard demo" loading="lazy">
+    </a>
+    {% else %}
+    <video src="{{ page.demo_video }}" controls muted style="max-width: 100%; border-radius: 8px; display: block;"></video>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Feature grid -->
+<div class="feature-grid">
+  <div class="feature-card">
+    <div class="feature-icon feature-icon--cyan">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49m-8.48-.01a6 6 0 010-8.49m11.31-2.82a10 10 0 010 14.14m-14.14 0a10 10 0 010-14.14"/>
+      </svg>
+    </div>
+    <h3 class="feature-title">Real-time agent monitoring</h3>
+    <p class="feature-desc">
+      Agents grouped by state with live tmux pane capture, conversation history, and a collapsible subagent tree.
+    </p>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-icon feature-icon--green">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><path d="M11 18H8a2 2 0 01-2-2V9"/>
+      </svg>
+    </div>
+    <h3 class="feature-title">GitHub PR workflow</h3>
+    <p class="feature-desc">
+      Review syntax-highlighted split-pane diffs, create PRs, and merge — all without leaving the terminal.
+    </p>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-icon feature-icon--amber">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+      </svg>
+    </div>
+    <h3 class="feature-title">Mobile remote control</h3>
+    <p class="feature-desc">
+      A companion PWA for managing agents from your phone. Approve permissions, reply, stop agents, and manage PRs.
+    </p>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-icon feature-icon--purple">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+    </div>
+    <h3 class="feature-title">Session creation</h3>
+    <p class="feature-desc">
+      Spin up new agent sessions with frecency-ranked path suggestions and skill selection.
+    </p>
+  </div>
+</div>
+
+<!-- Callout -->
+<div class="tip-callout">
+  This dashboard pairs well with
+  <a href="https://github.com/affaan-m/everything-claude-code">everything-claude-code</a>
+  for a complete agent workflow experience.
+</div>
+
+{{ content }}
