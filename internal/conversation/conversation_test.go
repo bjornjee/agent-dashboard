@@ -22,6 +22,9 @@ func TestProjectSlug(t *testing.T) {
 		{"/Users/bjornjee/.dotfiles/dotfiles", "-Users-bjornjee--dotfiles-dotfiles"},
 		{"/Users/bjornjee/.claude", "-Users-bjornjee--claude"},
 		{"/Users/bjornjee/.tmux/plugins/agent-dashboard", "-Users-bjornjee--tmux-plugins-agent-dashboard"},
+		// Underscores in directory names must be replaced with hyphens
+		// to match Claude Code's slug convention.
+		{"/Users/bjornjee/Code/tomoro/project_venice", "-Users-bjornjee-Code-tomoro-project-venice"},
 	}
 	for _, tt := range tests {
 		got := ProjectSlug(tt.cwd)

@@ -17,7 +17,8 @@ import (
 // Replaces both path separators and dots to match Claude Code's slug convention.
 func ProjectSlug(cwd string) string {
 	s := strings.ReplaceAll(cwd, string(os.PathSeparator), "-")
-	return strings.ReplaceAll(s, ".", "-")
+	s = strings.ReplaceAll(s, ".", "-")
+	return strings.ReplaceAll(s, "_", "-")
 }
 
 // jsonlEntry is the raw structure of a Claude Code session JSONL line.
