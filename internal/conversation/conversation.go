@@ -6,19 +6,22 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
+// slugRe matches any character that is not alphanumeric or a hyphen.
+var slugRe = regexp.MustCompile(`[^a-zA-Z0-9-]`)
+
 // ProjectSlug derives the Claude Code project slug from a cwd path.
 // e.g., "/Users/bjornjee/Code/skills" -> "-Users-bjornjee-Code-skills"
-// Replaces both path separators and dots to match Claude Code's slug convention.
+// Replaces all non-alphanumeric characters with hyphens to match
+// Claude Code's slug convention.
 func ProjectSlug(cwd string) string {
-	s := strings.ReplaceAll(cwd, string(os.PathSeparator), "-")
-	s = strings.ReplaceAll(s, ".", "-")
-	return strings.ReplaceAll(s, "_", "-")
+	return slugRe.ReplaceAllString(cwd, "-")
 }
 
 // jsonlEntry is the raw structure of a Claude Code session JSONL line.
