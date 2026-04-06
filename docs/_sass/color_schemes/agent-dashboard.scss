@@ -2,60 +2,80 @@
 // agent-dashboard — light colour scheme
 // =============================================================
 
-// --- Slate neutrals ---
-$slate-900: #0f172a;
-$slate-800: #1e293b;
-$slate-700: #334155;
-$slate-600: #475569;
-$slate-500: #64748b;
-$slate-400: #94a3b8;
-$slate-300: #cbd5e1;
-$slate-200: #e2e8f0;
-$slate-100: #f1f5f9;
-$slate-050: #f8fafc;
+// --- Zinc neutrals (modern, no blue/green tint) ---
+$zinc-950: #09090b;
+$zinc-900: #18181b;
+$zinc-800: #27272a;
+$zinc-700: #3f3f46;
+$zinc-600: #52525b;
+$zinc-500: #71717a;
+$zinc-400: #a1a1aa;
+$zinc-300: #d4d4d8;
+$zinc-200: #e4e4e7;
+$zinc-100: #f4f4f5;
+$zinc-050: #fafafa;
 
-// --- Cyan accent ---
-$cyan-500: #06b6d4;
-$cyan-600: #0891b2;
-$cyan-700: #0e7490;
-$cyan-400: #22d3ee;
-$cyan-300: #67e8f9;
-$cyan-100: #cffafe;
+// --- Indigo accent ---
+$indigo-600: #4f46e5;
+$indigo-500: #6366f1;
+$indigo-400: #818cf8;
+$indigo-300: #a5b4fc;
+$indigo-200: #c7d2fe;
+$indigo-100: #e0e7ff;
 
 // --- Semantic: agent states ---
 $green-500: #10b981;   // active agent
 $amber-500: #f59e0b;   // waiting / blocked
 $red-500:   #ef4444;   // error / stopped
 
+// --- Legacy aliases (used by custom.scss) ---
+$slate-900: $zinc-950;
+$slate-800: $zinc-900;
+$slate-700: $zinc-800;
+$slate-600: $zinc-600;
+$slate-500: $zinc-500;
+$slate-400: $zinc-400;
+$slate-300: $zinc-300;
+$slate-200: $zinc-200;
+$slate-100: $zinc-100;
+$slate-050: $zinc-050;
+
+$cyan-700: $indigo-600;
+$cyan-600: $indigo-600;
+$cyan-500: $indigo-500;
+$cyan-400: $indigo-400;
+$cyan-300: $indigo-300;
+$cyan-100: $indigo-100;
+
 // --- Theme variable overrides ---
 // Reference: https://github.com/just-the-docs/just-the-docs/blob/main/_sass/support/_variables.scss
 
-$body-background-color: $slate-050;
+$body-background-color: $zinc-050;
 $sidebar-color:         #ffffff;
-$body-text-color:       $slate-800;
-$body-heading-color:    $slate-900;
-$nav-child-link-color:  $slate-600;
-$search-result-preview-color: $slate-600;
+$body-text-color:       $zinc-700;
+$body-heading-color:    $zinc-950;
+$nav-child-link-color:  $zinc-500;
+$search-result-preview-color: $zinc-500;
 
 // Links
-$link-color:            $cyan-600;
-$link-hover-color:      $cyan-700;
+$link-color:            $indigo-600;
+$link-hover-color:      $indigo-500;
 
 // Navigation
 $nav-width:             264px;
 
 // Search feedback highlight
-$feedback-color:        $cyan-500;
+$feedback-color:        $indigo-500;
 
 // Code
-$code-background-color: $slate-100;
+$code-background-color: $zinc-100;
 $code-font-size:        13px;
 
 // Search
 $search-background-color: #ffffff;
 
 // Borders
-$border-color:          $slate-200;
+$border-color:          $zinc-200;
 
 // Buttons
-$btn-primary-color:     $cyan-600;
+$btn-primary-color:     $indigo-600;
