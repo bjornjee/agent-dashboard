@@ -244,21 +244,17 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target, err := tmux.TmuxNewWindow(session, repoName, folder)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", err)})
-		return
-	}
-
-	// Build command with optional skill and message
+	// Build the shell command — passed directly to new-window as the
+	// pane's initial process to avoid tmux send-keys buffer limits.
 	cmd := s.cfg.Profile.Command
 	prompt := buildPrompt(req.Skill, req.Message)
 	if prompt != "" {
 		cmd = cmd + " " + shellQuote(prompt)
 	}
 
-	if err := tmux.TmuxSendKeys(target, cmd); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("send command: %v", err)})
+	target, err := tmux.TmuxNewWindow(session, repoName, folder, cmd)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", err)})
 		return
 	}
 

@@ -160,17 +160,29 @@ func TmuxSelectPane(target string) error {
 	return runner.Run(ctx, "select-pane", "-t", target)
 }
 
+// sendKeysChunkSize is the maximum number of bytes sent per send-keys call.
+// tmux silently truncates text beyond its internal paste/input buffer (~1 KB).
+const sendKeysChunkSize = 512
+
 // TmuxSendKeys sends text literally to a tmux pane, followed by Enter.
-// The -l flag prevents tmux from interpreting key names (e.g. "Enter", "Escape").
+// Long text is split into chunks to avoid tmux's input buffer truncation.
 func TmuxSendKeys(target, text string) error {
-	ctx1, cancel1 := context.WithTimeout(context.Background(), Timeout)
-	defer cancel1()
-	if err := runner.Run(ctx1, "send-keys", "-l", "-t", target, text); err != nil {
-		return err
+	for len(text) > 0 {
+		chunk := text
+		if len(chunk) > sendKeysChunkSize {
+			chunk = text[:sendKeysChunkSize]
+		}
+		text = text[len(chunk):]
+		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+		err := runner.Run(ctx, "send-keys", "-l", "-t", target, chunk)
+		cancel()
+		if err != nil {
+			return err
+		}
 	}
-	ctx2, cancel2 := context.WithTimeout(context.Background(), Timeout)
-	defer cancel2()
-	return runner.Run(ctx2, "send-keys", "-t", target, "Enter")
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	return runner.Run(ctx, "send-keys", "-t", target, "Enter")
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.
@@ -337,14 +349,18 @@ func TmuxListWindows(session string) ([]domain.TmuxWindowInfo, error) {
 
 // TmuxNewWindow creates a new window in the given session, returning the new pane's target.
 // The -d flag keeps focus on the current window (dashboard).
-func TmuxNewWindow(session, windowName, startDir string) (string, error) {
+func TmuxNewWindow(session, windowName, startDir string, shellCmd ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := runner.Output(ctx,
-		"new-window", "-t", session+":", "-n", windowName, "-c", startDir,
+	args := []string{
+		"new-window", "-t", session + ":", "-n", windowName, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	)
+	}
+	if len(shellCmd) > 0 && shellCmd[0] != "" {
+		args = append(args, shellCmd[0])
+	}
+	out, err := runner.Output(ctx, args...)
 	if err != nil {
 		return "", fmt.Errorf("new-window failed: %w", err)
 	}
@@ -357,14 +373,18 @@ func TmuxNewWindow(session, windowName, startDir string) (string, error) {
 
 // TmuxSplitWindow splits an existing window to create a new pane, returning its target.
 // The -d flag keeps focus on the current pane (dashboard).
-func TmuxSplitWindow(sessionWindow, startDir string) (string, error) {
+func TmuxSplitWindow(sessionWindow, startDir string, shellCmd ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := runner.Output(ctx,
+	args := []string{
 		"split-window", "-t", sessionWindow, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	)
+	}
+	if len(shellCmd) > 0 && shellCmd[0] != "" {
+		args = append(args, shellCmd[0])
+	}
+	out, err := runner.Output(ctx, args...)
 	if err != nil {
 		return "", fmt.Errorf("split-window failed: %w", err)
 	}

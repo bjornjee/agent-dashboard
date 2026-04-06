@@ -498,6 +498,14 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			}
 		}
 
+		// Build the shell command to run in the new pane.
+		// Passing it directly to new-window/split-window makes it the
+		// pane's initial process, avoiding tmux send-keys buffer limits.
+		cmd := profile.Command
+		if prompt := buildPrompt(skill, message); prompt != "" {
+			cmd = profile.Command + " " + shellQuote(prompt)
+		}
+
 		if found {
 			// Check pane limit; if the window no longer exists (stale agent
 			// state), fall through and create a fresh window instead.
@@ -507,27 +515,15 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			} else if count >= maxPanesPerWindow {
 				return createSessionMsg{err: fmt.Errorf("8-pane limit reached for %s", repoName)}
 			} else {
-				newTarget, err = tmux.TmuxSplitWindow(sw, absFolder)
+				newTarget, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
 			}
 		}
 		if !found {
-			newTarget, err = tmux.TmuxNewWindow(session, repoName, absFolder)
+			newTarget, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
 		}
 
 		if err != nil {
 			return createSessionMsg{err: err}
-		}
-
-		// Build the command with optional initial prompt.
-		// The prompt is shell-quoted so metacharacters (>, |, &, etc.)
-		// are passed literally to the claude CLI as a single argument.
-		cmd := profile.Command
-		if prompt := buildPrompt(skill, message); prompt != "" {
-			cmd = profile.Command + " " + shellQuote(prompt)
-		}
-
-		if sendErr := tmux.TmuxSendKeys(newTarget, cmd); sendErr != nil {
-			return createSessionMsg{err: fmt.Errorf("failed to launch %s: %w", profile.Command, sendErr)}
 		}
 
 		return createSessionMsg{target: newTarget}
