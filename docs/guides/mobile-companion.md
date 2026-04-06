@@ -1,7 +1,7 @@
 ---
-title: Mobile Companion
+title: Mobile Companion (WIP)
 parent: Guides
-nav_order: 1
+nav_order: 6
 ---
 
 # Mobile Companion

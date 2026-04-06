@@ -1,5 +1,5 @@
 title: agent-dashboard
-description: A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code agents
+description: A tmux-integrated TUI and mobile web companion for monitoring and controlling coding agents
 remote_theme: just-the-docs/just-the-docs
 
 plugins:
