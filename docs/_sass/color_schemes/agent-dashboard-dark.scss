@@ -1,0 +1,15 @@
+@import "color_schemes/agent-dashboard";
+
+// --- Dark overrides ---
+$body-background-color:  $slate-900;
+$sidebar-color:          $slate-800;
+$body-text-color:        $slate-200;
+$body-heading-color:     #ffffff;
+$nav-child-link-color:   $slate-400;
+$border-color:           $slate-700;
+$code-background-color:  $slate-800;
+$search-background-color:$slate-800;
+$search-result-preview-color: $slate-400;
+$link-color:             $cyan-400;
+$link-hover-color:       $cyan-300;
+$feedback-color:         $cyan-400;

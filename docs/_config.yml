@@ -10,14 +10,20 @@ baseurl: /agent-dashboard
 
 permalink: pretty
 
-aux_links:
-  GitHub: https://github.com/bjornjee/agent-dashboard
+color_scheme: agent-dashboard
 
-nav_external_links:
-  - title: Releases
-    url: https://github.com/bjornjee/agent-dashboard/releases
+breadcrumbs: true
 
-color_scheme: agent-dark
+callouts:
+  tip:
+    title: Tip
+    color: cyan
+  warning:
+    title: Warning
+    color: amber
+  note:
+    title: Note
+    color: grey
 
 search_enabled: true
 search:
@@ -26,18 +32,12 @@ search:
 back_to_top: true
 back_to_top_text: "Back to top"
 
-footer_content: "MIT License. Built with <a href=\"https://just-the-docs.com\">just-the-docs</a>."
+aux_links:
+  "GitHub":
+    - "https://github.com/bjornjee/agent-dashboard"
+aux_links_new_tab: true
+
+footer_content: ""
 
 ga_tracking:
 ga_tracking_anonymize_ip: true
-
-callouts:
-  warning:
-    title: Warning
-    color: yellow
-  note:
-    title: Note
-    color: blue
-  tip:
-    title: Tip
-    color: green
