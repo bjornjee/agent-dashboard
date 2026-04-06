@@ -1171,12 +1171,6 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
-	if m.mode == modeConfirmSend {
-		parts = append(parts, boldStyle.Render("enter")+" confirm")
-		parts = append(parts, boldStyle.Render("esc")+" cancel")
-		return m.truncateHelpBar(parts)
-	}
-
 	if m.mode == modeConfirmJump {
 		parts = append(parts, boldStyle.Render("y/enter")+" jump")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
@@ -1321,8 +1315,6 @@ func (m model) renderHelpOverlay() string {
 	} else {
 		lines = append(lines, line("m", "Mark merged + send cleanup"))
 	}
-	lines = append(lines, line("y / n", "Quick approve/reject"))
-	lines = append(lines, line("1-9", "Send numbered option"))
 	lines = append(lines, line("c", "Collapse/expand subagents"))
 	lines = append(lines, line("C", "Collapse/expand status group"))
 	lines = append(lines, "")

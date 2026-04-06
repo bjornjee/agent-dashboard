@@ -20,8 +20,6 @@ All keyboard shortcuts grouped by context. Press `h` in the dashboard to see thi
 | `Tab` / `Shift+Tab` | Cycle focus between panels |
 | `Ctrl+U` / `Ctrl+D` | Scroll focused panel (half page) |
 | `r` | Reply to agent (free-text) |
-| `y` / `n` | Quick approve/reject (blocked or waiting agents) |
-| `1`-`9` | Send numbered option to agent |
 | `e` | Open editor in agent's directory |
 | `d` | Show git diff (merge-base vs HEAD) |
 | `g` | Open existing PR diff or create new PR |
