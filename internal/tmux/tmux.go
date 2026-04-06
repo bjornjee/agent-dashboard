@@ -172,7 +172,7 @@ func TmuxSendKeys(target, text string) error {
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), Timeout)
 	defer cancel2()
-	if err := runner.Run(ctx2, "paste-buffer", "-b", bufName, "-d", "-t", target); err != nil {
+	if err := runner.Run(ctx2, "paste-buffer", "-b", bufName, "-d", "-p", "-t", target); err != nil {
 		return err
 	}
 	ctx3, cancel3 := context.WithTimeout(context.Background(), Timeout)
