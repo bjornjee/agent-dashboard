@@ -38,7 +38,7 @@ Then run it with `agent-dashboard-web`.
 The mobile interface mirrors the TUI's capabilities:
 
 - **Agent list and detail views** — same state grouping (needs attention, running, completed) with conversation timeline and diff viewer
-- **Full remote control** — approve/reject permissions, reply to questions, send numbered options, stop agents
+- **Full remote control** — approve plans, reply to questions, stop agents
 - **PR workflow** — open PRs, merge, and close from your phone
 - **Session creation** — create new agent sessions with z-plugin suggestions and skill selection
 - **Usage dashboard** — token breakdown and cost tracking
