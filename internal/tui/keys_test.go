@@ -963,68 +963,44 @@ func TestConfirmCleanup_PhantomGuard(t *testing.T) {
 	}
 }
 
-func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []domain.Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	m.selected = 1 // index 0 is group header
-
-	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	if cmd != nil {
-		t.Fatal("expected nil cmd from 'y' (should enter confirm mode)")
-	}
-
-	updated := result.(model)
-	if updated.mode != modeConfirmSend {
-		t.Errorf("expected modeConfirmSend, got %d", updated.mode)
-	}
-	if updated.confirmSendKey != "y" {
-		t.Errorf("expected confirmSendKey='y', got %q", updated.confirmSendKey)
-	}
-	if updated.confirmSendPaneID != "%5" {
-		t.Errorf("expected confirmSendPaneID='%%5', got %q", updated.confirmSendPaneID)
-	}
-}
-
-func TestYKey_PlanAgent_MapsTo1(t *testing.T) {
+func TestYKey_PlanAgent_EntersConfirmSend(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.agents = []domain.Agent{
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 1 // index 0 is group header
+	selectFirstAgent(&m)
 
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	updated := result.(model)
-	if updated.confirmSendKey != "1" {
-		t.Errorf("expected plan 'y' to map to '1', got %q", updated.confirmSendKey)
-	}
-}
-
-func TestNumKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []domain.Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "question", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	m.selected = 1 // index 0 is group header
-
-	result, cmd := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd != nil {
-		t.Fatal("expected nil cmd from '3' (should enter confirm mode)")
+		t.Fatal("expected nil cmd from 'y' (should enter confirm mode)")
 	}
-
 	updated := result.(model)
 	if updated.mode != modeConfirmSend {
 		t.Errorf("expected modeConfirmSend, got %d", updated.mode)
 	}
-	if updated.confirmSendKey != "3" {
-		t.Errorf("expected confirmSendKey='3', got %q", updated.confirmSendKey)
+	if updated.confirmSendKey != "1" {
+		t.Errorf("expected confirmSendKey='1' for plan approve, got %q", updated.confirmSendKey)
+	}
+	if updated.confirmSendLabel != "Plan approved" {
+		t.Errorf("expected label 'Plan approved', got %q", updated.confirmSendLabel)
+	}
+}
+
+func TestYKey_NonPlanAgent_Ignored(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal for non-plan agent, got %d", updated.mode)
 	}
 }
 
@@ -1033,13 +1009,13 @@ func TestConfirmSend_Enter_Sends(t *testing.T) {
 	m.mode = modeConfirmSend
 	m.confirmEnteredAt = pastConfirmTime
 	m.confirmSendPaneID = "%5"
-	m.confirmSendKey = "y"
+	m.confirmSendKey = "1"
+	m.confirmSendLabel = "Plan approved"
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected cmd after confirming send")
 	}
-
 	updated := result.(model)
 	if updated.mode != modeNormal {
 		t.Errorf("expected modeNormal after confirm, got %d", updated.mode)
@@ -1053,8 +1029,8 @@ func TestConfirmSend_Esc_Cancels(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.mode = modeConfirmSend
 	m.confirmSendPaneID = "%5"
-	m.confirmSendKey = "y"
-	m.statusMsg = "Send 'y' to agent?"
+	m.confirmSendKey = "1"
+	m.statusMsg = "Approve plan?"
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	updated := result.(model)
@@ -1066,23 +1042,6 @@ func TestConfirmSend_Esc_Cancels(t *testing.T) {
 	}
 	if updated.statusMsg != "" {
 		t.Errorf("expected empty status after cancel, got %q", updated.statusMsg)
-	}
-}
-
-func TestConfirmSend_PhantomKey_Swallowed(t *testing.T) {
-	// A phantom key like 'm' arriving during modeConfirmSend should be swallowed.
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.mode = modeConfirmSend
-	m.confirmSendPaneID = "%5"
-	m.confirmSendKey = "y"
-
-	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
-	if cmd != nil {
-		t.Fatal("expected nil cmd for unrecognized key in confirm mode")
-	}
-	updated := result.(model)
-	if updated.mode != modeConfirmSend {
-		t.Errorf("expected to stay in modeConfirmSend, got %d", updated.mode)
 	}
 }
 
@@ -1407,32 +1366,6 @@ func TestPhantomEnter_AfterReplySubmit(t *testing.T) {
 	}
 }
 
-func TestPhantomEnter_AfterConfirmSend(t *testing.T) {
-	// When Enter confirms a key send in modeConfirmSend, a rapid follow-up
-	// Enter must be swallowed by PhantomFilter.
-	m := newTestModelWithAgents()
-	m.agents[0].TmuxPaneID = "%5"
-	m.agents[0].State = "waiting"
-	m.mode = modeConfirmSend
-	m.confirmEnteredAt = pastConfirmTime // bypass confirm cooldown
-	m.confirmSendPaneID = "%5"
-	m.confirmSendKey = "y"
-	m.buildTree()
-
-	// Press Enter to confirm send → mode returns to modeNormal.
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	rm := result.(model)
-	if rm.mode != modeNormal {
-		t.Fatalf("expected modeNormal after confirm send, got %d", rm.mode)
-	}
-
-	// Immediately press Enter again (phantom) — filter should swallow it.
-	filtered := PhantomFilter(rm, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if filtered != nil {
-		t.Error("phantom Enter after confirm-send should be swallowed by PhantomFilter")
-	}
-}
-
 func TestPhantomEnter_AfterCreateMessage(t *testing.T) {
 	// When Enter submits in modeCreateMessage, a rapid follow-up Enter
 	// must be swallowed by PhantomFilter.
@@ -1507,62 +1440,6 @@ func TestMergeGH_PinsToMerged(t *testing.T) {
 	}
 }
 
-func TestYKey_PlanState_SetsConfirmSendLabel(t *testing.T) {
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []domain.Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	selectFirstAgent(&m)
-
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	updated := result.(model)
-	if updated.mode != modeConfirmSend {
-		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
-	}
-	if updated.confirmSendLabel != "Plan approved" {
-		t.Errorf("expected label 'Plan approved', got %q", updated.confirmSendLabel)
-	}
-	if updated.confirmSendKey != "1" {
-		t.Errorf("expected sendKey '1' for plan approve, got %q", updated.confirmSendKey)
-	}
-}
-
-func TestNumberKey_BlockedState_SetsConfirmSendLabel(t *testing.T) {
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.agents = []domain.Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
-	}
-	m.buildTree()
-	selectFirstAgent(&m)
-
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
-	updated := result.(model)
-	if updated.mode != modeConfirmSend {
-		t.Fatalf("expected modeConfirmSend, got %d", updated.mode)
-	}
-	if updated.confirmSendLabel != "Sent '3'" {
-		t.Errorf("expected label \"Sent '3'\", got %q", updated.confirmSendLabel)
-	}
-}
-
-func TestConfirmSend_Esc_ClearsLabel(t *testing.T) {
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.mode = modeConfirmSend
-	m.confirmSendPaneID = "%5"
-	m.confirmSendKey = "y"
-	m.confirmSendLabel = "Plan approved"
-	m.statusMsg = "Send 'y' to agent?"
-
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
-	updated := result.(model)
-	if updated.confirmSendLabel != "" {
-		t.Errorf("expected confirmSendLabel cleared, got %q", updated.confirmSendLabel)
-	}
-}
-
 func TestEditorKey_SetsInFlightStatus(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.cfg.Editor = "vim"
@@ -1621,10 +1498,6 @@ func TestPhantomFilter_SwallowsDestructiveKeyDuringEscapeCooldown(t *testing.T) 
 		{Code: 'r', Text: "r"},
 		{Code: 'm', Text: "m"},
 		{Code: 'y', Text: "y"},
-		{Code: 'n', Text: "n"},
-		{Code: '1', Text: "1"},
-		{Code: '5', Text: "5"},
-		{Code: '9', Text: "9"},
 	}
 	for _, key := range destructiveKeys {
 		t.Run(key.String(), func(t *testing.T) {

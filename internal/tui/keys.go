@@ -50,9 +50,7 @@ const modeResetCooldown = 100 * time.Millisecond
 // intentionally excluded so scrolling works immediately after mouse events.
 var phantomGuardedKeys = map[string]bool{
 	"x": true, "enter": true, "r": true, "m": true,
-	"y": true, "n": true,
-	"1": true, "2": true, "3": true, "4": true, "5": true,
-	"6": true, "7": true, "8": true, "9": true,
+	"y": true,
 }
 
 // PhantomFilter is a tea.WithFilter callback that swallows phantom keystrokes
@@ -529,7 +527,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Confirm send-key mode
+	// Confirm send-key mode (plan approve)
 	if m.mode == modeConfirmSend {
 		switch key {
 		case "enter":
@@ -998,37 +996,15 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.dino = newDinoGameModel(m.leftWidth, dinoGameHeight)
 			return m, nil
 		}
-	case "y", "n":
+	case "y":
 		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
-			es := agent.State
-			if isBlocked(es) || isWaiting(es) {
-				sendKey := key
-				label := fmt.Sprintf("Sent '%s'", key)
-				// Plan state: y→"1" (approve+bypass), n stays as "n"
-				if es == "plan" && key == "y" {
-					sendKey = "1"
-					label = "Plan approved"
-				}
+			if agent.State == "plan" {
 				m.mode = modeConfirmSend
 				m.confirmEnteredAt = time.Now()
 				m.confirmSendPaneID = agent.TmuxPaneID
-				m.confirmSendKey = sendKey
-				m.confirmSendLabel = label
-				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
-				m.statusMsgTick = -1 // pinned
-				return m, nil
-			}
-		}
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		if agent := m.selectedAgent(); m.tmuxAvailable && agent != nil && m.selectedSubagent() == nil {
-			es := agent.State
-			if isBlocked(es) || isWaiting(es) {
-				m.mode = modeConfirmSend
-				m.confirmEnteredAt = time.Now()
-				m.confirmSendPaneID = agent.TmuxPaneID
-				m.confirmSendKey = key
-				m.confirmSendLabel = fmt.Sprintf("Sent '%s'", key)
-				m.statusMsg = fmt.Sprintf("Send '%s' to agent? (Enter to confirm, Esc to cancel)", key)
+				m.confirmSendKey = "1"
+				m.confirmSendLabel = "Plan approved"
+				m.statusMsg = "Approve plan? (Enter to confirm, Esc to cancel)"
 				m.statusMsgTick = -1 // pinned
 				return m, nil
 			}
