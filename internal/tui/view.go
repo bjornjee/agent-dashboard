@@ -21,6 +21,11 @@ func (m *model) updateLeftContent() {
 	content, selectedLine := m.agentListContentWithLine()
 	m.agentListVP.SetContent(content)
 
+	// After setting new content the viewport's YOffset may exceed the new
+	// maximum (e.g. after collapsing a group).  Re-apply the current offset
+	// so the viewport clamps it to the valid range before we compare.
+	m.agentListVP.SetYOffset(m.agentListVP.YOffset())
+
 	// Auto-scroll: keep selected item visible in the viewport
 	vpHeight := m.agentListVP.Height()
 	if vpHeight > 0 && selectedLine >= 0 {

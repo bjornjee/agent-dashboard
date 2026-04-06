@@ -289,11 +289,15 @@ func (m model) isNodeInCollapsedGroup(i int) bool {
 
 // selectedIdentity returns the identity of the currently selected tree node:
 // the agent Target and (if a subagent is selected) the domain.SubagentInfo.AgentID.
+// For group header nodes, target is "__group:<N>" so restoreSelection can find them.
 func (m model) selectedIdentity() (target string, subID string) {
 	if m.selected < 0 || m.selected >= len(m.treeNodes) {
 		return "", ""
 	}
 	node := m.treeNodes[m.selected]
+	if node.GroupHeader > 0 {
+		return fmt.Sprintf("__group:%d", node.GroupHeader), ""
+	}
 	if node.AgentIdx >= 0 && node.AgentIdx < len(m.agents) {
 		target = m.agents[node.AgentIdx].Target
 	}
@@ -306,6 +310,23 @@ func (m model) selectedIdentity() (target string, subID string) {
 // restoreSelection scans the tree for a node matching the given identity
 // and sets m.selected to that position. Falls back to clamping if not found.
 func (m *model) restoreSelection(target, subID string) {
+	// Handle group header identity
+	if strings.HasPrefix(target, "__group:") {
+		var group int
+		fmt.Sscanf(target, "__group:%d", &group)
+		for i, node := range m.treeNodes {
+			if node.GroupHeader == group {
+				m.selected = i
+				return
+			}
+		}
+		// Group no longer exists — clamp
+		if m.selected >= len(m.treeNodes) {
+			m.selected = max(0, len(m.treeNodes)-1)
+		}
+		return
+	}
+
 	for i, node := range m.treeNodes {
 		nodeTarget := ""
 		if node.AgentIdx >= 0 && node.AgentIdx < len(m.agents) {

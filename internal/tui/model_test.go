@@ -2290,3 +2290,66 @@ func TestScrollHints_ShownWhenOverflow(t *testing.T) {
 		t.Error("expected ▲ scroll hint when content overflows above")
 	}
 }
+
+func TestCollapseGroup_SelectionStaysOnCollapsedGroupHeader(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},    // group 2
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},     // group 3
+		{Target: "main:3.0", Window: 3, Pane: 0, State: "idle_prompt"}, // group 4
+	}
+	m.buildTree()
+	m.leftWidth = 60
+	m.tmuxAvailable = true
+
+	// Tree: [hdr2(0), agent-q(1), hdr3(2), agent-run(3), hdr4(4), agent-idle(5)]
+
+	// Select the running agent (index 3)
+	m.selected = 3
+	if m.selectedAgent() == nil || m.selectedAgent().State != "running" {
+		t.Fatalf("expected running agent at index 3, got %v", m.selectedAgent())
+	}
+
+	// Collapse group 3 (RUNNING) via C key
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'C', Text: "C"})
+	rm := result.(model)
+
+	// Selection should land on the RUNNING group header (index 2), NOT index 0
+	if rm.selected != 2 {
+		t.Errorf("expected selection on RUNNING header (index 2), got index %d", rm.selected)
+	}
+	if rm.selectedGroupHeader() != 3 {
+		t.Errorf("expected selected group header to be 3 (RUNNING), got %d", rm.selectedGroupHeader())
+	}
+}
+
+func TestGroupHeaderSelection_SurvivesTreeRebuild(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "question"},    // group 2
+		{Target: "main:2.0", Window: 2, Pane: 0, State: "running"},     // group 3
+		{Target: "main:3.0", Window: 3, Pane: 0, State: "idle_prompt"}, // group 4
+	}
+	m.buildTree()
+
+	// Select the RUNNING group header (group 3)
+	for i, node := range m.treeNodes {
+		if node.GroupHeader == 3 {
+			m.selected = i
+			break
+		}
+	}
+	if m.selectedGroupHeader() != 3 {
+		t.Fatalf("setup failed: expected group header 3, got %d", m.selectedGroupHeader())
+	}
+
+	// Simulate a tick/refresh: save identity, rebuild tree, restore
+	prevTarget, prevSubID := m.selectedIdentity()
+	m.buildTree()
+	m.restoreSelection(prevTarget, prevSubID)
+
+	// Selection must still be on the RUNNING header, not jumped to index 0
+	if m.selectedGroupHeader() != 3 {
+		t.Errorf("after tree rebuild, expected group header 3, got %d (selected=%d)", m.selectedGroupHeader(), m.selected)
+	}
+}
