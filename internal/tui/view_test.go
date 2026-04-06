@@ -17,7 +17,7 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 	fixedTime := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC).Format(time.RFC3339)
 
 	makeModel := func(panelWidth int) model {
-		return model{
+		m := model{
 			leftWidth: panelWidth,
 			agents: []domain.Agent{
 				{
@@ -34,6 +34,7 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 				},
 			},
 			treeNodes: []treeNode{
+				{AgentIdx: -1, GroupHeader: 3},
 				{AgentIdx: 0},
 				{AgentIdx: 0, Sub: &domain.SubagentInfo{
 					AgentType:   "general-purpose",
@@ -41,9 +42,11 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 					Completed:   false,
 				}},
 			},
-			agentSubagents: map[string][]domain.SubagentInfo{},
-			collapsed:      map[string]bool{},
+			agentSubagents:  map[string][]domain.SubagentInfo{},
+			collapsed:       map[string]bool{},
+			collapsedGroups: map[int]bool{},
 		}
+		return m
 	}
 
 	t.Run("lines clamped to panel width", func(t *testing.T) {

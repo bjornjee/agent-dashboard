@@ -26,69 +26,69 @@ func newTestModelWithAgents() model {
 		{AgentID: "aaa", AgentType: "Explore", Description: "sub1"},
 	}
 	m.buildTree()
-	// Tree: [parent0(0), sub-aaa(1), parent1(2)]
+	// Tree: [header(0), parent0(1), sub-aaa(2), parent1(3)]
 	return m
 }
 
 func TestShiftDownJumpsToNextParent(t *testing.T) {
 	m := newTestModelWithAgents()
-	m.selected = 0
+	m.selected = 1 // parent0 (index 0 is group header)
 
 	msg := tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.selected != 2 {
-		t.Errorf("shift+down from parent0: expected selected=2, got %d", rm.selected)
+	if rm.selected != 3 {
+		t.Errorf("shift+down from parent0: expected selected=3, got %d", rm.selected)
 	}
 }
 
 func TestShiftUpJumpsToPrevParent(t *testing.T) {
 	m := newTestModelWithAgents()
-	m.selected = 2
+	m.selected = 3 // parent1
 
 	msg := tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.selected != 0 {
-		t.Errorf("shift+up from parent1: expected selected=0, got %d", rm.selected)
+	if rm.selected != 1 {
+		t.Errorf("shift+up from parent1: expected selected=1, got %d", rm.selected)
 	}
 }
 
 func TestCtrlDownDoesNotJump(t *testing.T) {
 	m := newTestModelWithAgents()
-	// Start at parent0 (idx 0) — old code would jump to parent1 (idx 2)
-	m.selected = 0
+	// Start at parent0 (idx 1) — old code would jump to parent1
+	m.selected = 1
 
 	msg := tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// ctrl+down should NOT jump (feature removed), selection stays at 0
-	if rm.selected != 0 {
-		t.Errorf("ctrl+down should not change selection, expected 0, got %d", rm.selected)
+	// ctrl+down should NOT jump (feature removed), selection stays at 1
+	if rm.selected != 1 {
+		t.Errorf("ctrl+down should not change selection, expected 1, got %d", rm.selected)
 	}
 }
 
 func TestCtrlUpDoesNotJump(t *testing.T) {
 	m := newTestModelWithAgents()
-	// Start at parent1 (idx 2) — if ctrl+up still worked, it would jump to 0
-	m.selected = 2
+	// Start at parent1 (idx 3) — if ctrl+up still worked, it would jump to 1
+	m.selected = 3
 
 	msg := tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// ctrl+up should NOT jump (feature removed), selection stays at 2
-	if rm.selected != 2 {
-		t.Errorf("ctrl+up should not change selection, expected 2, got %d", rm.selected)
+	// ctrl+up should NOT jump (feature removed), selection stays at 3
+	if rm.selected != 3 {
+		t.Errorf("ctrl+up should not change selection, expected 3, got %d", rm.selected)
 	}
 }
 
 func TestAKeyEntersCreateFolderMode(t *testing.T) {
 	m := newTestModelWithAgents()
-	m.selected = 0
+	m.selected = 1
 
 	msg := tea.KeyPressMsg{Code: 'a', Text: "a"}
 	result, _ := m.handleKey(msg)
@@ -134,7 +134,7 @@ func TestCreateFolderMode_EscReturnsToNormal(t *testing.T) {
 
 func TestShiftSDoesNothing(t *testing.T) {
 	m := newTestModelWithAgents()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	msg := tea.KeyPressMsg{Code: 'S', Text: "S"}
 	result, _ := m.handleKey(msg)
@@ -286,7 +286,7 @@ func TestCreateFolderMode_UpWrapsSelection(t *testing.T) {
 
 func TestHKeyOpensHelp(t *testing.T) {
 	m := newTestModelWithAgents()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	msg := tea.KeyPressMsg{Code: 'h', Text: "h"}
 	result, _ := m.handleKey(msg)
@@ -635,7 +635,7 @@ func TestGKeyPinsPRState_NoGH(t *testing.T) {
 			SessionID: "sess1", Cwd: t.TempDir(), Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	_, cmd := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	if cmd == nil {
@@ -679,7 +679,7 @@ func TestGKeyDefersPin_WithGH(t *testing.T) {
 			SessionID: "sess1", Cwd: t.TempDir(), Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	if cmd == nil {
@@ -729,7 +729,7 @@ func TestMKey_WithGH_EntersConfirmMode(t *testing.T) {
 			SessionID: "sess1", TmuxPaneID: "%5", Cwd: t.TempDir(), Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	if cmd != nil {
@@ -814,7 +814,7 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 			SessionID: "sess1", TmuxPaneID: "%5", Cwd: t.TempDir(), Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	// Step 1: press 'm' — should enter confirm mode
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
@@ -970,7 +970,7 @@ func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd != nil {
@@ -996,7 +996,7 @@ func TestYKey_PlanAgent_MapsTo1(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	updated := result.(model)
@@ -1012,7 +1012,7 @@ func TestNumKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "question", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 0
+	m.selected = 1 // index 0 is group header
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
 	if cmd != nil {
@@ -1095,7 +1095,7 @@ func TestEnterKey_EntersConfirmJump(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil {
@@ -1310,6 +1310,7 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
+	selectFirstAgent(&m)
 	m.lastEscapeAt = time.Now().Add(-100 * time.Millisecond) // well past 50ms cooldown
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1462,6 +1463,7 @@ func TestRealEnter_AfterCooldown(t *testing.T) {
 	m.mode = modeReply
 	m.textInput.SetValue("test")
 	m.buildTree()
+	selectFirstAgent(&m)
 
 	// Press Enter to submit reply.
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1512,7 +1514,7 @@ func TestYKey_PlanState_SetsConfirmSendLabel(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "plan", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	updated := result.(model)
@@ -1534,7 +1536,7 @@ func TestNumberKey_BlockedState_SetsConfirmSendLabel(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "permission", TmuxPaneID: "%5"},
 	}
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: '3', Text: "3"})
 	updated := result.(model)
@@ -1568,7 +1570,7 @@ func TestEditorKey_SetsInFlightStatus(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
 	}
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	updated := result.(model)
@@ -1586,7 +1588,7 @@ func TestDiffKey_SetsInFlightStatus(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
 	}
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	updated := result.(model)
@@ -1601,7 +1603,7 @@ func TestPRKey_SetsInFlightStatus(t *testing.T) {
 		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp", Branch: "feat/test"},
 	}
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	updated := result.(model)
@@ -1747,8 +1749,8 @@ func TestReplyMode_ViewportScrollsToBottom(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.agents[0].TmuxPaneID = "%5"
 	m.agents[0].State = "done"
-	m.selected = 0
 	m.buildTree()
+	selectFirstAgent(&m)
 	m.width = 80
 	m.height = 40
 	m.resizeViewports()
@@ -1801,7 +1803,7 @@ func TestOpenWorktreeWindowWithWorktreeCwd(t *testing.T) {
 	m.agents[0].Session = "main"
 	m.agents[0].Branch = "feat/my-feature"
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
 	result, cmd := m.handleKey(msg)
@@ -1822,7 +1824,7 @@ func TestOpenWorktreeWindowWithCwdOnly(t *testing.T) {
 	m.agents[0].Session = "main"
 	m.agents[0].Branch = "main"
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
 	result, cmd := m.handleKey(msg)
@@ -1841,7 +1843,7 @@ func TestOpenWorktreeWindowNoTmux(t *testing.T) {
 	m.tmuxAvailable = false
 	m.agents[0].Cwd = "/home/user/code/myrepo"
 	m.buildTree()
-	m.selected = 0
+	selectFirstAgent(&m)
 
 	msg := tea.KeyPressMsg{Code: 'o', Text: "o"}
 	result, _ := m.handleKey(msg)

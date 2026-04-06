@@ -27,8 +27,9 @@ import (
 
 // treeNode is a flat entry in the navigation tree (agent or subagent).
 type treeNode struct {
-	AgentIdx int                  // index into m.agents
-	Sub      *domain.SubagentInfo // nil for parent agent nodes
+	AgentIdx    int                  // index into m.agents (-1 for group headers)
+	Sub         *domain.SubagentInfo // nil for parent agent nodes
+	GroupHeader int                  // >0 means this is a selectable group header for that priority
 }
 
 // -- Per-agent state cache --
@@ -109,10 +110,11 @@ type model struct {
 	agentCaches map[string]*agentCache
 
 	// Subagent tree
-	agentSubagents map[string][]domain.SubagentInfo // parentTarget → subagents
-	collapsed      map[string]bool                  // parentTarget → collapsed state
-	dismissed      map[string]bool                  // "parentTarget:agentID" → dismissed
-	subActivity    []domain.ActivityEntry           // activity log for selected subagent
+	agentSubagents  map[string][]domain.SubagentInfo // parentTarget → subagents
+	collapsed       map[string]bool                  // parentTarget → collapsed state
+	dismissed       map[string]bool                  // "parentTarget:agentID" → dismissed
+	collapsedGroups map[int]bool                     // group priority → collapsed state
+	subActivity     []domain.ActivityEntry           // activity log for selected subagent
 
 	// Plan content for selected agent
 	planContent  string
@@ -233,9 +235,17 @@ func (m *model) clearStatus() {
 }
 
 // buildTree rebuilds the flat tree node list from agents and their subagents.
+// Group header nodes are inserted before each status group so they are always
+// navigable, even when the group is collapsed.
 func (m *model) buildTree() {
 	m.treeNodes = nil
+	lastGroup := -1
 	for i, agent := range m.agents {
+		group := agentGroup(agent)
+		if group != lastGroup {
+			m.treeNodes = append(m.treeNodes, treeNode{AgentIdx: -1, GroupHeader: group})
+			lastGroup = group
+		}
 		m.treeNodes = append(m.treeNodes, treeNode{AgentIdx: i})
 		if !m.collapsed[agent.Target] {
 			for _, sub := range m.agentSubagents[agent.Target] {
@@ -250,14 +260,45 @@ func (m *model) buildTree() {
 	}
 }
 
+// agentGroup returns the status group priority for the given agent.
+func agentGroup(agent domain.Agent) int {
+	group := domain.StatePriority[agent.State]
+	if group == 0 {
+		group = 3
+	}
+	return group
+}
+
+// isNodeInCollapsedGroup reports whether the tree node at index i belongs to
+// a status group that is currently collapsed. Group header nodes are always
+// visible and return false.
+func (m model) isNodeInCollapsedGroup(i int) bool {
+	if i < 0 || i >= len(m.treeNodes) {
+		return false
+	}
+	node := m.treeNodes[i]
+	// Group headers are always navigable
+	if node.GroupHeader > 0 {
+		return false
+	}
+	if node.AgentIdx < 0 || node.AgentIdx >= len(m.agents) {
+		return false
+	}
+	return m.collapsedGroups[agentGroup(m.agents[node.AgentIdx])]
+}
+
 // selectedIdentity returns the identity of the currently selected tree node:
 // the agent Target and (if a subagent is selected) the domain.SubagentInfo.AgentID.
+// For group header nodes, target is "__group:<N>" so restoreSelection can find them.
 func (m model) selectedIdentity() (target string, subID string) {
 	if m.selected < 0 || m.selected >= len(m.treeNodes) {
 		return "", ""
 	}
 	node := m.treeNodes[m.selected]
-	if node.AgentIdx < len(m.agents) {
+	if node.GroupHeader > 0 {
+		return fmt.Sprintf("__group:%d", node.GroupHeader), ""
+	}
+	if node.AgentIdx >= 0 && node.AgentIdx < len(m.agents) {
 		target = m.agents[node.AgentIdx].Target
 	}
 	if node.Sub != nil {
@@ -269,9 +310,26 @@ func (m model) selectedIdentity() (target string, subID string) {
 // restoreSelection scans the tree for a node matching the given identity
 // and sets m.selected to that position. Falls back to clamping if not found.
 func (m *model) restoreSelection(target, subID string) {
+	// Handle group header identity
+	if strings.HasPrefix(target, "__group:") {
+		var group int
+		fmt.Sscanf(target, "__group:%d", &group)
+		for i, node := range m.treeNodes {
+			if node.GroupHeader == group {
+				m.selected = i
+				return
+			}
+		}
+		// Group no longer exists — clamp
+		if m.selected >= len(m.treeNodes) {
+			m.selected = max(0, len(m.treeNodes)-1)
+		}
+		return
+	}
+
 	for i, node := range m.treeNodes {
 		nodeTarget := ""
-		if node.AgentIdx < len(m.agents) {
+		if node.AgentIdx >= 0 && node.AgentIdx < len(m.agents) {
 			nodeTarget = m.agents[node.AgentIdx].Target
 		}
 		if nodeTarget != target {
@@ -296,7 +354,12 @@ func (m *model) restoreSelection(target, subID string) {
 // Returns the index of the next parent, or stays at current if none found.
 func (m model) nextParentIndex(dir int) int {
 	for i := m.selected + dir; i >= 0 && i < len(m.treeNodes); i += dir {
-		if m.treeNodes[i].Sub == nil {
+		node := m.treeNodes[i]
+		// Stop on group headers or non-collapsed parent agents
+		if node.GroupHeader > 0 {
+			return i
+		}
+		if node.Sub == nil && node.AgentIdx >= 0 && !m.isNodeInCollapsedGroup(i) {
 			return i
 		}
 	}
@@ -304,15 +367,25 @@ func (m model) nextParentIndex(dir int) int {
 }
 
 // selectedAgent returns the parent agent for the current selection.
+// Returns nil for group header nodes.
 func (m model) selectedAgent() *domain.Agent {
 	if m.selected >= len(m.treeNodes) {
 		return nil
 	}
 	idx := m.treeNodes[m.selected].AgentIdx
-	if idx >= len(m.agents) {
+	if idx < 0 || idx >= len(m.agents) {
 		return nil
 	}
 	return &m.agents[idx]
+}
+
+// selectedGroupHeader returns the group priority if the current selection is a
+// group header node, or 0 if it is not.
+func (m model) selectedGroupHeader() int {
+	if m.selected < 0 || m.selected >= len(m.treeNodes) {
+		return 0
+	}
+	return m.treeNodes[m.selected].GroupHeader
 }
 
 // selectedSubagent returns the subagent for the current selection, or nil if parent is selected.
@@ -444,6 +517,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		agentSubagents:    make(map[string][]domain.SubagentInfo),
 		collapsed:         make(map[string]bool),
 		dismissed:         make(map[string]bool),
+		collapsedGroups:   make(map[int]bool),
 		quote:             "",
 		quoteAuthor:       "",
 		nowFunc:           time.Now,

@@ -16,3 +16,14 @@ func testConfig(stateDir string) domain.Config {
 	}
 	return cfg
 }
+
+// selectFirstAgent sets m.selected to the first non-header agent node in the tree.
+// Call after buildTree() in tests that need a real agent selected.
+func selectFirstAgent(m *model) {
+	for i, node := range m.treeNodes {
+		if node.GroupHeader == 0 && node.AgentIdx >= 0 && node.Sub == nil {
+			m.selected = i
+			return
+		}
+	}
+}

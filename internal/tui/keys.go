@@ -720,6 +720,17 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.selected > 0 {
 			m.saveCurrentCache()
 			m.selected--
+			// Skip nodes in collapsed groups
+			for m.selected > 0 && m.isNodeInCollapsedGroup(m.selected) {
+				m.selected--
+			}
+			// If we landed on a collapsed node at index 0, move forward instead
+			if m.isNodeInCollapsedGroup(m.selected) {
+				m.selected++
+				for m.selected < len(m.treeNodes) && m.isNodeInCollapsedGroup(m.selected) {
+					m.selected++
+				}
+			}
 			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
@@ -731,6 +742,17 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.selected < len(m.treeNodes)-1 {
 			m.saveCurrentCache()
 			m.selected++
+			// Skip nodes in collapsed groups
+			for m.selected < len(m.treeNodes)-1 && m.isNodeInCollapsedGroup(m.selected) {
+				m.selected++
+			}
+			// If we landed on a collapsed node at the end, move backward instead
+			if m.isNodeInCollapsedGroup(m.selected) {
+				m.selected--
+				for m.selected > 0 && m.isNodeInCollapsedGroup(m.selected) {
+					m.selected--
+				}
+			}
 			m.clearStatus()
 			m.mode = modeNormal
 			m.restoreCurrentCache()
@@ -748,6 +770,32 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.updateLeftContent()
 			return m, nil
+		}
+	case "C":
+		// Toggle collapse on the status group — works on both group headers and agents
+		group := m.selectedGroupHeader()
+		if group == 0 {
+			if agent := m.selectedAgent(); agent != nil {
+				group = agentGroup(*agent)
+			}
+		}
+		if group > 0 {
+			m.collapsedGroups[group] = !m.collapsedGroups[group]
+			// If we just collapsed, move selection to the group's header node
+			if m.collapsedGroups[group] && m.isNodeInCollapsedGroup(m.selected) {
+				m.saveCurrentCache()
+				// Find the header node for this group (scan backward)
+				for i := m.selected - 1; i >= 0; i-- {
+					if m.treeNodes[i].GroupHeader == group {
+						m.selected = i
+						break
+					}
+				}
+				m.restoreCurrentCache()
+			}
+			m.updateLeftContent()
+			m.updateRightContent()
+			return m, m.loadSelectionData()
 		}
 	case "x":
 		if sub := m.selectedSubagent(); sub != nil {
