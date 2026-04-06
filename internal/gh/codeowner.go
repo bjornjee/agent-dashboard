@@ -3,8 +3,6 @@ package gh
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -32,24 +30,21 @@ func MergeArgs(r Runner, dir, branch string) []string {
 }
 
 // IsCodeOwner returns true if the authenticated gh user appears in the
-// CODEOWNERS file for the repository containing dir.
+// CODEOWNERS file on the default branch (origin/main).
+// Reading from origin/main prevents spoofing via a modified CODEOWNERS
+// on a feature branch.
 func IsCodeOwner(r Runner, dir string) bool {
 	user := ghUser(r)
 	if user == "" {
 		return false
 	}
 
-	root := repoRoot(r, dir)
-	if root == "" {
+	data := codeownersFromDefault(r, dir)
+	if data == "" {
 		return false
 	}
 
-	data, err := os.ReadFile(filepath.Join(root, ".github", "CODEOWNERS"))
-	if err != nil {
-		return false
-	}
-
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(data, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -59,6 +54,18 @@ func IsCodeOwner(r Runner, dir string) bool {
 		}
 	}
 	return false
+}
+
+// codeownersFromDefault reads .github/CODEOWNERS from origin/main via
+// `git show`, so it cannot be spoofed by local working-tree changes.
+func codeownersFromDefault(r Runner, dir string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := r.Output(ctx, "git", "-C", dir, "show", "origin/main:.github/CODEOWNERS")
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 // ghUser returns the authenticated GitHub username, cached after first call.
@@ -75,13 +82,3 @@ func ghUser(r Runner) string {
 	return cachedUser
 }
 
-// repoRoot returns the top-level directory of the git repository containing dir.
-func repoRoot(r Runner, dir string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	out, err := r.Output(ctx, "git", "-C", dir, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}

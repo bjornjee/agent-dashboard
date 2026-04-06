@@ -3,8 +3,6 @@ package gh
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -33,20 +31,14 @@ func resetCache() {
 func TestIsCodeOwner(t *testing.T) {
 	t.Cleanup(resetCache)
 
-	// Set up a temp repo structure with CODEOWNERS.
-	dir := t.TempDir()
-	ghDir := filepath.Join(dir, ".github")
-	os.MkdirAll(ghDir, 0o755)
-	os.WriteFile(filepath.Join(ghDir, "CODEOWNERS"), []byte("* @alice @bob\n"), 0o644)
-
 	r := &fakeRunner{
 		responses: map[string]string{
 			"gh":  "alice\n",
-			"git": dir + "\n",
+			"git": "* @alice @bob\n",
 		},
 	}
 
-	if !IsCodeOwner(r, dir) {
+	if !IsCodeOwner(r, "/repo") {
 		t.Fatal("expected alice to be a code owner")
 	}
 }
@@ -54,19 +46,14 @@ func TestIsCodeOwner(t *testing.T) {
 func TestIsCodeOwner_NotOwner(t *testing.T) {
 	t.Cleanup(resetCache)
 
-	dir := t.TempDir()
-	ghDir := filepath.Join(dir, ".github")
-	os.MkdirAll(ghDir, 0o755)
-	os.WriteFile(filepath.Join(ghDir, "CODEOWNERS"), []byte("* @bob\n"), 0o644)
-
 	r := &fakeRunner{
 		responses: map[string]string{
 			"gh":  "charlie\n",
-			"git": dir + "\n",
+			"git": "* @bob\n",
 		},
 	}
 
-	if IsCodeOwner(r, dir) {
+	if IsCodeOwner(r, "/repo") {
 		t.Fatal("expected charlie NOT to be a code owner")
 	}
 }
@@ -80,27 +67,39 @@ func TestIsCodeOwner_NoGH(t *testing.T) {
 		},
 	}
 
-	if IsCodeOwner(r, "/nonexistent") {
+	if IsCodeOwner(r, "/repo") {
 		t.Fatal("expected false when gh is unavailable")
+	}
+}
+
+func TestIsCodeOwner_NoCODEOWNERS(t *testing.T) {
+	t.Cleanup(resetCache)
+
+	r := &fakeRunner{
+		responses: map[string]string{
+			"gh": "alice\n",
+		},
+		errors: map[string]error{
+			"git": fmt.Errorf("path not found"),
+		},
+	}
+
+	if IsCodeOwner(r, "/repo") {
+		t.Fatal("expected false when CODEOWNERS does not exist on default branch")
 	}
 }
 
 func TestMergeArgs_CodeOwner(t *testing.T) {
 	t.Cleanup(resetCache)
 
-	dir := t.TempDir()
-	ghDir := filepath.Join(dir, ".github")
-	os.MkdirAll(ghDir, 0o755)
-	os.WriteFile(filepath.Join(ghDir, "CODEOWNERS"), []byte("* @alice\n"), 0o644)
-
 	r := &fakeRunner{
 		responses: map[string]string{
 			"gh":  "alice\n",
-			"git": dir + "\n",
+			"git": "* @alice\n",
 		},
 	}
 
-	args := MergeArgs(r, dir, "feat/foo")
+	args := MergeArgs(r, "/repo", "feat/foo")
 	expected := []string{"pr", "merge", "feat/foo", "--squash", "--admin"}
 	if len(args) != len(expected) {
 		t.Fatalf("got %v, want %v", args, expected)
@@ -115,19 +114,14 @@ func TestMergeArgs_CodeOwner(t *testing.T) {
 func TestMergeArgs_NotCodeOwner(t *testing.T) {
 	t.Cleanup(resetCache)
 
-	dir := t.TempDir()
-	ghDir := filepath.Join(dir, ".github")
-	os.MkdirAll(ghDir, 0o755)
-	os.WriteFile(filepath.Join(ghDir, "CODEOWNERS"), []byte("* @bob\n"), 0o644)
-
 	r := &fakeRunner{
 		responses: map[string]string{
 			"gh":  "charlie\n",
-			"git": dir + "\n",
+			"git": "* @bob\n",
 		},
 	}
 
-	args := MergeArgs(r, dir, "feat/foo")
+	args := MergeArgs(r, "/repo", "feat/foo")
 	expected := []string{"pr", "merge", "feat/foo", "--squash"}
 	if len(args) != len(expected) {
 		t.Fatalf("got %v, want %v", args, expected)
