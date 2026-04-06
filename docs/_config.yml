@@ -17,7 +17,7 @@ nav_external_links:
   - title: Releases
     url: https://github.com/bjornjee/agent-dashboard/releases
 
-color_scheme: dark
+color_scheme: agent-dark
 
 search_enabled: true
 search:
