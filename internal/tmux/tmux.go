@@ -349,14 +349,18 @@ func TmuxListWindows(session string) ([]domain.TmuxWindowInfo, error) {
 
 // TmuxNewWindow creates a new window in the given session, returning the new pane's target.
 // The -d flag keeps focus on the current window (dashboard).
-func TmuxNewWindow(session, windowName, startDir string) (string, error) {
+func TmuxNewWindow(session, windowName, startDir string, shellCmd ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := runner.Output(ctx,
-		"new-window", "-t", session+":", "-n", windowName, "-c", startDir,
+	args := []string{
+		"new-window", "-t", session + ":", "-n", windowName, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	)
+	}
+	if len(shellCmd) > 0 && shellCmd[0] != "" {
+		args = append(args, shellCmd[0])
+	}
+	out, err := runner.Output(ctx, args...)
 	if err != nil {
 		return "", fmt.Errorf("new-window failed: %w", err)
 	}
@@ -369,14 +373,18 @@ func TmuxNewWindow(session, windowName, startDir string) (string, error) {
 
 // TmuxSplitWindow splits an existing window to create a new pane, returning its target.
 // The -d flag keeps focus on the current pane (dashboard).
-func TmuxSplitWindow(sessionWindow, startDir string) (string, error) {
+func TmuxSplitWindow(sessionWindow, startDir string, shellCmd ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	out, err := runner.Output(ctx,
+	args := []string{
 		"split-window", "-t", sessionWindow, "-c", startDir,
 		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	)
+	}
+	if len(shellCmd) > 0 && shellCmd[0] != "" {
+		args = append(args, shellCmd[0])
+	}
+	out, err := runner.Output(ctx, args...)
 	if err != nil {
 		return "", fmt.Errorf("split-window failed: %w", err)
 	}
