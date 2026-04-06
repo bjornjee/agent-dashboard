@@ -20,6 +20,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr, rca)
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
+- **Dino runner game** — experimental Chrome-style endless runner in the left panel with jump, duck, speed ramp, and score counter (opt-in via settings)
 - **Quick reply** — send free-text responses directly to agent panes
 - **GitHub PR workflow** — open existing PR diff, create new PR, or merge via `gh` CLI (falls back to browser)
 - **Status feedback** — colour-coded success/error messages in the help bar for user actions
@@ -144,6 +145,7 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `x` | Dismiss subagent or close agent pane |
 | `p` | Toggle plan view |
 | `u` | Toggle usage dashboard |
+| `G` (Shift+G) | Toggle dino runner game (when enabled) |
 | `h` | Show help overlay with all keybindings |
 | `J/K` | Line scroll (plan/diff views) |
 | `q` / `Ctrl+C` | Quit |
@@ -183,6 +185,7 @@ key_log = false       # write key/mouse/focus events to debug-keys.log (default:
 
 [experimental]
 ascii_pet = false     # show animated ASCII pet in the left panel (default: false)
+dino_game = false     # show Chrome-style dino runner game in the left panel (default: false)
 ```
 
 | Section | Key | Default | Description |
@@ -194,6 +197,7 @@ ascii_pet = false     # show animated ASCII pet in the left panel (default: fals
 | `notifications` | `silent_events` | `false` | Show notification for non-alerting stops |
 | `debug` | `key_log` | `false` | Write key/mouse/focus events to `debug-keys.log` |
 | `experimental` | `ascii_pet` | `false` | Show animated ASCII pet in the left panel |
+| `experimental` | `dino_game` | `false` | Show Chrome-style dino runner game in the left panel (Shift+G to toggle) |
 
 ## Environment Variables
 
@@ -285,6 +289,7 @@ internal/
 │   ├── banner.go                      # axolotl pixel art + quote display
 │   ├── helpers.go                     # text wrapping, markdown rendering
 │   ├── wrapped_input.go              # soft-wrap text input helper
+│   ├── dino.go                        # experimental dino runner game
 │   ├── pet.go                         # animated ASCII pet (red panda)
 │   ├── runner.go                      # exec.Command interface for testability
 │   ├── styles.go                      # Catppuccin Frappe theme
