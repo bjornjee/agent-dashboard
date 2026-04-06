@@ -1,55 +1,9 @@
 // =============================================================
 // agent-dashboard — light colour scheme
 // =============================================================
-
-// --- Zinc neutrals (modern, no blue/green tint) ---
-$zinc-950: #09090b;
-$zinc-900: #18181b;
-$zinc-800: #27272a;
-$zinc-700: #3f3f46;
-$zinc-600: #52525b;
-$zinc-500: #71717a;
-$zinc-400: #a1a1aa;
-$zinc-300: #d4d4d8;
-$zinc-200: #e4e4e7;
-$zinc-100: #f4f4f5;
-$zinc-050: #fafafa;
-
-// --- Indigo accent ---
-$indigo-600: #4f46e5;
-$indigo-500: #6366f1;
-$indigo-400: #818cf8;
-$indigo-300: #a5b4fc;
-$indigo-200: #c7d2fe;
-$indigo-100: #e0e7ff;
-
-// --- Semantic: agent states ---
-$green-500: #10b981;   // active agent
-$amber-500: #f59e0b;   // waiting / blocked
-$red-500:   #ef4444;   // error / stopped
-
-// --- Legacy aliases (used by custom.scss) ---
-$slate-900: $zinc-950;
-$slate-800: $zinc-900;
-$slate-700: $zinc-800;
-$slate-600: $zinc-600;
-$slate-500: $zinc-500;
-$slate-400: $zinc-400;
-$slate-300: $zinc-300;
-$slate-200: $zinc-200;
-$slate-100: $zinc-100;
-$slate-050: $zinc-050;
-
-$cyan-700: $indigo-600;
-$cyan-600: $indigo-600;
-$cyan-500: $indigo-500;
-$cyan-400: $indigo-400;
-$cyan-300: $indigo-300;
-$cyan-100: $indigo-100;
+// Raw colour tokens are defined in custom/setup.scss (loaded first)
 
 // --- Theme variable overrides ---
-// Reference: https://github.com/just-the-docs/just-the-docs/blob/main/_sass/support/_variables.scss
-
 $body-background-color: $zinc-050;
 $sidebar-color:         #ffffff;
 $body-text-color:       $zinc-700;
@@ -62,7 +16,7 @@ $link-color:            $indigo-600;
 $link-hover-color:      $indigo-500;
 
 // Navigation
-$nav-width:             264px;
+$nav-width:             16.5rem;
 
 // Search feedback highlight
 $feedback-color:        $indigo-500;

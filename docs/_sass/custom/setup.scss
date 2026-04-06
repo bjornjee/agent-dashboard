@@ -1,12 +1,62 @@
-// Callout colour definitions for Just the Docs
-// These use distinct variable names to avoid colliding with the color scheme palette
+// =============================================================
+// Shared colour tokens — loaded before all other SCSS
+// =============================================================
+
+// --- Zinc neutrals ---
+$zinc-950: #09090b;
+$zinc-900: #18181b;
+$zinc-800: #27272a;
+$zinc-700: #3f3f46;
+$zinc-600: #52525b;
+$zinc-500: #71717a;
+$zinc-400: #a1a1aa;
+$zinc-300: #d4d4d8;
+$zinc-200: #e4e4e7;
+$zinc-100: #f4f4f5;
+$zinc-050: #fafafa;
+
+// --- Indigo accent ---
+$indigo-600: #4f46e5;
+$indigo-500: #6366f1;
+$indigo-400: #818cf8;
+$indigo-300: #a5b4fc;
+$indigo-200: #c7d2fe;
+$indigo-100: #e0e7ff;
+
+// --- Semantic: agent states ---
+$green-500: #10b981;
+$amber-500: #f59e0b;
+$red-500:   #ef4444;
+
+// --- Legacy aliases (used throughout custom.scss and color schemes) ---
+$slate-900: $zinc-950;
+$slate-800: $zinc-900;
+$slate-700: $zinc-800;
+$slate-600: $zinc-600;
+$slate-500: $zinc-500;
+$slate-400: $zinc-400;
+$slate-300: $zinc-300;
+$slate-200: $zinc-200;
+$slate-100: $zinc-100;
+$slate-050: $zinc-050;
+
+$cyan-700: $indigo-600;
+$cyan-600: $indigo-600;
+$cyan-500: $indigo-500;
+$cyan-400: $indigo-400;
+$cyan-300: $indigo-300;
+$cyan-100: $indigo-100;
+
+// --- Callout colours for Just the Docs ---
+// Required: $<color>-000 and $<color>-300 for each callout in _config.yml
 
 $cyan-000: #e0e7ff;
-$cyan-callout-100: #c7d2fe;
-$cyan-callout-200: #a5b4fc;
-$cyan-callout-300: #818cf8;
-
 $amber-000: #fef3c7;
-$amber-callout-100: #fde68a;
-$amber-callout-200: #fcd34d;
-$amber-callout-300: #fbbf24;
+$amber-100: #fde68a;
+$amber-200: #fcd34d;
+$amber-300: #fbbf24;
+
+$grey-000: #f4f4f5;
+$grey-100: #e4e4e7;
+$grey-200: #d4d4d8;
+$grey-300: #a1a1aa;

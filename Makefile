@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race install install-web uninstall clean seed web help
+.PHONY: build build-web fmt vet test test-race install install-web uninstall clean seed web docs help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -49,6 +49,9 @@ install-web: build-web ## Install web server binary
 
 web: build-web ## Run web server locally
 	./bin/agent-dashboard-web --port 8390
+
+docs: ## Serve docs site locally (http://localhost:4000)
+	cd docs && bundle install --quiet && bundle exec jekyll serve --baseurl "" --livereload
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/
