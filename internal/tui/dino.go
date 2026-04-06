@@ -120,14 +120,19 @@ const dinoGameHeight = 13
 // -- Physics constants --
 
 const (
-	jumpVelocity    = 4
-	gravity         = 2 // faster arc so dino doesn't float into obstacles
-	maxSpeed        = 5
-	baseSpeed       = 1
-	speedUpInterval = 80
-	minSpawnGap     = 25 // enough cols between obstacles to react and land
-	maxSpawnGap     = 50
-	duckDuration    = 6 // auto-release duck after this many ticks
+	jumpVelocity = 4
+	gravity      = 2 // faster arc so dino doesn't float into obstacles
+	duckDuration = 6 // auto-release duck after this many ticks
+
+	// Speed is stored in tenths of a column per tick (fixed-point ×10).
+	// e.g. speed10=10 means 1.0 col/tick, speed10=25 means 2.5 col/tick.
+	baseSpeed10    = 10 // 1.0 col/tick
+	maxSpeed10     = 40 // 4.0 col/tick
+	speedIncrement = 1  // +0.1 col/tick each interval
+	speedUpEvery   = 40 // ticks between speed bumps
+
+	minSpawnGap = 25 // minimum ticks between spawns
+	maxSpawnGap = 50
 )
 
 // -- Game model --
@@ -144,7 +149,8 @@ type dinoGameModel struct {
 
 	obstacles  []obstacle
 	groundOff  int
-	speed      int
+	speed10    int // speed in tenths of col/tick (fixed-point ×10)
+	subPixel   int // accumulator for sub-pixel movement (0-9)
 	score      int
 	tickCount  int
 	spawnTimer int
@@ -155,7 +161,7 @@ func newDinoGameModel(w, h int) dinoGameModel {
 		state:      dinoWaiting,
 		width:      w,
 		height:     h,
-		speed:      baseSpeed,
+		speed10:    baseSpeed10,
 		spawnTimer: minSpawnGap,
 	}
 }
@@ -185,7 +191,8 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 			d.state = dinoPlaying
 			d.score = 0
 			d.tickCount = 0
-			d.speed = baseSpeed
+			d.speed10 = baseSpeed10
+			d.subPixel = 0
 			d.obstacles = nil
 			d.spawnTimer = minSpawnGap
 			d.dinoY = 0
@@ -260,9 +267,14 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 		}
 	}
 
+	// Calculate how many whole columns to move this tick (sub-pixel accumulation).
+	d.subPixel += d.speed10
+	move := d.subPixel / 10
+	d.subPixel = d.subPixel % 10
+
 	// Move obstacles left
 	for i := range d.obstacles {
-		d.obstacles[i].x -= d.speed
+		d.obstacles[i].x -= move
 	}
 
 	// Remove off-screen obstacles
@@ -275,7 +287,7 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 	d.obstacles = alive
 
 	// Spawn new obstacles
-	d.spawnTimer -= d.speed
+	d.spawnTimer -= move
 	if d.spawnTimer <= 0 {
 		d.obstacles = append(d.obstacles, d.spawnObstacle())
 		d.spawnTimer = minSpawnGap + rand.IntN(maxSpawnGap-minSpawnGap)
@@ -289,14 +301,14 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 
 	d.score++
 
-	// Speed ramp
-	if d.tickCount%speedUpInterval == 0 && d.speed < maxSpeed {
-		d.speed++
+	// Gradual speed ramp
+	if d.tickCount%speedUpEvery == 0 && d.speed10 < maxSpeed10 {
+		d.speed10 += speedIncrement
 	}
 
 	// Scroll ground
 	if d.width > 0 {
-		d.groundOff = (d.groundOff + d.speed) % d.width
+		d.groundOff = (d.groundOff + move) % d.width
 	}
 
 	return d, tea.Tick(dinoTickInterval, func(time.Time) tea.Msg { return dinoTickMsg{} })
@@ -451,7 +463,7 @@ func (d dinoGameModel) renderPlaying() string {
 
 	// Line 0: score
 	scoreText := dinoScoreStyle.Render(fmt.Sprintf("%04d", d.score))
-	speedText := lipgloss.NewStyle().Foreground(themeOverlay1).Render(fmt.Sprintf("s%d", d.speed))
+	speedText := lipgloss.NewStyle().Foreground(themeOverlay1).Render(fmt.Sprintf("s%.1f", float64(d.speed10)/10))
 	pad := d.width - lipgloss.Width(scoreText) - lipgloss.Width(speedText)
 	if pad < 1 {
 		pad = 1

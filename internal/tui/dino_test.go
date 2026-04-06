@@ -22,8 +22,8 @@ func TestNewDinoGameModel(t *testing.T) {
 	if d.score != 0 {
 		t.Errorf("initial score = %d, want 0", d.score)
 	}
-	if d.speed != baseSpeed {
-		t.Errorf("initial speed = %d, want %d", d.speed, baseSpeed)
+	if d.speed10 != baseSpeed10 {
+		t.Errorf("initial speed10 = %d, want %d", d.speed10, baseSpeed10)
 	}
 	if d.width != 80 || d.height != 24 {
 		t.Errorf("dimensions = %dx%d, want 80x24", d.width, d.height)
@@ -56,7 +56,7 @@ func TestDinoExitOnEsc(t *testing.T) {
 func TestDinoJumpPhysics(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = baseSpeed
+	d.speed10 = baseSpeed10
 	d.spawnTimer = 999
 
 	// Jump
@@ -121,7 +121,7 @@ func TestDinoCannotJumpWhileDucking(t *testing.T) {
 func TestObstacleScrollsLeft(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = 2
+	d.speed10 = 20 // 2.0 col/tick
 	d.spawnTimer = 999
 
 	startX := 60
@@ -140,7 +140,7 @@ func TestObstacleScrollsLeft(t *testing.T) {
 func TestObstacleRemoval(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = 2
+	d.speed10 = 20
 	d.spawnTimer = 999
 
 	d.obstacles = []obstacle{{x: -5, kind: obstSmallCactus, width: 6, height: 3}}
@@ -157,14 +157,14 @@ func TestObstacleRemoval(t *testing.T) {
 func TestCollisionTriggersGameOver(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = 1
+	d.speed10 = 10
 	d.spawnTimer = 999
 
 	d.obstacles = []obstacle{{
 		x:      dinoPosX,
 		kind:   obstSmallCactus,
-		width:  3,
-		height: 1,
+		width:  6,
+		height: 3,
 	}}
 
 	d, _ = d.tick()
@@ -177,15 +177,15 @@ func TestCollisionTriggersGameOver(t *testing.T) {
 func TestNoCollisionWhenJumpingOver(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = 1
+	d.speed10 = 10
 	d.spawnTimer = 999
 	d.dinoY = 10
 
 	d.obstacles = []obstacle{{
 		x:      dinoPosX,
 		kind:   obstSmallCactus,
-		width:  3,
-		height: 1,
+		width:  6,
+		height: 3,
 	}}
 
 	if d.checkCollision() {
@@ -196,7 +196,7 @@ func TestNoCollisionWhenJumpingOver(t *testing.T) {
 func TestScoreIncrementsEachTick(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = 1
+	d.speed10 = 10
 	d.spawnTimer = 999
 
 	startScore := d.score
@@ -210,12 +210,12 @@ func TestScoreIncrementsEachTick(t *testing.T) {
 func TestSpeedIncreasesOverTime(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = baseSpeed
+	d.speed10 = baseSpeed10
 	d.spawnTimer = 999
 
-	startSpeed := d.speed
+	startSpeed := d.speed10
 
-	for i := 0; i < speedUpInterval+1; i++ {
+	for i := 0; i < speedUpEvery+1; i++ {
 		d, _ = d.tick()
 		if d.state != dinoPlaying {
 			d.state = dinoPlaying
@@ -223,23 +223,23 @@ func TestSpeedIncreasesOverTime(t *testing.T) {
 		}
 	}
 
-	if d.speed <= startSpeed {
-		t.Errorf("speed should increase after %d ticks: speed = %d, start = %d",
-			speedUpInterval, d.speed, startSpeed)
+	if d.speed10 <= startSpeed {
+		t.Errorf("speed10 should increase after %d ticks: speed10 = %d, start = %d",
+			speedUpEvery, d.speed10, startSpeed)
 	}
 }
 
 func TestSpeedCapsAtMax(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed = maxSpeed
-	d.tickCount = speedUpInterval - 1
+	d.speed10 = maxSpeed10
+	d.tickCount = speedUpEvery - 1
 	d.spawnTimer = 999
 
 	d, _ = d.tick()
 
-	if d.speed > maxSpeed {
-		t.Errorf("speed = %d should not exceed maxSpeed %d", d.speed, maxSpeed)
+	if d.speed10 > maxSpeed10 {
+		t.Errorf("speed10 = %d should not exceed maxSpeed10 %d", d.speed10, maxSpeed10)
 	}
 }
 
