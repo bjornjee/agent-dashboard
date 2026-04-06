@@ -21,6 +21,9 @@ archives:
 checksum:
   name_template: checksums.txt
 
+release:
+  make_latest: true
+
 changelog:
   disable: true
 
