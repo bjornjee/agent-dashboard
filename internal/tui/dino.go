@@ -54,66 +54,72 @@ const dinoTickInterval = 50 * time.Millisecond
 type dinoTickMsg struct{}
 type dinoExitMsg struct{}
 
-// -- Sprites (half-block art, sized for left panel) --
+// -- Sprites (half-block art, matching approved plan) --
 
 var dinoRunFrame0 = []string{
-	"  ▄█▀█▄",
-	"  ██▀▀ ",
-	"▄████▀ ",
-	" ▀██▀  ",
-	"  ▀ ▀  ",
+	"    ▄█▀██▄",
+	"    ███▀▀▀",
+	"▄█▄████▀  ",
+	" ▀▀██▀    ",
+	"   ▀  ▀   ",
 }
 
 var dinoRunFrame1 = []string{
-	"  ▄█▀█▄",
-	"  ██▀▀ ",
-	"▄████▀ ",
-	" ▀██▀  ",
-	"  ▀▀   ",
+	"    ▄█▀██▄",
+	"    ███▀▀▀",
+	"▄█▄████▀  ",
+	" ▀▀██▀    ",
+	"    ▀▀    ",
 }
 
 var dinoDuckFrame = []string{
-	"▄▄▄█▀█▄",
-	" ▀███▀ ",
-	"  ▀ ▀  ",
+	"▄▄▄▄█▀██",
+	"▀▀████▀  ",
+	"   ▀ ▀   ",
 }
 
 var spriteSmallCactus = []string{
-	" ██ ",
-	"████",
-	" ██ ",
+	"  ██  ",
+	"█▄██▄█",
+	" ▀██▀ ",
 }
 
 var spriteLargeCactus = []string{
-	" ██ ",
-	"████",
-	"████",
-	" ██ ",
+	"  ██  ",
+	"█ ██ █",
+	"▀████▀",
+	"  ██  ",
 }
 
 var spriteBirdFrame0 = []string{
-	"▀▄▄▀",
-	" ██ ",
+	"▀▄ ▄▀",
+	"  █  ",
 }
 
 var spriteBirdFrame1 = []string{
-	"▄▀▀▄",
-	" ██ ",
+	"▄▀ ▀▄",
+	"  █  ",
 }
 
 // Sprite dimensions for collision detection.
 const (
-	dinoStandWidth  = 7
+	dinoStandWidth  = 10
 	dinoStandHeight = 5
-	dinoDuckWidth   = 8
+	dinoDuckWidth   = 9
 	dinoDuckHeight  = 3
-	dinoPosX        = 3 // fixed horizontal position of the dino
+	dinoPosX        = 4 // fixed horizontal position of the dino
 )
+
+// dinoGameHeight is the maximum lines the game needs:
+// 1 score + playRows + 1 ground.
+// playRows = dinoStandHeight + jumpPeak where jumpPeak = v*(v+1)/2.
+// With jumpVelocity=3 → peak=6, playRows = 5+6 = 11, total = 13.
+const dinoGameHeight = 13
 
 // -- Physics constants --
 
 const (
-	jumpVelocity    = 5
+	jumpVelocity    = 3
 	gravity         = 1
 	maxSpeed        = 5
 	baseSpeed       = 1
@@ -290,22 +296,22 @@ func (d dinoGameModel) spawnObstacle() obstacle {
 		return obstacle{
 			x:      d.width,
 			kind:   obstBird,
-			width:  4,
+			width:  5,
 			height: 2,
-			birdY:  2 + rand.IntN(4),
+			birdY:  2 + rand.IntN(3),
 		}
 	case obstLargeCactus:
 		return obstacle{
 			x:      d.width,
 			kind:   obstLargeCactus,
-			width:  4,
+			width:  6,
 			height: 4,
 		}
 	default:
 		return obstacle{
 			x:      d.width,
 			kind:   obstSmallCactus,
-			width:  4,
+			width:  6,
 			height: 3,
 		}
 	}

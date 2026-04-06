@@ -729,10 +729,29 @@ func (m model) renderLeftPanel() string {
 	}
 
 	if m.mode == modeDinoGame {
+		// Show agent list above the game, giving the game only what it needs.
+		gameH := dinoGameHeight
+		if gameH > panelHeight {
+			gameH = panelHeight
+		}
+		listH := panelHeight - gameH
+		if listH < 0 {
+			listH = 0
+		}
+		var content string
+		if listH > 0 {
+			m.agentListVP.SetHeight(listH)
+			content = lipgloss.JoinVertical(lipgloss.Left,
+				m.agentListVP.View(),
+				m.dino.View(),
+			)
+		} else {
+			content = m.dino.View()
+		}
 		return style.
 			Width(m.leftWidth + 2).
 			Height(panelHeight + 2).
-			Render(m.dino.View())
+			Render(content)
 	}
 
 	if m.petEnabled {

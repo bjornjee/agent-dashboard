@@ -125,7 +125,7 @@ func TestObstacleScrollsLeft(t *testing.T) {
 	d.spawnTimer = 999
 
 	startX := 60
-	d.obstacles = []obstacle{{x: startX, kind: obstSmallCactus, width: 4, height: 3}}
+	d.obstacles = []obstacle{{x: startX, kind: obstSmallCactus, width: 6, height: 3}}
 
 	d, _ = d.tick()
 
@@ -143,7 +143,7 @@ func TestObstacleRemoval(t *testing.T) {
 	d.speed = 2
 	d.spawnTimer = 999
 
-	d.obstacles = []obstacle{{x: -5, kind: obstSmallCactus, width: 4, height: 3}}
+	d.obstacles = []obstacle{{x: -5, kind: obstSmallCactus, width: 6, height: 3}}
 
 	d, _ = d.tick()
 
@@ -247,7 +247,7 @@ func TestGameResetFromGameOver(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoGameOver
 	d.score = 42
-	d.obstacles = []obstacle{{x: 10, kind: obstSmallCactus, width: 4, height: 3}}
+	d.obstacles = []obstacle{{x: 10, kind: obstSmallCactus, width: 6, height: 3}}
 
 	d, _ = d.handleKey(spaceKey())
 
