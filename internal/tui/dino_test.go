@@ -10,9 +10,9 @@ func keyMsg(code rune, text string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Text: text}
 }
 
-func spaceKey() tea.KeyPressMsg   { return keyMsg(' ', " ") }
-func downKey() tea.KeyPressMsg    { return tea.KeyPressMsg{Code: tea.KeyDown} }
-func escKey() tea.KeyPressMsg     { return tea.KeyPressMsg{Code: tea.KeyEscape} }
+func spaceKey() tea.KeyPressMsg { return keyMsg(' ', " ") }
+func downKey() tea.KeyPressMsg  { return tea.KeyPressMsg{Code: tea.KeyDown} }
+func escKey() tea.KeyPressMsg   { return tea.KeyPressMsg{Code: tea.KeyEscape} }
 
 func TestNewDinoGameModel(t *testing.T) {
 	d := newDinoGameModel(80, 24)
