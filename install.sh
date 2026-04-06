@@ -158,19 +158,7 @@ SETTINGS_FILE="$STATE_DIR/settings.toml"
 echo "[2/3] Bootstrapping settings..."
 if [ ! -f "$SETTINGS_FILE" ]; then
   mkdir -p "$STATE_DIR"
-  cat > "$SETTINGS_FILE" <<'TOML'
-# Agent Dashboard settings
-# See https://github.com/bjornjee/agent-dashboard for documentation.
-
-[banner]
-show_mascot = true   # show the axolotl pixel art
-show_quote  = true   # show the daily quote
-
-[notifications]
-enabled       = false  # enable desktop notifications
-sound         = false  # play alert sound on attention events
-silent_events = false  # show notification for non-alerting stops
-TOML
+  cp "$REPO_DIR/settings.example.toml" "$SETTINGS_FILE"
   echo "  Created $SETTINGS_FILE"
 else
   echo "  $SETTINGS_FILE already exists, skipping."

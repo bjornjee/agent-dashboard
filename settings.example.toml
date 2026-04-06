@@ -1,0 +1,18 @@
+# Agent Dashboard settings
+# Copy to ~/.agent-dashboard/settings.toml (or $AGENT_DASHBOARD_DIR/settings.toml).
+# Any missing keys fall back to the defaults shown below.
+
+[banner]
+show_mascot = true   # show the axolotl pixel art
+show_quote  = true   # show the daily quote
+
+[notifications]
+enabled       = false  # enable desktop notifications from adapter hooks
+sound         = false  # play alert sound on attention events
+silent_events = false  # show notification for non-alerting stops
+
+[debug]
+key_log = false        # write key/mouse/focus events to debug-keys.log
+
+[experimental]
+ascii_pet = false      # show animated ASCII pet in the left panel
