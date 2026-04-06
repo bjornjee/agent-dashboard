@@ -39,7 +39,7 @@ test-race: vet ## Run tests with race detector (CI only, requires codesigned bin
 
 install: ## Build and install binary + adapter (ADAPTER=claude-code)
 	@git fetch origin --quiet 'refs/tags/*:refs/tags/*' --no-recurse-submodules 2>/dev/null || true
-	./install.sh $(ADAPTER)
+	./install.sh --build --adapter $(ADAPTER)
 
 uninstall: ## Uninstall binary, adapter, and state
 	./uninstall.sh

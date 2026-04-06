@@ -18,11 +18,12 @@ archives:
   - format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-extra_files:
-  - glob: agent-dashboard-adapter-claude-code.tar.gz
-
 checksum:
   name_template: checksums.txt
+
+release:
+  extra_files:
+    - glob: agent-dashboard-adapter-claude-code.tar.gz
 
 changelog:
   disable: true

@@ -15,6 +15,7 @@ BIN_DIR="$HOME/.local/bin"
 STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
 ADAPTER="claude-code"
 BUILD_FROM_SOURCE=false
+WORK_DIR=""
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -23,7 +24,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --build)   BUILD_FROM_SOURCE=true; shift ;;
     --adapter) ADAPTER="$2"; shift 2 ;;
-    *)         ADAPTER="$1"; shift ;;
+    *)         shift ;;
   esac
 done
 
@@ -39,6 +40,12 @@ check_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+cleanup() {
+  if [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+    rm -rf "$WORK_DIR"
+  fi
+}
+
 # Returns 0 if version $1 >= $2 (major.minor comparison)
 version_ge() {
   major1=$(echo "$1" | cut -d. -f1)
@@ -48,6 +55,17 @@ version_ge() {
   [ "$major1" -gt "$major2" ] 2>/dev/null && return 0
   [ "$major1" -eq "$major2" ] 2>/dev/null && [ "$minor1" -ge "$minor2" ] 2>/dev/null && return 0
   return 1
+}
+
+# ---------------------------------------------------------------------------
+# Validate adapter name (allowlist)
+# ---------------------------------------------------------------------------
+
+validate_adapter() {
+  case "$ADAPTER" in
+    claude-code) ;;
+    *) err "Unknown adapter: $ADAPTER (available: claude-code)"; exit 1 ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -70,11 +88,10 @@ check_prerequisites() {
     fi
   fi
 
-  if ! check_cmd git; then
-    missing="$missing  - git: https://git-scm.com/\n"
-  fi
-
   if [ "$BUILD_FROM_SOURCE" = true ]; then
+    if ! check_cmd git; then
+      missing="$missing  - git: https://git-scm.com/\n"
+    fi
     if ! check_cmd go; then
       missing="$missing  - go (1.26+): https://go.dev/dl/\n"
     else
@@ -138,6 +155,12 @@ resolve_version() {
     err "Check your internet connection or install from source with --build."
     exit 1
   fi
+
+  # Validate version format
+  case "$VERSION" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) err "Unexpected version format: $VERSION"; exit 1 ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -147,13 +170,10 @@ resolve_version() {
 install_binary_download() {
   step "1/4" "Downloading agent-dashboard v$VERSION ($OS/$ARCH)..."
 
-  tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
-
   asset="agent-dashboard_${VERSION}_${OS}_${ARCH}.tar.gz"
   url="https://github.com/$REPO/releases/download/v${VERSION}/$asset"
 
-  if ! curl -fsSL "$url" -o "$tmpdir/$asset"; then
+  if ! curl -fsSL "$url" -o "$WORK_DIR/$asset"; then
     err "Failed to download $url"
     if check_cmd go; then
       info "Falling back to building from source..."
@@ -164,8 +184,8 @@ install_binary_download() {
   fi
 
   mkdir -p "$BIN_DIR"
-  tar -xzf "$tmpdir/$asset" -C "$tmpdir"
-  cp "$tmpdir/agent-dashboard" "$BIN_DIR/agent-dashboard"
+  tar -xzf "$WORK_DIR/$asset" -C "$WORK_DIR"
+  cp "$WORK_DIR/agent-dashboard" "$BIN_DIR/agent-dashboard"
 
   # Ad-hoc codesign on macOS to prevent AMFI/Gatekeeper issues
   if [ "$OS" = "darwin" ]; then
@@ -174,9 +194,6 @@ install_binary_download() {
   fi
 
   info "Installed to $BIN_DIR/agent-dashboard"
-
-  rm -rf "$tmpdir"
-  trap - EXIT
 }
 
 install_binary_build() {
@@ -206,28 +223,20 @@ install_adapter_download() {
 
   step "2/4" "Downloading adapter..."
 
-  tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
-
   asset="agent-dashboard-adapter-${ADAPTER}.tar.gz"
   url="https://github.com/$REPO/releases/download/v${VERSION}/$asset"
 
-  if ! curl -fsSL "$url" -o "$tmpdir/$asset"; then
+  if ! curl -fsSL "$url" -o "$WORK_DIR/$asset"; then
     err "Failed to download adapter: $url"
     err "You can install the adapter manually via: /plugin add $REPO"
-    rm -rf "$tmpdir"
-    trap - EXIT
     return
   fi
 
   # Extract adapter to plugin cache
   local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$VERSION"
   mkdir -p "$cache_dir"
-  tar -xzf "$tmpdir/$asset" -C "$cache_dir"
+  tar -xzf "$WORK_DIR/$asset" -C "$cache_dir"
   info "Installed adapter v$VERSION to plugin cache"
-
-  rm -rf "$tmpdir"
-  trap - EXIT
 
   register_plugin "$VERSION" "$cache_dir"
 }
@@ -279,66 +288,69 @@ register_plugin() {
 
   # --- Register in known_marketplaces.json ---
   local known="$plugins_dir/known_marketplaces.json"
-  node -e "
-    const fs = require('fs');
-    const p = '$known';
-    const k = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
-    k['agent-dashboard'] = {
-      source: { source: 'github', repo: '$REPO' },
-      installLocation: '$cache_dir',
-      autoUpdate: true,
-      lastUpdated: '$now'
-    };
-    fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
-  "
+  AD_KNOWN_PATH="$known" AD_REPO="$REPO" AD_CACHE_DIR="$cache_dir" AD_NOW="$now" \
+    node -e "
+      const fs = require('fs');
+      const p = process.env.AD_KNOWN_PATH;
+      const k = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
+      k['agent-dashboard'] = {
+        source: { source: 'github', repo: process.env.AD_REPO },
+        installLocation: process.env.AD_CACHE_DIR,
+        autoUpdate: true,
+        lastUpdated: process.env.AD_NOW
+      };
+      fs.writeFileSync(p, JSON.stringify(k, null, 2) + '\n');
+    "
   info "Updated known_marketplaces.json"
 
   # --- Register in installed_plugins.json ---
   local installed="$plugins_dir/installed_plugins.json"
-  node -e "
-    const fs = require('fs');
-    const p = '$installed';
-    const d = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : { version: 2, plugins: {} };
-    d.version = d.version || 2;
-    d.plugins = d.plugins || {};
+  AD_INSTALLED_PATH="$installed" AD_CACHE_DIR="$cache_dir" AD_VERSION="$version" AD_NOW="$now" \
+    node -e "
+      const fs = require('fs');
+      const p = process.env.AD_INSTALLED_PATH;
+      const d = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : { version: 2, plugins: {} };
+      d.version = d.version || 2;
+      d.plugins = d.plugins || {};
 
-    const key = 'agent-dashboard@agent-dashboard';
-    const existing = d.plugins[key] || [];
-    let entry = existing.find(e => e.scope === 'user');
-    const now = '$now';
-    if (entry) {
-      entry.installPath = '$cache_dir';
-      entry.version = '$version';
-      entry.lastUpdated = now;
-    } else {
-      existing.push({
-        scope: 'user',
-        installPath: '$cache_dir',
-        version: '$version',
-        installedAt: now,
-        lastUpdated: now
-      });
-    }
-    d.plugins[key] = existing;
-    fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
-  "
+      const key = 'agent-dashboard@agent-dashboard';
+      const existing = d.plugins[key] || [];
+      let entry = existing.find(e => e.scope === 'user');
+      const now = process.env.AD_NOW;
+      if (entry) {
+        entry.installPath = process.env.AD_CACHE_DIR;
+        entry.version = process.env.AD_VERSION;
+        entry.lastUpdated = now;
+      } else {
+        existing.push({
+          scope: 'user',
+          installPath: process.env.AD_CACHE_DIR,
+          version: process.env.AD_VERSION,
+          installedAt: now,
+          lastUpdated: now
+        });
+      }
+      d.plugins[key] = existing;
+      fs.writeFileSync(p, JSON.stringify(d, null, 2) + '\n');
+    "
   info "Updated installed_plugins.json"
 
   # --- Enable in settings.json ---
   if [ -f "$settings" ]; then
-    node -e "
-      const fs = require('fs');
-      const p = '$settings';
-      const s = JSON.parse(fs.readFileSync(p, 'utf8'));
-      s.enabledPlugins = s.enabledPlugins || {};
-      if (!s.enabledPlugins['agent-dashboard@agent-dashboard']) {
-        s.enabledPlugins['agent-dashboard@agent-dashboard'] = true;
-        fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
-        console.log('  Enabled plugin in settings.json');
-      } else {
-        console.log('  Plugin already enabled in settings.json');
-      }
-    "
+    AD_SETTINGS_PATH="$settings" \
+      node -e "
+        const fs = require('fs');
+        const p = process.env.AD_SETTINGS_PATH;
+        const s = JSON.parse(fs.readFileSync(p, 'utf8'));
+        s.enabledPlugins = s.enabledPlugins || {};
+        if (!s.enabledPlugins['agent-dashboard@agent-dashboard']) {
+          s.enabledPlugins['agent-dashboard@agent-dashboard'] = true;
+          fs.writeFileSync(p, JSON.stringify(s, null, 2) + '\n');
+          console.log('  Enabled plugin in settings.json');
+        } else {
+          console.log('  Plugin already enabled in settings.json');
+        }
+      "
   fi
 }
 
@@ -391,7 +403,14 @@ check_path() {
       echo ""
       info "WARNING: $BIN_DIR is not on your PATH."
       info "Add it to your shell profile:"
-      info "  echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc"
+      case "${SHELL:-}" in
+        */zsh)  info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc" ;;
+        */bash) info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc" ;;
+        *)
+          info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc  # zsh"
+          info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc # bash"
+          ;;
+      esac
       ;;
   esac
 }
@@ -403,6 +422,7 @@ check_path() {
 echo "=== agent-dashboard installer ==="
 echo ""
 
+validate_adapter
 check_prerequisites
 
 if [ "$BUILD_FROM_SOURCE" = true ]; then
@@ -411,6 +431,10 @@ if [ "$BUILD_FROM_SOURCE" = true ]; then
 else
   detect_platform
   resolve_version
+
+  WORK_DIR=$(mktemp -d)
+  trap cleanup EXIT
+
   install_binary_download
   install_adapter_download
 fi

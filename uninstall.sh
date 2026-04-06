@@ -43,16 +43,27 @@ done
 
 step "2/4" "Removing state directory..."
 if [ -d "$STATE_DIR" ]; then
-  if [ "$SKIP_PROMPT" = true ]; then
-    rm -rf "$STATE_DIR"
-    info "Removed $STATE_DIR"
-  else
-    printf '  %s contains settings and usage data. Delete it? [y/N] ' "$STATE_DIR"
-    read -r answer </dev/tty 2>/dev/null || answer="n"
-    case "$answer" in
-      [yY]*) rm -rf "$STATE_DIR"; info "Removed $STATE_DIR" ;;
-      *)     info "Kept $STATE_DIR" ;;
-    esac
+  # Safety: refuse to delete paths outside $HOME
+  case "$STATE_DIR" in
+    "$HOME"/*) ;;
+    *)
+      info "WARNING: STATE_DIR '$STATE_DIR' is not under \$HOME, skipping deletion."
+      info "Remove it manually if intended."
+      STATE_DIR="" ;;
+  esac
+
+  if [ -n "$STATE_DIR" ]; then
+    if [ "$SKIP_PROMPT" = true ]; then
+      rm -rf "$STATE_DIR"
+      info "Removed $STATE_DIR"
+    else
+      printf '  %s contains settings and usage data. Delete it? [y/N] ' "$STATE_DIR"
+      read -r answer </dev/tty 2>/dev/null || answer="n"
+      case "$answer" in
+        [yY]*) rm -rf "$STATE_DIR"; info "Removed $STATE_DIR" ;;
+        *)     info "Kept $STATE_DIR" ;;
+      esac
+    fi
   fi
 else
   info "No state directory found."
@@ -89,9 +100,9 @@ if command -v node >/dev/null 2>&1 && [ -d "$CLAUDE_DIR" ]; then
   # --- known_marketplaces.json ---
   known="$CLAUDE_DIR/plugins/known_marketplaces.json"
   if [ -f "$known" ]; then
-    node -e "
+    AD_FILE_PATH="$known" node -e "
       const fs = require('fs');
-      const p = '$known';
+      const p = process.env.AD_FILE_PATH;
       const k = JSON.parse(fs.readFileSync(p, 'utf8'));
       if (k['agent-dashboard']) {
         delete k['agent-dashboard'];
@@ -104,9 +115,9 @@ if command -v node >/dev/null 2>&1 && [ -d "$CLAUDE_DIR" ]; then
   # --- installed_plugins.json ---
   installed="$CLAUDE_DIR/plugins/installed_plugins.json"
   if [ -f "$installed" ]; then
-    node -e "
+    AD_FILE_PATH="$installed" node -e "
       const fs = require('fs');
-      const p = '$installed';
+      const p = process.env.AD_FILE_PATH;
       const d = JSON.parse(fs.readFileSync(p, 'utf8'));
       if (d.plugins && d.plugins['agent-dashboard@agent-dashboard']) {
         delete d.plugins['agent-dashboard@agent-dashboard'];
@@ -119,9 +130,9 @@ if command -v node >/dev/null 2>&1 && [ -d "$CLAUDE_DIR" ]; then
   # --- settings.json ---
   settings="$CLAUDE_DIR/settings.json"
   if [ -f "$settings" ]; then
-    node -e "
+    AD_FILE_PATH="$settings" node -e "
       const fs = require('fs');
-      const p = '$settings';
+      const p = process.env.AD_FILE_PATH;
       const s = JSON.parse(fs.readFileSync(p, 'utf8'));
       if (s.enabledPlugins && s.enabledPlugins['agent-dashboard@agent-dashboard']) {
         delete s.enabledPlugins['agent-dashboard@agent-dashboard'];
