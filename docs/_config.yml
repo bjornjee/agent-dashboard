@@ -1,5 +1,5 @@
 title: agent-dashboard
-description: A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code agents
+description: A tmux-integrated TUI and mobile web companion for monitoring and controlling coding agents
 remote_theme: just-the-docs/just-the-docs
 
 plugins:
@@ -10,7 +10,7 @@ baseurl: /agent-dashboard
 
 permalink: pretty
 
-color_scheme: agent-dashboard
+color_scheme: agent-dashboard-dark
 
 breadcrumbs: true
 
@@ -38,6 +38,12 @@ aux_links:
 aux_links_new_tab: true
 
 footer_content: ""
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
 
 ga_tracking:
 ga_tracking_anonymize_ip: true

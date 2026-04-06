@@ -8,6 +8,8 @@ nav_order: 3
 
 Press `d` on any agent to open the diff viewer — a GitHub-style split-pane view with syntax highlighting.
 
+![Diff viewer screenshot](https://github.com/user-attachments/assets/65e972e1-bd8b-4fdf-bb27-d1a0df6b1c4f)
+
 ---
 
 ## What it shows

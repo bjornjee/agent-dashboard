@@ -31,6 +31,11 @@ Thumbs.db
 *.tmp
 tmp/
 
+# Jekyll (docs site local build)
+docs/_site/
+docs/.jekyll-cache/
+docs/.sass-cache/
+
 # Test/tool artifacts
 .playwright-mcp/
 screenshots/

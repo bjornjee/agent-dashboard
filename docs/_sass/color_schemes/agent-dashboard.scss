@@ -1,61 +1,27 @@
 // =============================================================
 // agent-dashboard — light colour scheme
 // =============================================================
+// Raw colour tokens are defined in custom/setup.scss (loaded first)
 
-// --- Slate neutrals ---
-$slate-900: #0f172a;
-$slate-800: #1e293b;
-$slate-700: #334155;
-$slate-600: #475569;
-$slate-500: #64748b;
-$slate-400: #94a3b8;
-$slate-300: #cbd5e1;
-$slate-200: #e2e8f0;
-$slate-100: #f1f5f9;
-$slate-050: #f8fafc;
-
-// --- Cyan accent ---
-$cyan-500: #06b6d4;
-$cyan-600: #0891b2;
-$cyan-700: #0e7490;
-$cyan-400: #22d3ee;
-$cyan-300: #67e8f9;
-$cyan-100: #cffafe;
-
-// --- Semantic: agent states ---
-$green-500: #10b981;   // active agent
-$amber-500: #f59e0b;   // waiting / blocked
-$red-500:   #ef4444;   // error / stopped
-
-// --- Theme variable overrides ---
-// Reference: https://github.com/just-the-docs/just-the-docs/blob/main/_sass/support/_variables.scss
-
-$body-background-color: $slate-050;
+$body-background-color: $warm-050;
 $sidebar-color:         #ffffff;
-$body-text-color:       $slate-800;
-$body-heading-color:    $slate-900;
-$nav-child-link-color:  $slate-600;
-$search-result-preview-color: $slate-600;
+$body-text-color:       $warm-700;
+$body-heading-color:    $warm-950;
+$nav-child-link-color:  $warm-500;
+$search-result-preview-color: $warm-500;
 
-// Links
-$link-color:            $cyan-600;
-$link-hover-color:      $cyan-700;
+$link-color:            $terra-600;
+$link-hover-color:      $terra-500;
 
-// Navigation
-$nav-width:             264px;
+$nav-width:             16.5rem;
 
-// Search feedback highlight
-$feedback-color:        $cyan-500;
+$feedback-color:        $terra-500;
 
-// Code
-$code-background-color: $slate-100;
+$code-background-color: $warm-100;
 $code-font-size:        13px;
 
-// Search
 $search-background-color: #ffffff;
 
-// Borders
-$border-color:          $slate-200;
+$border-color:          $warm-200;
 
-// Buttons
-$btn-primary-color:     $cyan-600;
+$btn-primary-color:     $terra-500;

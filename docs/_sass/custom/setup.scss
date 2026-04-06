@@ -1,12 +1,83 @@
-// Callout colour definitions for Just the Docs
-// These use distinct variable names to avoid colliding with the color scheme palette
+// =============================================================
+// Shared colour tokens — loaded before all other SCSS
+// Inspired by claude.ai's warm, earthy dark palette
+// =============================================================
 
-$cyan-000: #cffafe;
-$cyan-callout-100: #a5f3fc;
-$cyan-callout-200: #67e8f9;
-$cyan-callout-300: #22d3ee;
+// --- Warm neutrals (Claude-style, no blue tint) ---
+$warm-950: #1a1a18;
+$warm-900: #262624;
+$warm-850: #2e2e2c;
+$warm-800: #30302e;
+$warm-700: #3f3f3c;
+$warm-600: #52524e;
+$warm-500: #71716a;
+$warm-400: #9c9a92;
+$warm-300: #c2c0b6;
+$warm-200: #dedcd1;
+$warm-100: #f0efe8;
+$warm-050: #faf9f5;
 
+// --- Terracotta accent (Claude's signature) ---
+$terra-600: #c4623f;
+$terra-500: #d97757;
+$terra-400: #e39479;
+$terra-300: #edb49f;
+$terra-200: #f5d4c6;
+$terra-100: #fae8e0;
+
+// --- Semantic: agent states ---
+$green-500: #10b981;
+$amber-500: #f59e0b;
+$red-500:   #ef4444;
+
+// --- Legacy aliases (used by custom.scss and color schemes) ---
+$slate-900: $warm-950;
+$slate-800: $warm-900;
+$slate-700: $warm-700;
+$slate-600: $warm-600;
+$slate-500: $warm-500;
+$slate-400: $warm-400;
+$slate-300: $warm-300;
+$slate-200: $warm-200;
+$slate-100: $warm-100;
+$slate-050: $warm-050;
+
+$cyan-700: $terra-600;
+$cyan-600: $terra-600;
+$cyan-500: $terra-500;
+$cyan-400: $terra-400;
+$cyan-300: $terra-300;
+$cyan-100: $terra-100;
+
+// Indigo aliases (used in custom.scss)
+$indigo-600: $terra-600;
+$indigo-500: $terra-500;
+$indigo-400: $terra-400;
+$indigo-300: $terra-300;
+$indigo-200: $terra-200;
+$indigo-100: $terra-100;
+
+// Zinc aliases (used in custom.scss)
+$zinc-950: $warm-950;
+$zinc-900: $warm-900;
+$zinc-800: $warm-700;
+$zinc-700: $warm-700;
+$zinc-600: $warm-600;
+$zinc-500: $warm-500;
+$zinc-400: $warm-400;
+$zinc-300: $warm-300;
+$zinc-200: $warm-200;
+$zinc-100: $warm-100;
+$zinc-050: $warm-050;
+
+// --- Callout colours for Just the Docs ---
+$cyan-000: $terra-100;
 $amber-000: #fef3c7;
-$amber-callout-100: #fde68a;
-$amber-callout-200: #fcd34d;
-$amber-callout-300: #fbbf24;
+$amber-100: #fde68a;
+$amber-200: #fcd34d;
+$amber-300: #fbbf24;
+
+$grey-000: $warm-100;
+$grey-100: $warm-200;
+$grey-200: $warm-300;
+$grey-300: $warm-400;

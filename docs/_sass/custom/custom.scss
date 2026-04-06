@@ -26,25 +26,25 @@ pre,
 
 .main-content {
   h1 {
-    font-size: 2rem !important;     // 32px
+    font-size: 1.875rem !important;   // 30px
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
     margin-top: 0;
   }
   h2 {
-    font-size: 1.5rem !important;   // 24px
+    font-size: 1.5rem !important;     // 24px
     font-weight: 600;
     letter-spacing: -0.01em;
     padding-bottom: 0.3rem;
-    border-bottom: 1px solid var(--border-color, #{$slate-200});
+    border-bottom: 1px solid var(--border-color, #{$zinc-200});
   }
   h3 {
-    font-size: 1.25rem !important;  // 20px
+    font-size: 1.25rem !important;    // 20px
     font-weight: 600;
   }
 
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
 // Tighter sidebar text
@@ -60,15 +60,15 @@ code {
   padding: 0.15em 0.4em;
   border-radius: 4px;
   font-size: 0.87em;
-  background-color: $slate-100;
-  color: $cyan-700;
+  background-color: $zinc-100;
+  color: $indigo-600;
 }
 
 // Code blocks
 div.highlighter-rouge,
 figure.highlight {
   border-radius: 8px;
-  border: 1px solid $slate-200;
+  border: 1px solid $zinc-800;
   overflow: hidden;
   position: relative;
 
@@ -77,8 +77,8 @@ figure.highlight {
     margin: 0;
     overflow-x: auto;
     line-height: 1.6;
-    background-color: $slate-900;  // dark bg regardless of page mode
-    color: $slate-200;
+    background-color: $warm-850;
+    color: $zinc-300;
 
     code {
       background: transparent;
@@ -93,7 +93,7 @@ figure.highlight {
 .language-bash .highlight pre::before,
 .language-shell .highlight pre::before {
   content: "$ ";
-  color: $slate-500;
+  color: $zinc-600;
   user-select: none;
 }
 
@@ -102,10 +102,10 @@ figure.highlight {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
-  color: $slate-400;
+  color: $zinc-500;
   padding: 4px 8px;
   font-size: 12px;
   cursor: pointer;
@@ -113,8 +113,8 @@ figure.highlight {
   transition: opacity 0.2s ease;
 
   &:hover {
-    background: rgba(255,255,255,0.15);
-    color: $slate-200;
+    background: rgba(255,255,255,0.12);
+    color: $zinc-300;
   }
 }
 
@@ -122,17 +122,17 @@ div.highlighter-rouge:hover .copy-code-button {
   opacity: 1;
 }
 
-// --------------- One Dark syntax theme (applied to dark code blocks) ---------------
+// --------------- Syntax theme (tuned for indigo accent) ---------------
 
 .highlight {
   .k, .kd, .kn, .kp, .kr, .kt   { color: #c678dd; }  // keywords — purple
   .s, .s1, .s2, .sb, .sc, .sd,
   .sh, .sx                        { color: #98c379; }  // strings — green
-  .nf, .nx                        { color: #61afef; }  // functions — blue
+  .nf, .nx                        { color: #e39479; }  // functions — terracotta
   .nc, .nn                        { color: #e5c07b; }  // classes/namespaces — gold
   .c, .c1, .cm, .cs               { color: #5c6370; font-style: italic; } // comments
   .mi, .mf, .mh, .mo, .il        { color: #d19a66; }  // numbers — orange
-  .o, .ow                         { color: #56b6c2; }  // operators — cyan
+  .o, .ow                         { color: #d19a66; }  // operators — warm orange
   .nb                             { color: #e5c07b; }  // builtins
   .na                             { color: #d19a66; }  // attributes
   .p                              { color: #abb2bf; }  // punctuation
@@ -144,11 +144,27 @@ div.highlighter-rouge:hover .copy-code-button {
 
 // Hero
 .hero-section {
-  background: $slate-900;
+  background: $zinc-950;
   border-radius: 12px;
   padding: 3rem 2.5rem;
   margin-bottom: 2rem;
   color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid $zinc-800;
+
+  // Subtle radial glow
+  &::before {
+    content: "";
+    position: absolute;
+    top: -60%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 400px;
+    background: radial-gradient(ellipse, rgba(217, 119, 87, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
 }
 
 .hero-badges {
@@ -156,6 +172,7 @@ div.highlighter-rouge:hover .copy-code-button {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 1.5rem;
+  position: relative;
 }
 
 .hero-badge {
@@ -166,15 +183,16 @@ div.highlighter-rouge:hover .copy-code-button {
   font-weight: 500;
   padding: 4px 12px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: $slate-300;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: $zinc-400;
   text-decoration: none;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255,255,255,0.14);
-    color: #ffffff;
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.18);
+    color: $zinc-200;
     text-decoration: none;
   }
 }
@@ -190,35 +208,39 @@ div.highlighter-rouge:hover .copy-code-button {
 }
 
 .hero-title {
-  font-family: $mono-font-family;
+  font-family: $heading-font-family;
   font-size: 2.5rem !important;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: #ffffff !important;
   margin-bottom: 0.75rem;
   line-height: 1.1;
+  position: relative;
 }
 
 .hero-tagline {
   font-size: 1.25rem;
-  color: $slate-300;
+  color: $zinc-300;
   margin-bottom: 0.5rem;
   line-height: 1.4;
   max-width: 540px;
+  position: relative;
 }
 
 .hero-description {
   font-size: 0.95rem;
-  color: $slate-400;
+  color: $zinc-500;
   line-height: 1.6;
   max-width: 540px;
   margin-bottom: 1.5rem;
+  position: relative;
 }
 
 .hero-actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  position: relative;
 }
 
 .btn-hero {
@@ -232,23 +254,26 @@ div.highlighter-rouge:hover .copy-code-button {
   transition: all 0.2s ease;
 
   &--primary {
-    background: $cyan-500;
+    background: linear-gradient(135deg, $indigo-500, $indigo-600);
     color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(217, 119, 87, 0.3);
     &:hover {
-      background: $cyan-600;
+      background: linear-gradient(135deg, $indigo-400, $indigo-500);
+      box-shadow: 0 2px 8px rgba(217, 119, 87, 0.3), 0 0 0 1px rgba(217, 119, 87, 0.4);
       color: #ffffff;
       text-decoration: none;
+      transform: translateY(-1px);
     }
   }
 
   &--outline {
     background: transparent;
-    border: 1px solid rgba(255,255,255,0.2);
-    color: $slate-300;
+    border: 1px solid $zinc-700;
+    color: $zinc-400;
     &:hover {
-      background: rgba(255,255,255,0.06);
-      border-color: rgba(255,255,255,0.3);
-      color: #ffffff;
+      background: rgba(255,255,255,0.04);
+      border-color: $zinc-600;
+      color: $zinc-200;
       text-decoration: none;
     }
   }
@@ -274,7 +299,7 @@ div.highlighter-rouge:hover .copy-code-button {
   &__label {
     font-size: 13px;
     font-weight: 600;
-    color: $slate-500;
+    color: $zinc-500;
     margin-bottom: 6px;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -283,13 +308,13 @@ div.highlighter-rouge:hover .copy-code-button {
     pre {
       margin: 0;
       padding: 0.75rem 1rem;
-      background: $slate-900;
+      background: $warm-850;
       border-radius: 8px;
-      border: 1px solid $slate-700;
+      border: 1px solid $zinc-800;
       overflow-x: auto;
 
       code {
-        color: $slate-200;
+        color: $zinc-300;
         font-family: $mono-font-family;
         font-size: 13px;
         background: transparent;
@@ -306,7 +331,7 @@ div.highlighter-rouge:hover .copy-code-button {
   .demo-embed {
     border-radius: 8px;
     overflow: hidden;
-    border: 1px solid $slate-200;
+    border: 1px solid $zinc-800;
 
     img {
       width: 100%;
@@ -326,14 +351,32 @@ div.highlighter-rouge:hover .copy-code-button {
 
 .feature-card {
   padding: 1.25rem;
-  border: 1px solid $slate-200;
+  border: 1px solid $zinc-200;
   border-radius: 10px;
   background: #ffffff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
+  position: relative;
+
+  // Top accent line
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background: transparent;
+    border-radius: 0 0 2px 2px;
+    transition: background 0.2s ease;
+  }
 
   &:hover {
-    border-color: $cyan-400;
-    box-shadow: 0 2px 8px rgba(6, 182, 212, 0.08);
+    border-color: rgba(217, 119, 87, 0.3);
+    box-shadow: 0 4px 12px rgba(217, 119, 87, 0.06);
+
+    &::before {
+      background: $indigo-500;
+    }
   }
 }
 
@@ -346,23 +389,23 @@ div.highlighter-rouge:hover .copy-code-button {
   justify-content: center;
   margin-bottom: 12px;
 
-  &--cyan   { background: $cyan-100;  color: $cyan-700; }
-  &--green  { background: #d1fae5;    color: #065f46; }
-  &--amber  { background: #fef3c7;    color: #92400e; }
-  &--purple { background: #ede9fe;    color: #5b21b6; }
+  &--cyan   { background: $indigo-100; color: $indigo-600; }
+  &--green  { background: #d1fae5;     color: #065f46; }
+  &--amber  { background: #fef3c7;     color: #92400e; }
+  &--purple { background: #ede9fe;     color: #5b21b6; }
 }
 
 .feature-title {
   font-size: 16px !important;
   font-weight: 600;
   margin-bottom: 6px;
-  color: $slate-900;
+  color: $zinc-950;
 }
 
 .feature-desc {
   font-size: 14px;
   line-height: 1.55;
-  color: $slate-500;
+  color: $zinc-500;
   margin: 0;
 }
 
@@ -370,48 +413,110 @@ div.highlighter-rouge:hover .copy-code-button {
 .tip-callout {
   padding: 1rem 1.25rem;
   border-radius: 8px;
-  background: $cyan-100;
-  color: $cyan-700;
+  background: $indigo-100;
+  color: $indigo-600;
   font-size: 14px;
   line-height: 1.55;
   margin-bottom: 2rem;
+  border: 1px solid rgba(217, 119, 87, 0.15);
 
   a {
-    color: $cyan-700;
+    color: $indigo-600;
     font-weight: 600;
     text-decoration: underline;
   }
 }
 
-// --------------- Sidebar ---------------
+// --------------- Sidebar layout ---------------
+// Fix: Just the Docs grows the sidebar with viewport and right-aligns nav content,
+// leaving dead space on the left. Override to use fixed width, flush left.
 
-// Active page — cyan left border
-.nav-list-item.active > .nav-list-link {
-  border-left: 2px solid $cyan-500;
-  padding-left: 10px;
-  font-weight: 600;
-  color: $slate-900;
-  background-color: rgba(6, 182, 212, 0.06);
+@media (min-width: 66.5rem) {
+  .side-bar {
+    width: 16.5rem !important;
+    align-items: stretch !important;
+  }
+
+  .side-bar + .main {
+    margin-left: 16.5rem !important;
+    max-width: none !important;
+  }
 }
 
-// Section category headers
-.nav-list .nav-list-item .nav-list-link {
-  font-size: 14px;
-  padding: 4px 0 4px 12px;
-  border-radius: 4px;
-  transition: background 0.15s ease;
+// Active page — subtle warm background pill (Claude docs style)
+.nav-list-item.active > .nav-list-link {
+  font-weight: 600 !important;
+  color: $warm-050 !important;
+  background-color: rgba(222, 220, 209, 0.08) !important;
+  background-image: none !important;
+  border-radius: 6px;
+  border-left: none !important;
+}
+
+// Top-level section headers (Getting Started, Guides, etc.)
+.site-nav > .nav-list > .nav-list-item > .nav-list-link {
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: $warm-400;
+  margin-top: 1rem;
+  padding: 6px 12px;
 
   &:hover {
-    background: rgba(6, 182, 212, 0.06);
+    color: $warm-200;
+    background: transparent;
+  }
+}
+
+// First section header — no top margin
+.site-nav > .nav-list > .nav-list-item:first-child > .nav-list-link {
+  margin-top: 0;
+}
+
+// All nav links — clean, minimal
+.nav-list .nav-list-item .nav-list-link {
+  font-size: 14px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+  color: $warm-400;
+  border-left: none;
+
+  &:hover {
+    background: rgba(222, 220, 209, 0.06);
+    color: $warm-200;
+  }
+}
+
+// Child nav links — slightly indented, smaller
+.nav-list .nav-list .nav-list-link {
+  font-size: 13px;
+  padding-left: 24px;
+  color: $warm-500;
+
+  &:hover {
+    color: $warm-300;
   }
 }
 
 // Site title in sidebar
 .site-title {
-  font-family: $mono-font-family;
-  font-weight: 600;
+  font-family: $heading-font-family;
+  font-weight: 700;
   font-size: 18px !important;
-  color: $slate-900;
+  color: $warm-050;
+  letter-spacing: -0.02em;
+}
+
+// Sidebar background — clean, no gradient
+.side-bar {
+  border-right: 1px solid rgba(222, 220, 209, 0.08);
+}
+
+// Nav expander arrows — muted
+.nav-list-expander {
+  color: $warm-600;
 }
 
 // --------------- Tables ---------------
@@ -422,24 +527,24 @@ div.highlighter-rouge:hover .copy-code-button {
   font-size: 14px;
 
   thead th {
-    background: $slate-100;
+    background: $zinc-100;
     font-weight: 600;
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: $slate-600;
+    color: $zinc-500;
     padding: 10px 12px;
-    border-bottom: 2px solid $slate-200;
+    border-bottom: 2px solid $zinc-200;
   }
 
   tbody td {
     padding: 10px 12px;
-    border-bottom: 1px solid $slate-100;
-    color: $slate-700;
+    border-bottom: 1px solid $zinc-100;
+    color: $zinc-600;
   }
 
   tbody tr:hover {
-    background: rgba(6, 182, 212, 0.03);
+    background: rgba(217, 119, 87, 0.03);
   }
 
   // Keybinding keys — monospace + pill style
@@ -448,8 +553,90 @@ div.highlighter-rouge:hover .copy-code-button {
     font-size: 12px;
     padding: 2px 6px;
     border-radius: 4px;
-    background: $slate-100;
-    border: 1px solid $slate-200;
-    color: $slate-700;
+    background: $zinc-100;
+    border: 1px solid $zinc-200;
+    color: $zinc-600;
+  }
+}
+
+// --------------- Dark mode overrides ---------------
+
+@media (prefers-color-scheme: dark) {
+  .hero-section {
+    border-color: $zinc-800;
+  }
+
+  .feature-card {
+    background: $zinc-900;
+    border-color: $zinc-800;
+
+    &:hover {
+      border-color: rgba(217, 119, 87, 0.3);
+      box-shadow: 0 4px 12px rgba(217, 119, 87, 0.08);
+    }
+  }
+
+  .feature-title {
+    color: $zinc-050;
+  }
+
+  .feature-icon {
+    &--cyan   { background: rgba(217, 119, 87, 0.15); color: $indigo-400; }
+    &--green  { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+    &--amber  { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+    &--purple { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
+  }
+
+  .tip-callout {
+    background: rgba(217, 119, 87, 0.08);
+    border-color: rgba(217, 119, 87, 0.15);
+    color: $indigo-300;
+
+    a { color: $indigo-300; }
+  }
+
+  .install-step__label {
+    color: $zinc-500;
+  }
+
+  code {
+    background-color: $zinc-900;
+    color: $indigo-400;
+  }
+
+  .main-content table {
+    thead th {
+      background: $zinc-900;
+      color: $zinc-400;
+      border-bottom-color: $zinc-800;
+    }
+
+    tbody td {
+      border-bottom-color: $zinc-800;
+      color: $zinc-400;
+    }
+
+    code {
+      background: rgba(255,255,255,0.06);
+      border-color: $zinc-700;
+      color: $zinc-400;
+    }
+  }
+
+  .site-title {
+    color: $warm-050;
+  }
+
+  .nav-list-item.active > .nav-list-link {
+    color: $warm-050;
+    background-color: rgba(222, 220, 209, 0.1);
+  }
+
+  .demo-section .demo-embed {
+    border-color: $zinc-800;
+  }
+
+  .main-content h2 {
+    border-bottom-color: $zinc-800;
   }
 }
