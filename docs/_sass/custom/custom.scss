@@ -1,0 +1,161 @@
+// =============================================================================
+// Typography
+// =============================================================================
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+code,
+pre,
+.highlight {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.main-content {
+  line-height: 1.7;
+
+  h1 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-top: 2.5rem;
+  }
+
+  h3 {
+    font-weight: 600;
+    color: $green-accent;
+  }
+}
+
+// =============================================================================
+// Code blocks
+// =============================================================================
+
+pre.highlight {
+  border: 1px solid $border-subtle;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+// =============================================================================
+// kbd styling — auto-applied to code spans inside tables
+// =============================================================================
+
+kbd,
+.kbd {
+  display: inline-block;
+  padding: 0.15em 0.4em;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8em;
+  line-height: 1;
+  color: #e6edf3;
+  background-color: $surface-elevated;
+  border: 1px solid $border-subtle;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+table code {
+  padding: 0.15em 0.4em;
+  border: 1px solid $border-subtle;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  background-color: $surface-elevated;
+}
+
+// =============================================================================
+// Tables
+// =============================================================================
+
+th {
+  font-weight: 600;
+  color: #e6edf3;
+  border-bottom: 2px solid $green-dim;
+}
+
+td,
+th {
+  padding: 0.6rem 1rem;
+}
+
+// =============================================================================
+// Callouts
+// =============================================================================
+
+.warning,
+.note,
+.tip {
+  border-radius: 6px;
+  border-left-width: 4px;
+}
+
+// =============================================================================
+// Navigation
+// =============================================================================
+
+.nav-list-item.active > .nav-list-link {
+  border-left: 3px solid $green-accent;
+  padding-left: calc(0.75rem - 3px);
+}
+
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+// =============================================================================
+// Video
+// =============================================================================
+
+video {
+  border: 1px solid $border-subtle;
+  border-radius: 8px;
+}
+
+// =============================================================================
+// Homepage feature cards
+// =============================================================================
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  background-color: $surface-elevated;
+  border: 1px solid $border-subtle;
+  border-radius: 8px;
+  padding: 1.5rem;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: $green-accent;
+  }
+
+  .feature-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  h3 {
+    margin-top: 0;
+    font-size: 1.1rem;
+    color: #e6edf3;
+  }
+
+  p {
+    color: $text-muted;
+    font-size: 0.9rem;
+    margin-bottom: 0;
+  }
+}
