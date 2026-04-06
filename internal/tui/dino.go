@@ -138,8 +138,8 @@ const dinoGameHeight = 17
 // -- Physics constants --
 
 const (
-	jumpVelocity = 4
-	gravity      = 1  // tuned so 8-tick airtime clears danger zone at all speeds
+	jumpVelocity     = 4
+	gravity          = 1  // tuned so 8-tick airtime clears danger zone at all speeds
 	duckDefaultTicks = 12 // default duck expiry in ticks (~600ms) to cover initial key repeat delay
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
@@ -156,13 +156,13 @@ const (
 // -- Game model --
 
 type dinoGameModel struct {
-	state     dinoGameState
-	width     int
-	height    int
-	pose      dinoPose
-	dinoY     int // vertical offset from ground (0 = ground, positive = up)
-	jumpVel   int
-	frame     int // animation frame counter
+	state        dinoGameState
+	width        int
+	height       int
+	pose         dinoPose
+	dinoY        int // vertical offset from ground (0 = ground, positive = up)
+	jumpVel      int
+	frame        int       // animation frame counter
 	duckTicks    int       // ticks remaining in duck; 0 = not ducking
 	lastDownTime time.Time // timestamp of last "down" key press
 	duckExpiry   int       // adaptive expiry in ticks (3× measured repeat gap)
