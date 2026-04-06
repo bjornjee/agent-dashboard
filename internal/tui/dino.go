@@ -127,10 +127,10 @@ const (
 //
 //	danger zone = dinoCollisionW + maxObstWidth = 4+6 = 10 cols
 //	base speed 2.0: 10/2 = 5 ticks to cross, 8 airborne → 6 col buffer ✓
-//	max speed 4.5:  10/4.5 ≈ 2 ticks to cross, 8 airborne → 27 col buffer ✓
 //
-// Recovery: spawn timer is tick-based (not column-based), so the player
-// always gets ≥1.25s (25 ticks) between obstacles regardless of speed.
+// Recovery: spawn timer is tick-based (not column-based) and tightens with
+// difficulty. Floor is spawnFloor (16 ticks = 0.8s).
+// Speed is uncapped — difficulty increases forever.
 //
 // playRows = 5 + 10 = 15, total = 17.
 const dinoGameHeight = 17
@@ -144,13 +144,14 @@ const (
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
 	baseSpeed10    = 20 // 2.0 col/tick — tuned so jump clears 10-col danger zone
-	maxSpeed10     = 45 // 4.5 col/tick
 	speedIncrement = 1  // +0.1 col/tick each interval
 	speedUpEvery   = 50 // ticks between speed bumps
 
-	// Spawn timer is tick-based so recovery time is constant regardless of speed.
-	minSpawnTicks = 25 // 1.25s minimum between obstacles
-	maxSpawnTicks = 45 // 2.25s maximum
+	// Difficulty scaling.
+	difficultyRate = 500 // ticks per difficulty level (~25s)
+	spawnFloor     = 16  // absolute minimum spawn gap: 16 ticks = 0.8s
+	baseMinSpawn   = 25  // initial minimum spawn gap in ticks
+	baseMaxSpawn   = 45  // initial maximum spawn gap in ticks
 )
 
 // -- Game model --
@@ -182,11 +183,46 @@ func newDinoGameModel(w, h int) dinoGameModel {
 		width:      w,
 		height:     h,
 		speed10:    baseSpeed10,
-		spawnTimer: minSpawnTicks,
+		spawnTimer: baseMinSpawn,
 	}
 }
 
 func (d dinoGameModel) isDucking() bool { return d.pose == dinoDucking }
+
+// difficulty returns a continuously growing difficulty level (0.0 at start, 1.0 at ~25s, etc.).
+func (d dinoGameModel) difficulty() float64 {
+	return float64(d.tickCount) / float64(difficultyRate)
+}
+
+// spawnRange returns the current (min, max) spawn interval in ticks, tightening over time.
+func (d dinoGameModel) spawnRange() (int, int) {
+	diff := d.difficulty()
+	minT := baseMinSpawn - int(diff)
+	if minT < spawnFloor {
+		minT = spawnFloor
+	}
+	maxT := baseMaxSpawn - int(diff*2)
+	if maxT < minT+1 {
+		maxT = minT + 1
+	}
+	return minT, maxT
+}
+
+// collisionParams returns the dino's (width, offset) collision box, becoming less forgiving over time.
+// spriteW is the visual width of the current pose (10 for standing, 9 for ducking).
+func (d dinoGameModel) collisionParams(spriteW int) (int, int) {
+	diff := d.difficulty()
+	off := dinoCollisionOff - int(diff/2)
+	if off < 0 {
+		off = 0
+	}
+	w := dinoCollisionW + int(diff/2)
+	maxW := spriteW - 2*off
+	if w > maxW {
+		w = maxW
+	}
+	return w, off
+}
 
 func (d dinoGameModel) Init() tea.Cmd {
 	return nil
@@ -214,7 +250,7 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 			d.speed10 = baseSpeed10
 			d.subPixel = 0
 			d.obstacles = nil
-			d.spawnTimer = minSpawnTicks
+			d.spawnTimer = baseMinSpawn
 			d.dinoY = 0
 			d.jumpVel = 0
 			d.pose = dinoRunning
@@ -320,11 +356,12 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 	d.obstacles = alive
 
 	// Spawn new obstacles
-	// Tick-based spawn timer — guarantees constant recovery time regardless of speed.
+	// Tick-based spawn timer — guarantees ≥1s recovery time regardless of speed.
 	d.spawnTimer--
 	if d.spawnTimer <= 0 {
 		d.obstacles = append(d.obstacles, d.spawnObstacle())
-		d.spawnTimer = minSpawnTicks + rand.IntN(maxSpawnTicks-minSpawnTicks)
+		minT, maxT := d.spawnRange()
+		d.spawnTimer = minT + rand.IntN(maxT-minT)
 	}
 
 	// Collision detection
@@ -335,8 +372,8 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 
 	d.score++
 
-	// Gradual speed ramp
-	if d.tickCount%speedUpEvery == 0 && d.speed10 < maxSpeed10 {
+	// Gradual speed ramp (uncapped — difficulty increases forever)
+	if d.tickCount%speedUpEvery == 0 {
 		d.speed10 += speedIncrement
 	}
 
@@ -377,14 +414,16 @@ func (d dinoGameModel) spawnObstacle() obstacle {
 }
 
 func (d dinoGameModel) checkCollision() bool {
-	// Use forgiving collision box (smaller than visual sprite).
-	var dw, dh int
+	// Collision box becomes less forgiving as difficulty increases.
+	var dw, dh, collOff int
 	if d.isDucking() {
-		dw, dh = dinoDuckCollW, dinoDuckHeight
+		dw, collOff = d.collisionParams(9) // duck sprite is 9 columns
+		dh = dinoDuckHeight
 	} else {
-		dw, dh = dinoCollisionW, dinoStandHeight
+		dw, collOff = d.collisionParams(10) // stand sprite is 10 columns
+		dh = dinoStandHeight
 	}
-	dx1 := dinoPosX + dinoCollisionOff
+	dx1 := dinoPosX + collOff
 	dx2 := dx1 + dw
 	dy1 := d.dinoY
 	dy2 := d.dinoY + dh
