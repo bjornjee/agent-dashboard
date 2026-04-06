@@ -54,63 +54,72 @@ const dinoTickInterval = 50 * time.Millisecond
 type dinoTickMsg struct{}
 type dinoExitMsg struct{}
 
-// -- Tiny sprites for pet panel (3 play rows, ~40 cols) --
+// -- Sprites (half-block art, sized for left panel) --
 
-// Dino standing: 2 lines × 4 chars
 var dinoRunFrame0 = []string{
-	"▄█▀▄",
-	"▀ ▀ ",
+	"  ▄█▀█▄",
+	"  ██▀▀ ",
+	"▄████▀ ",
+	" ▀██▀  ",
+	"  ▀ ▀  ",
 }
 
 var dinoRunFrame1 = []string{
-	"▄█▀▄",
-	" ▀▀ ",
+	"  ▄█▀█▄",
+	"  ██▀▀ ",
+	"▄████▀ ",
+	" ▀██▀  ",
+	"  ▀▀   ",
 }
 
-// Dino ducking: 1 line × 5 chars
 var dinoDuckFrame = []string{
-	"▄▄█▀▄",
+	"▄▄▄█▀█▄",
+	" ▀███▀ ",
+	"  ▀ ▀  ",
 }
 
-// Small cactus: 1 line × 3 chars
 var spriteSmallCactus = []string{
-	"▀█▀",
+	" ██ ",
+	"████",
+	" ██ ",
 }
 
-// Large cactus: 2 lines × 3 chars
 var spriteLargeCactus = []string{
-	"█▄█",
-	" █ ",
+	" ██ ",
+	"████",
+	"████",
+	" ██ ",
 }
 
-// Bird: 1 line × 3 chars
 var spriteBirdFrame0 = []string{
-	"▀▄▀",
+	"▀▄▄▀",
+	" ██ ",
 }
 
 var spriteBirdFrame1 = []string{
-	"▄▀▄",
+	"▄▀▀▄",
+	" ██ ",
 }
 
 // Sprite dimensions for collision detection.
 const (
-	dinoStandWidth  = 4
-	dinoStandHeight = 2
-	dinoDuckWidth   = 5
-	dinoDuckHeight  = 1
-	dinoPosX        = 2 // fixed horizontal position of the dino
+	dinoStandWidth  = 7
+	dinoStandHeight = 5
+	dinoDuckWidth   = 8
+	dinoDuckHeight  = 3
+	dinoPosX        = 3 // fixed horizontal position of the dino
 )
 
-// -- Physics constants (tuned for 3-row play area) --
+// -- Physics constants --
 
 const (
-	jumpVelocity    = 2  // jump 2 rows then fall (peaks at row 2, lands after 4 ticks)
-	gravity         = 1  // 1 row per tick deceleration
-	maxSpeed        = 4  // max scroll speed
-	baseSpeed       = 1  // starting scroll speed
-	speedUpInterval = 80 // ticks between speed increases
-	minSpawnGap     = 12 // minimum ticks between spawns
-	maxSpawnGap     = 25 // maximum ticks between spawns
+	jumpVelocity    = 5
+	gravity         = 1
+	maxSpeed        = 5
+	baseSpeed       = 1
+	speedUpInterval = 80
+	minSpawnGap     = 15
+	maxSpawnGap     = 30
 )
 
 // -- Game model --
@@ -281,23 +290,23 @@ func (d dinoGameModel) spawnObstacle() obstacle {
 		return obstacle{
 			x:      d.width,
 			kind:   obstBird,
-			width:  3,
-			height: 1,
-			birdY:  1 + rand.IntN(2), // fly at row 1 or 2
+			width:  4,
+			height: 2,
+			birdY:  2 + rand.IntN(4),
 		}
 	case obstLargeCactus:
 		return obstacle{
 			x:      d.width,
 			kind:   obstLargeCactus,
-			width:  3,
-			height: 2,
+			width:  4,
+			height: 4,
 		}
 	default:
 		return obstacle{
 			x:      d.width,
 			kind:   obstSmallCactus,
-			width:  3,
-			height: 1,
+			width:  4,
+			height: 3,
 		}
 	}
 }
@@ -360,7 +369,7 @@ var (
 //	line 3: ground level (dino bottom when standing)
 //	line 4: ground decoration
 func (d dinoGameModel) View() string {
-	if d.width < 10 || d.height < 4 {
+	if d.width < 20 || d.height < 8 {
 		return dinoTitleStyle.Render("too small")
 	}
 
@@ -377,21 +386,31 @@ func (d dinoGameModel) View() string {
 
 func (d dinoGameModel) renderWaiting() string {
 	var sb strings.Builder
-	// Line 0: title
-	sb.WriteString(dinoCenterText(dinoTitleStyle.Render("DINO"), d.width) + "\n")
-	// Line 1: dino sprite
-	sb.WriteString(dinoCenterText(dinoSpriteStyle.Render(dinoRunFrame0[0]), d.width) + "\n")
-	sb.WriteString(dinoCenterText(dinoSpriteStyle.Render(dinoRunFrame0[1]), d.width) + "\n")
-	// Line 3: prompt
-	sb.WriteString(dinoCenterText(dinoTitleStyle.Render("SPACE start"), d.width) + "\n")
-	// Line 4: ground
-	sb.WriteString(dinoGroundStyle.Render(d.renderGround()))
+
+	// Vertically center the content
+	spriteLines := len(dinoRunFrame0)
+	contentLines := 1 + spriteLines + 2 // title + sprite + blank + prompt
+	topPad := (d.height - contentLines) / 2
+	for i := 0; i < topPad; i++ {
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(dinoCenterText(dinoTitleStyle.Render("DINO GAME"), d.width) + "\n")
+	for _, line := range dinoRunFrame0 {
+		sb.WriteString(dinoCenterText(dinoSpriteStyle.Render(line), d.width) + "\n")
+	}
+	sb.WriteString("\n")
+	sb.WriteString(dinoCenterText(dinoTitleStyle.Render("SPACE to start · ESC to exit"), d.width))
+
 	return sb.String()
 }
 
 func (d dinoGameModel) renderPlaying() string {
-	// 3 rows of play area (rows 0=sky, 1=mid, 2=ground level)
-	const playRows = 3
+	// Play area: total height minus score line and ground line
+	playRows := d.height - 2
+	if playRows < 3 {
+		playRows = 3
+	}
 	grid := make([][]rune, playRows)
 	for i := range grid {
 		grid[i] = make([]rune, d.width)
@@ -495,16 +514,19 @@ func (d dinoGameModel) renderGround() string {
 
 func (d dinoGameModel) renderGameOver() string {
 	var sb strings.Builder
-	// Line 0: GAME OVER
+
+	contentLines := 5 // title + blank + score + blank + prompt
+	topPad := (d.height - contentLines) / 2
+	for i := 0; i < topPad; i++ {
+		sb.WriteString("\n")
+	}
+
 	sb.WriteString(dinoCenterText(dinoGameOverStyle.Render("GAME OVER"), d.width) + "\n")
-	// Line 1: empty
 	sb.WriteString("\n")
-	// Line 2: score
 	sb.WriteString(dinoCenterText(dinoScoreStyle.Render(fmt.Sprintf("Score: %04d", d.score)), d.width) + "\n")
-	// Line 3: prompt
-	sb.WriteString(dinoCenterText(dinoTitleStyle.Render("SPACE retry"), d.width) + "\n")
-	// Line 4: ground
-	sb.WriteString(dinoGroundStyle.Render(d.renderGround()))
+	sb.WriteString("\n")
+	sb.WriteString(dinoCenterText(dinoTitleStyle.Render("SPACE retry · ESC exit"), d.width))
+
 	return sb.String()
 }
 

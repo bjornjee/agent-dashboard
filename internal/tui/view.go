@@ -728,16 +728,17 @@ func (m model) renderLeftPanel() string {
 		style = style.BorderForeground(themeSapphire)
 	}
 
-	if m.petEnabled || m.mode == modeDinoGame {
-		var bottomPanel string
-		if m.mode == modeDinoGame {
-			bottomPanel = m.dino.View()
-		} else {
-			bottomPanel = m.pet.View()
-		}
+	if m.mode == modeDinoGame {
+		return style.
+			Width(m.leftWidth + 2).
+			Height(panelHeight + 2).
+			Render(m.dino.View())
+	}
+
+	if m.petEnabled {
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			m.agentListVP.View(),
-			bottomPanel,
+			m.pet.View(),
 		)
 		return style.
 			Width(m.leftWidth + 2).
