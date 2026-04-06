@@ -81,4 +81,3 @@ func ghUser(r Runner) string {
 	})
 	return cachedUser
 }
-
