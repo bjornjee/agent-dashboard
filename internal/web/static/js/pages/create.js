@@ -22,11 +22,6 @@ export function renderCreate(app, agents) {
         <label class="form-label">Skill</label>
         <select id="create-skill" class="action-input" style="width:100%">
           <option value="">Default</option>
-          <option value="feature">feature</option>
-          <option value="bugfix">bugfix</option>
-          <option value="refactor">refactor</option>
-          <option value="test">test</option>
-          <option value="docs">docs</option>
         </select>
       </div>
       <div class="form-group">
@@ -36,6 +31,19 @@ export function renderCreate(app, agents) {
       <div style="margin-top:8px">${UI.btn('Create Agent', { variant: 'primary', onclick: "Dashboard.createAgent(event)" })}</div>
     </div>
   `;
+
+  // Fetch discovered plugin skills and populate dropdown
+  get('/api/skills').then(skills => {
+    if (!Array.isArray(skills)) return;
+    const sel = document.getElementById('create-skill');
+    if (!sel) return;
+    for (const s of skills) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      sel.appendChild(opt);
+    }
+  });
 
   // Fetch zsuggest entries and merge with agent folders
   get('/api/suggestions').then(suggestions => {

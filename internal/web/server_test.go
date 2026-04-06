@@ -855,6 +855,70 @@ func TestSuggestionsFiltersSensitivePaths(t *testing.T) {
 	}
 }
 
+func TestSkillsEndpointEmpty(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	cfg.Profile.PluginCacheDir = "/nonexistent/plugin/cache"
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/skills")
+	if err != nil {
+		t.Fatalf("GET /api/skills: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var skills []string
+	if err := json.NewDecoder(resp.Body).Decode(&skills); err != nil {
+		t.Fatalf("decode skills: %v", err)
+	}
+	if len(skills) != 0 {
+		t.Errorf("expected 0 skills, got %d: %v", len(skills), skills)
+	}
+}
+
+func TestSkillsEndpointWithSkills(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	// Create fake plugin cache structure:
+	// <cacheDir>/agent-dashboard/agent-dashboard/0.1.0/skills/{bugfix,feature}/
+	cacheDir := t.TempDir()
+	cfg.Profile.PluginCacheDir = cacheDir
+	skillsBase := filepath.Join(cacheDir, "agent-dashboard", "agent-dashboard", "0.1.0", "skills")
+	os.MkdirAll(filepath.Join(skillsBase, "bugfix"), 0700)
+	os.MkdirAll(filepath.Join(skillsBase, "feature"), 0700)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/skills")
+	if err != nil {
+		t.Fatalf("GET /api/skills: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var skills []string
+	if err := json.NewDecoder(resp.Body).Decode(&skills); err != nil {
+		t.Fatalf("decode skills: %v", err)
+	}
+	if len(skills) != 2 {
+		t.Fatalf("expected 2 skills, got %d: %v", len(skills), skills)
+	}
+	if skills[0] != "bugfix" || skills[1] != "feature" {
+		t.Errorf("expected [bugfix feature], got %v", skills)
+	}
+}
+
 func TestIsSensitivePath(t *testing.T) {
 	tests := []struct {
 		path string
