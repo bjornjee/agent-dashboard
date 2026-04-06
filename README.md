@@ -145,19 +145,19 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 
 ## User Settings
 
-The dashboard supports a TOML configuration file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
+The dashboard supports a TOML configuration file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). The installer creates this from [`settings.example.toml`](settings.example.toml). Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
 
 Example `settings.toml`:
 
 ```toml
 [banner]
-show_mascot = false   # hide the axolotl pixel art (default: true)
-show_quote  = false   # hide the daily quote (default: true)
+show_mascot = true   # show the axolotl pixel art (default: true)
+show_quote  = true   # show the daily quote (default: true)
 
 [notifications]
-enabled       = true  # enable desktop notifications from adapter hooks (default: false)
-sound         = true  # play a sound with notifications (default: false)
-silent_events = true  # suppress event-level notifications (default: false)
+enabled       = false  # enable desktop notifications from adapter hooks (default: false)
+sound         = false  # play alert sound on attention events (default: false)
+silent_events = false  # show notification for non-alerting stops (default: false)
 
 [debug]
 key_log = false       # write key/mouse/focus events to debug-keys.log (default: false)
@@ -171,8 +171,8 @@ ascii_pet = false     # show animated ASCII pet in the left panel (default: fals
 | `banner` | `show_mascot` | `true` | Show the axolotl pixel art in the banner |
 | `banner` | `show_quote` | `true` | Show the daily quote in the banner |
 | `notifications` | `enabled` | `false` | Enable desktop notifications from adapter hooks |
-| `notifications` | `sound` | `false` | Play a sound with notifications |
-| `notifications` | `silent_events` | `false` | Suppress event-level notifications |
+| `notifications` | `sound` | `false` | Play alert sound on attention events |
+| `notifications` | `silent_events` | `false` | Show notification for non-alerting stops |
 | `debug` | `key_log` | `false` | Write key/mouse/focus events to `debug-keys.log` |
 | `experimental` | `ascii_pet` | `false` | Show animated ASCII pet in the left panel |
 
@@ -222,6 +222,7 @@ agent-dashboard/
 ├── release-please-config.json
 ├── install.sh                         # installer (accepts adapter name, default: claude-code)
 ├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
+├── settings.example.toml              # default settings (copied by install.sh)
 ├── go.mod / go.sum
 ├── cmd/
 │   ├── dashboard/
@@ -245,6 +246,7 @@ agent-dashboard/
 internal/
 ├── config/                            # agent profile + TOML settings loader
 ├── conversation/                      # JSONL parsing, subagent discovery
+├── gh/                                # GitHub CLI helpers (CODEOWNERS, merge args)
 ├── db/                                # SQLite operations (usage + quotes)
 ├── domain/                            # shared type definitions (Agent, Message, etc.)
 ├── lock/                              # singleton instance lock

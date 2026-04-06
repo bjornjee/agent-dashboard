@@ -61,7 +61,7 @@ install_claude_code() {
   local version
   version=$(node -e "console.log(require('$REPO_DIR/adapters/$ADAPTER/.claude-plugin/plugin.json').version)" 2>/dev/null \
     || (cd "$REPO_DIR" && v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -z "$v" ] && { git fetch --tags --quiet 2>/dev/null; v=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); }; [ -n "$v" ] && echo "$v") \
-    || cat "$REPO_DIR/VERSION" 2>/dev/null \
+    || sed 's/ *#.*//' "$REPO_DIR/VERSION" 2>/dev/null \
     || echo "0.0.0")
   local cache_dir="$plugins_dir/cache/agent-dashboard/agent-dashboard/$version"
   mkdir -p "$cache_dir"
@@ -158,19 +158,7 @@ SETTINGS_FILE="$STATE_DIR/settings.toml"
 echo "[2/3] Bootstrapping settings..."
 if [ ! -f "$SETTINGS_FILE" ]; then
   mkdir -p "$STATE_DIR"
-  cat > "$SETTINGS_FILE" <<'TOML'
-# Agent Dashboard settings
-# See https://github.com/bjornjee/agent-dashboard for documentation.
-
-[banner]
-show_mascot = true   # show the axolotl pixel art
-show_quote  = true   # show the daily quote
-
-[notifications]
-enabled       = false  # enable desktop notifications
-sound         = false  # play alert sound on attention events
-silent_events = false  # show notification for non-alerting stops
-TOML
+  cp "$REPO_DIR/settings.example.toml" "$SETTINGS_FILE"
   echo "  Created $SETTINGS_FILE"
 else
   echo "  $SETTINGS_FILE already exists, skipping."
