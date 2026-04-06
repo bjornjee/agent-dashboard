@@ -229,17 +229,72 @@ func TestSpeedIncreasesOverTime(t *testing.T) {
 	}
 }
 
-func TestSpeedCapsAtMax(t *testing.T) {
+func TestSpeedGrowsBeyondOldCap(t *testing.T) {
 	d := newDinoGameModel(80, 24)
 	d.state = dinoPlaying
-	d.speed10 = maxSpeed10
+	d.speed10 = 45 // old cap
 	d.tickCount = speedUpEvery - 1
 	d.spawnTimer = 999
 
 	d, _ = d.tick()
 
-	if d.speed10 > maxSpeed10 {
-		t.Errorf("speed10 = %d should not exceed maxSpeed10 %d", d.speed10, maxSpeed10)
+	if d.speed10 <= 45 {
+		t.Errorf("speed10 = %d, should grow beyond old cap of 45", d.speed10)
+	}
+}
+
+func TestDifficultyIncreases(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.tickCount = 0
+	d0 := d.difficulty()
+	d.tickCount = 1000
+	d1 := d.difficulty()
+	if d1 <= d0 {
+		t.Errorf("difficulty should increase: d(0)=%f, d(1000)=%f", d0, d1)
+	}
+}
+
+func TestSpawnRangeDecreases(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.tickCount = 0
+	min0, max0 := d.spawnRange()
+
+	d.tickCount = 5000
+	min1, max1 := d.spawnRange()
+
+	if min1 >= min0 {
+		t.Errorf("min spawn should decrease: %d -> %d", min0, min1)
+	}
+	if max1 >= max0 {
+		t.Errorf("max spawn should decrease: %d -> %d", max0, max1)
+	}
+}
+
+func TestSpawnFloor(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.tickCount = 1_000_000 // extreme difficulty
+	minT, maxT := d.spawnRange()
+	if minT < spawnFloor {
+		t.Errorf("minSpawn = %d, should not go below %d", minT, spawnFloor)
+	}
+	if maxT <= minT {
+		t.Errorf("maxSpawn = %d should be > minSpawn = %d", maxT, minT)
+	}
+}
+
+func TestCollisionForgivenessDecreases(t *testing.T) {
+	d := newDinoGameModel(80, 24)
+	d.tickCount = 0
+	w0, off0 := d.collisionParams(10)
+
+	d.tickCount = 1500 // diff=3, off=2, w=5 — clearly shrinking but not saturated
+	w1, off1 := d.collisionParams(10)
+
+	if w1 <= w0 {
+		t.Errorf("collision width should grow: %d -> %d", w0, w1)
+	}
+	if off1 >= off0 {
+		t.Errorf("collision offset should shrink: %d -> %d", off0, off1)
 	}
 }
 
