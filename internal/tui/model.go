@@ -143,10 +143,10 @@ type model struct {
 	confirmPaneID    string // tmux pane ID (%N) pending close
 	confirmSessionID string // session_id of agent pending close
 
-	// Send-key confirmation (plan approve)
-	confirmSendPaneID string
-	confirmSendKey    string
-	confirmSendLabel  string
+	// Send-key confirmation (guards against phantom keystrokes from mouse escape sequences)
+	confirmSendPaneID string // tmux pane ID for pending key send
+	confirmSendKey    string // key to send (y, n, 1-9)
+	confirmSendLabel  string // human-readable ack for the key send
 
 	// Jump confirmation (guards against phantom enter from mouse escape sequences)
 	confirmJumpPaneID string // tmux pane ID for pending jump
@@ -1037,6 +1037,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
+
+	case tea.KeyboardEnhancementsMsg:
+		if m.mode == modeDinoGame {
+			var cmd tea.Cmd
+			m.dino, cmd = m.dino.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	case tea.KeyReleaseMsg:
+		if m.mode == modeDinoGame {
+			var cmd tea.Cmd
+			m.dino, cmd = m.dino.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)

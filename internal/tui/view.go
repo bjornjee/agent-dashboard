@@ -758,6 +758,9 @@ func (m model) View() tea.View {
 		default:
 			v.MouseMode = tea.MouseModeCellMotion
 		}
+		if m.mode == modeDinoGame && m.dino.state == dinoPlaying {
+			v.KeyboardEnhancements.ReportEventTypes = true
+		}
 		return v
 	}
 
@@ -1321,7 +1324,6 @@ func (m model) renderHelpOverlay() string {
 	} else {
 		lines = append(lines, line("m", "Mark merged + send cleanup"))
 	}
-	lines = append(lines, line("y", "Approve plan"))
 	lines = append(lines, line("c", "Collapse/expand subagents"))
 	lines = append(lines, line("C", "Collapse/expand status group"))
 	lines = append(lines, "")
