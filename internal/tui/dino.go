@@ -105,13 +105,13 @@ var spriteBirdFrame1 = []string{
 const dinoPosX = 4
 
 // Collision hitbox — smaller than visual sprites for forgiving gameplay.
-// Visual dino is 10 wide, but collision uses 6 (trimmed 2 each side).
+// Visual dino is 10 wide, but collision uses 4 (trimmed 3 each side).
 const (
-	dinoCollisionW   = 6
+	dinoCollisionW   = 4
 	dinoStandHeight  = 5
-	dinoDuckCollW    = 6
+	dinoDuckCollW    = 4
 	dinoDuckHeight   = 3
-	dinoCollisionOff = 2 // offset from dinoPosX to start of collision box
+	dinoCollisionOff = 3 // offset from dinoPosX to start of collision box
 )
 
 // dinoGameHeight is the maximum lines the game needs:
@@ -125,9 +125,12 @@ const (
 //
 // Reaction zone math:
 //
-//	danger zone = dinoCollisionW + maxObstWidth = 6+6 = 12 cols
-//	base speed 2.0: 12/2 = 6 ticks to cross, 8 airborne → 4 col buffer ✓
-//	max speed 4.5:  12/4.5 ≈ 3 ticks to cross, 8 airborne → 22 col buffer ✓
+//	danger zone = dinoCollisionW + maxObstWidth = 4+6 = 10 cols
+//	base speed 2.0: 10/2 = 5 ticks to cross, 8 airborne → 6 col buffer ✓
+//	max speed 4.5:  10/4.5 ≈ 2 ticks to cross, 8 airborne → 27 col buffer ✓
+//
+// Recovery: spawn timer is tick-based (not column-based), so the player
+// always gets ≥1.25s (25 ticks) between obstacles regardless of speed.
 //
 // playRows = 5 + 10 = 15, total = 17.
 const dinoGameHeight = 17
@@ -140,13 +143,14 @@ const (
 	duckDuration = 10 // auto-release duck after this many ticks (~500ms at 50ms/tick)
 
 	// Speed is stored in tenths of a column per tick (fixed-point ×10).
-	baseSpeed10    = 20 // 2.0 col/tick — tuned so jump clears 12-col danger zone
+	baseSpeed10    = 20 // 2.0 col/tick — tuned so jump clears 10-col danger zone
 	maxSpeed10     = 45 // 4.5 col/tick
 	speedIncrement = 1  // +0.1 col/tick each interval
 	speedUpEvery   = 50 // ticks between speed bumps
 
-	minSpawnGap = 20 // minimum ticks between spawns
-	maxSpawnGap = 40
+	// Spawn timer is tick-based so recovery time is constant regardless of speed.
+	minSpawnTicks = 25 // 1.25s minimum between obstacles
+	maxSpawnTicks = 45 // 2.25s maximum
 )
 
 // -- Game model --
@@ -176,7 +180,7 @@ func newDinoGameModel(w, h int) dinoGameModel {
 		width:      w,
 		height:     h,
 		speed10:    baseSpeed10,
-		spawnTimer: minSpawnGap,
+		spawnTimer: minSpawnTicks,
 	}
 }
 
@@ -208,7 +212,7 @@ func (d dinoGameModel) handleKey(msg tea.KeyPressMsg) (dinoGameModel, tea.Cmd) {
 			d.speed10 = baseSpeed10
 			d.subPixel = 0
 			d.obstacles = nil
-			d.spawnTimer = minSpawnGap
+			d.spawnTimer = minSpawnTicks
 			d.dinoY = 0
 			d.jumpVel = 0
 			d.pose = dinoRunning
@@ -301,10 +305,11 @@ func (d dinoGameModel) tick() (dinoGameModel, tea.Cmd) {
 	d.obstacles = alive
 
 	// Spawn new obstacles
-	d.spawnTimer -= move
+	// Tick-based spawn timer — guarantees constant recovery time regardless of speed.
+	d.spawnTimer--
 	if d.spawnTimer <= 0 {
 		d.obstacles = append(d.obstacles, d.spawnObstacle())
-		d.spawnTimer = minSpawnGap + rand.IntN(maxSpawnGap-minSpawnGap)
+		d.spawnTimer = minSpawnTicks + rand.IntN(maxSpawnTicks-minSpawnTicks)
 	}
 
 	// Collision detection
