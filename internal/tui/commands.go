@@ -576,14 +576,16 @@ func (m model) loadDiagrams() tea.Cmd {
 }
 
 // openDiagram emits a temp HTML file for the given diagram and asks the OS
-// to open it in the default browser.
+// to open it in the default browser without stealing focus from the terminal
+// (the `-g` flag on macOS `open` keeps the dashboard foregrounded; on other
+// platforms it's silently ignored by the runner because we use `xdg-open`).
 func (m model) openDiagram(d diagrams.Diagram) tea.Cmd {
 	return func() tea.Msg {
 		path, err := diagrams.WriteTempHTML(d)
 		if err != nil {
 			return diagramOpenedMsg{err: err}
 		}
-		if err := gitRunner.Start("open", path); err != nil {
+		if err := gitRunner.Start("open", "-g", path); err != nil {
 			return diagramOpenedMsg{err: err}
 		}
 		return diagramOpenedMsg{}

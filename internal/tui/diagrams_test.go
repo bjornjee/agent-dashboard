@@ -226,9 +226,10 @@ func TestOpenDiagram_CallsGitRunnerStart(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("expected exactly 1 Start call, got %d", len(calls))
 	}
-	// Should be `open <tmp-html-path>`
-	if !startsWith(calls[0], "open ") {
-		t.Errorf("expected `open <path>`, got %q", calls[0])
+	// Should be `open -g <tmp-html-path>` — the -g flag prevents the
+	// browser from stealing focus from the dashboard.
+	if !startsWith(calls[0], "open -g ") {
+		t.Errorf("expected `open -g <path>`, got %q", calls[0])
 	}
 }
 
