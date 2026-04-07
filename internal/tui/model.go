@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
+	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -37,12 +38,15 @@ type treeNode struct {
 // agentCache stores per-agent UI state so switching between agents preserves
 // conversation history, live output, plan content, etc.
 type agentCache struct {
-	conversation   []domain.ConversationEntry
-	convFileOffset int64
-	convSessionKey string
-	planContent    string
-	planVisible    bool
-	subActivity    []domain.ActivityEntry
+	conversation    []domain.ConversationEntry
+	convFileOffset  int64
+	convSessionKey  string
+	planContent     string
+	planVisible     bool
+	subActivity     []domain.ActivityEntry
+	diagrams        []diagrams.Diagram
+	diagramsVisible bool
+	diagramsCursor  int
 }
 
 // -- Model --
@@ -120,6 +124,14 @@ type model struct {
 	planContent  string
 	planVisible  bool   // true when plan is shown in message VP
 	renderedPlan string // glamour-rendered plan markdown
+
+	// Diagrams for selected agent
+	diagrams             []diagrams.Diagram
+	diagramsVisible      bool
+	diagramsCursor       int
+	renderedDiagramSrc   string         // chroma-highlighted source of selected diagram
+	confirmDiagramPath   string         // pending deletion path
+	lastSeenDiagramCount map[string]int // sessionID -> count last surfaced to user
 
 	// Diff viewer
 	diffVisible       bool
@@ -425,12 +437,15 @@ func (m *model) saveCurrentCache() {
 		copy(activity, m.subActivity)
 	}
 	m.agentCaches[key] = &agentCache{
-		conversation:   m.conversation,
-		convFileOffset: m.convFileOffset,
-		convSessionKey: m.convSessionKey,
-		planContent:    m.planContent,
-		planVisible:    m.planVisible,
-		subActivity:    activity,
+		conversation:    m.conversation,
+		convFileOffset:  m.convFileOffset,
+		convSessionKey:  m.convSessionKey,
+		planContent:     m.planContent,
+		planVisible:     m.planVisible,
+		subActivity:     activity,
+		diagrams:        m.diagrams,
+		diagramsVisible: m.diagramsVisible,
+		diagramsCursor:  m.diagramsCursor,
 	}
 }
 
@@ -446,6 +461,9 @@ func (m *model) restoreCurrentCache() {
 		m.planContent = c.planContent
 		m.planVisible = c.planVisible
 		m.subActivity = c.subActivity
+		m.diagrams = c.diagrams
+		m.diagramsVisible = c.diagramsVisible
+		m.diagramsCursor = c.diagramsCursor
 	} else {
 		m.conversation = nil
 		m.convFileOffset = 0
@@ -453,7 +471,11 @@ func (m *model) restoreCurrentCache() {
 		m.planContent = ""
 		m.planVisible = false
 		m.subActivity = nil
+		m.diagrams = nil
+		m.diagramsVisible = false
+		m.diagramsCursor = 0
 	}
+	m.renderedDiagramSrc = ""
 
 	// Zero ephemeral/derived fields — regenerated on demand
 	m.capturedLines = nil
@@ -492,42 +514,43 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	hasSkills := len(skillList) > 0 && strings.Contains(cfg.Profile.Command, "claude")
 
 	return model{
-		cfg:               cfg,
-		agents:            nil,
-		statePath:         cfg.Profile.StateDir,
-		selfPaneID:        "",
-		tmuxAvailable:     false,
-		TmuxReady:         &atomic.Bool{},
-		textInput:         ti,
-		spawningSpinner:   s,
-		startupSpinner:    ss,
-		startupDone:       false,
-		mode:              modeNormal,
-		db:                database,
-		agentListVP:       viewport.New(),
-		filesVP:           viewport.New(),
-		historyVP:         viewport.New(),
-		messageVP:         viewport.New(),
-		focusedVP:         focusAgentList,
-		diffFileVP:        viewport.New(),
-		diffContentVP:     viewport.New(),
-		diffCollapsedDirs: make(map[string]bool),
-		diffFilterInput:   dfi,
-		agentCaches:       make(map[string]*agentCache),
-		agentSubagents:    make(map[string][]domain.SubagentInfo),
-		collapsed:         make(map[string]bool),
-		dismissed:         make(map[string]bool),
-		collapsedGroups:   make(map[int]bool),
-		quote:             "",
-		quoteAuthor:       "",
-		nowFunc:           time.Now,
-		pathExists:        zsuggest.DirExists,
-		availableSkills:   skillList,
-		skillsAvailable:   hasSkills,
-		pet:               newPetModel(0),
-		petEnabled:        cfg.Settings.Experimental.AsciiPet,
-		dino:              newDinoGameModel(0, 0),
-		dinoEnabled:       cfg.Settings.Experimental.DinoGame,
+		cfg:                  cfg,
+		agents:               nil,
+		statePath:            cfg.Profile.StateDir,
+		selfPaneID:           "",
+		tmuxAvailable:        false,
+		TmuxReady:            &atomic.Bool{},
+		textInput:            ti,
+		spawningSpinner:      s,
+		startupSpinner:       ss,
+		startupDone:          false,
+		mode:                 modeNormal,
+		db:                   database,
+		agentListVP:          viewport.New(),
+		filesVP:              viewport.New(),
+		historyVP:            viewport.New(),
+		messageVP:            viewport.New(),
+		focusedVP:            focusAgentList,
+		diffFileVP:           viewport.New(),
+		diffContentVP:        viewport.New(),
+		diffCollapsedDirs:    make(map[string]bool),
+		diffFilterInput:      dfi,
+		agentCaches:          make(map[string]*agentCache),
+		lastSeenDiagramCount: make(map[string]int),
+		agentSubagents:       make(map[string][]domain.SubagentInfo),
+		collapsed:            make(map[string]bool),
+		dismissed:            make(map[string]bool),
+		collapsedGroups:      make(map[int]bool),
+		quote:                "",
+		quoteAuthor:          "",
+		nowFunc:              time.Now,
+		pathExists:           zsuggest.DirExists,
+		availableSkills:      skillList,
+		skillsAvailable:      hasSkills,
+		pet:                  newPetModel(0),
+		petEnabled:           cfg.Settings.Experimental.AsciiPet,
+		dino:                 newDinoGameModel(0, 0),
+		dinoEnabled:          cfg.Settings.Experimental.DinoGame,
 	}
 }
 
@@ -577,7 +600,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateUpdatedMsg:
 		state.ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
 		prevTarget, prevSubID := m.selectedIdentity()
+		// Track previous diagram counts to detect increases.
+		prevDiagramCounts := make(map[string]int, len(m.agents))
+		for _, a := range m.agents {
+			if a.SessionID != "" {
+				prevDiagramCounts[a.SessionID] = a.DiagramCount
+			}
+		}
 		m.agents = state.SortedAgents(msg.state, m.selfPaneID)
+		// Flash status when any agent gains a new diagram while panel is closed.
+		for _, a := range m.agents {
+			if a.SessionID == "" || a.DiagramCount == 0 {
+				continue
+			}
+			prev := prevDiagramCounts[a.SessionID]
+			if a.DiagramCount > prev && !(m.diagramsVisible && m.selectedAgent() != nil && m.selectedAgent().SessionID == a.SessionID) {
+				m.setStatus("New diagram ready — D to view", false)
+				break
+			}
+		}
 		// Clear spawning status once the real agent appears on disk
 		if m.spawningFolder != "" {
 			for _, a := range m.agents {
@@ -658,7 +699,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateLeftContent()
 		m.updateRightContent()
-		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir), m.loadPlan()}
+		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir), m.loadPlan(), m.loadDiagrams()}
 		cmds = append(cmds, m.loadAllSubagents()...)
 		return m, tea.Batch(cmds...)
 
@@ -678,6 +719,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// and mouse is not hovering over the history viewport
 		if m.focusedVP != focusHistory && !m.mouseOverHistory() {
 			m.historyVP.GotoBottom()
+		}
+		return m, nil
+
+	case diagramsLoadedMsg:
+		// Only apply if message matches the currently selected agent's session.
+		a := m.selectedAgent()
+		if a != nil && a.SessionID == msg.sessionID {
+			m.diagrams = msg.list
+			if m.diagramsCursor >= len(m.diagrams) {
+				m.diagramsCursor = max(0, len(m.diagrams)-1)
+			}
+			if len(m.diagrams) == 0 {
+				m.diagramsVisible = false
+				m.renderedDiagramSrc = ""
+			} else {
+				m.renderedDiagramSrc = highlightMermaid(m.diagrams[m.diagramsCursor].Source)
+			}
+			m.updateRightContent()
+		}
+		return m, nil
+
+	case diagramOpenedMsg:
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Open diagram failed: %v", msg.err), true)
+		} else {
+			m.setStatus("Opened diagram in browser", false)
 		}
 		return m, nil
 
@@ -718,6 +785,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%5 == 0 {
 			cmds = append(cmds, m.loadAllSubagents()...)
 			cmds = append(cmds, m.loadPlan())
+			cmds = append(cmds, m.loadDiagrams())
 		}
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
@@ -967,6 +1035,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Cleanup failed at %s: %v", msg.progress, msg.err), true)
 			return m, nil
+		}
+		if m.cleanupSessionID != "" {
+			_ = diagrams.CleanupSession(m.cfg.Profile.StateDir, m.cleanupSessionID)
 		}
 		m.setStatus("Cleaned up", false)
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), pruneDead(m.statePath))

@@ -149,6 +149,18 @@
           }
         ],
         "description": "Desktop notification + agent state reporting; Blow sound when AskUserQuestion or ExitPlanMode detected"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/mermaid-extractor.js\"",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Extract mermaid diagrams from assistant messages into ~/.agent-dashboard/diagrams/"
       }
     ],
     "Notification": [

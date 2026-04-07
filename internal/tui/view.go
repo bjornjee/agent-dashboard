@@ -42,7 +42,7 @@ func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - m.bannerHeight() // matches resizeViewports
-	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") {
+	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") || (m.diagramsVisible && len(m.diagrams) > 0) {
 		fullHeight := panelHeight - defaultHeaderLines - 1 // -1 for section label
 		if fullHeight < minMessageHeight {
 			fullHeight = minMessageHeight
@@ -164,7 +164,9 @@ func (m *model) updateRightContent() {
 		m.planVisible = true
 	}
 
-	if m.planVisible && m.renderedPlan != "" && m.mode != modeReply {
+	if m.diagramsVisible && len(m.diagrams) > 0 && m.mode != modeReply {
+		m.messageVP.SetContent(m.renderDiagramsPanel())
+	} else if m.planVisible && m.renderedPlan != "" && m.mode != modeReply {
 		m.messageVP.SetContent(m.renderedPlan)
 	} else if isBlocked(effState) || isWaiting(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
@@ -375,6 +377,13 @@ func (m model) agentListContentWithLine() (string, int) {
 
 		// Metadata badges
 		badges := agentBadges(agent)
+		if dbadge := m.diagramBadge(agent.SessionID, agent.DiagramCount); dbadge != "" {
+			if badges == "" {
+				badges = dbadge
+			} else {
+				badges = badges + " " + dbadge
+			}
+		}
 		if badges != "" {
 			lines = append(lines, "    "+badges)
 		}
@@ -1019,7 +1028,10 @@ func (m model) renderRightPanel() string {
 		historyLabel = " " + boldStyle.Render("── History") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
 			" " + helpStyle.Render(strings.Repeat("─", 18))
 
-		if m.planVisible && m.renderedPlan != "" {
+		if m.diagramsVisible && len(m.diagrams) > 0 {
+			label := fmt.Sprintf("── Diagrams (%d) — D to close", len(m.diagrams))
+			messageLabel = " " + planLabelStyle.Render(label) + focusMarker(focusMessage) + scrollHint(m.messageVP)
+		} else if m.planVisible && m.renderedPlan != "" {
 			label := "── Plan (p to close)"
 			if rpEffState == "plan" {
 				label = "── Plan ready (y approve, r feedback)"
@@ -1072,6 +1084,13 @@ func (m model) renderRightPanel() string {
 			m.messageVP.View(),
 		}
 	} else if m.planVisible && m.renderedPlan != "" {
+		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
+		parts = []string{
+			headerStr,
+			messageLabel,
+			m.messageVP.View(),
+		}
+	} else if m.diagramsVisible && len(m.diagrams) > 0 {
 		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
 		parts = []string{
 			headerStr,

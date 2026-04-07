@@ -23,6 +23,8 @@ type Agent struct {
 	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
 	PRURL              string   `json:"pr_url,omitempty"`
 	PinnedState        string   `json:"pinned_state,omitempty"`
+	DiagramCount       int      `json:"diagram_count,omitempty"`
+	DiagramLatestTS    int64    `json:"diagram_latest_ts,omitempty"`
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.

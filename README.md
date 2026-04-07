@@ -17,6 +17,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **Diff viewer** — GitHub-style split-pane diff with syntax highlighting, smart context collapsing, and sticky function headers
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
+- **Mermaid diagram viewer** — captures `mermaid` blocks from agent messages, browse per-session, render in browser via `D`
 - **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr, rca)
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
@@ -144,6 +145,7 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `c` | Collapse/expand subagent tree |
 | `x` | Dismiss subagent or close agent pane |
 | `p` | Toggle plan view |
+| `D` | Toggle diagrams panel (when diagrams present) |
 | `u` | Toggle usage dashboard |
 | `G` (Shift+G) | Toggle dino runner game (when enabled) |
 | `h` | Show help overlay with all keybindings |

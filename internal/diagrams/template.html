@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}}</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #303446; color: #c6d0f5;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  header { padding: 1rem 1.5rem; border-bottom: 1px solid #414559; }
+  header h1 { font-size: 1rem; font-weight: 500; margin: 0; color: #c6d0f5; }
+  .diagram { display: flex; justify-content: center; padding: 2rem; }
+  .diagram pre { background: transparent; }
+</style>
+</head>
+<body>
+<header><h1>{{TITLE}}</h1></header>
+<div class="diagram"><pre class="mermaid">{{SOURCE}}</pre></div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
+</body>
+</html>
