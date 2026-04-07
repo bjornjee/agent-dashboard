@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+  :root {
+    --base:     #1e1e2e;
+    --surface:  #313244;
+    --overlay:  #45475a;
+    --text:     #cdd6f4;
+    --subtext:  #a6adc8;
+    --lavender: #b4befe;
+    --mauve:    #cba6f7;
+    --sapphire: #74c7ec;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: var(--base);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 0.9rem 1.5rem;
+    background: rgba(30, 30, 46, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--overlay);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  header h1 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text);
+    letter-spacing: 0.01em;
+  }
+  header .badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--base);
+    background: var(--lavender);
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  main {
+    padding: 2rem 1.5rem 4rem;
+    display: flex;
+    justify-content: center;
+  }
+  .diagram-card {
+    display: inline-block;
+    max-width: calc(100vw - 3rem);
+    padding: 2rem;
+    background: var(--surface);
+    border: 1px solid var(--overlay);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    overflow: auto;
+  }
+  .diagram-card pre.mermaid {
+    margin: 0;
+    background: transparent;
+    text-align: center;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+  /* Render at native size; the card scrolls horizontally if needed
+     so node labels stay readable on wide diagrams. */
+  .diagram-card pre.mermaid svg {
+    display: block;
+    margin: 0 auto;
+    height: auto;
+  }
+  footer {
+    text-align: center;
+    color: var(--subtext);
+    font-size: 0.75rem;
+    padding: 1.5rem 1rem 2rem;
+  }
+  footer code {
+    color: var(--lavender);
+    background: var(--surface);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="badge">Diagram</span>
+  <h1>{{TITLE}}</h1>
+</header>
+<main>
+  <div class="diagram-card">
+    <pre class="mermaid">{{SOURCE}}</pre>
+  </div>
+</main>
+<footer>Rendered locally by <code>agent-dashboard</code> · mermaid bundled · no network</footer>
+<script src="mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    securityLevel: 'loose',
+    fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+    themeVariables: {
+      // Catppuccin Mocha-inspired palette tuned for high contrast on dark bg.
+      background: '#313244',
+      primaryColor: '#45475a',
+      primaryTextColor: '#cdd6f4',
+      primaryBorderColor: '#b4befe',
+      secondaryColor: '#585b70',
+      secondaryTextColor: '#cdd6f4',
+      secondaryBorderColor: '#74c7ec',
+      tertiaryColor: '#45475a',
+      tertiaryTextColor: '#cdd6f4',
+      tertiaryBorderColor: '#cba6f7',
+      lineColor: '#a6adc8',
+      textColor: '#cdd6f4',
+      mainBkg: '#45475a',
+      nodeBorder: '#b4befe',
+      nodeTextColor: '#cdd6f4',
+      clusterBkg: '#1e1e2e',
+      clusterBorder: '#585b70',
+      titleColor: '#cdd6f4',
+      edgeLabelBackground: '#313244',
+      labelBackground: '#313244',
+      labelTextColor: '#cdd6f4',
+      // Sequence
+      actorBkg: '#45475a',
+      actorBorder: '#b4befe',
+      actorTextColor: '#cdd6f4',
+      actorLineColor: '#a6adc8',
+      signalColor: '#cdd6f4',
+      signalTextColor: '#cdd6f4',
+      labelBoxBkgColor: '#313244',
+      labelBoxBorderColor: '#b4befe',
+      noteBkgColor: '#f9e2af',
+      noteTextColor: '#1e1e2e',
+      noteBorderColor: '#f9e2af',
+      // State / class
+      altBackground: '#1e1e2e',
+    },
+    flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis', padding: 20 },
+    sequence: { useMaxWidth: false, showSequenceNumbers: false, wrap: true },
+    gantt:    { useMaxWidth: false },
+  });
+</script>
+</body>
+</html>

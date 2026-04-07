@@ -30,6 +30,7 @@ All keyboard shortcuts grouped by context. Press `h` in the dashboard to see thi
 | `c` | Collapse/expand subagent tree |
 | `x` | Dismiss subagent or close agent pane |
 | `p` | Toggle plan view |
+| `D` | Toggle diagrams panel (when diagrams present) |
 | `u` | Toggle usage dashboard |
 | `h` | Show help overlay |
 | `J` / `K` | Line scroll (plan/diff views) |

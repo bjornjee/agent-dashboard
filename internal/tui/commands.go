@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
+	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -137,7 +138,7 @@ func (m model) loadSelectionData() tea.Cmd {
 	if m.selectedSubagent() != nil {
 		return m.loadSubagentActivity()
 	}
-	return tea.Batch(m.captureSelected(), m.loadConversation(), m.loadPlan())
+	return tea.Batch(m.captureSelected(), m.loadConversation(), m.loadPlan(), m.loadDiagrams())
 }
 
 // loadSubagentActivity loads activity log for the selected subagent.
@@ -555,6 +556,50 @@ func (m model) loadPlan() tea.Cmd {
 		}
 		content := conversation.ReadPlanContent(plansDir, planSlug)
 		return planMsg{content: content}
+	}
+}
+
+// loadDiagrams returns a command that lists all diagrams stored for the
+// currently selected agent's session. The dashboard is a pure reader of
+// the on-disk layout written by the mermaid-extractor hook.
+func (m model) loadDiagrams() tea.Cmd {
+	agent := m.selectedAgent()
+	if agent == nil || agent.SessionID == "" {
+		return nil
+	}
+	sessionID := agent.SessionID
+	stateDir := m.cfg.Profile.StateDir
+	return func() tea.Msg {
+		list, _ := diagrams.Load(stateDir, sessionID)
+		return diagramsLoadedMsg{sessionID: sessionID, list: list}
+	}
+}
+
+// openDiagram emits a temp HTML file for the given diagram and asks the OS
+// to open it in the default browser without stealing focus from the terminal
+// (the `-g` flag on macOS `open` keeps the dashboard foregrounded; on other
+// platforms it's silently ignored by the runner because we use `xdg-open`).
+func (m model) openDiagram(d diagrams.Diagram) tea.Cmd {
+	return func() tea.Msg {
+		path, err := diagrams.WriteTempHTML(d)
+		if err != nil {
+			return diagramOpenedMsg{err: err}
+		}
+		if err := gitRunner.Start("open", "-g", path); err != nil {
+			return diagramOpenedMsg{err: err}
+		}
+		return diagramOpenedMsg{}
+	}
+}
+
+// deleteDiagram removes a diagram file and reloads the session list.
+func (m model) deleteDiagram(d diagrams.Diagram) tea.Cmd {
+	sessionID := d.SessionID
+	stateDir := m.cfg.Profile.StateDir
+	return func() tea.Msg {
+		_ = diagrams.Delete(d)
+		list, _ := diagrams.Load(stateDir, sessionID)
+		return diagramsLoadedMsg{sessionID: sessionID, list: list}
 	}
 }
 

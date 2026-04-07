@@ -3,6 +3,7 @@ package tui
 import (
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
@@ -34,6 +35,11 @@ type subagentsMsg struct {
 	agents       []domain.SubagentInfo
 }
 type planMsg struct{ content string }
+type diagramsLoadedMsg struct {
+	sessionID string
+	list      []diagrams.Diagram
+}
+type diagramOpenedMsg struct{ err error }
 type openEditorMsg struct{ err error }
 type openWorktreeMsg struct {
 	err error
@@ -78,6 +84,7 @@ const (
 	modeReply
 	modeUsage
 	modeConfirmClose
+	modeConfirmDeleteDiagram
 	modeConfirmMerge   // confirm before merging a PR
 	modeConfirmCleanup // confirm before post-merge cleanup
 	modeConfirmSend    // confirm before sending a key to an agent pane

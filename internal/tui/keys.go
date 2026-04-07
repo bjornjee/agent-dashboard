@@ -83,7 +83,7 @@ func PhantomFilter(m tea.Model, msg tea.Msg) tea.Msg {
 	// Confirmation modes: swallow confirming keys during cooldown.
 	if !mdl.confirmEnteredAt.IsZero() && time.Since(mdl.confirmEnteredAt) < confirmCooldown {
 		switch mdl.mode {
-		case modeConfirmClose, modeConfirmMerge, modeConfirmCleanup:
+		case modeConfirmClose, modeConfirmMerge, modeConfirmCleanup, modeConfirmDeleteDiagram:
 			if keyStr == "y" {
 				return nil
 			}
@@ -435,6 +435,71 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			m.messageVP.GotoBottom()
 			return m, cmd
+		}
+	}
+
+	// Confirm delete diagram mode
+	if m.mode == modeConfirmDeleteDiagram {
+		switch key {
+		case "y":
+			path := m.confirmDiagramPath
+			m.confirmDiagramPath = ""
+			m.mode = modeNormal
+			m.clearStatus()
+			// Find the diagram by path in the current list, then delete.
+			for _, d := range m.diagrams {
+				if d.Path == path {
+					return m, m.deleteDiagram(d)
+				}
+			}
+			return m, nil
+		case "n", "esc":
+			m.confirmDiagramPath = ""
+			m.mode = modeNormal
+			m.clearStatus()
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Diagrams panel internal navigation (when panel is open and message VP focused)
+	if m.diagramsVisible && m.focusedVP == focusMessage && len(m.diagrams) > 0 {
+		switch key {
+		case "j", "down":
+			if m.diagramsCursor < len(m.diagrams)-1 {
+				m.diagramsCursor++
+				m.renderedDiagramSrc = highlightMermaid(m.diagrams[m.diagramsCursor].Source)
+				m.updateRightContent()
+			}
+			return m, nil
+		case "k", "up":
+			if m.diagramsCursor > 0 {
+				m.diagramsCursor--
+				m.renderedDiagramSrc = highlightMermaid(m.diagrams[m.diagramsCursor].Source)
+				m.updateRightContent()
+			}
+			return m, nil
+		case "enter":
+			d := m.diagrams[m.diagramsCursor]
+			m.setStatus("Opening diagram...", false)
+			return m, m.openDiagram(d)
+		case "x":
+			d := m.diagrams[m.diagramsCursor]
+			m.confirmDiagramPath = d.Path
+			m.mode = modeConfirmDeleteDiagram
+			m.confirmEnteredAt = time.Now()
+			label := d.Title
+			if label == "" {
+				label = d.Type
+			}
+			m.setStatus(fmt.Sprintf("Delete \"%s\"? (y/n)", label), false)
+			m.statusMsgTick = -1
+			return m, nil
+		case "esc":
+			m.diagramsVisible = false
+			m.renderedDiagramSrc = ""
+			m.updateRightContent()
+			return m, nil
 		}
 	}
 
@@ -894,11 +959,34 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.planVisible = !m.planVisible
 			if m.planVisible {
 				m.focusedVP = focusMessage
+				m.diagramsVisible = false // mutually exclusive with diagrams
 			}
 			m.updateRightContent()
 			if m.planVisible {
 				m.messageVP.GotoTop()
 			}
+		}
+		return m, nil
+	case "D":
+		if a := m.selectedAgent(); a != nil && m.selectedSubagent() == nil && len(m.diagrams) > 0 {
+			m.diagramsVisible = !m.diagramsVisible
+			if m.diagramsVisible {
+				m.focusedVP = focusMessage
+				m.planVisible = false // mutually exclusive with plan view
+				if m.diagramsCursor >= len(m.diagrams) {
+					m.diagramsCursor = 0
+				}
+				if a.SessionID != "" {
+					if m.lastSeenDiagramCount == nil {
+						m.lastSeenDiagramCount = make(map[string]int)
+					}
+					m.lastSeenDiagramCount[a.SessionID] = a.DiagramCount
+				}
+				m.renderedDiagramSrc = highlightMermaid(m.diagrams[m.diagramsCursor].Source)
+			} else {
+				m.renderedDiagramSrc = ""
+			}
+			m.updateRightContent()
 		}
 		return m, nil
 	case "J":
