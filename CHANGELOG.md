@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/bjornjee/agent-dashboard/compare/v0.8.0...v0.9.0) (2026-04-07)
+
+
+### Features
+
+* capture and render mermaid diagrams as first-class artifacts ([#185](https://github.com/bjornjee/agent-dashboard/issues/185)) ([85f3dca](https://github.com/bjornjee/agent-dashboard/commit/85f3dca8ad3ed9999d4ae3115d573db6556131f2))
+
 ## [0.8.0](https://github.com/bjornjee/agent-dashboard/compare/v0.7.0...v0.8.0) (2026-04-06)
 
 
