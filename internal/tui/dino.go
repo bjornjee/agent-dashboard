@@ -72,10 +72,18 @@ var dinoRunFrame1 = []string{
 	"    ▀▀    ",
 }
 
-var dinoDuckFrame = []string{
-	"▄▄▄▄█▀██",
-	"▀▀████▀  ",
-	"   ▀ ▀   ",
+var dinoDuckFrame0 = []string{
+	"      ▄█▀██▄",
+	"      ███▀▀▀",
+	" ▄█▄█████▀  ",
+	"   ▀  ▀     ",
+}
+
+var dinoDuckFrame1 = []string{
+	"      ▄█▀██▄",
+	"      ███▀▀▀",
+	" ▄█▄█████▀  ",
+	"    ▀▀      ",
 }
 
 var spriteSmallCactus = []string{
@@ -110,7 +118,7 @@ const (
 	dinoCollisionW   = 4
 	dinoStandHeight  = 5
 	dinoDuckCollW    = 4
-	dinoDuckHeight   = 3
+	dinoDuckHeight   = 4
 	dinoCollisionOff = 3 // offset from dinoPosX to start of collision box
 )
 
@@ -419,7 +427,7 @@ func (d dinoGameModel) checkCollision() bool {
 	// Collision box becomes less forgiving as difficulty increases.
 	var dw, dh, collOff int
 	if d.isDucking() {
-		dw, collOff = d.collisionParams(9) // duck sprite is 9 columns
+		dw, collOff = d.collisionParams(15) // duck sprite is 15 columns
 		dh = dinoDuckHeight
 	} else {
 		dw, collOff = d.collisionParams(10) // stand sprite is 10 columns
@@ -560,7 +568,10 @@ func (d dinoGameModel) renderPlaying() string {
 // dinoSprite returns the current dino sprite based on pose and frame.
 func (d dinoGameModel) dinoSprite() []string {
 	if d.isDucking() {
-		return dinoDuckFrame
+		if d.frame%6 < 3 {
+			return dinoDuckFrame0
+		}
+		return dinoDuckFrame1
 	}
 	if d.frame%6 < 3 {
 		return dinoRunFrame0
