@@ -200,6 +200,51 @@ func TestWriteTempHTML_RecoversFromStaleMermaidJS(t *testing.T) {
 	}
 }
 
+// TestWriteTempHTML_FitToViewportAndNoInnerScroll asserts the rendered
+// HTML opens the diagram pre-scaled to fit the viewport (so wide diagrams
+// aren't cropped) and that the diagram card has no internal scroll — the
+// user pans/zooms the whole page instead. This guards against regressing
+// back to the base template that rendered at native size behind a
+// scrolling card.
+func TestWriteTempHTML_FitToViewportAndNoInnerScroll(t *testing.T) {
+	withTempDirRoot(t)
+	d := Diagram{
+		Hash:   "fit00001",
+		Title:  "fit test",
+		Source: "flowchart TD\n  A --> B",
+	}
+	p, err := WriteTempHTML(d)
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	body, _ := os.ReadFile(p)
+	s := string(body)
+
+	// Must have the zoom wrapper that is CSS-transformed for zoom/pan.
+	if !strings.Contains(s, `id="zoom-wrap"`) {
+		t.Errorf("expected #zoom-wrap in rendered HTML")
+	}
+	// Must compute fit-to-viewport on initial render and use it as default.
+	if !strings.Contains(s, "computeFitZoom") {
+		t.Errorf("expected computeFitZoom() in rendered HTML")
+	}
+	if !strings.Contains(s, "fitDefault") {
+		t.Errorf("expected fitDefault assignment in rendered HTML")
+	}
+	// Must have zoom toolbar buttons.
+	if !strings.Contains(s, `id="zoom-in"`) || !strings.Contains(s, `id="zoom-out"`) {
+		t.Errorf("expected zoom toolbar buttons in rendered HTML")
+	}
+	// Diagram card must NOT have inner scroll: no `overflow: auto` on it.
+	if strings.Contains(s, "overflow: auto") {
+		t.Errorf("diagram-card must not use overflow: auto — the page itself scrolls")
+	}
+	// Drag-to-pan support.
+	if !strings.Contains(s, "grabbing") {
+		t.Errorf("expected drag-to-pan (grabbing) support in rendered HTML")
+	}
+}
+
 func TestWriteTempHTML_EscapesHTML(t *testing.T) {
 	withTempDirRoot(t)
 	d := Diagram{

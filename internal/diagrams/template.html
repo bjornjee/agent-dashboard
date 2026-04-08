@@ -55,6 +55,40 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
+  header .spacer { flex: 1; }
+  header .toolbar {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+  }
+  header .toolbar button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--overlay);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  header .toolbar button:hover {
+    background: var(--overlay);
+    border-color: var(--lavender);
+  }
+  header .toolbar .zoom-pct {
+    font-size: 0.72rem;
+    color: var(--subtext);
+    min-width: 3.2rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
   main {
     padding: 2rem 1.5rem 4rem;
     display: flex;
@@ -62,14 +96,13 @@
   }
   .diagram-card {
     display: inline-block;
-    max-width: calc(100vw - 3rem);
     padding: 2rem;
     background: var(--surface);
     border: 1px solid var(--overlay);
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    overflow: auto;
   }
+  body.grabbing, body.grabbing * { cursor: grabbing !important; }
   .diagram-card pre.mermaid {
     margin: 0;
     background: transparent;
@@ -77,12 +110,43 @@
     font-size: 16px;
     line-height: 1.4;
   }
-  /* Render at native size; the card scrolls horizontally if needed
-     so node labels stay readable on wide diagrams. */
+  /* The SVG sits inside a transform-wrapper that we scale on zoom.
+     The wrapper's box dimensions track the scaled svg size so the
+     page itself grows and the browser provides natural scrollbars —
+     no internal scroll inside the card. */
+  .zoom-wrap {
+    display: inline-block;
+    transform-origin: 0 0;
+    transition: transform 0.08s ease-out;
+    will-change: transform;
+  }
   .diagram-card pre.mermaid svg {
     display: block;
     margin: 0 auto;
     height: auto;
+  }
+  .help-hint {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(49, 50, 68, 0.94);
+    border: 1px solid var(--overlay);
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--subtext);
+    backdrop-filter: blur(8px);
+    pointer-events: none;
+    line-height: 1.5;
+  }
+  .help-hint kbd {
+    color: var(--lavender);
+    background: var(--base);
+    border: 1px solid var(--overlay);
+    border-radius: 4px;
+    padding: 0 0.3rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.65rem;
   }
   footer {
     text-align: center;
@@ -103,13 +167,25 @@
 <header>
   <span class="badge">Diagram</span>
   <h1>{{TITLE}}</h1>
+  <span class="spacer"></span>
+  <div class="toolbar" role="toolbar" aria-label="Zoom controls">
+    <button id="zoom-out" title="Zoom out (−)">−</button>
+    <span class="zoom-pct" id="zoom-pct">100%</span>
+    <button id="zoom-in" title="Zoom in (+)">+</button>
+    <button id="zoom-reset" title="Reset zoom (0)">⟳</button>
+  </div>
 </header>
 <main>
-  <div class="diagram-card">
-    <pre class="mermaid">{{SOURCE}}</pre>
+  <div class="diagram-card" id="card">
+    <div class="zoom-wrap" id="zoom-wrap">
+      <pre class="mermaid">{{SOURCE}}</pre>
+    </div>
   </div>
 </main>
 <footer>Rendered locally by <code>agent-dashboard</code> · mermaid bundled · no network</footer>
+<div class="help-hint">
+  <kbd>+</kbd> / <kbd>−</kbd> zoom · <kbd>0</kbd> reset · <kbd>⌘</kbd>+scroll · drag to pan
+</div>
 <script src="{{MERMAID_JS}}"></script>
 <script>
   mermaid.initialize({
@@ -159,6 +235,194 @@
     sequence: { useMaxWidth: false, showSequenceNumbers: false, wrap: true },
     gantt:    { useMaxWidth: false },
   });
+
+  // ─── Zoom + pan controls ───────────────────────────────────────────────
+  // Pure-CSS transform on a wrapper around the rendered SVG. We never
+  // touch the SVG itself so mermaid's layout stays untouched. The card
+  // has no internal scrollbar — the wrap's box dimensions are kept in
+  // sync with the scaled svg so the page itself grows and the browser
+  // window provides the scrollbars.
+  (function () {
+    const wrap   = document.getElementById('zoom-wrap');
+    const pctEl  = document.getElementById('zoom-pct');
+    const btnIn  = document.getElementById('zoom-in');
+    const btnOut = document.getElementById('zoom-out');
+    const btnRst = document.getElementById('zoom-reset');
+
+    const MIN = 0.1;
+    const MAX = 4;
+    const STEP = 1.15;
+    let zoom = 1;
+    let fitDefault = 1; // computed once after first measure; used by reset
+    let baseW = 0, baseH = 0;
+
+    function measureBase() {
+      const svg = wrap.querySelector('svg');
+      if (!svg) return false;
+      // Prefer the SVG's intrinsic viewBox / attributes — these are the
+      // unscaled coordinates mermaid laid out at, independent of any
+      // CSS or transform applied later. getBoundingClientRect is racy
+      // because mermaid sizes the SVG asynchronously.
+      let w = 0, h = 0;
+      if (svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width > 0) {
+        w = svg.viewBox.baseVal.width;
+        h = svg.viewBox.baseVal.height;
+      } else {
+        const wAttr = parseFloat(svg.getAttribute('width')  || '0');
+        const hAttr = parseFloat(svg.getAttribute('height') || '0');
+        w = wAttr; h = hAttr;
+      }
+      if (!(w > 0 && h > 0)) {
+        const r = svg.getBoundingClientRect();
+        w = r.width / zoom;
+        h = r.height / zoom;
+      }
+      baseW = w;
+      baseH = h;
+      return baseW > 0 && baseH > 0;
+    }
+
+    function apply() {
+      wrap.style.transform = 'scale(' + zoom + ')';
+      if (baseW && baseH) {
+        wrap.style.width  = (baseW * zoom) + 'px';
+        wrap.style.height = (baseH * zoom) + 'px';
+      }
+      pctEl.textContent = Math.round(zoom * 100) + '%';
+    }
+    function setZoom(z) {
+      zoom = Math.max(MIN, Math.min(MAX, z));
+      apply();
+    }
+    function zoomBy(factor, anchorX, anchorY) {
+      // Zoom around an anchor point in viewport coords so the point
+      // under the cursor stays put. We adjust window scroll because
+      // the page (not the card) is what scrolls.
+      const before = zoom;
+      const next = Math.max(MIN, Math.min(MAX, before * factor));
+      if (next === before) return;
+      const ratio = next / before;
+      const sx = window.scrollX, sy = window.scrollY;
+      zoom = next;
+      apply();
+      window.scrollTo({
+        left: (sx + anchorX) * ratio - anchorX,
+        top:  (sy + anchorY) * ratio - anchorY,
+        behavior: 'instant',
+      });
+    }
+    function centerAnchor() {
+      return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    }
+
+    // Compute the largest zoom at which the entire diagram fits inside
+    // the visible viewport (minus header/footer/card padding). Result is
+    // clamped to [MIN, MAX]; we cap the upper bound at 1 so tiny diagrams
+    // are shown at native size rather than blown up.
+    function computeFitZoom() {
+      if (!(baseW > 0 && baseH > 0)) return 1;
+      const headerH = (document.querySelector('header') || {}).offsetHeight || 0;
+      const footerH = (document.querySelector('footer') || {}).offsetHeight || 0;
+      // mainPaddingY (2rem top + 4rem bottom) + cardPadding (2rem * 2) = 160px
+      // mainPaddingX (1.5rem * 2) + cardPadding (2rem * 2) = 112px
+      // +20px slack on each axis for scrollbars / sub-pixel rounding so
+      // the diagram is guaranteed to fit without producing overflow.
+      const padX = 132;
+      const padY = 180;
+      const availW = Math.max(1, window.innerWidth  - padX);
+      const availH = Math.max(1, window.innerHeight - headerH - footerH - padY);
+      const fit = Math.min(availW / baseW, availH / baseH);
+      return Math.max(MIN, Math.min(1, fit));
+    }
+
+    btnIn .addEventListener('click', () => { const a = centerAnchor(); zoomBy(STEP,   a.x, a.y); });
+    btnOut.addEventListener('click', () => { const a = centerAnchor(); zoomBy(1/STEP, a.x, a.y); });
+    btnRst.addEventListener('click', () => { setZoom(fitDefault); window.scrollTo(0, 0); });
+
+    // Keyboard
+    document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        const a = centerAnchor(); zoomBy(STEP, a.x, a.y);
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        const a = centerAnchor(); zoomBy(1/STEP, a.x, a.y);
+      } else if (e.key === '0') {
+        e.preventDefault();
+        setZoom(1);
+        window.scrollTo(0, 0);
+      }
+    });
+
+    // Ctrl/Cmd + wheel zoom anchored at the cursor.
+    window.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? STEP : 1/STEP;
+        zoomBy(factor, e.clientX, e.clientY);
+      }
+    }, { passive: false });
+
+    // Drag-to-pan via window scroll.
+    let dragging = false;
+    let startX = 0, startY = 0, startScrollX = 0, startScrollY = 0;
+    window.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest('button')) return;
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollX = window.scrollX;
+      startScrollY = window.scrollY;
+      document.body.classList.add('grabbing');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      window.scrollTo(
+        startScrollX - (e.clientX - startX),
+        startScrollY - (e.clientY - startY)
+      );
+    });
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove('grabbing');
+    });
+
+    // Wait for mermaid to inject the SVG, then measure and apply.
+    // mermaid v11 with startOnLoad:true renders on DOMContentLoaded;
+    // we poll briefly because there's no public "rendered" event.
+    // After the first successful measure we compute the fit-to-viewport
+    // zoom and apply it as the default — that way wide diagrams open
+    // fully visible instead of overflowing off-screen at 100%.
+    function waitForSvg(attempt) {
+      if (measureBase()) {
+        fitDefault = computeFitZoom();
+        zoom = fitDefault;
+        apply();
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (attempt < 50) setTimeout(() => waitForSvg(attempt + 1), 40);
+    }
+    waitForSvg(0);
+
+    // Recompute fit on window resize if the user is still at default
+    // (haven't zoomed manually). This keeps the diagram fully visible
+    // when the window is resized after open.
+    let lastFit = null;
+    window.addEventListener('resize', () => {
+      if (Math.abs(zoom - fitDefault) > 0.001) return; // user has interacted
+      const next = computeFitZoom();
+      if (lastFit !== null && Math.abs(next - lastFit) < 0.001) return;
+      lastFit = next;
+      fitDefault = next;
+      zoom = next;
+      apply();
+    });
+  })();
 </script>
 </body>
 </html>
