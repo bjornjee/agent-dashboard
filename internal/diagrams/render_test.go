@@ -2,7 +2,6 @@ package diagrams
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,15 +9,24 @@ import (
 	"time"
 )
 
-// withTempDirRoot redirects WriteTempHTML's temp-dir parent to t.TempDir()
-// for the duration of the test, so each test gets a hermetic dir and tests
-// cannot pollute the user's real /tmp/agent-dashboard-diagrams.
+// withTempDirRoot points WriteTempHTML at a hermetic t.TempDir() for the
+// duration of the test and resets the process-wide session dir so tests
+// don't leak state into each other.
 func withTempDirRoot(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	prev := tempDirRoot
-	tempDirRoot = func() string { return dir }
-	t.Cleanup(func() { tempDirRoot = prev })
+	sessionDirMu.Lock()
+	prevDir := sessionDir
+	prevFn := newSessionDir
+	sessionDir = dir
+	newSessionDir = func() (string, error) { return dir, nil }
+	sessionDirMu.Unlock()
+	t.Cleanup(func() {
+		sessionDirMu.Lock()
+		sessionDir = prevDir
+		newSessionDir = prevFn
+		sessionDirMu.Unlock()
+	})
 	return dir
 }
 
@@ -129,72 +137,76 @@ func TestWriteTempHTML_BundlesMermaidJS(t *testing.T) {
 	}
 }
 
-// TestWriteTempHTML_RecoversFromStaleMermaidJS is the regression test for
-// the bug where a stale or wrong mermaid.min.js sitting in the temp dir
-// (e.g. from an older binary or a hand-rolled stub) was reused forever
-// because the writer only ran when the file was missing. After the fix,
-// the on-disk file referenced by the rendered HTML must be byte-identical
-// to the embedded mermaidJS.
-func TestWriteTempHTML_RecoversFromStaleMermaidJS(t *testing.T) {
-	dir := withTempDirRoot(t)
-	cacheDir := filepath.Join(dir, tempDirName)
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+// TestWriteTempHTML_SessionDirIsProcessScoped documents the invariant that
+// replaced the stale-cache bug: each process creates its own temp directory
+// via os.MkdirTemp (matching `go tool cover -html` / `pprof -web`), so a
+// stale or wrong mermaid.min.js left anywhere else on disk cannot poison
+// the rendered HTML. Clearing the package-level session dir simulates a
+// fresh process invocation; the two runs must land in different directories.
+func TestWriteTempHTML_SessionDirIsProcessScoped(t *testing.T) {
+	// Bypass withTempDirRoot — we want the real newSessionDir (os.MkdirTemp)
+	// so we're testing the production path. Redirect TMPDIR into t.TempDir()
+	// so we don't pollute the user's real /tmp.
+	t.Setenv("TMPDIR", t.TempDir())
+	sessionDirMu.Lock()
+	prevDir := sessionDir
+	sessionDir = ""
+	sessionDirMu.Unlock()
+	t.Cleanup(func() {
+		sessionDirMu.Lock()
+		sessionDir = prevDir
+		sessionDirMu.Unlock()
+	})
 
-	// Plant a stub at the legacy path to simulate the broken cache.
-	stub := []byte("/* fake mermaid bundle for tests */ var mermaid = {};\n")
-	legacyPath := filepath.Join(cacheDir, "mermaid.min.js")
-	if err := os.WriteFile(legacyPath, stub, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	d := Diagram{
-		Hash:   "stale001",
-		Title:  "stale cache test",
-		Source: "flowchart TD\n  A --> B",
-	}
-	htmlPath, err := WriteTempHTML(d)
+	d := Diagram{Hash: "procscp1", Source: "flowchart TD\n  A --> B"}
+	p1, err := WriteTempHTML(d)
 	if err != nil {
-		t.Fatalf("write: %v", err)
+		t.Fatalf("write1: %v", err)
 	}
+	dir1 := filepath.Dir(p1)
 
-	body, _ := os.ReadFile(htmlPath)
-	bodyStr := string(body)
+	// Simulate a second process invocation.
+	sessionDirMu.Lock()
+	sessionDir = ""
+	sessionDirMu.Unlock()
 
-	// HTML must reference some sibling JS file (the exact name may be
-	// content-addressed; we discover it from the script tag).
-	scriptIdx := strings.Index(bodyStr, `<script src="`)
-	if scriptIdx == -1 {
-		t.Fatalf("HTML missing <script src=...>:\n%s", bodyStr)
-	}
-	rest := bodyStr[scriptIdx+len(`<script src="`):]
-	end := strings.Index(rest, `"`)
-	if end == -1 {
-		t.Fatalf("HTML script tag malformed:\n%s", bodyStr)
-	}
-	scriptName := rest[:end]
-	if scriptName == "" {
-		t.Fatalf("empty script src in HTML")
-	}
-
-	// The referenced sibling file must be the real bundle.
-	jsPath := filepath.Join(filepath.Dir(htmlPath), scriptName)
-	got, err := os.ReadFile(jsPath)
+	p2, err := WriteTempHTML(d)
 	if err != nil {
-		t.Fatalf("expected sibling JS at %s, got: %v", jsPath, err)
+		t.Fatalf("write2: %v", err)
 	}
-	wantSum := sha256.Sum256(mermaidJS)
-	gotSum := sha256.Sum256(got)
-	if wantSum != gotSum {
-		t.Errorf("sibling JS does not match embedded mermaidJS\n want sha256=%s (%d bytes)\n  got sha256=%s (%d bytes)",
-			hex.EncodeToString(wantSum[:]), len(mermaidJS),
-			hex.EncodeToString(gotSum[:]), len(got))
+	dir2 := filepath.Dir(p2)
+
+	if dir1 == dir2 {
+		t.Errorf("expected per-process session dirs, both runs landed in %s", dir1)
+	}
+	if !strings.Contains(filepath.Base(dir1), "agent-dashboard-diagrams-") {
+		t.Errorf("session dir name should include agent-dashboard-diagrams- prefix, got %s", dir1)
 	}
 
-	// Defense in depth: the embed itself must export `globalThis["mermaid"]`,
-	// otherwise mermaid.initialize will be undefined in the browser even with
-	// a fresh cache.
+	// Both runs must produce the real embedded bundle, independent of any
+	// file that happens to exist elsewhere. This is defense in depth — the
+	// fresh dir already makes pollution impossible.
+	for _, p := range []string{p1, p2} {
+		body, _ := os.ReadFile(p)
+		scriptIdx := strings.Index(string(body), `<script src="`)
+		if scriptIdx == -1 {
+			t.Fatalf("HTML missing <script src=...>:\n%s", body)
+		}
+		rest := string(body)[scriptIdx+len(`<script src="`):]
+		end := strings.Index(rest, `"`)
+		scriptName := rest[:end]
+		jsPath := filepath.Join(filepath.Dir(p), scriptName)
+		got, err := os.ReadFile(jsPath)
+		if err != nil {
+			t.Fatalf("expected sibling JS at %s: %v", jsPath, err)
+		}
+		if sha256.Sum256(got) != sha256.Sum256(mermaidJS) {
+			t.Errorf("sibling JS at %s does not match embedded mermaidJS", jsPath)
+		}
+	}
+
+	// The embedded bundle itself must export `globalThis["mermaid"]` —
+	// otherwise mermaid.initialize is undefined in the browser.
 	if !strings.Contains(string(mermaidJS), `globalThis["mermaid"]`) {
 		t.Errorf("embedded mermaid.min.js does not assign globalThis[\"mermaid\"]; the bundle is broken")
 	}
@@ -242,6 +254,29 @@ func TestWriteTempHTML_FitToViewportAndNoInnerScroll(t *testing.T) {
 	// Drag-to-pan support.
 	if !strings.Contains(s, "grabbing") {
 		t.Errorf("expected drag-to-pan (grabbing) support in rendered HTML")
+	}
+	// Fit must be width-only, not min(width, height). A tall flowchart in
+	// a landscape window gets squashed to unreadable 10-12% zoom when the
+	// height constraint binds; GitHub-style vertical scroll is the fix.
+	// Guard by asserting the computeFitZoom body references availW but
+	// not availH, and does not use Math.min on two dimensions.
+	fitStart := strings.Index(s, "function computeFitZoom()")
+	if fitStart == -1 {
+		t.Fatalf("computeFitZoom not found")
+	}
+	fitEnd := strings.Index(s[fitStart:], "\n    }")
+	if fitEnd == -1 {
+		t.Fatalf("computeFitZoom body not terminated")
+	}
+	fitBody := s[fitStart : fitStart+fitEnd]
+	if !strings.Contains(fitBody, "availW") {
+		t.Errorf("computeFitZoom must compute width availability, got:\n%s", fitBody)
+	}
+	if strings.Contains(fitBody, "availH") {
+		t.Errorf("computeFitZoom must NOT use height availability (fit-by-width only), got:\n%s", fitBody)
+	}
+	if strings.Contains(fitBody, "baseH") {
+		t.Errorf("computeFitZoom must NOT reference baseH (fit-by-width only), got:\n%s", fitBody)
 	}
 }
 

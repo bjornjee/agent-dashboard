@@ -9,7 +9,7 @@
     --base:     #1e1e2e;
     --surface:  #313244;
     --overlay:  #45475a;
-    --text:     #cdd6f4;
+    --text:     #f5f5ff;
     --subtext:  #a6adc8;
     --lavender: #b4befe;
     --mauve:    #cba6f7;
@@ -107,44 +107,121 @@
     margin: 0;
     background: transparent;
     text-align: center;
-    font-size: 18px;
+    font-size: 20px;
     line-height: 1.5;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
-  /* Crisper boxes + arrows. mermaid ships thin 1px strokes that disappear
-     on a dark surface when scaled down to fit — bump everything to 2px
-     and brighten the line color so edges read clearly at any zoom. */
+  /* ── Nodes: thick bright border, darker interior for contrast with text ── */
   .diagram-card pre.mermaid svg .node rect,
   .diagram-card pre.mermaid svg .node polygon,
   .diagram-card pre.mermaid svg .node circle,
   .diagram-card pre.mermaid svg .node ellipse,
   .diagram-card pre.mermaid svg .node path,
-  .diagram-card pre.mermaid svg .cluster rect,
   .diagram-card pre.mermaid svg .actor,
   .diagram-card pre.mermaid svg rect.actor {
-    stroke-width: 2px !important;
+    stroke-width: 4px !important;
+    stroke: #a5b4fc !important;   /* bright indigo border */
+    fill: #1e213a !important;     /* deep indigo interior */
   }
+  /* Cluster (subgraph) boxes: distinct treatment so nested structures read. */
+  .diagram-card pre.mermaid svg .cluster rect {
+    stroke-width: 3px !important;
+    stroke: #7c83b8 !important;
+    fill: rgba(30, 33, 58, 0.45) !important;
+    rx: 8 !important;
+    ry: 8 !important;
+  }
+  /* Edges + arrows: thick, bright, unmistakable at any zoom. */
   .diagram-card pre.mermaid svg .edgePath .path,
   .diagram-card pre.mermaid svg .flowchart-link,
   .diagram-card pre.mermaid svg .messageLine0,
   .diagram-card pre.mermaid svg .messageLine1,
   .diagram-card pre.mermaid svg line.loopLine,
   .diagram-card pre.mermaid svg .transition {
-    stroke-width: 2px !important;
+    stroke-width: 3px !important;
+    stroke: #cbd5ff !important;
+    fill: none !important;
   }
-  /* Arrowheads default to the line color; force them to the text color
-     so they pop on the dark card. */
   .diagram-card pre.mermaid svg marker path,
   .diagram-card pre.mermaid svg .arrowheadPath,
   .diagram-card pre.mermaid svg defs marker path {
-    fill: #cdd6f4 !important;
-    stroke: #cdd6f4 !important;
+    fill: #cbd5ff !important;
+    stroke: #cbd5ff !important;
   }
-  /* Edge labels: give them an opaque background so they don't blur into
-     lines crossing underneath. */
+  /* ── Text: bold glyphs. We deliberately do NOT force a fill color here
+     because classDef nodes may have light fills (yellow warn, cream note,
+     light pink) where white text is unreadable. Mermaid's theme engine
+     picks a text color appropriate for each node's fill — we let it.
+     The halo is what gives us readability across all backgrounds: a
+     translucent dark outline is nearly invisible on dark backgrounds
+     and reads as a soft shadow on light ones, boosting contrast in
+     both directions without flipping the text color. */
+  .diagram-card pre.mermaid svg .nodeLabel,
   .diagram-card pre.mermaid svg .edgeLabel,
-  .diagram-card pre.mermaid svg .edgeLabel rect {
-    fill: #313244 !important;
-    background-color: #313244 !important;
+  .diagram-card pre.mermaid svg .cluster-label,
+  .diagram-card pre.mermaid svg .label,
+  .diagram-card pre.mermaid svg text,
+  .diagram-card pre.mermaid svg foreignObject div,
+  .diagram-card pre.mermaid svg foreignObject span,
+  .diagram-card pre.mermaid svg foreignObject p {
+    font-weight: 700 !important;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "SF Pro Text", sans-serif !important;
+    font-variant-numeric: tabular-nums;
+  }
+  /* No halo here: runtime JS (tuneTextContrast) sets per-node text fill
+     based on the actual shape fill luminance, which is more reliable than
+     a halo trying to compensate for both dark and light backgrounds. */
+  /* Edge labels: opaque dark chip + white text (we know this bg is dark). */
+  .diagram-card pre.mermaid svg .edgeLabel rect,
+  .diagram-card pre.mermaid svg .edgeLabel .label rect {
+    fill: #0f1020 !important;
+    background-color: #0f1020 !important;
+  }
+  .diagram-card pre.mermaid svg .edgeLabel foreignObject div {
+    background-color: #0f1020 !important;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .diagram-card pre.mermaid svg .edgeLabel text,
+  .diagram-card pre.mermaid svg .edgeLabel tspan,
+  .diagram-card pre.mermaid svg .edgeLabel foreignObject div {
+    fill: #f5f5ff !important;
+    color: #f5f5ff !important;
+  }
+  /* Cluster labels sit on the semi-transparent dark cluster fill. */
+  .diagram-card pre.mermaid svg .cluster text,
+  .diagram-card pre.mermaid svg .cluster tspan,
+  .diagram-card pre.mermaid svg .cluster-label text,
+  .diagram-card pre.mermaid svg .cluster-label tspan {
+    fill: #f5f5ff !important;
+  }
+  /* Node text color is set per-node by tuneTextContrast() at runtime —
+     no static CSS override here so classDef/light-fill nodes get the
+     right color instead of inheriting our default white. */
+  /* ── Neutralize mermaid's pastel classDef defaults ──
+     classDefs like `classDef error fill:#f99` (which produced the pink
+     box in the previous screenshot) override our theme. Match them by
+     the inline `fill="#..."` attribute mermaid writes and re-tint to
+     match the dark palette while preserving the node's *semantic*
+     color via a distinct accent hue. */
+  .diagram-card pre.mermaid svg .node[class*="error"] rect,
+  .diagram-card pre.mermaid svg .node[class*="fail"] rect,
+  .diagram-card pre.mermaid svg g.node.error rect,
+  .diagram-card pre.mermaid svg g.node.fail rect {
+    stroke: #f38ba8 !important;   /* pink border, dark fill */
+    fill: #2a1822 !important;
+  }
+  .diagram-card pre.mermaid svg .node[class*="warn"] rect,
+  .diagram-card pre.mermaid svg g.node.warn rect {
+    stroke: #f9e2af !important;
+    fill: #2a2418 !important;
+  }
+  .diagram-card pre.mermaid svg .node[class*="success"] rect,
+  .diagram-card pre.mermaid svg .node[class*="ok"] rect,
+  .diagram-card pre.mermaid svg g.node.success rect {
+    stroke: #a6e3a1 !important;
+    fill: #172a1e !important;
   }
   /* The SVG sits inside a transform-wrapper that we scale on zoom.
      The wrapper's box dimensions track the scaled svg size so the
@@ -233,41 +310,48 @@
       // Catppuccin Mocha-inspired palette tuned for high contrast on dark bg.
       background: '#313244',
       primaryColor: '#45475a',
-      primaryTextColor: '#cdd6f4',
+      primaryTextColor: '#f5f5ff',
       primaryBorderColor: '#b4befe',
       secondaryColor: '#585b70',
-      secondaryTextColor: '#cdd6f4',
+      secondaryTextColor: '#f5f5ff',
       secondaryBorderColor: '#74c7ec',
       tertiaryColor: '#45475a',
-      tertiaryTextColor: '#cdd6f4',
+      tertiaryTextColor: '#f5f5ff',
       tertiaryBorderColor: '#cba6f7',
-      lineColor: '#cdd6f4',
-      textColor: '#cdd6f4',
+      lineColor: '#f5f5ff',
+      textColor: '#f5f5ff',
       mainBkg: '#45475a',
       nodeBorder: '#b4befe',
-      nodeTextColor: '#cdd6f4',
+      nodeTextColor: '#f5f5ff',
       clusterBkg: '#1e1e2e',
       clusterBorder: '#585b70',
-      titleColor: '#cdd6f4',
+      titleColor: '#f5f5ff',
       edgeLabelBackground: '#313244',
       labelBackground: '#313244',
-      labelTextColor: '#cdd6f4',
+      labelTextColor: '#f5f5ff',
       // Sequence
       actorBkg: '#45475a',
       actorBorder: '#b4befe',
-      actorTextColor: '#cdd6f4',
+      actorTextColor: '#f5f5ff',
       actorLineColor: '#a6adc8',
-      signalColor: '#cdd6f4',
-      signalTextColor: '#cdd6f4',
+      signalColor: '#f5f5ff',
+      signalTextColor: '#f5f5ff',
       labelBoxBkgColor: '#313244',
       labelBoxBorderColor: '#b4befe',
-      noteBkgColor: '#f9e2af',
-      noteTextColor: '#1e1e2e',
-      noteBorderColor: '#f9e2af',
+      // Keep notes dark too — the default cream #f9e2af bleeds into
+      // cylinder/storage shapes on some mermaid layouts and produces
+      // illegible dark-on-light text.
+      noteBkgColor: '#45475a',
+      noteTextColor: '#f5f5ff',
+      noteBorderColor: '#b4befe',
       // State / class
       altBackground: '#1e1e2e',
     },
-    flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis', padding: 20 },
+    // htmlLabels:false makes mermaid emit SVG <text> elements instead of
+    // foreignObject/<div>. SVG text honors primaryTextColor reliably and
+    // renders crisper at zoom — the foreignObject path drops our color
+    // overrides and produces the muddy text we saw in earlier screenshots.
+    flowchart: { useMaxWidth: false, htmlLabels: false, curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 60 },
     sequence: { useMaxWidth: false, showSequenceNumbers: false, wrap: true },
     gantt:    { useMaxWidth: false },
   });
@@ -351,23 +435,21 @@
       return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     }
 
-    // Compute the largest zoom at which the entire diagram fits inside
-    // the visible viewport (minus header/footer/card padding). Result is
-    // clamped to [MIN, MAX]; we cap the upper bound at 1 so tiny diagrams
-    // are shown at native size rather than blown up.
+    // Compute the zoom at which the diagram fills the viewport width.
+    // We intentionally fit-by-width only (not min(width,height)) so tall
+    // diagrams stay readable and scroll vertically, GitHub-style. Fitting
+    // by the smaller of the two dimensions squashes tall flowcharts down
+    // to ~10% in landscape windows, which makes node labels illegible.
+    // Result is clamped to [MIN, 1.0]; we cap the upper bound at 1 so
+    // narrow diagrams are shown at native size rather than blown up.
     function computeFitZoom() {
-      if (!(baseW > 0 && baseH > 0)) return 1;
-      const headerH = (document.querySelector('header') || {}).offsetHeight || 0;
-      const footerH = (document.querySelector('footer') || {}).offsetHeight || 0;
-      // mainPaddingY (2rem top + 4rem bottom) + cardPadding (2rem * 2) = 160px
+      if (!(baseW > 0)) return 1;
       // mainPaddingX (1.5rem * 2) + cardPadding (2rem * 2) = 112px
-      // +20px slack on each axis for scrollbars / sub-pixel rounding so
-      // the diagram is guaranteed to fit without producing overflow.
+      // +20px slack for scrollbars / sub-pixel rounding so the diagram
+      // is guaranteed to fit horizontally without producing overflow.
       const padX = 132;
-      const padY = 180;
-      const availW = Math.max(1, window.innerWidth  - padX);
-      const availH = Math.max(1, window.innerHeight - headerH - footerH - padY);
-      const fit = Math.min(availW / baseW, availH / baseH);
+      const availW = Math.max(1, window.innerWidth - padX);
+      const fit = availW / baseW;
       return Math.max(MIN, Math.min(1, fit));
     }
 
@@ -427,6 +509,106 @@
       document.body.classList.remove('grabbing');
     });
 
+    // ─── Per-node text contrast ────────────────────────────────────────
+    // CSS can't know the actual fill color of a classDef-styled node, so
+    // forcing white text globally breaks light-fill shapes (yellow warn,
+    // cream note, light pink). Instead, after mermaid renders we walk
+    // every .node, read its shape's computed fill, compute WCAG relative
+    // luminance, and set the text fill to dark or light so contrast is
+    // always readable regardless of what the source classDef specifies.
+    function parseColorToRgb(s) {
+      if (!s || s === 'none' || s === 'transparent') return null;
+      const m = s.match(/rgba?\(([^)]+)\)/);
+      if (m) {
+        const parts = m[1].split(',').map(x => parseFloat(x.trim()));
+        if (parts.length >= 3 && parts.every(n => !isNaN(n))) {
+          // Treat fully-transparent as no color.
+          if (parts.length === 4 && parts[3] === 0) return null;
+          return [parts[0], parts[1], parts[2]];
+        }
+      }
+      if (s[0] === '#') {
+        let hex = s.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        if (hex.length === 6) {
+          return [parseInt(hex.slice(0, 2), 16),
+                  parseInt(hex.slice(2, 4), 16),
+                  parseInt(hex.slice(4, 6), 16)];
+        }
+      }
+      return null;
+    }
+    // WCAG 2.x relative luminance, 0 (black) → 1 (white).
+    function relLuminance(rgb) {
+      const [r, g, b] = rgb.map(v => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+    // WCAG contrast ratio between two luminances.
+    function contrastRatio(la, lb) {
+      const lo = Math.min(la, lb), hi = Math.max(la, lb);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+    function tuneTextContrast() {
+      const DARK = '#0f1020';   // near-black with a hint of indigo
+      const LIGHT = '#f5f5ff';  // near-white
+      const lDark = relLuminance([15, 16, 32]);
+      const lLight = relLuminance([245, 245, 255]);
+      // Mermaid v11 ignores htmlLabels:false for flowchart and still
+      // wraps node labels in <foreignObject><div><span class="nodeLabel">,
+      // applying the theme color as an *inline style* on the span. We
+      // override that inline style with setProperty(..., 'important')
+      // based on the actual shape fill's luminance.
+      const nodes = document.querySelectorAll('.diagram-card svg .node');
+      nodes.forEach(node => {
+        // Prefer the label-container rect that mermaid draws as the
+        // shape's visual background; fall back to the first shape element.
+        const shape = node.querySelector('rect.basic.label-container')
+                   || node.querySelector('rect, polygon, circle, ellipse, path');
+        if (!shape) return;
+        const attrFill = shape.getAttribute('fill');
+        const styleFill = shape.style && shape.style.fill;
+        const computedFill = getComputedStyle(shape).fill;
+        const rgb = parseColorToRgb(attrFill)
+                 || parseColorToRgb(styleFill)
+                 || parseColorToRgb(computedFill);
+        if (!rgb) return;
+        // Pick whichever of DARK/LIGHT has the higher WCAG contrast
+        // ratio against the shape fill. This beats a naive luminance
+        // threshold on mid-saturation colors (pink, orange, teal) where
+        // both options look plausible but one is measurably more
+        // readable. On a #f38ba8 pink this picks dark (6.6:1) over
+        // white (2.3:1).
+        const lShape = relLuminance(rgb);
+        const isLight = contrastRatio(lShape, lDark) >= contrastRatio(lShape, lLight);
+        const textColor = isLight ? DARK : LIGHT;
+        // Override mermaid's inline theme color on every label element
+        // inside this node — span.nodeLabel, its <p>/<div>, and any
+        // native SVG text (used by sequence/state diagrams).
+        const labelEls = node.querySelectorAll(
+          '.nodeLabel, .nodeLabel p, .nodeLabel span, foreignObject div, foreignObject p, foreignObject span, text, tspan'
+        );
+        labelEls.forEach(el => {
+          el.style.setProperty('color', textColor, 'important');
+          el.style.setProperty('fill', textColor, 'important');
+        });
+        // Halo: dark text gets a light halo, light text gets a dark halo.
+        // Only meaningful on native SVG text — foreignObject HTML ignores
+        // paint-order — but it's cheap to set for both.
+        const haloColor = isLight
+          ? 'rgba(255,255,255,0.55)'
+          : 'rgba(0,0,0,0.45)';
+        node.querySelectorAll('text, tspan').forEach(t => {
+          t.style.setProperty('paint-order', 'stroke fill', 'important');
+          t.style.setProperty('stroke', haloColor, 'important');
+          t.style.setProperty('stroke-width', '2.5px', 'important');
+          t.style.setProperty('stroke-linejoin', 'round', 'important');
+        });
+      });
+    }
+
     // Wait for mermaid to inject the SVG, then measure and apply.
     // mermaid v11 with startOnLoad:true renders on DOMContentLoaded;
     // we poll briefly because there's no public "rendered" event.
@@ -435,6 +617,7 @@
     // fully visible instead of overflowing off-screen at 100%.
     function waitForSvg(attempt) {
       if (measureBase()) {
+        tuneTextContrast();
         fitDefault = computeFitZoom();
         zoom = fitDefault;
         apply();
