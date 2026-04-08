@@ -35,13 +35,13 @@ var mermaidJSFilename = func() string {
 // -html` and `pprof -web` — both generate one-shot HTML that the user's
 // browser loads and forgets. Advantages over a fixed shared directory:
 //
-//   1. No cross-process collision: a stale bundle left by an older binary
-//      cannot poison a new process because each process gets its own dir.
-//      This was the origin of the "mermaid renders as plain text" bug.
-//   2. No custom reaper: unique dirs under the OS temp are swept by the
-//      system's normal temp-cleanup policy.
-//   3. No cache coherence problem: content-addressing and atomic writes
-//      are defense in depth, not the primary correctness mechanism.
+//  1. No cross-process collision: a stale bundle left by an older binary
+//     cannot poison a new process because each process gets its own dir.
+//     This was the origin of the "mermaid renders as plain text" bug.
+//  2. No custom reaper: unique dirs under the OS temp are swept by the
+//     system's normal temp-cleanup policy.
+//  3. No cache coherence problem: content-addressing and atomic writes
+//     are defense in depth, not the primary correctness mechanism.
 //
 // Reusing the same dir for every diagram within a single process keeps
 // repeated opens fast (write the 3MB bundle once) and lets the browser
