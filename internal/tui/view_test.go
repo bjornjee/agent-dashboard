@@ -72,6 +72,65 @@ func TestAgentListContentClampsWidth(t *testing.T) {
 	})
 }
 
+// Diagram badge (📑) must render on the same line as the parent agent's
+// title (paneID + repo), not on a separate badges row underneath. This
+// regression keeps the badge visible when the metadata badges line is
+// missing or scrolled off.
+func TestAgentListContent_DiagramBadgeOnTitleLine(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := model{
+		leftWidth: 60,
+		agents: []domain.Agent{
+			{
+				Target:       "1:1.0",
+				Window:       3,
+				Pane:         1,
+				State:        "running",
+				Cwd:          "/tmp/agent-dashboard",
+				SessionID:    "sess-A",
+				DiagramCount: 2,
+			},
+		},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		agentSubagents:       map[string][]domain.SubagentInfo{},
+		collapsed:            map[string]bool{},
+		collapsedGroups:      map[int]bool{},
+		lastSeenDiagramCount: map[string]int{"sess-A": 0},
+	}
+
+	content := m.agentListContent()
+	lines := strings.Split(content, "\n")
+
+	// Find the line containing the repo title.
+	var titleLine string
+	for _, l := range lines {
+		if strings.Contains(l, "agent-dashboard") {
+			titleLine = l
+			break
+		}
+	}
+	if titleLine == "" {
+		t.Fatalf("could not find title line in:\n%s", content)
+	}
+	if !strings.Contains(titleLine, "📑") {
+		t.Errorf("diagram badge 📑 must appear on title line, got:\n%q\nfull:\n%s", titleLine, content)
+	}
+
+	// Standalone badges row must NOT carry the diagram badge any more.
+	for _, l := range lines {
+		if l == titleLine {
+			continue
+		}
+		if strings.Contains(l, "📑") {
+			t.Errorf("📑 badge should only be on title line, also found on:\n%q", l)
+		}
+	}
+}
+
 func TestRenderHelpOverlayContainsSections(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 

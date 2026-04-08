@@ -341,7 +341,15 @@ func (m model) agentListContentWithLine() (string, int) {
 		if plainRepo == "" {
 			plainRepo = agent.Session
 		}
-		maxRepo := m.leftWidth - 5 - len(paneID) - 2 - len(duration)
+		// Diagram badge rendered inline on the title row (to the right of
+		// the repo name) so it stays visible even when the metadata row is
+		// clipped or scrolled off. Reserve ~3 cells for the emoji + space.
+		dbadge := m.diagramBadge(agent.SessionID, agent.DiagramCount)
+		dbadgeWidth := 0
+		if dbadge != "" {
+			dbadgeWidth = 3 // " 📑" ≈ space + 2-cell emoji
+		}
+		maxRepo := m.leftWidth - 5 - len(paneID) - 2 - len(duration) - dbadgeWidth
 		displayRepo := repoStyled
 		repoRunes := []rune(plainRepo)
 		if maxRepo > 0 && len(repoRunes) > maxRepo {
@@ -352,7 +360,12 @@ func (m model) agentListContentWithLine() (string, int) {
 		if nodeIdx == m.selected {
 			selectedLine = len(lines)
 		}
-		line := fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayRepo, duration)
+		var line string
+		if dbadge != "" {
+			line = fmt.Sprintf("   %s %s %s %s  %s", icon, paneID, displayRepo, dbadge, duration)
+		} else {
+			line = fmt.Sprintf("   %s %s %s  %s", icon, paneID, displayRepo, duration)
+		}
 
 		if nodeIdx == m.selected {
 			line = highlightLine(line, m.leftWidth)
@@ -375,15 +388,9 @@ func (m model) agentListContentWithLine() (string, int) {
 			lines = append(lines, branchLine)
 		}
 
-		// Metadata badges
+		// Metadata badges (diagram badge is rendered inline on the title
+		// row above, so it is intentionally omitted here).
 		badges := agentBadges(agent)
-		if dbadge := m.diagramBadge(agent.SessionID, agent.DiagramCount); dbadge != "" {
-			if badges == "" {
-				badges = dbadge
-			} else {
-				badges = badges + " " + dbadge
-			}
-		}
 		if badges != "" {
 			lines = append(lines, "    "+badges)
 		}
