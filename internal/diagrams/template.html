@@ -107,8 +107,44 @@
     margin: 0;
     background: transparent;
     text-align: center;
-    font-size: 16px;
-    line-height: 1.4;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+  /* Crisper boxes + arrows. mermaid ships thin 1px strokes that disappear
+     on a dark surface when scaled down to fit — bump everything to 2px
+     and brighten the line color so edges read clearly at any zoom. */
+  .diagram-card pre.mermaid svg .node rect,
+  .diagram-card pre.mermaid svg .node polygon,
+  .diagram-card pre.mermaid svg .node circle,
+  .diagram-card pre.mermaid svg .node ellipse,
+  .diagram-card pre.mermaid svg .node path,
+  .diagram-card pre.mermaid svg .cluster rect,
+  .diagram-card pre.mermaid svg .actor,
+  .diagram-card pre.mermaid svg rect.actor {
+    stroke-width: 2px !important;
+  }
+  .diagram-card pre.mermaid svg .edgePath .path,
+  .diagram-card pre.mermaid svg .flowchart-link,
+  .diagram-card pre.mermaid svg .messageLine0,
+  .diagram-card pre.mermaid svg .messageLine1,
+  .diagram-card pre.mermaid svg line.loopLine,
+  .diagram-card pre.mermaid svg .transition {
+    stroke-width: 2px !important;
+  }
+  /* Arrowheads default to the line color; force them to the text color
+     so they pop on the dark card. */
+  .diagram-card pre.mermaid svg marker path,
+  .diagram-card pre.mermaid svg .arrowheadPath,
+  .diagram-card pre.mermaid svg defs marker path {
+    fill: #cdd6f4 !important;
+    stroke: #cdd6f4 !important;
+  }
+  /* Edge labels: give them an opaque background so they don't blur into
+     lines crossing underneath. */
+  .diagram-card pre.mermaid svg .edgeLabel,
+  .diagram-card pre.mermaid svg .edgeLabel rect {
+    fill: #313244 !important;
+    background-color: #313244 !important;
   }
   /* The SVG sits inside a transform-wrapper that we scale on zoom.
      The wrapper's box dimensions track the scaled svg size so the
@@ -205,7 +241,7 @@
       tertiaryColor: '#45475a',
       tertiaryTextColor: '#cdd6f4',
       tertiaryBorderColor: '#cba6f7',
-      lineColor: '#a6adc8',
+      lineColor: '#cdd6f4',
       textColor: '#cdd6f4',
       mainBkg: '#45475a',
       nodeBorder: '#b4befe',
