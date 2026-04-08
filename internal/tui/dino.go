@@ -73,7 +73,7 @@ var dinoRunFrame1 = []string{
 }
 
 var dinoDuckFrame0 = []string{
-    "      ▄█▀██▄",
+	"      ▄█▀██▄",
 	"▄█▄██████▀▀▀",
 	" ▀▀▀▀██▀    ",
 	"     ▀  ▀   ",
