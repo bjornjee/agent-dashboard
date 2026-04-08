@@ -1,6 +1,8 @@
 package diagrams
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +10,20 @@ import (
 	"time"
 )
 
+// withTempDirRoot redirects WriteTempHTML's temp-dir parent to t.TempDir()
+// for the duration of the test, so each test gets a hermetic dir and tests
+// cannot pollute the user's real /tmp/agent-dashboard-diagrams.
+func withTempDirRoot(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	prev := tempDirRoot
+	tempDirRoot = func() string { return dir }
+	t.Cleanup(func() { tempDirRoot = prev })
+	return dir
+}
+
 func TestWriteTempHTML_Deterministic(t *testing.T) {
+	withTempDirRoot(t)
 	d := Diagram{
 		SessionID: "s",
 		Hash:      "abc12345",
@@ -39,6 +54,7 @@ func TestWriteTempHTML_Deterministic(t *testing.T) {
 }
 
 func TestWriteTempHTML_EmbedsSourceAndTitle(t *testing.T) {
+	withTempDirRoot(t)
 	d := Diagram{
 		SessionID: "s",
 		Hash:      "def67890",
@@ -75,6 +91,7 @@ func TestWriteTempHTML_EmbedsSourceAndTitle(t *testing.T) {
 // regression where the temp HTML loaded mermaid via https://, which Safari
 // and some Chrome configurations block when the page is opened over file://.
 func TestWriteTempHTML_BundlesMermaidJS(t *testing.T) {
+	withTempDirRoot(t)
 	d := Diagram{
 		Hash:   "bundle01",
 		Title:  "bundle test",
@@ -84,32 +101,107 @@ func TestWriteTempHTML_BundlesMermaidJS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(p) })
 
 	content, _ := os.ReadFile(p)
 	s := string(content)
 	if strings.Contains(s, "https://") || strings.Contains(s, "http://") {
 		t.Errorf("HTML must not reference any remote URL (file:// origin would block it). got:\n%s", s)
 	}
-	if !strings.Contains(s, `src="mermaid.min.js"`) {
-		t.Errorf("HTML must reference sibling mermaid.min.js, got:\n%s", s)
+	if !strings.Contains(s, `src="`+mermaidJSFilename+`"`) {
+		t.Errorf("HTML must reference sibling %s, got:\n%s", mermaidJSFilename, s)
 	}
-	jsPath := filepath.Join(filepath.Dir(p), "mermaid.min.js")
+	jsPath := filepath.Join(filepath.Dir(p), mermaidJSFilename)
 	info, err := os.Stat(jsPath)
 	if err != nil {
-		t.Fatalf("expected sibling mermaid.min.js at %s, got: %v", jsPath, err)
+		t.Fatalf("expected sibling %s at %s, got: %v", mermaidJSFilename, jsPath, err)
 	}
-	if info.Size() < 100_000 {
-		t.Errorf("mermaid.min.js is suspiciously small (%d bytes)", info.Size())
+	// Real mermaid bundle is ~3MB; a stub that only declares the global
+	// is well under 1KB. Require the real thing.
+	if info.Size() < 1_000_000 {
+		t.Errorf("%s is suspiciously small (%d bytes) — probably a stub", mermaidJSFilename, info.Size())
 	}
-	// Sanity-check that the file is actually mermaid (not a 404 page).
-	head, _ := os.ReadFile(jsPath)
-	if !strings.Contains(string(head[:200]), "mermaid") && !strings.Contains(string(head[:1000]), "mermaid") {
-		t.Errorf("mermaid.min.js file does not look like mermaid runtime")
+	// Must match the embed byte-for-byte.
+	got, _ := os.ReadFile(jsPath)
+	wantSum := sha256.Sum256(mermaidJS)
+	gotSum := sha256.Sum256(got)
+	if wantSum != gotSum {
+		t.Errorf("on-disk %s does not match embedded mermaidJS", mermaidJSFilename)
+	}
+}
+
+// TestWriteTempHTML_RecoversFromStaleMermaidJS is the regression test for
+// the bug where a stale or wrong mermaid.min.js sitting in the temp dir
+// (e.g. from an older binary or a hand-rolled stub) was reused forever
+// because the writer only ran when the file was missing. After the fix,
+// the on-disk file referenced by the rendered HTML must be byte-identical
+// to the embedded mermaidJS.
+func TestWriteTempHTML_RecoversFromStaleMermaidJS(t *testing.T) {
+	dir := withTempDirRoot(t)
+	cacheDir := filepath.Join(dir, tempDirName)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plant a stub at the legacy path to simulate the broken cache.
+	stub := []byte("/* fake mermaid bundle for tests */ var mermaid = {};\n")
+	legacyPath := filepath.Join(cacheDir, "mermaid.min.js")
+	if err := os.WriteFile(legacyPath, stub, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := Diagram{
+		Hash:   "stale001",
+		Title:  "stale cache test",
+		Source: "flowchart TD\n  A --> B",
+	}
+	htmlPath, err := WriteTempHTML(d)
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	body, _ := os.ReadFile(htmlPath)
+	bodyStr := string(body)
+
+	// HTML must reference some sibling JS file (the exact name may be
+	// content-addressed; we discover it from the script tag).
+	scriptIdx := strings.Index(bodyStr, `<script src="`)
+	if scriptIdx == -1 {
+		t.Fatalf("HTML missing <script src=...>:\n%s", bodyStr)
+	}
+	rest := bodyStr[scriptIdx+len(`<script src="`):]
+	end := strings.Index(rest, `"`)
+	if end == -1 {
+		t.Fatalf("HTML script tag malformed:\n%s", bodyStr)
+	}
+	scriptName := rest[:end]
+	if scriptName == "" {
+		t.Fatalf("empty script src in HTML")
+	}
+
+	// The referenced sibling file must be the real bundle.
+	jsPath := filepath.Join(filepath.Dir(htmlPath), scriptName)
+	got, err := os.ReadFile(jsPath)
+	if err != nil {
+		t.Fatalf("expected sibling JS at %s, got: %v", jsPath, err)
+	}
+	wantSum := sha256.Sum256(mermaidJS)
+	gotSum := sha256.Sum256(got)
+	if wantSum != gotSum {
+		t.Errorf("sibling JS does not match embedded mermaidJS\n want sha256=%s (%d bytes)\n  got sha256=%s (%d bytes)",
+			hex.EncodeToString(wantSum[:]), len(mermaidJS),
+			hex.EncodeToString(gotSum[:]), len(got))
+	}
+
+	// Defense in depth: the embed itself must export `globalThis["mermaid"]`,
+	// otherwise mermaid.initialize will be undefined in the browser even with
+	// a fresh cache.
+	if !strings.Contains(string(mermaidJS), `globalThis["mermaid"]`) {
+		t.Errorf("embedded mermaid.min.js does not assign globalThis[\"mermaid\"]; the bundle is broken")
 	}
 }
 
 func TestWriteTempHTML_EscapesHTML(t *testing.T) {
+	withTempDirRoot(t)
 	d := Diagram{
 		Hash:   "esc00001",
 		Title:  "<script>alert(1)</script>",
