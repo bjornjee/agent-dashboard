@@ -218,7 +218,10 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.worktree_cwd, undefined);
   });
 
-  it('preserves "pr" state when resolveState returns "running"', () => {
+  it('allows transition out of "pr" state when not pinned', () => {
+    // When pr-detect runs under gh-authed mode, it sets state="pr" without
+    // pinned_state. Subsequent agent activity should overwrite the state so
+    // the dashboard reflects live work.
     const existing = {
       target: 'main:1.0',
       state: 'pr',
@@ -238,11 +241,11 @@ describe('fast hook state updates (per-agent files)', () => {
       worktreeCwd: null,
     });
 
-    assert.equal(changed, false, 'should not overwrite pr state');
-    assert.equal(update, null);
+    assert.equal(changed, true, 'unpinned pr state should not stick');
+    assert.equal(update.state, 'running');
   });
 
-  it('preserves "merged" state when resolveState returns "running"', () => {
+  it('allows transition out of "merged" state when not pinned', () => {
     const existing = {
       target: 'main:1.0',
       state: 'merged',
@@ -262,8 +265,8 @@ describe('fast hook state updates (per-agent files)', () => {
       worktreeCwd: null,
     });
 
-    assert.equal(changed, false, 'should not overwrite merged state');
-    assert.equal(update, null);
+    assert.equal(changed, true, 'unpinned merged state should not stick');
+    assert.equal(update.state, 'running');
   });
 
   it('preserves pinned_state "pr" even when state differs', () => {
