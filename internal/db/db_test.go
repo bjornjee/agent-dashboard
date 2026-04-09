@@ -177,6 +177,76 @@ func TestCostForDate(t *testing.T) {
 	}
 }
 
+func TestUsageByDay(t *testing.T) {
+	d := testDB(t)
+
+	// Two sessions across three days
+	d.UpsertUsage("2026-03-26", "sess-1", "opus", domain.Usage{
+		InputTokens: 1000, OutputTokens: 500, CacheReadTokens: 200, CacheWriteTokens: 100, CostUSD: 1.00,
+	})
+	d.UpsertUsage("2026-03-27", "sess-1", "opus", domain.Usage{
+		InputTokens: 2000, OutputTokens: 800, CacheReadTokens: 300, CacheWriteTokens: 150, CostUSD: 2.00,
+	})
+	d.UpsertUsage("2026-03-27", "sess-2", "sonnet", domain.Usage{
+		InputTokens: 500, OutputTokens: 200, CacheReadTokens: 50, CacheWriteTokens: 25, CostUSD: 0.50,
+	})
+	d.UpsertUsage("2026-03-28", "sess-1", "opus", domain.Usage{
+		InputTokens: 3000, OutputTokens: 1200, CacheReadTokens: 400, CacheWriteTokens: 200, CostUSD: 3.00,
+	})
+
+	// Only fetch from 03-27 onward (excludes 03-26)
+	since := time.Date(2026, 3, 27, 0, 0, 0, 0, time.UTC)
+	days := d.UsageByDay(since)
+
+	if len(days) != 2 {
+		t.Fatalf("UsageByDay: got %d days, want 2", len(days))
+	}
+
+	// 2026-03-27: sess-1 + sess-2 aggregated
+	d0 := days[0]
+	if d0.Date != "2026-03-27" {
+		t.Errorf("day 0 date: got %s, want 2026-03-27", d0.Date)
+	}
+	if d0.InputTokens != 2500 {
+		t.Errorf("day 0 input: got %d, want 2500", d0.InputTokens)
+	}
+	if d0.OutputTokens != 1000 {
+		t.Errorf("day 0 output: got %d, want 1000", d0.OutputTokens)
+	}
+	if d0.CacheReadTokens != 350 {
+		t.Errorf("day 0 cache read: got %d, want 350", d0.CacheReadTokens)
+	}
+	if d0.CacheWriteTokens != 175 {
+		t.Errorf("day 0 cache write: got %d, want 175", d0.CacheWriteTokens)
+	}
+	if math.Abs(d0.CostUSD-2.50) > 0.0001 {
+		t.Errorf("day 0 cost: got %f, want 2.50", d0.CostUSD)
+	}
+
+	// 2026-03-28: sess-1 only
+	d1 := days[1]
+	if d1.Date != "2026-03-28" {
+		t.Errorf("day 1 date: got %s, want 2026-03-28", d1.Date)
+	}
+	if d1.InputTokens != 3000 {
+		t.Errorf("day 1 input: got %d, want 3000", d1.InputTokens)
+	}
+	if d1.OutputTokens != 1200 {
+		t.Errorf("day 1 output: got %d, want 1200", d1.OutputTokens)
+	}
+	if math.Abs(d1.CostUSD-3.00) > 0.0001 {
+		t.Errorf("day 1 cost: got %f, want 3.00", d1.CostUSD)
+	}
+}
+
+func TestUsageByDay_EmptyDB(t *testing.T) {
+	d := testDB(t)
+	days := d.UsageByDay(time.Now().Add(-24 * time.Hour))
+	if len(days) != 0 {
+		t.Errorf("UsageByDay on empty DB: got %d days, want 0", len(days))
+	}
+}
+
 func TestDeltaPersistence_NoDuplicateCounting(t *testing.T) {
 	d := testDB(t)
 

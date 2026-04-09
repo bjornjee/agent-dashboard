@@ -84,6 +84,7 @@ type model struct {
 	db               *db.DB
 	dbTotalCost      float64
 	dbTodayCost      float64
+	dbDailyUsage     []db.DayUsage
 
 	// History render cache (Layers 2+3)
 	renderedHistory   string // cached output of historyContent()
@@ -581,7 +582,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.captureSelected(),
 		}
 		if m.db != nil {
-			cmds = append(cmds, loadDBCost(m.db))
+			cmds = append(cmds, loadDBDailyUsage(m.db))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -856,7 +857,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		if m.db != nil {
 			cmds = append(cmds, persistUsage(m.db, m.agents, msg.perAgent))
-			cmds = append(cmds, loadDBCost(m.db))
+			cmds = append(cmds, loadDBDailyUsage(m.db))
 		}
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
@@ -866,9 +867,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case persistResultMsg:
 		return m, nil
 
-	case dbCostMsg:
+	case dbDailyUsageMsg:
 		m.dbTotalCost = msg.total
 		m.dbTodayCost = msg.todayCost
+		m.dbDailyUsage = msg.days
 		return m, nil
 
 	case activityMsg:

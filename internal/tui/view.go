@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
@@ -566,79 +567,84 @@ func (m model) finalMessageContent() string {
 
 func (m model) usageContent() string {
 	var lines []string
-	lines = append(lines, costStyle.Render("  USAGE BREAKDOWN"))
+	lines = append(lines, costStyle.Render("  USAGE"))
 	lines = append(lines, "")
 
-	// Per-agent usage
-	for _, agent := range m.agents {
-		u, ok := m.agentUsage[agent.Target]
-		if !ok || u.OutputTokens == 0 {
-			continue
-		}
-
-		label := agentLabelStyled(agent)
-		paneID := fmt.Sprintf("%d.%d", agent.Window, agent.Pane)
-
-		lines = append(lines, fmt.Sprintf("  %s %s %s",
-			boldStyle.Render(paneID), label, costStyle.Render(usage.FormatCost(u.CostUSD))))
-		lines = append(lines, fmt.Sprintf("    in: %s  out: %s  cache-r: %s  cache-w: %s",
-			usage.FormatTokens(u.InputTokens),
-			usage.FormatTokens(u.OutputTokens),
-			usage.FormatTokens(u.CacheReadTokens),
-			usage.FormatTokens(u.CacheWriteTokens)))
-		if u.Model != "" {
-			lines = append(lines, fmt.Sprintf("    model: %s", helpStyle.Render(u.Model)))
-		}
-		lines = append(lines, "")
+	// Build a map from date string to DayUsage for quick lookup.
+	dayMap := make(map[string]db.DayUsage, len(m.dbDailyUsage))
+	for _, d := range m.dbDailyUsage {
+		dayMap[d.Date] = d
 	}
 
-	// Daily cost from DB
+	// Compute today's and week's aggregated tokens + cost.
+	todayStr := time.Now().Format("2006-01-02")
+	todayUsage := dayMap[todayStr] // zero-value if absent
+
+	var weekIn, weekOut, weekTotal int
+	var weekCost float64
+	for _, d := range m.dbDailyUsage {
+		weekIn += d.InputTokens
+		weekOut += d.OutputTokens
+		weekTotal += d.InputTokens + d.OutputTokens
+		weekCost += d.CostUSD
+	}
+
 	if m.db != nil {
-		days := m.db.CostByDay(time.Now().AddDate(0, 0, -7))
-		if len(days) > 0 {
-			const maxBarWidth = 30
-			var maxCost float64
-			for _, d := range days {
-				if d.CostUSD > maxCost {
-					maxCost = d.CostUSD
-				}
-			}
+		todayCost := todayUsage.CostUSD
+		todayTotal := todayUsage.InputTokens + todayUsage.OutputTokens
 
-			lines = append(lines, boldStyle.Render("  DAILY COST (7d)"))
-			lines = append(lines, "")
-			for _, d := range days {
-				width := 0
-				if maxCost > 0 {
-					width = int(float64(maxBarWidth) * d.CostUSD / maxCost)
-				}
-				bar := strings.Repeat("█", width)
-				lines = append(lines, fmt.Sprintf("  %s  %s %s",
-					helpStyle.Render(d.Date),
-					costStyle.Render(bar),
-					usage.FormatCost(d.CostUSD)))
-			}
-			lines = append(lines, "")
-		}
-	}
+		lines = append(lines, fmt.Sprintf("  Today    %s   in: %s  out: %s  total: %s",
+			costStyle.Render(usage.FormatCost(todayCost)),
+			usage.FormatTokens(todayUsage.InputTokens),
+			usage.FormatTokens(todayUsage.OutputTokens),
+			usage.FormatTokens(todayTotal)))
 
-	// Today's accumulated cost
-	if m.db != nil && m.dbTodayCost > 0 {
-		lines = append(lines, fmt.Sprintf("  Today: %s  │  Session: in %s  out %s",
-			costStyle.Render(usage.FormatCost(m.dbTodayCost)),
-			usage.FormatTokens(m.totalUsage.InputTokens),
-			usage.FormatTokens(m.totalUsage.OutputTokens)))
-		lines = append(lines, "")
-	}
+		lines = append(lines, fmt.Sprintf("  Week     %s   in: %s  out: %s  total: %s",
+			costStyle.Render(usage.FormatCost(weekCost)),
+			usage.FormatTokens(weekIn),
+			usage.FormatTokens(weekOut),
+			usage.FormatTokens(weekTotal)))
 
-	// All-time total
-	if m.db != nil && m.dbTotalCost > 0 {
-		lines = append(lines, fmt.Sprintf("  All-time: %s",
+		lines = append(lines, fmt.Sprintf("  All-time %s",
 			costStyle.Render(usage.FormatCost(m.dbTotalCost))))
 	} else {
-		lines = append(lines, fmt.Sprintf("  Session: %s  │  in: %s  out: %s",
+		lines = append(lines, fmt.Sprintf("  Session  %s   in: %s  out: %s  total: %s",
 			costStyle.Render(usage.FormatCost(m.totalUsage.CostUSD)),
 			usage.FormatTokens(m.totalUsage.InputTokens),
-			usage.FormatTokens(m.totalUsage.OutputTokens)))
+			usage.FormatTokens(m.totalUsage.OutputTokens),
+			usage.FormatTokens(m.totalUsage.InputTokens+m.totalUsage.OutputTokens)))
+	}
+
+	lines = append(lines, "")
+
+	// Daily breakdown table for the last 7 days.
+	lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (7d)"))
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s",
+		helpStyle.Render("DATE      "),
+		helpStyle.Render("INPUT   "),
+		helpStyle.Render("OUTPUT  "),
+		helpStyle.Render("TOTAL   "),
+		helpStyle.Render("COST    ")))
+
+	// Generate the full 7-day grid, oldest first.
+	for i := 6; i >= 0; i-- {
+		date := time.Now().AddDate(0, 0, -i)
+		dateStr := date.Format("2006-01-02")
+		label := date.Format("Jan 02")
+
+		if d, ok := dayMap[dateStr]; ok {
+			total := d.InputTokens + d.OutputTokens
+			lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
+				label,
+				usage.FormatTokens(d.InputTokens),
+				usage.FormatTokens(d.OutputTokens),
+				usage.FormatTokens(total),
+				costStyle.Render(usage.FormatCost(d.CostUSD))))
+		} else {
+			lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
+				label, "—", "—", "—", helpStyle.Render("—")))
+		}
 	}
 
 	lines = append(lines, "")

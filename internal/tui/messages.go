@@ -3,6 +3,7 @@ package tui
 import (
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
@@ -25,9 +26,10 @@ type usageMsg struct {
 	total    domain.Usage
 }
 type persistResultMsg struct{ err error }
-type dbCostMsg struct {
+type dbDailyUsageMsg struct {
 	total     float64
 	todayCost float64
+	days      []db.DayUsage
 }
 type activityMsg struct{ entries []domain.ActivityEntry }
 type subagentsMsg struct {
