@@ -45,6 +45,16 @@ type DayCost struct {
 	CostUSD float64 `db:"cost_usd"`
 }
 
+// DayUsage is a single day's aggregated token counts and cost.
+type DayUsage struct {
+	Date             string  `db:"date"`
+	InputTokens      int     `db:"input_tokens"`
+	OutputTokens     int     `db:"output_tokens"`
+	CacheReadTokens  int     `db:"cache_read_tokens"`
+	CacheWriteTokens int     `db:"cache_write_tokens"`
+	CostUSD          float64 `db:"cost_usd"`
+}
+
 // DB wraps sqlx.DB with repository methods for usage tracking.
 type DB struct {
 	conn *sqlx.DB
@@ -177,6 +187,27 @@ func (d *DB) SetLastQuoteFetch(date string) {
 type QuoteRow struct {
 	Quote  string
 	Author string
+}
+
+// UsageByDay returns daily aggregated token counts and cost since the given
+// time, ordered by date ascending.
+func (d *DB) UsageByDay(since time.Time) []DayUsage {
+	var days []DayUsage
+	_ = d.conn.Select(&days, `
+		SELECT
+			date,
+			SUM(input_tokens)       AS input_tokens,
+			SUM(output_tokens)      AS output_tokens,
+			SUM(cache_read_tokens)  AS cache_read_tokens,
+			SUM(cache_write_tokens) AS cache_write_tokens,
+			SUM(cost_usd)           AS cost_usd
+		FROM daily_usage
+		WHERE date >= ?
+		GROUP BY date
+		ORDER BY date`,
+		since.Format("2006-01-02"),
+	)
+	return days
 }
 
 // CostByDay returns daily aggregated cost since the given time, ordered by date.

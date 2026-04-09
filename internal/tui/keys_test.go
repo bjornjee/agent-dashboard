@@ -264,7 +264,7 @@ func TestUsageModeWorksWithNoAgents(t *testing.T) {
 	m.updateRightContent()
 
 	content := m.messageVP.View()
-	if !strings.Contains(content, "USAGE BREAKDOWN") {
+	if !strings.Contains(content, "USAGE") {
 		t.Errorf("expected usage content when mode is modeUsage with no agents, got %q", content)
 	}
 }

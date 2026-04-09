@@ -263,12 +263,14 @@ func persistUsage(database *db.DB, agents []domain.Agent, perAgent map[string]do
 	}
 }
 
-func loadDBCost(database *db.DB) tea.Cmd {
+func loadDBDailyUsage(database *db.DB) tea.Cmd {
 	return func() tea.Msg {
 		today := time.Now().Format("2006-01-02")
-		return dbCostMsg{
+		since := time.Now().AddDate(0, 0, -6) // 7 days including today
+		return dbDailyUsageMsg{
 			total:     database.TotalCost(),
 			todayCost: database.CostForDate(today),
+			days:      database.UsageByDay(since),
 		}
 	}
 }
