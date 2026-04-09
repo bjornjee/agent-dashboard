@@ -101,9 +101,12 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
     return { changed: false, update: null };
   }
 
-  // Preserve PR states set by pr-detect or dashboard pinning.
+  // Preserve PR states only when they are explicitly pinned (dashboard pin or
+  // pr-detect running in non-gh-authed mode). An unpinned state="pr" is
+  // transient — agent activity should overwrite it so the dashboard reflects
+  // live work while the user iterates on rough edges post-PR.
   // Still clear hook_blocked even when returning early, to avoid a stuck signal.
-  if ((PR_STATES.has(existing.state) || PR_STATES.has(existing.pinned_state)) && state === 'running') {
+  if (PR_STATES.has(existing.pinned_state) && state === 'running') {
     if (consumeBlocked) {
       return { changed: true, update: { hook_blocked: '' } };
     }
