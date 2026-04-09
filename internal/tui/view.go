@@ -580,71 +580,67 @@ func (m model) usageContent() string {
 	todayStr := time.Now().Format("2006-01-02")
 	todayUsage := dayMap[todayStr] // zero-value if absent
 
-	var weekIn, weekOut, weekTotal int
+	var weekIn, weekOut int
 	var weekCost float64
 	for _, d := range m.dbDailyUsage {
 		weekIn += d.InputTokens
 		weekOut += d.OutputTokens
-		weekTotal += d.InputTokens + d.OutputTokens
 		weekCost += d.CostUSD
 	}
 
 	if m.db != nil {
-		todayCost := todayUsage.CostUSD
-		todayTotal := todayUsage.InputTokens + todayUsage.OutputTokens
-
 		lines = append(lines, fmt.Sprintf("  Today    %s   in: %s  out: %s  total: %s",
-			costStyle.Render(usage.FormatCost(todayCost)),
+			costStyle.Render(usage.FormatCost(todayUsage.CostUSD)),
 			usage.FormatTokens(todayUsage.InputTokens),
 			usage.FormatTokens(todayUsage.OutputTokens),
-			usage.FormatTokens(todayTotal)))
+			usage.FormatTokens(todayUsage.InputTokens+todayUsage.OutputTokens)))
 
 		lines = append(lines, fmt.Sprintf("  Week     %s   in: %s  out: %s  total: %s",
 			costStyle.Render(usage.FormatCost(weekCost)),
 			usage.FormatTokens(weekIn),
 			usage.FormatTokens(weekOut),
-			usage.FormatTokens(weekTotal)))
+			usage.FormatTokens(weekIn+weekOut)))
 
 		lines = append(lines, fmt.Sprintf("  All-time %s",
 			costStyle.Render(usage.FormatCost(m.dbTotalCost))))
+
+		lines = append(lines, "")
+
+		// Daily breakdown table for the last 7 days.
+		lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (7d)"))
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s",
+			helpStyle.Render("DATE      "),
+			helpStyle.Render("INPUT   "),
+			helpStyle.Render("OUTPUT  "),
+			helpStyle.Render("TOTAL   "),
+			helpStyle.Render("COST    ")))
+
+		// Generate the full 7-day grid, oldest first.
+		for i := 6; i >= 0; i-- {
+			date := time.Now().AddDate(0, 0, -i)
+			dateStr := date.Format("2006-01-02")
+			label := date.Format("Jan 02")
+
+			if d, ok := dayMap[dateStr]; ok {
+				total := d.InputTokens + d.OutputTokens
+				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
+					label,
+					usage.FormatTokens(d.InputTokens),
+					usage.FormatTokens(d.OutputTokens),
+					usage.FormatTokens(total),
+					costStyle.Render(usage.FormatCost(d.CostUSD))))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
+					label, "—", "—", "—", helpStyle.Render("—")))
+			}
+		}
 	} else {
 		lines = append(lines, fmt.Sprintf("  Session  %s   in: %s  out: %s  total: %s",
 			costStyle.Render(usage.FormatCost(m.totalUsage.CostUSD)),
 			usage.FormatTokens(m.totalUsage.InputTokens),
 			usage.FormatTokens(m.totalUsage.OutputTokens),
 			usage.FormatTokens(m.totalUsage.InputTokens+m.totalUsage.OutputTokens)))
-	}
-
-	lines = append(lines, "")
-
-	// Daily breakdown table for the last 7 days.
-	lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (7d)"))
-	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s",
-		helpStyle.Render("DATE      "),
-		helpStyle.Render("INPUT   "),
-		helpStyle.Render("OUTPUT  "),
-		helpStyle.Render("TOTAL   "),
-		helpStyle.Render("COST    ")))
-
-	// Generate the full 7-day grid, oldest first.
-	for i := 6; i >= 0; i-- {
-		date := time.Now().AddDate(0, 0, -i)
-		dateStr := date.Format("2006-01-02")
-		label := date.Format("Jan 02")
-
-		if d, ok := dayMap[dateStr]; ok {
-			total := d.InputTokens + d.OutputTokens
-			lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
-				label,
-				usage.FormatTokens(d.InputTokens),
-				usage.FormatTokens(d.OutputTokens),
-				usage.FormatTokens(total),
-				costStyle.Render(usage.FormatCost(d.CostUSD))))
-		} else {
-			lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
-				label, "—", "—", "—", helpStyle.Render("—")))
-		}
 	}
 
 	lines = append(lines, "")

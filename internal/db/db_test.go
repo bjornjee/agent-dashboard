@@ -234,6 +234,12 @@ func TestUsageByDay(t *testing.T) {
 	if d1.OutputTokens != 1200 {
 		t.Errorf("day 1 output: got %d, want 1200", d1.OutputTokens)
 	}
+	if d1.CacheReadTokens != 400 {
+		t.Errorf("day 1 cache read: got %d, want 400", d1.CacheReadTokens)
+	}
+	if d1.CacheWriteTokens != 200 {
+		t.Errorf("day 1 cache write: got %d, want 200", d1.CacheWriteTokens)
+	}
 	if math.Abs(d1.CostUSD-3.00) > 0.0001 {
 		t.Errorf("day 1 cost: got %f, want 3.00", d1.CostUSD)
 	}
