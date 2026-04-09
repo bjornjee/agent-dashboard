@@ -1,5 +1,32 @@
 package domain
 
+import "time"
+
+// RateWindow holds utilization data for a single rate-limit window.
+type RateWindow struct {
+	UsedPercent float64   // 0–100
+	ResetsAt    time.Time // zero if unknown
+}
+
+// ExtraUsage holds monthly extra-usage (overage) spend data.
+type ExtraUsage struct {
+	Enabled      bool
+	MonthlyLimit float64 // USD
+	UsedCredits  float64 // USD
+}
+
+// RateLimit holds live rate-limit data from the Anthropic OAuth API.
+// Nil fields indicate the window was not present in the API response.
+type RateLimit struct {
+	Session   *RateWindow
+	Weekly    *RateWindow
+	Opus      *RateWindow
+	Sonnet    *RateWindow
+	Extra     *ExtraUsage
+	Plan      string // "max", "pro", "team", etc.
+	FetchedAt time.Time
+}
+
 // Agent represents a single Claude Code agent's state.
 type Agent struct {
 	Target             string   `json:"target"`
@@ -159,12 +186,18 @@ type ExperimentalSettings struct {
 	DinoGame bool `toml:"dino_game"` // enable Chrome-style dino runner game
 }
 
+// UsageSettings controls the usage view behavior.
+type UsageSettings struct {
+	RateLimitPollSeconds int `toml:"rate_limit_poll_seconds"` // how often to fetch rate limits (default 60)
+}
+
 // Settings holds all user-facing configuration loaded from settings.toml.
 type Settings struct {
 	Banner        BannerSettings       `toml:"banner"`
 	Notifications NotificationSettings `toml:"notifications"`
 	Debug         DebugSettings        `toml:"debug"`
 	Experimental  ExperimentalSettings `toml:"experimental"`
+	Usage         UsageSettings        `toml:"usage"`
 }
 
 // TmuxWindowInfo holds a tmux window's index and name.

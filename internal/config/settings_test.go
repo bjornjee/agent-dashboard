@@ -26,6 +26,9 @@ func TestDefaultSettings(t *testing.T) {
 	if s.Experimental.AsciiPet {
 		t.Error("Experimental.AsciiPet should default to false")
 	}
+	if s.Usage.RateLimitPollSeconds != 60 {
+		t.Errorf("Usage.RateLimitPollSeconds should default to 60, got %d", s.Usage.RateLimitPollSeconds)
+	}
 }
 
 func TestLoadSettings_MissingFile(t *testing.T) {
@@ -96,6 +99,19 @@ func TestLoadSettings_ExperimentalAsciiPet(t *testing.T) {
 	s := LoadSettings(dir)
 	if !s.Experimental.AsciiPet {
 		t.Error("expected Experimental.AsciiPet to be true")
+	}
+}
+
+func TestLoadSettings_UsagePollInterval(t *testing.T) {
+	dir := t.TempDir()
+	content := "[usage]\nrate_limit_poll_seconds = 30\n"
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadSettings(dir)
+	if s.Usage.RateLimitPollSeconds != 30 {
+		t.Errorf("expected RateLimitPollSeconds=30, got %d", s.Usage.RateLimitPollSeconds)
 	}
 }
 

@@ -312,6 +312,13 @@ func loadUsage(agents []domain.Agent, projectsDir, sessionsDir string) tea.Cmd {
 	}
 }
 
+func loadRateLimit() tea.Cmd {
+	return func() tea.Msg {
+		rl, _ := usage.FetchRateLimit(context.Background())
+		return rateLimitMsg{rateLimit: rl}
+	}
+}
+
 func loadState(path string, tmuxAvailable bool) tea.Cmd {
 	return func() tea.Msg {
 		sf := state.ReadState(path)

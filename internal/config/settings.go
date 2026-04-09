@@ -21,6 +21,9 @@ func DefaultSettings() domain.Settings {
 			Sound:        false,
 			SilentEvents: false,
 		},
+		Usage: domain.UsageSettings{
+			RateLimitPollSeconds: 60,
+		},
 	}
 }
 

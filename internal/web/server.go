@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
@@ -30,6 +32,11 @@ type Server struct {
 	opts ServerOptions
 	auth *authHandler
 	hub  *sseHub
+
+	// Rate-limit cache (60s TTL to avoid per-request API calls)
+	rlMu        sync.Mutex
+	rlCache     *domain.RateLimit
+	rlFetchedAt time.Time
 }
 
 // NewServer creates a new web dashboard server.
@@ -68,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents/{id}/usage", s.requireAuth(s.handleUsage))
 	mux.HandleFunc("GET /api/agents/{id}/subagents", s.requireAuth(s.handleSubagents))
 	mux.HandleFunc("GET /api/usage/daily", s.requireAuth(s.handleDailyUsage))
+	mux.HandleFunc("GET /api/usage/ratelimit", s.requireAuth(s.handleRateLimit))
 	mux.HandleFunc("GET /api/skills", s.requireAuth(s.handleSkills))
 	mux.HandleFunc("GET /api/suggestions", s.requireAuth(s.handleSuggestions))
 
