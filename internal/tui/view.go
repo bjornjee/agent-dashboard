@@ -580,26 +580,28 @@ func (m model) usageContent() string {
 	todayStr := time.Now().Format("2006-01-02")
 	todayUsage := dayMap[todayStr] // zero-value if absent
 
-	var weekIn, weekOut int
+	var weekIn, weekOut, weekCache int
 	var weekCost float64
 	for _, d := range m.dbDailyUsage {
 		weekIn += d.InputTokens
 		weekOut += d.OutputTokens
+		weekCache += d.CacheReadTokens + d.CacheWriteTokens
 		weekCost += d.CostUSD
 	}
 
 	if m.db != nil {
+		todayCache := todayUsage.CacheReadTokens + todayUsage.CacheWriteTokens
 		lines = append(lines, fmt.Sprintf("  Today    %s   in: %s  out: %s  total: %s",
 			costStyle.Render(usage.FormatCost(todayUsage.CostUSD)),
 			usage.FormatTokens(todayUsage.InputTokens),
 			usage.FormatTokens(todayUsage.OutputTokens),
-			usage.FormatTokens(todayUsage.InputTokens+todayUsage.OutputTokens)))
+			usage.FormatTokens(todayUsage.InputTokens+todayUsage.OutputTokens+todayCache)))
 
 		lines = append(lines, fmt.Sprintf("  Week     %s   in: %s  out: %s  total: %s",
 			costStyle.Render(usage.FormatCost(weekCost)),
 			usage.FormatTokens(weekIn),
 			usage.FormatTokens(weekOut),
-			usage.FormatTokens(weekIn+weekOut)))
+			usage.FormatTokens(weekIn+weekOut+weekCache)))
 
 		lines = append(lines, fmt.Sprintf("  All-time %s",
 			costStyle.Render(usage.FormatCost(m.dbTotalCost))))
@@ -623,7 +625,7 @@ func (m model) usageContent() string {
 			label := date.Format("Jan 02")
 
 			if d, ok := dayMap[dateStr]; ok {
-				total := d.InputTokens + d.OutputTokens
+				total := d.InputTokens + d.OutputTokens + d.CacheReadTokens + d.CacheWriteTokens
 				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
 					label,
 					usage.FormatTokens(d.InputTokens),
@@ -640,7 +642,7 @@ func (m model) usageContent() string {
 			costStyle.Render(usage.FormatCost(m.totalUsage.CostUSD)),
 			usage.FormatTokens(m.totalUsage.InputTokens),
 			usage.FormatTokens(m.totalUsage.OutputTokens),
-			usage.FormatTokens(m.totalUsage.InputTokens+m.totalUsage.OutputTokens)))
+			usage.FormatTokens(m.totalUsage.InputTokens+m.totalUsage.OutputTokens+m.totalUsage.CacheReadTokens+m.totalUsage.CacheWriteTokens)))
 	}
 
 	lines = append(lines, "")
