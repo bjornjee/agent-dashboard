@@ -25,11 +25,11 @@ type RateLimitFetcher interface {
 
 // oauthUsageResponse matches the Anthropic OAuth usage API response.
 type oauthUsageResponse struct {
-	FiveHour      *oauthUsageWindow `json:"five_hour"`
-	SevenDay      *oauthUsageWindow `json:"seven_day"`
-	SevenDayOpus  *oauthUsageWindow `json:"seven_day_opus"`
+	FiveHour       *oauthUsageWindow `json:"five_hour"`
+	SevenDay       *oauthUsageWindow `json:"seven_day"`
+	SevenDayOpus   *oauthUsageWindow `json:"seven_day_opus"`
 	SevenDaySonnet *oauthUsageWindow `json:"seven_day_sonnet"`
-	ExtraUsage    *oauthExtraUsage  `json:"extra_usage"`
+	ExtraUsage     *oauthExtraUsage  `json:"extra_usage"`
 }
 
 type oauthUsageWindow struct {

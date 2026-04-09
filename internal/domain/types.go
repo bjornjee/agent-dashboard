@@ -23,7 +23,7 @@ type RateLimit struct {
 	Opus      *RateWindow
 	Sonnet    *RateWindow
 	Extra     *ExtraUsage
-	Plan      string    // "max", "pro", "team", etc.
+	Plan      string // "max", "pro", "team", etc.
 	FetchedAt time.Time
 }
 

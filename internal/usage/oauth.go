@@ -26,8 +26,8 @@ type OAuthRunner interface {
 // and the macOS keychain blob.
 type credentialEnvelope struct {
 	ClaudeAiOauth struct {
-		AccessToken    string `json:"accessToken"`
-		RateLimitTier  string `json:"rateLimitTier"`
+		AccessToken   string `json:"accessToken"`
+		RateLimitTier string `json:"rateLimitTier"`
 	} `json:"claudeAiOauth"`
 }
 
