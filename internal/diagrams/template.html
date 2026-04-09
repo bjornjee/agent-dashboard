@@ -92,7 +92,14 @@
   main {
     padding: 2rem 1.5rem 4rem;
     display: flex;
-    justify-content: center;
+    /* `safe center` degrades to flex-start when the child overflows the
+       container. Without `safe`, flex centering pushes wide content off
+       the left edge of the scroll region so the user can never reach
+       the leftmost part of a zoomed-in diagram. */
+    justify-content: safe center;
+    /* Allow the flex item to grow past the viewport width so horizontal
+       scrollbars appear on <body> when the zoomed diagram is wider. */
+    min-width: min-content;
   }
   .diagram-card {
     display: inline-block;
@@ -227,11 +234,30 @@
      The wrapper's box dimensions track the scaled svg size so the
      page itself grows and the browser provides natural scrollbars —
      no internal scroll inside the card. */
-  .zoom-wrap {
+  /* Two-element zoom structure. The OUTER box's layout size tracks
+     the scaled visual size (baseW*zoom × baseH*zoom) so the browser's
+     scroll-overflow area matches what the user sees. The INNER box
+     stays at the SVG's intrinsic size and is visually scaled via
+     `transform: scale(zoom)` with a top-left transform-origin so the
+     scaled content lines up with the outer box's top-left corner.
+     Using a single element here is broken two ways:
+       • if width = baseW*zoom, transform scales layout → double-scaled
+         visual (z²) and phantom margins around the SVG;
+       • if width = baseW, scroll overflow tracks the unscaled layout
+         box so zoom-out leaves a huge empty scroll region and zoom-in
+         clips parts of the diagram the user can't reach. */
+  .zoom-outer {
     display: inline-block;
+    overflow: visible;
+    will-change: width, height;
+  }
+  .zoom-inner {
     transform-origin: 0 0;
-    transition: transform 0.08s ease-out;
     will-change: transform;
+    /* No CSS transition on the transform: the zoom handler also
+       adjusts window.scrollX/Y to keep the anchor under the cursor,
+       and an async transition drifts out of sync with the synchronous
+       scroll update, making wheel/button zoom feel jittery. */
   }
   .diagram-card pre.mermaid svg {
     display: block;
@@ -290,8 +316,10 @@
 </header>
 <main>
   <div class="diagram-card" id="card">
-    <div class="zoom-wrap" id="zoom-wrap">
-      <pre class="mermaid">{{SOURCE}}</pre>
+    <div class="zoom-outer" id="zoom-outer">
+      <div class="zoom-inner" id="zoom-inner">
+        <pre class="mermaid">{{SOURCE}}</pre>
+      </div>
     </div>
   </div>
 </main>
@@ -363,7 +391,9 @@
   // sync with the scaled svg so the page itself grows and the browser
   // window provides the scrollbars.
   (function () {
-    const wrap   = document.getElementById('zoom-wrap');
+    const outer  = document.getElementById('zoom-outer');
+    const inner  = document.getElementById('zoom-inner');
+    const wrap   = inner; // backwards-compat alias for existing measureBase code
     const pctEl  = document.getElementById('zoom-pct');
     const btnIn  = document.getElementById('zoom-in');
     const btnOut = document.getElementById('zoom-out');
@@ -371,7 +401,12 @@
 
     const MIN = 0.1;
     const MAX = 4;
-    const STEP = 1.15;
+    // Smaller multiplicative step = finer-grained perceived smoothness
+    // for button clicks and keyboard press-and-hold. 1.1 ≈ 10% per step.
+    const STEP = 1.1;
+    // Wheel zoom uses an even smaller step so trackpad/ctrl+scroll
+    // feels continuous instead of jumping in big chunks.
+    const WHEEL_STEP = 1.05;
     let zoom = 1;
     let fitDefault = 1; // computed once after first measure; used by reset
     let baseW = 0, baseH = 0;
@@ -403,10 +438,16 @@
     }
 
     function apply() {
-      wrap.style.transform = 'scale(' + zoom + ')';
+      // Inner: visually scale at the SVG's intrinsic size. Outer: take
+      // scaled dimensions in the layout so the body's scroll region
+      // matches what the user sees (no phantom margins when zoomed in,
+      // no wasted scroll area when zoomed out).
+      inner.style.transform = 'scale(' + zoom + ')';
       if (baseW && baseH) {
-        wrap.style.width  = (baseW * zoom) + 'px';
-        wrap.style.height = (baseH * zoom) + 'px';
+        inner.style.width  = baseW + 'px';
+        inner.style.height = baseH + 'px';
+        outer.style.width  = (baseW * zoom) + 'px';
+        outer.style.height = (baseH * zoom) + 'px';
       }
       pctEl.textContent = Math.round(zoom * 100) + '%';
     }
@@ -473,11 +514,19 @@
       }
     });
 
-    // Ctrl/Cmd + wheel zoom anchored at the cursor.
+    // Ctrl/Cmd + wheel zoom anchored at the cursor. We scale the factor
+    // by |deltaY| so a single fast scroll tick zooms more than a slow
+    // one — this matches the feel of native map/image viewers and lets
+    // trackpad pinch gestures (which emit many small wheel events) feel
+    // continuous instead of stair-stepping through discrete stops.
     window.addEventListener('wheel', (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const factor = e.deltaY < 0 ? STEP : 1/STEP;
+        // Clamp |deltaY| per tick so very large OS-reported deltas
+        // (e.g. some trackpad drivers report 100+ per gesture tick)
+        // don't warp multiple STEPs at once.
+        const delta = Math.max(-50, Math.min(50, e.deltaY));
+        const factor = Math.pow(WHEEL_STEP, -delta / 10);
         zoomBy(factor, e.clientX, e.clientY);
       }
     }, { passive: false });

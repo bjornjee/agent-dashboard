@@ -723,7 +723,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case diagramsLoadedMsg:
-		// Only apply if message matches the currently selected agent's session.
+		// Sync the agent's DiagramCount with the freshly-loaded list for
+		// any agent matching the session — this covers the post-delete
+		// case where the file on disk is gone but the stale state JSON
+		// still reports the old count, which would otherwise leave the
+		// 📑 badge lingering in the left panel until the extractor hook
+		// next rewrites state. We do this regardless of whether this is
+		// the currently selected agent.
+		for i := range m.agents {
+			if m.agents[i].SessionID == msg.sessionID {
+				m.agents[i].DiagramCount = len(msg.list)
+				if m.lastSeenDiagramCount != nil {
+					m.lastSeenDiagramCount[msg.sessionID] = len(msg.list)
+				}
+			}
+		}
+		// Only apply to the viewer if message matches the currently
+		// selected agent's session.
 		a := m.selectedAgent()
 		if a != nil && a.SessionID == msg.sessionID {
 			m.diagrams = msg.list
