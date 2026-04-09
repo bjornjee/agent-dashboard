@@ -232,9 +232,16 @@ func TestWriteTempHTML_FitToViewportAndNoInnerScroll(t *testing.T) {
 	body, _ := os.ReadFile(p)
 	s := string(body)
 
-	// Must have the zoom wrapper that is CSS-transformed for zoom/pan.
-	if !strings.Contains(s, `id="zoom-wrap"`) {
-		t.Errorf("expected #zoom-wrap in rendered HTML")
+	// Must have the zoom wrappers: outer tracks scaled layout size so the
+	// body's scroll region matches the visible diagram; inner applies the
+	// CSS transform at the SVG's intrinsic size. The two-wrapper split
+	// prevents double-scaling (layout × transform) that otherwise creates
+	// phantom margins on large diagrams.
+	if !strings.Contains(s, `id="zoom-outer"`) {
+		t.Errorf("expected #zoom-outer in rendered HTML")
+	}
+	if !strings.Contains(s, `id="zoom-inner"`) {
+		t.Errorf("expected #zoom-inner in rendered HTML")
 	}
 	// Must compute fit-to-viewport on initial render and use it as default.
 	if !strings.Contains(s, "computeFitZoom") {
