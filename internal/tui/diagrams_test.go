@@ -251,6 +251,30 @@ func TestDeleteDiagram_ReturnsReloadMsg(t *testing.T) {
 	}
 }
 
+func TestDiagramsLoadedMsg_UpdatesAgentDiagramCount(t *testing.T) {
+	// Regression: after the user deletes the last diagram via the `x`
+	// confirm flow, diagramsLoadedMsg arrives with an empty list. The
+	// matching agent's DiagramCount must be updated to 0 so the left
+	// panel stops rendering the 📑 badge — otherwise the icon lingers
+	// until the extractor hook next rewrites the session state file.
+	m := newDiagramsTestModel()
+	m.agents[0].DiagramCount = 2
+	m.lastSeenDiagramCount = map[string]int{"sess-A": 2}
+	m.diagrams = sampleDiagrams()
+
+	out, _ := m.Update(diagramsLoadedMsg{sessionID: "sess-A", list: nil})
+	rm := out.(model)
+	if rm.agents[0].DiagramCount != 0 {
+		t.Errorf("expected agent DiagramCount=0 after empty reload, got %d", rm.agents[0].DiagramCount)
+	}
+	if rm.lastSeenDiagramCount["sess-A"] != 0 {
+		t.Errorf("expected lastSeenDiagramCount cleared to 0, got %d", rm.lastSeenDiagramCount["sess-A"])
+	}
+	if rm.diagramBadge("sess-A", rm.agents[0].DiagramCount) != "" {
+		t.Errorf("expected empty badge when count is 0 after reload")
+	}
+}
+
 func TestDiagramsLoadedMsg_IgnoredForOtherSession(t *testing.T) {
 	m := newDiagramsTestModel()
 	prev := sampleDiagrams()

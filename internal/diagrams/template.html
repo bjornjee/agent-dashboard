@@ -92,7 +92,14 @@
   main {
     padding: 2rem 1.5rem 4rem;
     display: flex;
-    justify-content: center;
+    /* `safe center` degrades to flex-start when the child overflows the
+       container. Without `safe`, flex centering pushes wide content off
+       the left edge of the scroll region so the user can never reach
+       the leftmost part of a zoomed-in diagram. */
+    justify-content: safe center;
+    /* Allow the flex item to grow past the viewport width so horizontal
+       scrollbars appear on <body> when the zoomed diagram is wider. */
+    min-width: min-content;
   }
   .diagram-card {
     display: inline-block;
@@ -230,7 +237,11 @@
   .zoom-wrap {
     display: inline-block;
     transform-origin: 0 0;
-    transition: transform 0.08s ease-out;
+    /* No CSS transition: the zoom handler also adjusts window.scrollX/Y
+       to keep the anchor point under the cursor, and an async transform
+       transition drifts out of sync with the synchronous scroll update,
+       making wheel- and button-zoom feel jittery. Instant application
+       with small steps is visually smoother than a staggered animation. */
     will-change: transform;
   }
   .diagram-card pre.mermaid svg {
@@ -371,7 +382,12 @@
 
     const MIN = 0.1;
     const MAX = 4;
-    const STEP = 1.15;
+    // Smaller multiplicative step = finer-grained perceived smoothness
+    // for button clicks and keyboard press-and-hold. 1.1 ≈ 10% per step.
+    const STEP = 1.1;
+    // Wheel zoom uses an even smaller step so trackpad/ctrl+scroll
+    // feels continuous instead of jumping in big chunks.
+    const WHEEL_STEP = 1.05;
     let zoom = 1;
     let fitDefault = 1; // computed once after first measure; used by reset
     let baseW = 0, baseH = 0;
@@ -473,11 +489,19 @@
       }
     });
 
-    // Ctrl/Cmd + wheel zoom anchored at the cursor.
+    // Ctrl/Cmd + wheel zoom anchored at the cursor. We scale the factor
+    // by |deltaY| so a single fast scroll tick zooms more than a slow
+    // one — this matches the feel of native map/image viewers and lets
+    // trackpad pinch gestures (which emit many small wheel events) feel
+    // continuous instead of stair-stepping through discrete stops.
     window.addEventListener('wheel', (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const factor = e.deltaY < 0 ? STEP : 1/STEP;
+        // Clamp |deltaY| per tick so very large OS-reported deltas
+        // (e.g. some trackpad drivers report 100+ per gesture tick)
+        // don't warp multiple STEPs at once.
+        const delta = Math.max(-50, Math.min(50, e.deltaY));
+        const factor = Math.pow(WHEEL_STEP, -delta / 10);
         zoomBy(factor, e.clientX, e.clientY);
       }
     }, { passive: false });
