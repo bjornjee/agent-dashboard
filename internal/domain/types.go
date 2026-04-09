@@ -186,12 +186,18 @@ type ExperimentalSettings struct {
 	DinoGame bool `toml:"dino_game"` // enable Chrome-style dino runner game
 }
 
+// UsageSettings controls the usage view behavior.
+type UsageSettings struct {
+	RateLimitPollSeconds int `toml:"rate_limit_poll_seconds"` // how often to fetch rate limits (default 60)
+}
+
 // Settings holds all user-facing configuration loaded from settings.toml.
 type Settings struct {
 	Banner        BannerSettings       `toml:"banner"`
 	Notifications NotificationSettings `toml:"notifications"`
 	Debug         DebugSettings        `toml:"debug"`
 	Experimental  ExperimentalSettings `toml:"experimental"`
+	Usage         UsageSettings        `toml:"usage"`
 }
 
 // TmuxWindowInfo holds a tmux window's index and name.

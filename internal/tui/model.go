@@ -809,7 +809,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
-		if m.tickCount%60 == 0 {
+		if poll := m.cfg.Settings.Usage.RateLimitPollSeconds; poll > 0 && m.tickCount%poll == 0 {
 			cmds = append(cmds, loadRateLimit())
 		}
 		if m.tickCount%30 == 0 {
