@@ -1,5 +1,32 @@
 package domain
 
+import "time"
+
+// RateWindow holds utilization data for a single rate-limit window.
+type RateWindow struct {
+	UsedPercent float64   // 0–100
+	ResetsAt    time.Time // zero if unknown
+}
+
+// ExtraUsage holds monthly extra-usage (overage) spend data.
+type ExtraUsage struct {
+	Enabled      bool
+	MonthlyLimit float64 // USD
+	UsedCredits  float64 // USD
+}
+
+// RateLimit holds live rate-limit data from the Anthropic OAuth API.
+// Nil fields indicate the window was not present in the API response.
+type RateLimit struct {
+	Session   *RateWindow
+	Weekly    *RateWindow
+	Opus      *RateWindow
+	Sonnet    *RateWindow
+	Extra     *ExtraUsage
+	Plan      string    // "max", "pro", "team", etc.
+	FetchedAt time.Time
+}
+
 // Agent represents a single Claude Code agent's state.
 type Agent struct {
 	Target             string   `json:"target"`

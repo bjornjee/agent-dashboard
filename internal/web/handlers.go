@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
@@ -374,6 +375,81 @@ func (s *Server) handleDailyUsage(w http.ResponseWriter, r *http.Request) {
 		TotalCost: s.db.TotalCost(),
 		TodayCost: todayCost,
 	})
+}
+
+// rateLimitResponse is the JSON shape for the rate-limit endpoint.
+type rateLimitResponse struct {
+	Session *rateLimitWindowResponse `json:"session,omitempty"`
+	Weekly  *rateLimitWindowResponse `json:"weekly,omitempty"`
+	Opus    *rateLimitWindowResponse `json:"opus,omitempty"`
+	Sonnet  *rateLimitWindowResponse `json:"sonnet,omitempty"`
+	Extra   *extraUsageResponse      `json:"extra_usage,omitempty"`
+	Plan    string                   `json:"plan,omitempty"`
+}
+
+type rateLimitWindowResponse struct {
+	UsedPercent float64 `json:"used_percent"`
+	ResetsAt    string  `json:"resets_at,omitempty"`
+}
+
+type extraUsageResponse struct {
+	Enabled      bool    `json:"enabled"`
+	MonthlyLimit float64 `json:"monthly_limit"`
+	UsedCredits  float64 `json:"used_credits"`
+}
+
+// handleRateLimit returns the current rate-limit window data.
+// Results are cached for 60 seconds to avoid per-request API calls.
+func (s *Server) handleRateLimit(w http.ResponseWriter, r *http.Request) {
+	s.rlMu.Lock()
+	if s.rlCache != nil && time.Since(s.rlFetchedAt) < 60*time.Second {
+		rl := s.rlCache
+		s.rlMu.Unlock()
+		s.writeRateLimitResponse(w, rl)
+		return
+	}
+	s.rlMu.Unlock()
+
+	rl, err := usage.FetchRateLimit(r.Context())
+	if err != nil || rl == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	s.rlMu.Lock()
+	s.rlCache = rl
+	s.rlFetchedAt = time.Now()
+	s.rlMu.Unlock()
+
+	s.writeRateLimitResponse(w, rl)
+}
+
+func (s *Server) writeRateLimitResponse(w http.ResponseWriter, rl *domain.RateLimit) {
+	resp := rateLimitResponse{Plan: rl.Plan}
+	mapW := func(rw *domain.RateWindow) *rateLimitWindowResponse {
+		if rw == nil {
+			return nil
+		}
+		rlw := &rateLimitWindowResponse{UsedPercent: rw.UsedPercent}
+		if !rw.ResetsAt.IsZero() {
+			rlw.ResetsAt = rw.ResetsAt.Format(time.RFC3339)
+		}
+		return rlw
+	}
+	resp.Session = mapW(rl.Session)
+	resp.Weekly = mapW(rl.Weekly)
+	resp.Opus = mapW(rl.Opus)
+	resp.Sonnet = mapW(rl.Sonnet)
+
+	if rl.Extra != nil {
+		resp.Extra = &extraUsageResponse{
+			Enabled:      rl.Extra.Enabled,
+			MonthlyLimit: rl.Extra.MonthlyLimit,
+			UsedCredits:  rl.Extra.UsedCredits,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleSubagents returns the subagent tree for an agent.

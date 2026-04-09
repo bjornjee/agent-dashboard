@@ -565,8 +565,90 @@ func (m model) finalMessageContent() string {
 	return strings.Join(lines, "\n")
 }
 
+// renderProgressBar draws a text-based progress bar like "████████░░" at the given width.
+func renderProgressBar(percent float64, width int) string {
+	if width <= 0 {
+		width = 20
+	}
+	filled := int(percent / 100 * float64(width))
+	if filled > width {
+		filled = width
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	empty := width - filled
+	return strings.Repeat("█", filled) + strings.Repeat("░", empty)
+}
+
+// formatResetDuration returns a human-readable duration until reset like "2h 15m".
+func formatResetDuration(resetsAt time.Time) string {
+	if resetsAt.IsZero() {
+		return ""
+	}
+	d := time.Until(resetsAt)
+	if d <= 0 {
+		return "resetting"
+	}
+	if d >= 24*time.Hour {
+		days := int(d.Hours()) / 24
+		hours := int(d.Hours()) % 24
+		if hours > 0 {
+			return fmt.Sprintf("resets in %dd %dh", days, hours)
+		}
+		return fmt.Sprintf("resets in %dd", days)
+	}
+	hours := int(d.Hours())
+	mins := int(d.Minutes()) % 60
+	if hours > 0 {
+		return fmt.Sprintf("resets in %dh %dm", hours, mins)
+	}
+	return fmt.Sprintf("resets in %dm", mins)
+}
+
 func (m model) usageContent() string {
 	var lines []string
+
+	// Rate-limit section (optional — only when credentials are available)
+	if rl := m.rateLimit; rl != nil {
+		header := costStyle.Render("  RATE LIMITS")
+		if len(rl.Plan) > 0 {
+			planLabel := strings.ToUpper(rl.Plan[:1]) + rl.Plan[1:]
+			header += "  " + helpStyle.Render("Plan: "+planLabel)
+		}
+		lines = append(lines, header)
+		lines = append(lines, "")
+
+		barWidth := 20
+		renderWindow := func(label string, w *domain.RateWindow) {
+			if w == nil {
+				return
+			}
+			bar := renderProgressBar(w.UsedPercent, barWidth)
+			reset := formatResetDuration(w.ResetsAt)
+			pctStr := fmt.Sprintf("%3.0f%%", w.UsedPercent)
+			line := fmt.Sprintf("  %-16s %s  %s", label, bar, pctStr)
+			if reset != "" {
+				line += "  " + helpStyle.Render(reset)
+			}
+			lines = append(lines, line)
+		}
+
+		renderWindow("Session (5h)", rl.Session)
+		renderWindow("Weekly", rl.Weekly)
+		renderWindow("Opus (weekly)", rl.Opus)
+		renderWindow("Sonnet (weekly)", rl.Sonnet)
+
+		if rl.Extra != nil {
+			lines = append(lines, "")
+			lines = append(lines, fmt.Sprintf("  Extra Usage     %s / %s",
+				costStyle.Render(usage.FormatCost(rl.Extra.UsedCredits)),
+				usage.FormatCost(rl.Extra.MonthlyLimit)))
+		}
+
+		lines = append(lines, "")
+	}
+
 	lines = append(lines, costStyle.Render("  USAGE"))
 	lines = append(lines, "")
 

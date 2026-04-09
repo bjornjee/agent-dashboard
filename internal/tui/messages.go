@@ -78,6 +78,9 @@ type createSessionMsg struct {
 	target string
 	err    error
 }
+type rateLimitMsg struct {
+	rateLimit *domain.RateLimit
+}
 
 // -- Modes --
 

@@ -85,6 +85,7 @@ type model struct {
 	dbTotalCost      float64
 	dbTodayCost      float64
 	dbDailyUsage     []db.DayUsage
+	rateLimit        *domain.RateLimit
 
 	// History render cache (Layers 2+3)
 	renderedHistory   string // cached output of historyContent()
@@ -561,6 +562,7 @@ func (m model) Init() tea.Cmd {
 		deferredQuote(m.db, m.cfg.Settings.Banner.ShowQuote),
 		tickEvery(),
 		checkGHAvailable(),
+		loadRateLimit(),
 		m.startupSpinner.Tick,
 	}
 	if m.petEnabled {
@@ -807,6 +809,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tickCount%10 == 0 {
 			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
 		}
+		if m.tickCount%60 == 0 {
+			cmds = append(cmds, loadRateLimit())
+		}
 		if m.tickCount%30 == 0 {
 			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
 		}
@@ -862,6 +867,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(cmds) > 0 {
 			return m, tea.Batch(cmds...)
 		}
+		return m, nil
+
+	case rateLimitMsg:
+		m.rateLimit = msg.rateLimit
+		m.updateRightContent()
 		return m, nil
 
 	case persistResultMsg:

@@ -21,7 +21,8 @@ export async function renderUsage(app, agents) {
     actions: [{ label: '&larr; Back', onclick: 'Dashboard.showList()' }],
   }) + '<div class="usage-view">' + UI.loadingBlock() + '</div>';
 
-  await loadUsageData();
+  // Load rate limits and usage data in parallel
+  await Promise.all([loadRateLimits(), loadUsageData()]);
 }
 
 // Exposed globally for onclick from dateRangeSelector
@@ -33,6 +34,69 @@ window.Dashboard.setUsageRange = async function(days) {
   if (chartSection) chartSection.innerHTML = UI.loadingBlock();
   await loadUsageData();
 };
+
+async function loadRateLimits() {
+  try {
+    const resp = await fetch('/api/usage/ratelimit', {
+      headers: { 'X-Requested-With': 'dashboard' },
+    });
+    if (resp.status === 204 || !resp.ok) return;
+    const rl = await resp.json();
+    const view = document.querySelector('.usage-view');
+    if (!view) return;
+
+    const windows = [];
+    if (rl.session) windows.push(renderRateBar('Session (5h)', rl.session));
+    if (rl.weekly) windows.push(renderRateBar('Weekly', rl.weekly));
+    if (rl.opus) windows.push(renderRateBar('Opus (weekly)', rl.opus));
+    if (rl.sonnet) windows.push(renderRateBar('Sonnet (weekly)', rl.sonnet));
+
+    if (windows.length === 0) return;
+
+    let extraHtml = '';
+    if (rl.extra_usage && rl.extra_usage.enabled) {
+      extraHtml = `<div class="rate-limit-extra">Extra Usage: ${formatCostFull(rl.extra_usage.used_credits)} / ${formatCostFull(rl.extra_usage.monthly_limit)}</div>`;
+    }
+
+    const planLabel = rl.plan ? ` <span class="rate-limit-plan">${escapeHtml(rl.plan)}</span>` : '';
+    const card = `<div class="card rate-limit-card">
+      <div class="card-header">Rate Limits${planLabel}</div>
+      <div class="card-body">${windows.join('')}${extraHtml}</div>
+    </div>`;
+
+    // Insert before existing content
+    view.insertAdjacentHTML('afterbegin', card);
+  } catch { /* silently skip if unavailable */ }
+}
+
+function renderRateBar(label, window) {
+  const pct = Math.min(100, Math.max(0, window.used_percent || 0));
+  const resetText = window.resets_at ? formatResetDuration(window.resets_at) : '';
+  const barColor = pct >= 80 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
+  return `<div class="rate-limit-row">
+    <span class="rate-limit-label">${escapeHtml(label)}</span>
+    <div class="rate-limit-bar-track">
+      <div class="rate-limit-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+    </div>
+    <span class="rate-limit-pct">${Math.round(pct)}%</span>
+    ${resetText ? `<span class="rate-limit-reset">${escapeHtml(resetText)}</span>` : ''}
+  </div>`;
+}
+
+function formatResetDuration(isoStr) {
+  const resetAt = new Date(isoStr);
+  const diff = resetAt - Date.now();
+  if (diff <= 0) return 'resetting';
+  const hours = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return remHours > 0 ? `resets in ${days}d ${remHours}h` : `resets in ${days}d`;
+  }
+  if (hours > 0) return `resets in ${hours}h ${mins}m`;
+  return `resets in ${mins}m`;
+}
 
 async function loadUsageData() {
   const data = await get('/api/usage/daily?days=' + currentRange);
