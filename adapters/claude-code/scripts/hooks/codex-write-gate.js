@@ -2,13 +2,8 @@
 /**
  * PreToolUse hook for Bash — blocks `codex-companion.mjs task` without --write.
  *
- * When a Bash tool call invokes `codex-companion.mjs task` without the --write
- * flag, this hook blocks execution (exit 2) so the agent retries with --write.
  * Without --write, Codex runs in read-only sandbox mode and cannot modify files.
- *
- * Set SKIP_CODEX_WRITE_GATE=1 to suppress.
- *
- * Stdin: JSON from Claude Code hook system (PreToolUse, Bash)
+ * Exit code 2 blocks the tool call. Set SKIP_CODEX_WRITE_GATE=1 to suppress.
  */
 
 'use strict';
@@ -16,7 +11,6 @@
 const BLOCK_MESSAGE = [
   'Codex task requires --write for workspace write access.',
   'Add --write to the codex-companion.mjs task command.',
-  'Without it, Codex runs in read-only sandbox mode and cannot modify files.',
 ].join('\n');
 
 function isCodexTask(command) {
@@ -51,12 +45,7 @@ if (require.main === module && !process.stdin.isTTY) {
       const input = data.trim() ? JSON.parse(data) : {};
       const command = input.tool_input?.command ?? '';
 
-      if (!isCodexTask(command)) {
-        process.stdout.write(data);
-        return;
-      }
-
-      if (hasWriteFlag(command)) {
+      if (!isCodexTask(command) || hasWriteFlag(command)) {
         process.stdout.write(data);
         return;
       }
