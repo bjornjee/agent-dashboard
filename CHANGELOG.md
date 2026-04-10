@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.10.0](https://github.com/bjornjee/agent-dashboard/compare/v0.9.0...v0.10.0) (2026-04-10)
+
+
+### Features
+
+* add Codex usage tracking alongside Claude in usage view ([#197](https://github.com/bjornjee/agent-dashboard/issues/197)) ([3283c46](https://github.com/bjornjee/agent-dashboard/commit/3283c469d9177dc574565f4dc733be38ca61b9bd))
+* add live rate-limit usage from Anthropic OAuth API ([#194](https://github.com/bjornjee/agent-dashboard/issues/194)) ([48c3385](https://github.com/bjornjee/agent-dashboard/commit/48c33857f32fea89aa56b4d1a84741e5c458e05a))
+* collapse subagents by default, fix PR state override, add refactor-cleaner skill step ([#195](https://github.com/bjornjee/agent-dashboard/issues/195)) ([be9f116](https://github.com/bjornjee/agent-dashboard/commit/be9f116b24ac25444ac094f7fb87a1ae9f75a977))
+* redesign TUI usage view with daily/weekly cost and token breakdown ([#193](https://github.com/bjornjee/agent-dashboard/issues/193)) ([737697e](https://github.com/bjornjee/agent-dashboard/commit/737697ede67a06543f3448f74ef2f03e70ed110a))
+* skip pr pin when gh auth is available ([#192](https://github.com/bjornjee/agent-dashboard/issues/192)) ([7799c3b](https://github.com/bjornjee/agent-dashboard/commit/7799c3b2c9057609b7f71778cc8659568a4ceb28))
+
+
+### Bug Fixes
+
+* bump go toolchain to 1.26.2 to resolve stdlib CVEs ([#188](https://github.com/bjornjee/agent-dashboard/issues/188)) ([6182cfe](https://github.com/bjornjee/agent-dashboard/commit/6182cfe519ec71b52b8fc067be1750a8cddd8ae5))
+* deterministic Codex delegation gate for skills ([#196](https://github.com/bjornjee/agent-dashboard/issues/196)) ([9c8cffe](https://github.com/bjornjee/agent-dashboard/commit/9c8cffea2c7c758ee497d41717b5a15c8713346e))
+* mermaid diagram renderer nits — stale badge, truncation, zoom smoothness ([#191](https://github.com/bjornjee/agent-dashboard/issues/191)) ([01f8673](https://github.com/bjornjee/agent-dashboard/commit/01f867364e45156c0a92fa773e765f6624d1cdbe))
+* per-process diagram dir and WCAG-aware mermaid text contrast ([#190](https://github.com/bjornjee/agent-dashboard/issues/190)) ([bc6aff3](https://github.com/bjornjee/agent-dashboard/commit/bc6aff3a490440982d602a4b60bf8309982ad800))
+
 ## [0.9.0](https://github.com/bjornjee/agent-dashboard/compare/v0.8.0...v0.9.0) (2026-04-07)
 
 
