@@ -116,6 +116,13 @@ Do not batch multiple changes between test runs. One change, one test run.
 
 ### Phase 6: Review and Commit
 
+Before committing, run the `refactor-cleaner` agent as an automated cleanup pass — but only if needed:
+
+1. Check git log for a recent cleaner run: `git log --oneline -20 --grep="chore: ai-fmt"`.
+2. If no recent run is found, spawn the `refactor-cleaner` agent (`run_in_background: false`) on all changed files.
+3. Run `make test` to confirm the cleaner's changes don't break anything.
+4. If the cleaner made changes, commit them separately with `chore: ai-fmt` as the commit message.
+
 1. Review all changes for correctness, security, and convention adherence.
 2. Verify that behavior is preserved — no new features, no bug fixes, only structural changes.
 3. Commit with a `refactor:` conventional commit message that describes what was restructured and why.

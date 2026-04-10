@@ -42,6 +42,25 @@ A companion PWA (`cmd/web/`) for managing agents from your phone over your local
 - **Google OAuth** — optional single-user authentication so only you can access the dashboard
 - **Installable PWA** — add to home screen for a native app feel with offline caching via service worker
 
+<details>
+<summary>Agent state model</summary>
+
+| Raw state | Display group | Priority | Description |
+|-----------|--------------|----------|-------------|
+| `permission` | BLOCKED | 1 | Waiting for tool permission |
+| `plan` | BLOCKED | 1 | Plan review pending |
+| `question` | WAITING | 2 | Agent asked a question |
+| `error` | WAITING | 2 | Agent encountered an error |
+| `running` | RUNNING | 3 | Actively executing |
+| `idle_prompt` | REVIEW | 4 | Idle, waiting for user input |
+| `done` | REVIEW | 4 | Session completed |
+| `pr` | PR | 5 | Pull request created |
+| `merged` | MERGED | 6 | Pull request merged |
+
+**Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active states (`running`, `permission`) display through normally so the dashboard reflects live work.
+
+</details>
+
 ## Prerequisites
 
 | Dependency | Required | Purpose |

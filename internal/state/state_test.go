@@ -711,24 +711,36 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestApplyPinnedStates(t *testing.T) {
-	sf := domain.StateFile{
-		Agents: map[string]domain.Agent{
-			"pinned-pr":     {State: "done", PinnedState: "pr"},
-			"pinned-merged": {State: "idle_prompt", PinnedState: "merged"},
-			"no-pin":        {State: "running"},
-		},
+	tests := []struct {
+		name      string
+		state     string
+		pinned    string
+		wantState string
+	}{
+		{"idle_prompt restored to pr", "idle_prompt", "pr", "pr"},
+		{"done restored to pr", "done", "pr", "pr"},
+		{"question restored to pr", "question", "pr", "pr"},
+		{"done restored to merged", "done", "merged", "merged"},
+		{"running passes through pinned pr", "running", "pr", "running"},
+		{"permission passes through pinned pr", "permission", "pr", "permission"},
+		{"error passes through pinned pr", "error", "pr", "error"},
+		{"plan passes through pinned pr", "plan", "pr", "plan"},
+		{"no pin leaves state unchanged", "running", "", "running"},
+		{"no pin idle_prompt unchanged", "idle_prompt", "", "idle_prompt"},
 	}
 
-	ApplyPinnedStates(&sf)
-
-	if sf.Agents["pinned-pr"].State != "pr" {
-		t.Errorf("expected pr, got %s", sf.Agents["pinned-pr"].State)
-	}
-	if sf.Agents["pinned-merged"].State != "merged" {
-		t.Errorf("expected merged, got %s", sf.Agents["pinned-merged"].State)
-	}
-	if sf.Agents["no-pin"].State != "running" {
-		t.Errorf("expected running unchanged, got %s", sf.Agents["no-pin"].State)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sf := domain.StateFile{
+				Agents: map[string]domain.Agent{
+					"agent": {State: tt.state, PinnedState: tt.pinned},
+				},
+			}
+			ApplyPinnedStates(&sf)
+			if got := sf.Agents["agent"].State; got != tt.wantState {
+				t.Errorf("got %q, want %q", got, tt.wantState)
+			}
+		})
 	}
 }
 

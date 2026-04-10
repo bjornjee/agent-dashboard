@@ -3,10 +3,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { detectPR, buildPRUpdate, PR_URL_RE, getCachedGhAuth } = require('./pr-detect');
+const { detectPR, buildPRUpdate, PR_URL_RE } = require('./pr-detect');
 
 describe('detectPR', () => {
   it('detects gh pr create with URL in output', () => {
@@ -92,107 +89,12 @@ describe('buildPRUpdate', () => {
     assert.equal(update.pr_url, undefined);
   });
 
-  it('omits pinned_state for created when ghAuthed is true', () => {
+  it('always pins created regardless of extra args', () => {
     const update = buildPRUpdate(
       { action: 'created', prUrl: 'https://github.com/a/b/pull/1' },
-      { ghAuthed: true },
     );
     assert.equal(update.state, 'pr');
-    assert.equal(update.pinned_state, undefined);
-    assert.equal(update.pr_url, 'https://github.com/a/b/pull/1');
-  });
-
-  it('still sets pinned_state for merged when ghAuthed is true', () => {
-    const update = buildPRUpdate(
-      { action: 'merged', prUrl: 'https://github.com/a/b/pull/1' },
-      { ghAuthed: true },
-    );
-    assert.equal(update.state, 'merged');
-    assert.equal(update.pinned_state, 'merged');
-    assert.equal(update.pr_url, 'https://github.com/a/b/pull/1');
-  });
-
-  it('sets pinned_state for created when ghAuthed is false (default)', () => {
-    const update = buildPRUpdate(
-      { action: 'created', prUrl: 'https://github.com/a/b/pull/1' },
-      { ghAuthed: false },
-    );
     assert.equal(update.pinned_state, 'pr');
-  });
-});
-
-describe('getCachedGhAuth', () => {
-  function makeTmpCachePath() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-auth-cache-'));
-    return path.join(dir, 'gh-auth.json');
-  }
-
-  it('returns cached value when within TTL without invoking isGhAuthed', () => {
-    const cachePath = makeTmpCachePath();
-    const now = 1_000_000_000;
-    fs.writeFileSync(cachePath, JSON.stringify({ authed: true, checked_at: now - 1000 }));
-
-    let called = 0;
-    const authed = getCachedGhAuth({
-      cachePath,
-      now,
-      ttlMs: 60_000,
-      isGhAuthed: () => { called++; return false; },
-    });
-
-    assert.equal(authed, true);
-    assert.equal(called, 0, 'must not call isGhAuthed when cache is fresh');
-  });
-
-  it('refreshes when cache is expired', () => {
-    const cachePath = makeTmpCachePath();
-    const now = 1_000_000_000;
-    fs.writeFileSync(cachePath, JSON.stringify({ authed: true, checked_at: now - 100_000 }));
-
-    const authed = getCachedGhAuth({
-      cachePath,
-      now,
-      ttlMs: 60_000,
-      isGhAuthed: () => false,
-    });
-
-    assert.equal(authed, false);
-    const written = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    assert.equal(written.authed, false);
-    assert.equal(written.checked_at, now);
-  });
-
-  it('refreshes and creates file when cache is missing', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-auth-cache-'));
-    const cachePath = path.join(dir, 'nested', 'gh-auth.json');
-    const now = 2_000_000_000;
-
-    const authed = getCachedGhAuth({
-      cachePath,
-      now,
-      ttlMs: 60_000,
-      isGhAuthed: () => true,
-    });
-
-    assert.equal(authed, true);
-    assert.ok(fs.existsSync(cachePath), 'should create cache file (and parent dir)');
-    const written = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    assert.equal(written.authed, true);
-    assert.equal(written.checked_at, now);
-  });
-
-  it('returns false and does not throw on parse error', () => {
-    const cachePath = makeTmpCachePath();
-    fs.writeFileSync(cachePath, 'not-json');
-
-    const authed = getCachedGhAuth({
-      cachePath,
-      now: 1_000_000_000,
-      ttlMs: 60_000,
-      isGhAuthed: () => { throw new Error('boom'); },
-    });
-
-    assert.equal(authed, false);
   });
 });
 
