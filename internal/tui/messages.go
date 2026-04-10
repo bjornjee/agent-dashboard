@@ -6,6 +6,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/usage"
 )
 
 // -- Messages --
@@ -80,6 +81,15 @@ type createSessionMsg struct {
 }
 type rateLimitMsg struct {
 	rateLimit *domain.RateLimit
+}
+type codexUsageMsg struct {
+	days []usage.CodexDayUsage
+}
+type codexPersistMsg struct{}
+type codexDBUsageMsg struct {
+	days      []db.DayUsage
+	totalCost float64
+	todayCost float64
 }
 
 // -- Modes --

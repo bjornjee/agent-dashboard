@@ -268,9 +268,9 @@ func loadDBDailyUsage(database *db.DB) tea.Cmd {
 		today := time.Now().Format("2006-01-02")
 		since := time.Now().AddDate(0, 0, -6) // 7 days including today
 		return dbDailyUsageMsg{
-			total:     database.TotalCost(),
-			todayCost: database.CostForDate(today),
-			days:      database.UsageByDay(since),
+			total:     database.TotalCostForProvider("claude"),
+			todayCost: database.CostForDateAndProvider(today, "claude"),
+			days:      database.UsageByDayForProvider(since, "claude"),
 		}
 	}
 }
@@ -316,6 +316,45 @@ func loadRateLimit() tea.Cmd {
 	return func() tea.Msg {
 		rl, _ := usage.FetchRateLimit(context.Background())
 		return rateLimitMsg{rateLimit: rl}
+	}
+}
+
+func loadCodexUsage(sessionsDir string) tea.Cmd {
+	return func() tea.Msg {
+		since := time.Now().AddDate(0, 0, -6) // 7 days including today
+		days := usage.ReadCodexDailyUsage(sessionsDir, since)
+		return codexUsageMsg{days: days}
+	}
+}
+
+func persistCodexUsage(database *db.DB, days []usage.CodexDayUsage) tea.Cmd {
+	return func() tea.Msg {
+		for _, d := range days {
+			if d.OutputTokens == 0 && d.InputTokens == 0 {
+				continue
+			}
+			u := domain.Usage{
+				InputTokens:     d.InputTokens,
+				OutputTokens:    d.OutputTokens,
+				CacheReadTokens: d.CachedInputTokens,
+				CostUSD:         d.CostUSD,
+			}
+			// Use date as session_id component since Codex sessions are date-partitioned
+			_ = database.UpsertUsageWithProvider(d.Date, "codex-daily", "codex", "", u)
+		}
+		return codexPersistMsg{}
+	}
+}
+
+func loadCodexDBUsage(database *db.DB) tea.Cmd {
+	return func() tea.Msg {
+		today := time.Now().Format("2006-01-02")
+		since := time.Now().AddDate(0, 0, -6)
+		return codexDBUsageMsg{
+			days:      database.UsageByDayForProvider(since, "codex"),
+			totalCost: database.TotalCostForProvider("codex"),
+			todayCost: database.CostForDateAndProvider(today, "codex"),
+		}
 	}
 }
 

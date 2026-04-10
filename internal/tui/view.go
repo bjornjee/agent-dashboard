@@ -129,7 +129,7 @@ func (m *model) updateRightContent() {
 		return
 	}
 
-	// domain.Usage mode overrides right panel content (works even with no agents)
+	// Usage mode overrides right panel content (works even with no agents)
 	if m.mode == modeUsage {
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
@@ -649,77 +649,131 @@ func (m model) usageContent() string {
 		lines = append(lines, "")
 	}
 
-	lines = append(lines, costStyle.Render("  USAGE"))
-	lines = append(lines, "")
-
-	// Build a map from date string to DayUsage for quick lookup.
-	dayMap := make(map[string]db.DayUsage, len(m.dbDailyUsage))
+	// Build day maps for Claude (from combined dbDailyUsage) and Codex.
+	claudeDayMap := make(map[string]db.DayUsage, len(m.dbDailyUsage))
 	for _, d := range m.dbDailyUsage {
-		dayMap[d.Date] = d
+		claudeDayMap[d.Date] = d
+	}
+	codexDayMap := make(map[string]db.DayUsage, len(m.codexDailyUsage))
+	for _, d := range m.codexDailyUsage {
+		codexDayMap[d.Date] = d
 	}
 
-	// Compute today's and week's aggregated tokens + cost.
 	todayStr := time.Now().Format("2006-01-02")
-	todayUsage := dayMap[todayStr] // zero-value if absent
-
-	var weekIn, weekOut, weekCache int
-	var weekCost float64
-	for _, d := range m.dbDailyUsage {
-		weekIn += d.InputTokens
-		weekOut += d.OutputTokens
-		weekCache += d.CacheReadTokens + d.CacheWriteTokens
-		weekCost += d.CostUSD
-	}
+	hasCodex := m.codexTotalCost > 0 || len(m.codexDailyUsage) > 0
 
 	if m.db != nil {
-		todayCache := todayUsage.CacheReadTokens + todayUsage.CacheWriteTokens
+		// -- Claude section --
+		claudeLabel := "  USAGE"
+		if hasCodex {
+			claudeLabel = "  USAGE (Claude)"
+		}
+		lines = append(lines, costStyle.Render(claudeLabel))
+		lines = append(lines, "")
+
+		claudeToday := claudeDayMap[todayStr]
+		var cWeekIn, cWeekOut, cWeekCache int
+		var cWeekCost float64
+		for _, d := range m.dbDailyUsage {
+			cWeekIn += d.InputTokens
+			cWeekOut += d.OutputTokens
+			cWeekCache += d.CacheReadTokens + d.CacheWriteTokens
+			cWeekCost += d.CostUSD
+		}
+		todayCache := claudeToday.CacheReadTokens + claudeToday.CacheWriteTokens
 		lines = append(lines, fmt.Sprintf("  Today    %s   in: %s  out: %s  total: %s",
-			costStyle.Render(usage.FormatCost(todayUsage.CostUSD)),
-			usage.FormatTokens(todayUsage.InputTokens),
-			usage.FormatTokens(todayUsage.OutputTokens),
-			usage.FormatTokens(todayUsage.InputTokens+todayUsage.OutputTokens+todayCache)))
-
+			costStyle.Render(usage.FormatCost(claudeToday.CostUSD)),
+			usage.FormatTokens(claudeToday.InputTokens),
+			usage.FormatTokens(claudeToday.OutputTokens),
+			usage.FormatTokens(claudeToday.InputTokens+claudeToday.OutputTokens+todayCache)))
 		lines = append(lines, fmt.Sprintf("  Week     %s   in: %s  out: %s  total: %s",
-			costStyle.Render(usage.FormatCost(weekCost)),
-			usage.FormatTokens(weekIn),
-			usage.FormatTokens(weekOut),
-			usage.FormatTokens(weekIn+weekOut+weekCache)))
-
+			costStyle.Render(usage.FormatCost(cWeekCost)),
+			usage.FormatTokens(cWeekIn),
+			usage.FormatTokens(cWeekOut),
+			usage.FormatTokens(cWeekIn+cWeekOut+cWeekCache)))
 		lines = append(lines, fmt.Sprintf("  All-time %s",
 			costStyle.Render(usage.FormatCost(m.dbTotalCost))))
-
 		lines = append(lines, "")
 
-		// Daily breakdown table for the last 7 days.
+		// -- Codex section (only if data exists) --
+		if hasCodex {
+			lines = append(lines, costStyle.Render("  USAGE (Codex)"))
+			lines = append(lines, "")
+
+			codexToday := codexDayMap[todayStr]
+			var xWeekIn, xWeekOut, xWeekCache int
+			var xWeekCost float64
+			for _, d := range m.codexDailyUsage {
+				xWeekIn += d.InputTokens
+				xWeekOut += d.OutputTokens
+				xWeekCache += d.CacheReadTokens
+				xWeekCost += d.CostUSD
+			}
+			xTodayTotal := codexToday.InputTokens + codexToday.OutputTokens + codexToday.CacheReadTokens
+			lines = append(lines, fmt.Sprintf("  Today    %s   in: %s  out: %s  total: %s",
+				costStyle.Render(usage.FormatCost(codexToday.CostUSD)),
+				usage.FormatTokens(codexToday.InputTokens),
+				usage.FormatTokens(codexToday.OutputTokens),
+				usage.FormatTokens(xTodayTotal)))
+			lines = append(lines, fmt.Sprintf("  Week     %s   in: %s  out: %s  total: %s",
+				costStyle.Render(usage.FormatCost(xWeekCost)),
+				usage.FormatTokens(xWeekIn),
+				usage.FormatTokens(xWeekOut),
+				usage.FormatTokens(xWeekIn+xWeekOut+xWeekCache)))
+			lines = append(lines, fmt.Sprintf("  All-time %s",
+				costStyle.Render(usage.FormatCost(m.codexTotalCost))))
+			lines = append(lines, "")
+
+			// -- Combined summary --
+			lines = append(lines, costStyle.Render("  COMBINED"))
+			lines = append(lines, "")
+			lines = append(lines, fmt.Sprintf("  Today %s   Week %s   All-time %s",
+				costStyle.Render(usage.FormatCost(claudeToday.CostUSD+codexToday.CostUSD)),
+				costStyle.Render(usage.FormatCost(cWeekCost+xWeekCost)),
+				costStyle.Render(usage.FormatCost(m.dbTotalCost+m.codexTotalCost))))
+			lines = append(lines, "")
+		}
+
+		// Daily breakdown table — combined Claude + Codex.
 		lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (7d)"))
 		lines = append(lines, "")
-		lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s",
+		lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 			helpStyle.Render("DATE      "),
 			helpStyle.Render("INPUT   "),
 			helpStyle.Render("OUTPUT  "),
+			helpStyle.Render("CACHED  "),
 			helpStyle.Render("TOTAL   "),
 			helpStyle.Render("COST    ")))
 
-		// Generate the full 7-day grid, oldest first.
 		for i := 6; i >= 0; i-- {
 			date := time.Now().AddDate(0, 0, -i)
 			dateStr := date.Format("2006-01-02")
 			label := date.Format("Jan 02")
 
-			if d, ok := dayMap[dateStr]; ok {
-				total := d.InputTokens + d.OutputTokens + d.CacheReadTokens + d.CacheWriteTokens
-				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
+			cd := claudeDayMap[dateStr]
+			xd := codexDayMap[dateStr]
+			inTok := cd.InputTokens + xd.InputTokens
+			outTok := cd.OutputTokens + xd.OutputTokens
+			cacheTok := cd.CacheReadTokens + cd.CacheWriteTokens + xd.CacheReadTokens + xd.CacheWriteTokens
+			dayCost := cd.CostUSD + xd.CostUSD
+
+			if inTok > 0 || outTok > 0 || dayCost > 0 {
+				totalTok := inTok + outTok + cacheTok
+				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %-8s  %s",
 					label,
-					usage.FormatTokens(d.InputTokens),
-					usage.FormatTokens(d.OutputTokens),
-					usage.FormatTokens(total),
-					costStyle.Render(usage.FormatCost(d.CostUSD))))
+					usage.FormatTokens(inTok),
+					usage.FormatTokens(outTok),
+					usage.FormatTokens(cacheTok),
+					usage.FormatTokens(totalTok),
+					costStyle.Render(usage.FormatCost(dayCost))))
 			} else {
-				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %s",
-					label, "—", "—", "—", helpStyle.Render("—")))
+				lines = append(lines, fmt.Sprintf("  %-10s  %-8s  %-8s  %-8s  %-8s  %s",
+					label, "—", "—", "—", "—", helpStyle.Render("—")))
 			}
 		}
 	} else {
+		lines = append(lines, costStyle.Render("  USAGE"))
+		lines = append(lines, "")
 		lines = append(lines, fmt.Sprintf("  Session  %s   in: %s  out: %s  total: %s",
 			costStyle.Render(usage.FormatCost(m.totalUsage.CostUSD)),
 			usage.FormatTokens(m.totalUsage.InputTokens),
@@ -986,6 +1040,18 @@ func (m model) renderRightPanel() string {
 			Render(m.messageVP.View())
 	}
 
+	// Usage mode: take the entire right panel — no agent header
+	if m.mode == modeUsage {
+		usageLabel := " " + lipgloss.NewStyle().Foreground(themePeach).Bold(true).
+			Render("── Usage") + " " + helpStyle.Render(strings.Repeat("─", 20))
+		m.messageVP.SetHeight(max(panelHeight-2, 3))
+		content := strings.Join([]string{usageLabel, m.messageVP.View()}, "\n")
+		return borderStyle.
+			Width(m.rightWidth + 2).
+			Height(panelHeight + 2).
+			Render(content)
+	}
+
 	agent := m.selectedAgent()
 	if agent == nil {
 		return borderStyle.
@@ -1101,13 +1167,7 @@ func (m model) renderRightPanel() string {
 
 	var filesLabel, historyLabel, messageLabel string
 
-	if m.mode == modeUsage {
-		filesLabel = ""
-		historyLabel = ""
-		messageLabel = " " + lipgloss.NewStyle().Foreground(themePeach).Bold(true).
-			Render("── domain.Usage") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
-			" " + helpStyle.Render(strings.Repeat("─", 20))
-	} else if sub != nil {
+	if sub != nil {
 		filesLabel = " " + boldStyle.Render("── Files Touched") + focusMarker(focusFiles) + scrollHint(m.filesVP) +
 			" " + helpStyle.Render(strings.Repeat("─", 12))
 		historyLabel = " " + boldStyle.Render("── Activity") + focusMarker(focusHistory) + scrollHint(m.historyVP) +
@@ -1168,15 +1228,7 @@ func (m model) renderRightPanel() string {
 
 	// Compose right panel (with blank-line buffers between sections)
 	var parts []string
-	if m.mode == modeUsage {
-		// Single-section layout: header + label + messageVP
-		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
-		parts = []string{
-			headerStr,
-			messageLabel,
-			m.messageVP.View(),
-		}
-	} else if m.planVisible && m.renderedPlan != "" {
+	if m.planVisible && m.renderedPlan != "" {
 		m.messageVP.SetHeight(max(panelHeight-actualHeaderLines-1, minMessageHeight))
 		parts = []string{
 			headerStr,
@@ -1232,17 +1284,18 @@ func (m model) statusLine() string {
 func (m model) renderHelpBar() string {
 	var parts []string
 
-	// Today's accumulated cost
-	todayCost := m.dbTodayCost
+	// Today's accumulated cost (combined Claude + Codex)
+	todayCost := m.dbTodayCost + m.codexTodayCost
 	if todayCost > 0 {
-		todayStr := lipgloss.NewStyle().Foreground(themePeach).Bold(true).
-			Render(usage.FormatCost(todayCost))
-		parts = append(parts, fmt.Sprintf("Today: %s", todayStr))
+		costLabel := usage.FormatCost(todayCost)
+		todayRendered := lipgloss.NewStyle().Foreground(themePeach).Bold(true).
+			Render(costLabel)
+		parts = append(parts, fmt.Sprintf("Today: %s", todayRendered))
 		parts = append(parts, "│")
 	}
 
-	// All-time total
-	totalCost := m.dbTotalCost
+	// All-time total (Claude + Codex)
+	totalCost := m.dbTotalCost + m.codexTotalCost
 	if totalCost == 0 {
 		totalCost = m.totalUsage.CostUSD
 	}

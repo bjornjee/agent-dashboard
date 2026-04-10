@@ -1062,6 +1062,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 		} else {
 			m.mode = modeUsage
+			m.messageVP.GotoTop()
 			m.updateRightContent()
 		}
 		return m, nil
