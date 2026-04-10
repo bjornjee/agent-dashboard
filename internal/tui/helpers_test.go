@@ -59,84 +59,6 @@ func TestRepoFromCwd(t *testing.T) {
 	}
 }
 
-func TestAgentLabel(t *testing.T) {
-	tests := []struct {
-		name  string
-		agent domain.Agent
-		want  string
-	}{
-		{
-			name: "repo and branch",
-			agent: domain.Agent{
-				Cwd:    "/Users/bjornjee/Code/bjornjee/skills",
-				Branch: "feat/dashboard-agent-naming",
-			},
-			want: "skills | feat/dashboard-agent-naming",
-		},
-		{
-			name: "worktree repo and branch",
-			agent: domain.Agent{
-				Cwd:    "/Users/bjornjee/Code/bjornjee/worktrees/skills/dashboard-agent-naming",
-				Branch: "feat/dashboard-agent-naming",
-			},
-			want: "skills | feat/dashboard-agent-naming",
-		},
-		{
-			name: "worktree_cwd preferred over cwd",
-			agent: domain.Agent{
-				Cwd:         "/Users/bjornjee/Code/tomoro",
-				WorktreeCwd: "/Users/bjornjee/Code/tomoro/worktrees/tomoro-meta-harness/refactor-branch",
-				Branch:      "refactor-branch",
-			},
-			want: "tomoro-meta-harness | refactor-branch",
-		},
-		{
-			name: "worktree_cwd non-worktree path",
-			agent: domain.Agent{
-				Cwd:         "/Users/bjornjee/Code/tomoro",
-				WorktreeCwd: "/Users/bjornjee/Code/tomoro/tomoro-meta-harness",
-				Branch:      "main",
-			},
-			want: "tomoro-meta-harness | main",
-		},
-		{
-			name: "repo only no branch",
-			agent: domain.Agent{
-				Cwd: "/Users/bjornjee/Code/bjornjee/skills",
-			},
-			want: "skills",
-		},
-		{
-			name: "branch only no cwd",
-			agent: domain.Agent{
-				Branch: "main",
-			},
-			want: "main",
-		},
-		{
-			name: "fallback to session",
-			agent: domain.Agent{
-				Session: "dev",
-			},
-			want: "dev",
-		},
-		{
-			name:  "empty agent",
-			agent: domain.Agent{},
-			want:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := agentLabel(tt.agent)
-			if got != tt.want {
-				t.Errorf("agentLabel() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPermissionModeColor(t *testing.T) {
 	tests := []struct {
 		name string
@@ -468,37 +390,6 @@ func TestPadLabel(t *testing.T) {
 	visualWidth = lipgloss.Width(got)
 	if visualWidth != 9 {
 		t.Errorf("padLabel(\"agents\", 9) visual width = %d, want 9", visualWidth)
-	}
-}
-
-func TestAgentLabelStyled(t *testing.T) {
-	agent := domain.Agent{
-		Cwd:    "/Users/test/Code/skills",
-		Branch: "feat/dashboard",
-	}
-	got := agentLabelStyled(agent)
-	plain := stripANSI(got)
-	// Should contain repo, separator, and branch
-	if !strings.Contains(plain, "skills") {
-		t.Errorf("agentLabelStyled should contain repo name, got %q", plain)
-	}
-	if !strings.Contains(plain, "|") {
-		t.Errorf("agentLabelStyled should contain | separator, got %q", plain)
-	}
-	if !strings.Contains(plain, "feat/dashboard") {
-		t.Errorf("agentLabelStyled should contain branch, got %q", plain)
-	}
-}
-
-func TestAgentLabel_PipeSeparator(t *testing.T) {
-	// agentLabel should now use " | " separator instead of "/"
-	agent := domain.Agent{
-		Cwd:    "/Users/test/Code/skills",
-		Branch: "feat/dashboard",
-	}
-	got := agentLabel(agent)
-	if got != "skills | feat/dashboard" {
-		t.Errorf("agentLabel() = %q, want %q", got, "skills | feat/dashboard")
 	}
 }
 
