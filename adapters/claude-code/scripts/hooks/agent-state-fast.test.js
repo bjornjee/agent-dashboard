@@ -415,7 +415,7 @@ describe('fast hook state updates (per-agent files)', () => {
       worktreeCwd: null,
     });
 
-    // PR guard returns early, but hook_blocked must still be cleared
+    // hook_blocked triggers permission state, which differs from pr — changed
     assert.equal(changed, true);
     assert.equal(update.hook_blocked, '', 'hook_blocked should be cleared even with PR state');
   });

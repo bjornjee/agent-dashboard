@@ -176,15 +176,19 @@ func gitBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// idleStates are the agent states where a pinned_state override may be applied.
+// Active states (running, permission, error, plan) pass through unchanged so
+// the dashboard reflects live work.
+var idleStates = map[string]bool{
+	"idle_prompt": true, "done": true, "question": true,
+}
+
 // ApplyPinnedStates restores each agent's State to its PinnedState, but only
 // when the agent is idle. Active states (running, permission, error, plan)
 // pass through so the dashboard reflects live work.
 func ApplyPinnedStates(sf *domain.StateFile) {
-	idle := map[string]bool{
-		"idle_prompt": true, "done": true, "question": true,
-	}
 	for key, agent := range sf.Agents {
-		if agent.PinnedState != "" && idle[agent.State] {
+		if agent.PinnedState != "" && idleStates[agent.State] {
 			agent.State = agent.PinnedState
 			sf.Agents[key] = agent
 		}
