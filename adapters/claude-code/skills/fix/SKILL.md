@@ -116,6 +116,8 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 ### Phase 5: Fix (GREEN)
 
+**Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, invoke `/codex-delegate` with the diagnosis (Phase 4) and failing test (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
+
 1. Implement the **minimal fix** — change only what is necessary to fix the bug.
 2. Run `make test` — the previously failing test must now **pass**.
 3. Run the full test suite via `make test` — no regressions.
