@@ -88,6 +88,8 @@ Start two tracks in parallel:
 
 ### Phase 4: Transform
 
+**Delegation gate:** Run `codex --version`. If Codex CLI is available, invoke `/codex-delegate` with the scope (Phase 2) and baseline (Phase 3) as implementation context, then skip to the phase gate. If unavailable or user opts out, proceed below.
+
 Apply the refactoring in small, atomic steps. For each step:
 
 1. Make a single, focused change (e.g., extract a function, rename a variable, move a file).

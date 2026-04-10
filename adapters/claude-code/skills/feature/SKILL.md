@@ -78,6 +78,8 @@ Start two tracks in parallel:
 - If `.env-setup-failed` exists: surface the error and halt.
 - If neither file exists: the background agent is still running — wait for it to finish before proceeding.
 
+**Delegation gate:** Run `codex --version`. If Codex CLI is available, invoke `/codex-delegate` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. If unavailable or user opts out, proceed below.
+
 Build the feature following strict RED → GREEN → REFACTOR:
 
 1. **RED:** Write failing tests first. Run `make test` to confirm they fail. Show the failing output. Do not proceed until tests fail for the right reason.
