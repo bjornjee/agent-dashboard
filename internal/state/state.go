@@ -176,11 +176,15 @@ func gitBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// ApplyPinnedStates overrides each agent's State with its PinnedState when set.
-// This ensures user-driven promotions (pr, merged) survive hook updates.
+// ApplyPinnedStates restores each agent's State to its PinnedState, but only
+// when the agent is idle. Active states (running, permission, error, plan)
+// pass through so the dashboard reflects live work.
 func ApplyPinnedStates(sf *domain.StateFile) {
+	idle := map[string]bool{
+		"idle_prompt": true, "done": true, "question": true,
+	}
 	for key, agent := range sf.Agents {
-		if agent.PinnedState != "" {
+		if agent.PinnedState != "" && idle[agent.State] {
 			agent.State = agent.PinnedState
 			sf.Agents[key] = agent
 		}

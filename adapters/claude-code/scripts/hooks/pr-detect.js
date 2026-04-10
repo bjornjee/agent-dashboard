@@ -2,11 +2,10 @@
 /**
  * PostToolUse hook for Bash — detects PR creation and merge via `gh` CLI.
  *
- * On `gh pr create`: extracts the PR URL from tool output, sets state to "pr".
- *   Pins the state ("sticky pr") only when `gh auth status` is NOT available.
- *   When gh is authenticated (cached per ~/.agent-dashboard/gh-auth.json, 24h
- *   TTL), the state is left unpinned so follow-up agent activity transitions
- *   naturally while the user iterates on rough edges.
+ * On `gh pr create`: extracts the PR URL from tool output, sets state to "pr"
+ *   and pins it so idle states don't overwrite it. Active states (running,
+ *   permission) still show through — the Go-side ApplyPinnedStates only
+ *   restores pinned state from idle states.
  * On `gh pr merge`: sets state to "merged" and pins it (terminal state).
  *
  * Writes pr_url and state into the agent's state file.
@@ -17,20 +16,10 @@
 
 'use strict';
 
-const fs = require('fs');
-const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
-
-// Default cache path for gh auth status, keyed off the same base as agent state.
-const DEFAULT_GH_AUTH_CACHE = path.join(
-  process.env.AGENT_DASHBOARD_DIR || path.join(process.env.HOME || process.env.USERPROFILE || os.tmpdir(), '.agent-dashboard'),
-  'gh-auth.json',
-);
-const DEFAULT_GH_AUTH_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // GitHub PR URL pattern: https://github.com/<owner>/<repo>/pull/<number>
 const PR_URL_RE = /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
@@ -64,22 +53,18 @@ function detectPR(command, output) {
 /**
  * Build the state update from a detected PR action.
  *
- * When `ghAuthed` is true we skip `pinned_state` on PR creation so subsequent
- * agent activity (running, idle_prompt, ...) transitions naturally while the
- * user iterates on rough edges post-PR. Merge still pins — merged is terminal
- * and the sticky visual cue is useful for worktree cleanup.
+ * Both PR creation and merge pin the state. Active states (running,
+ * permission) still show through on the dashboard — the Go-side
+ * ApplyPinnedStates only restores pinned state from idle states.
  *
  * @param {{ action: string, prUrl: string|null }} detection
- * @param {{ ghAuthed?: boolean }} [opts]
  * @returns {object} fields to merge into agent state
  */
-function buildPRUpdate(detection, { ghAuthed = false } = {}) {
+function buildPRUpdate(detection) {
   const update = {};
   if (detection.action === 'created') {
     update.state = 'pr';
-    if (!ghAuthed) {
-      update.pinned_state = 'pr';
-    }
+    update.pinned_state = 'pr';
   } else if (detection.action === 'merged') {
     update.state = 'merged';
     update.pinned_state = 'merged';
@@ -88,73 +73,6 @@ function buildPRUpdate(detection, { ghAuthed = false } = {}) {
     update.pr_url = detection.prUrl;
   }
   return update;
-}
-
-/**
- * Check whether `gh auth status` succeeds. Synchronous, short timeout, and
- * never throws. Returns false if gh is missing, not authed, or slow.
- * @returns {boolean}
- */
-function isGhAuthed() {
-  try {
-    execFileSync('gh', ['auth', 'status'], { stdio: 'ignore', timeout: 1500 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Read or refresh the cached gh-auth result. Reads a small JSON file at
- * `cachePath` containing `{ authed, checked_at }` (ms epoch). If missing or
- * older than `ttlMs`, invokes `isGhAuthed` and rewrites the cache.
- *
- * Any I/O or parse error falls back to calling `isGhAuthed` directly, and a
- * thrown `isGhAuthed` yields `false`. This function must never throw.
- *
- * @param {object} [opts]
- * @param {string} [opts.cachePath]
- * @param {number} [opts.now]
- * @param {number} [opts.ttlMs]
- * @param {() => boolean} [opts.isGhAuthed] - injected for tests
- * @returns {boolean}
- */
-function getCachedGhAuth({
-  cachePath = DEFAULT_GH_AUTH_CACHE,
-  now = Date.now(),
-  ttlMs = DEFAULT_GH_AUTH_TTL_MS,
-  isGhAuthed: check = isGhAuthed,
-} = {}) {
-  try {
-    const raw = fs.readFileSync(cachePath, 'utf8');
-    const entry = JSON.parse(raw);
-    if (
-      entry
-      && typeof entry.checked_at === 'number'
-      && typeof entry.authed === 'boolean'
-      && now - entry.checked_at < ttlMs
-    ) {
-      return entry.authed;
-    }
-  } catch {
-    // Missing or corrupt cache — fall through to refresh.
-  }
-
-  let authed = false;
-  try {
-    authed = !!check();
-  } catch {
-    authed = false;
-  }
-
-  try {
-    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-    fs.writeFileSync(cachePath, JSON.stringify({ authed, checked_at: now }));
-  } catch {
-    // Cache write failure is non-fatal.
-  }
-
-  return authed;
 }
 
 // Only run stdin reader when executed directly (not when require()'d by tests)
@@ -180,8 +98,7 @@ if (require.main === module) {
       if (!sessionId) return;
 
       const existing = readAgentState(sessionId) || {};
-      const ghAuthed = getCachedGhAuth();
-      const update = buildPRUpdate(detection, { ghAuthed });
+      const update = buildPRUpdate(detection);
 
       // Preserve existing fields, only merge PR-related updates
       writeState(sessionId, {
@@ -195,4 +112,4 @@ if (require.main === module) {
 }
 
 // Export for testing
-module.exports = { detectPR, buildPRUpdate, PR_URL_RE, isGhAuthed, getCachedGhAuth };
+module.exports = { detectPR, buildPRUpdate, PR_URL_RE };

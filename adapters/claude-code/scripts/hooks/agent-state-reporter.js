@@ -138,12 +138,12 @@ function report(input) {
 
   const existing = readAgentState(sessionId) || {};
 
-  // On Stop events, preserve PR/merged states — these are set by pr-detect or
-  // dashboard pinning and must not be overwritten by detectState().
+  // On Stop events, preserve merged state — it is terminal and must not be
+  // overwritten by detectState(). PR state is allowed through so idle states
+  // write to disk; the Go-side ApplyPinnedStates restores pr from idle states.
   // SubagentStart/Stop events are allowed through so subagent_count stays accurate.
   const hookEvent = input.hook_event_name;
-  const PR_STATES = new Set(['pr', 'merged']);
-  if (hookEvent === 'Stop' && PR_STATES.has(existing.pinned_state)) return;
+  if (hookEvent === 'Stop' && existing.pinned_state === 'merged') return;
 
   const cwd = input.cwd || process.cwd();
 

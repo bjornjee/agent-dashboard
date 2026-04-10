@@ -137,6 +137,13 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 ### Phase 7: Review and Commit
 
+Before committing, run the `refactor-cleaner` agent as an automated cleanup pass — but only if needed:
+
+1. Check git log for a recent cleaner run: `git log --oneline -20 --grep="refactor: clean"`.
+2. If no recent run is found, spawn the `refactor-cleaner` agent (`run_in_background: false`) on all changed files.
+3. Run `make test` to confirm the cleaner's changes don't break anything.
+4. If the cleaner made changes, they will be included in the commit.
+
 1. Review all changes for correctness, security, and convention adherence.
 2. Commit with a `fix:` conventional commit message that describes what was fixed and why.
 

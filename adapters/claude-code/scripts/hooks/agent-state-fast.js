@@ -23,8 +23,6 @@ const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git
 
 // States set by the Stop hook that PostToolUse must not overwrite.
 const STOP_STATES = new Set(['idle_prompt', 'done', 'question']);
-// States set by pr-detect or dashboard pinning.
-const PR_STATES = new Set(['pr', 'merged']);
 
 /**
  * Determine the agent state from the hook event.
@@ -95,18 +93,6 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
   // Stop-derived states must not be overwritten by a late PostToolUse.
   // PreToolUse (next turn) is allowed through to correctly resume "running".
   if (hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state)) {
-    if (consumeBlocked) {
-      return { changed: true, update: { hook_blocked: '' } };
-    }
-    return { changed: false, update: null };
-  }
-
-  // Preserve PR states only when they are explicitly pinned (dashboard pin or
-  // pr-detect running in non-gh-authed mode). An unpinned state="pr" is
-  // transient — agent activity should overwrite it so the dashboard reflects
-  // live work while the user iterates on rough edges post-PR.
-  // Still clear hook_blocked even when returning early, to avoid a stuck signal.
-  if (PR_STATES.has(existing.pinned_state) && state === 'running') {
     if (consumeBlocked) {
       return { changed: true, update: { hook_blocked: '' } };
     }

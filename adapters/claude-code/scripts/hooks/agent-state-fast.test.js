@@ -219,9 +219,8 @@ describe('fast hook state updates (per-agent files)', () => {
   });
 
   it('allows transition out of "pr" state when not pinned', () => {
-    // When pr-detect runs under gh-authed mode, it sets state="pr" without
-    // pinned_state. Subsequent agent activity should overwrite the state so
-    // the dashboard reflects live work.
+    // Unpinned "pr" state (e.g. from an older hook version) is overridable
+    // by subsequent tool activity.
     const existing = {
       target: 'main:1.0',
       state: 'pr',
@@ -396,7 +395,7 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.hook_blocked, undefined, 'PostToolUse should not clear hook_blocked');
   });
 
-  it('hook_blocked is cleared even when PR-state guard returns early', () => {
+  it('hook_blocked is cleared on PreToolUse even when state is pr', () => {
     const existing = {
       target: 'main:1.0',
       state: 'pr',
