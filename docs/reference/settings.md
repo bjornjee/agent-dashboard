@@ -27,6 +27,10 @@ key_log       = false  # write key/mouse/focus events to debug-keys.log
 
 [experimental]
 ascii_pet     = false  # show animated ASCII pet in the left panel
+dino_game     = false  # enable Chrome-style dino runner game (Shift+G)
+
+[usage]
+rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic API (0 = disable)
 ```
 
 ## Settings table
@@ -40,6 +44,8 @@ ascii_pet     = false  # show animated ASCII pet in the left panel
 | `notifications` | `silent_events` | `false` | Show notification for non-alerting stops |
 | `debug` | `key_log` | `false` | Write key/mouse/focus events to `debug-keys.log` |
 | `experimental` | `ascii_pet` | `false` | Show animated ASCII pet in the left panel |
+| `experimental` | `dino_game` | `false` | Show Chrome-style dino runner game in the left panel (Shift+G to toggle) |
+| `usage` | `rate_limit_poll_seconds` | `60` | How often (in seconds) to fetch rate-limit data from the Anthropic OAuth API. Set to `0` to disable. |
 
 ## Environment variables
 
@@ -48,3 +54,6 @@ ascii_pet     = false  # show animated ASCII pet in the left panel
 | `AGENT_DASHBOARD_DIR` | Override default state directory (`~/.agent-dashboard`) | No |
 | `EDITOR` | Editor command for opening agent directories (default: `code`) | No |
 | `API_NINJAS_KEY` | API key for quote-of-the-day | No (falls back to built-in quotes) |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID for [mobile companion](../guides/mobile-companion/) authentication | No |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | No |
+| `GOOGLE_ALLOWED_EMAIL` | Email address allowed to access the mobile companion | No |

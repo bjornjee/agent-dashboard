@@ -1,6 +1,8 @@
 # agent-dashboard
 
-A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
+Real-time tmux dashboard to monitor, manage, and orchestrate AI coding agents — Claude Code, Codex, and more.
+
+A tmux-integrated TUI and mobile web companion for monitoring and controlling AI coding agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
 
 https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
@@ -18,7 +20,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Mermaid diagram viewer** — captures `mermaid` blocks from agent messages, browse per-session, render in browser via `D`
-- **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
+- **Usage dashboard** — per-agent token breakdown (Claude and Codex), 7-day cost chart, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr, rca)
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
 - **Dino runner game** — experimental Chrome-style endless runner in the left panel with jump, duck, speed ramp, and score counter (opt-in via settings)
