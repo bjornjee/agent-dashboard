@@ -102,7 +102,6 @@ func PhantomFilter(m tea.Model, msg tea.Msg) tea.Msg {
 }
 
 func (m model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	m.lastEscapeAt = time.Now()
 	mouse := msg.Mouse()
 	m.mouseY = mouse.Y
 	if m.DebugKeyLog != nil {

@@ -169,14 +169,13 @@ func (m *model) updateRightContent() {
 		m.messageVP.SetContent(m.renderDiagramsPanel())
 	} else if m.planVisible && m.renderedPlan != "" && m.mode != modeReply {
 		m.messageVP.SetContent(m.renderedPlan)
+	} else if m.mode == modeReply {
+		// Reply mode always shows the reply input, regardless of agent state.
+		m.messageVP.SetContent(m.waitingMessageContent())
 	} else if isBlocked(effState) || isWaiting(effState) {
 		m.messageVP.SetContent(m.waitingMessageContent())
 	} else if isReview(effState) || isPR(effState) || isMerged(effState) {
-		if m.mode == modeReply {
-			m.messageVP.SetContent(m.waitingMessageContent())
-		} else {
-			m.messageVP.SetContent(m.finalMessageContent())
-		}
+		m.messageVP.SetContent(m.finalMessageContent())
 	} else if m.tmuxAvailable && hasContent(m.capturedLines) {
 		w := m.rightWidth - 4
 		var lines []string
@@ -1220,6 +1219,10 @@ func (m model) renderRightPanel() string {
 					Render("── Final message") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 					" " + helpStyle.Render(strings.Repeat("─", 12))
 			}
+		} else if m.mode == modeReply {
+			messageLabel = " " + lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
+				Render("── Reply") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
+				" " + helpStyle.Render(strings.Repeat("─", 20))
 		} else {
 			messageLabel = " " + boldStyle.Render("── Live") + focusMarker(focusMessage) + scrollHint(m.messageVP) +
 				" " + helpStyle.Render(strings.Repeat("─", 21))
@@ -1261,6 +1264,39 @@ func (m model) renderRightPanel() string {
 		Width(m.rightWidth + 2).
 		Height(panelHeight + 2).
 		Render(content)
+}
+
+// modeBadge returns a vim-style mode indicator for non-normal modes.
+func (m model) modeBadge() string {
+	badgeStyle := lipgloss.NewStyle().Bold(true)
+
+	switch {
+	case m.mode == modeReply:
+		return badgeStyle.Foreground(textInputColor).Render("-- REPLY --")
+	case m.mode == modeUsage:
+		return badgeStyle.Foreground(themePeach).Render("-- USAGE --")
+	case m.mode == modeConfirmClose:
+		return badgeStyle.Foreground(errorColor).Render("-- CLOSE? --")
+	case m.mode == modeConfirmMerge:
+		return badgeStyle.Foreground(prColor).Render("-- MERGE? --")
+	case m.mode == modeConfirmCleanup:
+		return badgeStyle.Foreground(doneColor).Render("-- CLEANUP? --")
+	case m.mode == modeConfirmSend:
+		return badgeStyle.Foreground(questionColor).Render("-- SEND? --")
+	case m.mode == modeConfirmJump:
+		return badgeStyle.Foreground(questionColor).Render("-- JUMP? --")
+	case m.mode == modeConfirmDeleteDiagram:
+		return badgeStyle.Foreground(errorColor).Render("-- DELETE? --")
+	case m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage:
+		return badgeStyle.Foreground(themeSapphire).Render("-- CREATE --")
+	case m.mode == modeDinoGame:
+		return badgeStyle.Foreground(themeGreen).Render("-- DINO --")
+	case m.helpVisible:
+		return badgeStyle.Foreground(themeLavender).Render("-- HELP --")
+	case m.diffVisible:
+		return badgeStyle.Foreground(themeSapphire).Render("-- DIFF --")
+	}
+	return ""
 }
 
 // statusLine returns the status message line (spawning spinner, errors, etc).
@@ -1324,6 +1360,25 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, boldStyle.Render("space")+" jump")
 		parts = append(parts, boldStyle.Render("↓")+" duck")
 		parts = append(parts, boldStyle.Render("esc")+" exit")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeUsage {
+		parts = append(parts, boldStyle.Render("u/esc")+" close")
+		parts = append(parts, boldStyle.Render("j/k")+" scroll")
+		parts = append(parts, boldStyle.Render("^u/^d")+" page")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeConfirmClose {
+		parts = append(parts, boldStyle.Render("y")+" close")
+		parts = append(parts, boldStyle.Render("n/esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeConfirmDeleteDiagram {
+		parts = append(parts, boldStyle.Render("y")+" delete")
+		parts = append(parts, boldStyle.Render("n/esc")+" cancel")
 		return m.truncateHelpBar(parts)
 	}
 
@@ -1403,20 +1458,31 @@ func (m model) renderHelpBar() string {
 }
 
 // composeHelpBarWithStatus takes the left-aligned help text and appends
-// the status line right-aligned, padding to fill the terminal width.
+// the status line and mode badge right-aligned, padding to fill the terminal width.
 func (m model) composeHelpBarWithStatus(leftContent string) string {
 	status := m.statusLine()
-	if status == "" {
+	badge := m.modeBadge()
+
+	// Build the right-side content: status + badge
+	var rightParts []string
+	if status != "" {
+		rightParts = append(rightParts, status)
+	}
+	if badge != "" {
+		rightParts = append(rightParts, badge)
+	}
+	if len(rightParts) == 0 {
 		return leftContent
 	}
+	rightContent := strings.Join(rightParts, "  ")
 
 	leftW := lipgloss.Width(leftContent)
-	statusW := lipgloss.Width(status)
-	gap := m.width - leftW - statusW
+	rightW := lipgloss.Width(rightContent)
+	gap := m.width - leftW - rightW
 	if gap < 2 {
 		gap = 2
 	}
-	return leftContent + strings.Repeat(" ", gap) + status
+	return leftContent + strings.Repeat(" ", gap) + rightContent
 }
 
 // truncateHelpBar joins help bar parts and truncates to fit within the terminal width.
@@ -1424,9 +1490,14 @@ func (m model) composeHelpBarWithStatus(leftContent string) string {
 func (m model) truncateHelpBar(parts []string) string {
 	statusText := m.statusLine()
 	statusW := lipgloss.Width(statusText)
+	badgeText := m.modeBadge()
+	badgeW := lipgloss.Width(badgeText)
 	reserveRight := 0
 	if statusW > 0 {
-		reserveRight = statusW + 2 // +2 for gap
+		reserveRight += statusW + 2
+	}
+	if badgeW > 0 {
+		reserveRight += badgeW + 2
 	}
 
 	maxWidth := m.width - 2 - reserveRight // leave room for leading padding and status

@@ -1365,19 +1365,18 @@ func TestPhantomKey_AcceptedAfterCooldown(t *testing.T) {
 	}
 }
 
-func TestHandleMouse_SetsLastEscapeAt(t *testing.T) {
+func TestHandleMouse_DoesNotSetLastEscapeAt(t *testing.T) {
+	// Mouse events in bubbletea v2 are fully parsed by the framework, so
+	// they should NOT refresh lastEscapeAt (which would block guarded keys).
 	m := NewModel(testConfig(t.TempDir()), nil)
 	if !m.lastEscapeAt.IsZero() {
 		t.Fatal("lastEscapeAt should be zero initially")
 	}
 
-	before := time.Now()
 	result, _ := m.handleMouse(tea.MouseMotionMsg{})
-	after := time.Now()
-
 	updated := result.(model)
-	if updated.lastEscapeAt.Before(before) || updated.lastEscapeAt.After(after) {
-		t.Errorf("lastEscapeAt should be between before and after; got %v", updated.lastEscapeAt)
+	if !updated.lastEscapeAt.IsZero() {
+		t.Error("handleMouse should NOT set lastEscapeAt — bubbletea v2 fully parses mouse sequences")
 	}
 }
 
@@ -2031,5 +2030,58 @@ func TestPasteInCreateSkillModeIsNoop(t *testing.T) {
 
 	if rm.textInput.Value() != "" {
 		t.Errorf("expected textInput to be empty in skill selection mode, got %q", rm.textInput.Value())
+	}
+}
+
+func TestGuardedKey_NotSwallowedAfterMouseEvent(t *testing.T) {
+	// After a mouse event, guarded keys like Enter should NOT be swallowed
+	// by PhantomFilter. Mouse events in bubbletea v2 are fully parsed by
+	// the framework — no phantom keys can leak from mouse escape sequences.
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+
+	// Simulate a mouse event by calling handleMouse
+	result, _ := m.handleMouse(tea.MouseClickMsg{})
+	m = result.(model)
+
+	// Now press Enter — it should pass through PhantomFilter
+	filtered := PhantomFilter(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if filtered == nil {
+		t.Error("Enter after mouse event should NOT be swallowed — mouse events in bubbletea v2 are fully parsed")
+	}
+}
+
+func TestGuardedKey_NotSwallowedAfterMouseScroll(t *testing.T) {
+	// Simulates the tmux-switch scenario: user scrolls with mouse (works),
+	// then presses a guarded key (should also work, not be swallowed).
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+
+	// Simulate multiple rapid mouse scroll events
+	for i := 0; i < 5; i++ {
+		result, _ := m.handleMouse(tea.MouseWheelMsg{})
+		m = result.(model)
+	}
+
+	// Guarded keys should still work
+	for _, key := range []string{"x", "enter", "r", "m"} {
+		var msg tea.KeyPressMsg
+		if key == "enter" {
+			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
+		} else {
+			msg = tea.KeyPressMsg{Code: rune(key[0]), Text: key}
+		}
+		filtered := PhantomFilter(m, msg)
+		if filtered == nil {
+			t.Errorf("key %q should NOT be swallowed after mouse events", key)
+		}
 	}
 }
