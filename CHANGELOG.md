@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/bjornjee/agent-dashboard/compare/v0.10.0...v0.11.0) (2026-04-10)
+
+
+### Features
+
+* add Codex delegation enforcement hooks ([#198](https://github.com/bjornjee/agent-dashboard/issues/198)) ([cc08f69](https://github.com/bjornjee/agent-dashboard/commit/cc08f69441191325b4eb33be65c18fb1d2c636ec))
+
+
+### Bug Fixes
+
+* add modeUsage key handler to prevent keyboard unresponsiveness ([#200](https://github.com/bjornjee/agent-dashboard/issues/200)) ([852b893](https://github.com/bjornjee/agent-dashboard/commit/852b8938aa5be4e3230b0390d1dc3813d64955c6))
+* resolve keyboard unresponsiveness after tmux switch and add mode indicators ([#201](https://github.com/bjornjee/agent-dashboard/issues/201)) ([c8054bc](https://github.com/bjornjee/agent-dashboard/commit/c8054bce4b5d8bd801ff5f1a105722b2b00b7adc))
+
 ## [0.10.0](https://github.com/bjornjee/agent-dashboard/compare/v0.9.0...v0.10.0) (2026-04-10)
 
 
