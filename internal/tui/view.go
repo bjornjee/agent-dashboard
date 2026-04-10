@@ -1327,6 +1327,25 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
+	if m.mode == modeUsage {
+		parts = append(parts, boldStyle.Render("u/esc")+" close")
+		parts = append(parts, boldStyle.Render("j/k")+" scroll")
+		parts = append(parts, boldStyle.Render("^u/^d")+" page")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeConfirmClose {
+		parts = append(parts, boldStyle.Render("y")+" close")
+		parts = append(parts, boldStyle.Render("n/esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeConfirmDeleteDiagram {
+		parts = append(parts, boldStyle.Render("y")+" delete")
+		parts = append(parts, boldStyle.Render("n/esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
 	if m.mode == modeConfirmMerge {
 		parts = append(parts, boldStyle.Render("y")+" merge")
 		parts = append(parts, boldStyle.Render("n/esc")+" cancel")

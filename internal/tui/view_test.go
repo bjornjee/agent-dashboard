@@ -190,6 +190,58 @@ func TestHelpBarWhenHelpVisible(t *testing.T) {
 	}
 }
 
+func TestHelpBarWhenUsageMode(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.mode = modeUsage
+
+	bar := m.renderHelpBar()
+
+	if !strings.Contains(bar, "esc") {
+		t.Error("help bar in modeUsage should show esc to dismiss")
+	}
+	// Should NOT show normal mode hints
+	if strings.Contains(bar, "new") {
+		t.Error("help bar in modeUsage should NOT show normal mode 'new' hint")
+	}
+}
+
+func TestHelpBarWhenConfirmClose(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.mode = modeConfirmClose
+
+	bar := m.renderHelpBar()
+
+	if !strings.Contains(bar, "close") {
+		t.Error("help bar in modeConfirmClose should show 'close' hint")
+	}
+	if !strings.Contains(bar, "cancel") {
+		t.Error("help bar in modeConfirmClose should show 'cancel' hint")
+	}
+}
+
+func TestHelpBarWhenConfirmDeleteDiagram(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.mode = modeConfirmDeleteDiagram
+
+	bar := m.renderHelpBar()
+
+	if !strings.Contains(bar, "delete") {
+		t.Error("help bar in modeConfirmDeleteDiagram should show 'delete' hint")
+	}
+	if !strings.Contains(bar, "cancel") {
+		t.Error("help bar in modeConfirmDeleteDiagram should show 'cancel' hint")
+	}
+}
+
 func TestStatusLine_SuccessVsError(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
 
