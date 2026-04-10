@@ -32,6 +32,7 @@ All keyboard shortcuts grouped by context. Press `h` in the dashboard to see thi
 | `p` | Toggle plan view |
 | `D` | Toggle diagrams panel (when diagrams present) |
 | `u` | Toggle usage dashboard |
+| `G` (Shift+G) | Toggle dino runner game (when enabled) |
 | `h` | Show help overlay |
 | `J` / `K` | Line scroll (plan/diff views) |
 | `q` / `Ctrl+C` | Quit |

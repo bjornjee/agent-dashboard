@@ -137,7 +137,7 @@ func (p petModel) Update(msg tea.Msg) (petModel, tea.Cmd) {
 }
 
 // advanceState moves to the next state in the cycle.
-// idle → walk → sit → drowsy → sleep → eating → idle
+// idle → walk → drowsy → sleep → eating → idle
 func (p *petModel) advanceState() {
 	switch p.state {
 	case petIdle:

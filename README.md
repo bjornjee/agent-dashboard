@@ -1,6 +1,8 @@
 # agent-dashboard
 
-A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
+Real-time tmux dashboard to monitor, manage, and orchestrate AI coding agents — Claude Code, Codex, and more.
+
+A tmux-integrated TUI and mobile web companion for monitoring and controlling AI coding agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
 
 https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
@@ -18,7 +20,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Mermaid diagram viewer** — captures `mermaid` blocks from agent messages, browse per-session, render in browser via `D`
-- **Usage dashboard** — per-agent token breakdown, 7-day cost chart, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
+- **Usage dashboard** — per-agent token breakdown (Claude and Codex), 7-day cost chart, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
 - **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr, rca)
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
 - **Dino runner game** — experimental Chrome-style endless runner in the left panel with jump, duck, speed ramp, and score counter (opt-in via settings)
@@ -231,6 +233,9 @@ rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic AP
 | `AGENT_DASHBOARD_DIR` | Override default state directory (`~/.agent-dashboard`) | No |
 | `EDITOR` | Editor command for opening agent directories (default: `code`) | No |
 | `API_NINJAS_KEY` | API key for quote-of-the-day | No (falls back to built-in quotes) |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID for mobile companion authentication | No |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | No |
+| `GOOGLE_ALLOWED_EMAIL` | Email address allowed to access the mobile companion | No |
 
 ## Development
 
@@ -340,8 +345,11 @@ adapters/claude-code/
 │   ├── agent-state-fast.js            # fast agent state reporter
 │   ├── agent-state-reporter.js        # full agent state reporter
 │   ├── block-main-commit.js           # prevents commits to main branch
+│   ├── codex-delegation-gate.js       # enforces Codex delegation rules for skills
+│   ├── codex-write-gate.js            # ensures Codex uses --write in worktrees
 │   ├── commit-lint.js                 # validates commit message format
 │   ├── desktop-notify.js              # desktop notifications
+│   ├── mermaid-extractor.js           # extracts mermaid diagrams for the viewer
 │   ├── pr-detect.js                   # detects existing PRs
 │   ├── test-gate.js                   # blocks merges if tests fail
 │   └── warn-destructive.js            # warns about destructive git ops

@@ -83,24 +83,6 @@ func agentRepo(agent domain.Agent) string {
 	return repo
 }
 
-// agentLabel returns a plain display label for an agent: "repo | branch" with fallbacks.
-// Used for width calculation and non-styled contexts.
-func agentLabel(agent domain.Agent) string {
-	repo := agentRepo(agent)
-	branch := agent.Branch
-
-	if repo != "" && branch != "" {
-		return repo + " | " + branch
-	}
-	if repo != "" {
-		return repo
-	}
-	if branch != "" {
-		return branch
-	}
-	return agent.Session
-}
-
 // branchColor returns the theme color for a branch based on its prefix.
 func branchColor(branch string) color.Color {
 	b := strings.ToLower(branch)
@@ -127,26 +109,6 @@ func branchColor(branch string) color.Color {
 // styledBranch renders a branch name with prefix-appropriate color.
 func styledBranch(branch string) string {
 	return lipgloss.NewStyle().Foreground(branchColor(branch)).Render(branch)
-}
-
-// agentLabelStyled returns a styled label with repo in sapphire, | dim, branch colored by prefix.
-func agentLabelStyled(agent domain.Agent) string {
-	repo := agentRepo(agent)
-	branch := agent.Branch
-
-	repoStyle := lipgloss.NewStyle().Foreground(themeSapphire).Bold(true)
-	sepStyle := lipgloss.NewStyle().Foreground(themeOverlay0)
-
-	if repo != "" && branch != "" {
-		return repoStyle.Render(repo) + sepStyle.Render(" | ") + styledBranch(branch)
-	}
-	if repo != "" {
-		return repoStyle.Render(repo)
-	}
-	if branch != "" {
-		return styledBranch(branch)
-	}
-	return agent.Session
 }
 
 // agentRepoStyled returns only the styled repo name (no branch), for the left panel first line.
@@ -192,20 +154,6 @@ func padLabel(label string, width int) string {
 		rendered += strings.Repeat(" ", width-renderedWidth)
 	}
 	return rendered
-}
-
-// modelShort returns a single-letter model indicator with color.
-func modelShort(model string) string {
-	m := strings.ToLower(model)
-	switch {
-	case strings.Contains(m, "opus"):
-		return lipgloss.NewStyle().Foreground(themePink).Render("O")
-	case strings.Contains(m, "sonnet"):
-		return lipgloss.NewStyle().Foreground(themeSapphire).Render("S")
-	case strings.Contains(m, "haiku"):
-		return lipgloss.NewStyle().Foreground(themeTeal).Render("H")
-	}
-	return ""
 }
 
 // permissionModeColor returns the ANSI 256 color for a permission mode,

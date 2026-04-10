@@ -18,7 +18,7 @@ If a PR already exists, `g` opens the PR diff viewer instead.
 
 ## Reviewing
 
-Once a PR is open, press `g` to view the diff in the split-pane viewer. See [Reviewing Diffs](reviewing-diffs) for navigation details.
+Once a PR is open, press `g` to view the diff in the split-pane viewer. See [Reviewing Diffs](../reviewing-diffs/) for navigation details.
 
 ## Merging
 

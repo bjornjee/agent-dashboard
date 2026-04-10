@@ -25,6 +25,9 @@ Lifecycle hooks run automatically during Claude Code sessions. They write agent 
 | `block-main-commit.js` | Before commit | Prevents direct commits to main |
 | `commit-lint.js` | Before commit | Validates conventional commit format |
 | `desktop-notify.js` | State changes | Sends desktop notifications |
+| `mermaid-extractor.js` | After messages | Extracts mermaid diagram blocks for the diagram viewer |
+| `codex-delegation-gate.js` | Before Codex delegation | Enforces delegation rules for skills |
+| `codex-write-gate.js` | Before Codex writes | Ensures Codex uses `--write` flag in worktrees |
 | `pr-detect.js` | Before PR actions | Detects existing PRs for the branch |
 | `test-gate.js` | Before merge | Blocks merge if tests fail |
 | `warn-destructive.js` | Before destructive git ops | Warns about force pushes, resets, etc. |
@@ -72,4 +75,4 @@ Each agent's state is stored as a JSON file conforming to the schema at `schema/
 /plugin install agent-dashboard@agent-dashboard
 ```
 
-See [Getting Started](../getting-started) for the full installation walkthrough.
+See [Getting Started](../../getting-started/) for the full installation walkthrough.
