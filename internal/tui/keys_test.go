@@ -269,6 +269,51 @@ func TestUsageModeWorksWithNoAgents(t *testing.T) {
 	}
 }
 
+func TestUsageModeSwallowsKeys(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeUsage
+	m.selected = 1
+	m.messageVP.SetWidth(80)
+	m.messageVP.SetHeight(40)
+
+	msg := tea.KeyPressMsg{Code: 'j', Text: "j"}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeUsage {
+		t.Errorf("expected modeUsage after j in usage mode, got %d", rm.mode)
+	}
+	if rm.selected != 1 {
+		t.Errorf("expected selected=1 unchanged, got %d", rm.selected)
+	}
+}
+
+func TestUsageModeExitWithU(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeUsage
+
+	msg := tea.KeyPressMsg{Code: 'u', Text: "u"}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeNormal {
+		t.Errorf("expected modeNormal after u in usage mode, got %d", rm.mode)
+	}
+}
+
+func TestUsageModeExitWithEsc(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeUsage
+
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc in usage mode, got %d", rm.mode)
+	}
+}
+
 func TestCreateFolderMode_UpWrapsSelection(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder

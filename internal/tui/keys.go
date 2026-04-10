@@ -647,6 +647,32 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Usage mode: scroll content, dismiss with u/esc
+	if m.mode == modeUsage {
+		switch key {
+		case "u", "esc":
+			m.mode = modeNormal
+			m.updateRightContent()
+		case "up", "k":
+			m.messageVP.ScrollUp(1)
+		case "down", "j":
+			m.messageVP.ScrollDown(1)
+		case "ctrl+d":
+			m.messageVP.HalfPageDown()
+		case "ctrl+u":
+			m.messageVP.HalfPageUp()
+		case "g":
+			m.messageVP.GotoTop()
+		case "G":
+			m.messageVP.GotoBottom()
+		case "ctrl+c":
+			return m, tea.Quit
+		default:
+			// swallow all other keys
+		}
+		return m, nil
+	}
+
 	// Diff viewer mode
 	if m.diffVisible {
 		// Filter input active — forward keys to text input
