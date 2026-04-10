@@ -189,10 +189,9 @@ type model struct {
 	// within microseconds; real users take at least 200-300ms.
 	confirmEnteredAt time.Time
 
-	// lastEscapeAt records when the last terminal escape sequence event
-	// (mouse or focus) was received. Key events arriving within
-	// escapeKeyCooldown are treated as phantom keystrokes from fragmented
-	// escape sequences.
+	// lastEscapeAt records when the last focus or blur event was received.
+	// Key events arriving within escapeKeyCooldown are treated as phantom
+	// keystrokes from fragmented escape sequences.
 	lastEscapeAt time.Time
 
 	// modeResetAt records when a key event was last processed while in a
