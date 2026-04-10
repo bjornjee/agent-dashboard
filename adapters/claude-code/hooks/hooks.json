@@ -37,6 +37,16 @@
         "description": "Block git commit on main/master — require a feature branch"
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-write-gate.js\""
+          }
+        ],
+        "description": "Block codex-companion task without --write (prevents read-only sandbox)"
+      },
+      {
         "matcher": "*",
         "hooks": [
           {
@@ -50,6 +60,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-delegation-gate.js\""
+          }
+        ],
+        "description": "Nudge Codex delegation after plan approval (worktree + codex available)"
+      },
       {
         "matcher": "Bash",
         "hooks": [
