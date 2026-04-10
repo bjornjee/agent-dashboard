@@ -103,9 +103,9 @@ Before committing, run the `refactor-cleaner` agent as an automated cleanup pass
 1. Check git log for a recent cleaner run: `git log --oneline -20 --grep="chore: ai-fmt"`.
 2. If no recent run is found, spawn the `refactor-cleaner` agent (`run_in_background: false`) on all changed files.
 3. Run `make test` to confirm the cleaner's changes don't break anything.
-4. If the cleaner made changes, they will be included in the commit.
+4. If the cleaner made changes, commit them separately with `chore: ai-fmt` as the commit message.
 
-Commit changes and prepare for merge.
+Commit the feature changes and prepare for merge.
 
 **Gate:** Clean commit history with conventional commit messages.
 
