@@ -233,6 +233,9 @@ rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic AP
 | `AGENT_DASHBOARD_DIR` | Override default state directory (`~/.agent-dashboard`) | No |
 | `EDITOR` | Editor command for opening agent directories (default: `code`) | No |
 | `API_NINJAS_KEY` | API key for quote-of-the-day | No (falls back to built-in quotes) |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID for mobile companion authentication | No |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | No |
+| `GOOGLE_ALLOWED_EMAIL` | Email address allowed to access the mobile companion | No |
 
 ## Development
 
@@ -342,8 +345,11 @@ adapters/claude-code/
 │   ├── agent-state-fast.js            # fast agent state reporter
 │   ├── agent-state-reporter.js        # full agent state reporter
 │   ├── block-main-commit.js           # prevents commits to main branch
+│   ├── codex-delegation-gate.js       # enforces Codex delegation rules for skills
+│   ├── codex-write-gate.js            # ensures Codex uses --write in worktrees
 │   ├── commit-lint.js                 # validates commit message format
 │   ├── desktop-notify.js              # desktop notifications
+│   ├── mermaid-extractor.js           # extracts mermaid diagrams for the viewer
 │   ├── pr-detect.js                   # detects existing PRs
 │   ├── test-gate.js                   # blocks merges if tests fail
 │   └── warn-destructive.js            # warns about destructive git ops
