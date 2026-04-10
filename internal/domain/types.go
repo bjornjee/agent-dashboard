@@ -131,6 +131,13 @@ type ModelPricing struct {
 	CacheWrite float64
 }
 
+// CodexModelPricing holds per-million-token rates in USD for GPT/Codex models.
+type CodexModelPricing struct {
+	Input     float64
+	Output    float64
+	CacheRead float64
+}
+
 // Usage holds aggregated token counts and estimated cost for a session.
 type Usage struct {
 	InputTokens      int

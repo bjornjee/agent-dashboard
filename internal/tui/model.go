@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -86,6 +87,10 @@ type model struct {
 	dbTodayCost      float64
 	dbDailyUsage     []db.DayUsage
 	rateLimit        *domain.RateLimit
+	codexDailyUsage  []db.DayUsage
+	codexTotalCost   float64
+	codexTodayCost   float64
+	codexSessionsDir string
 
 	// History render cache (Layers 2+3)
 	renderedHistory   string // cached output of historyContent()
@@ -515,6 +520,13 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	skillList := skills.BuildSkillList(rawSkills)
 	hasSkills := len(skillList) > 0 && strings.Contains(cfg.Profile.Command, "claude")
 
+	// Resolve Codex sessions directory ($CODEX_HOME/sessions or ~/.codex/sessions)
+	codexHome := os.Getenv("CODEX_HOME")
+	if codexHome == "" {
+		codexHome = filepath.Join(cfg.Profile.HomeDir, ".codex")
+	}
+	codexSessions := filepath.Join(codexHome, "sessions")
+
 	return model{
 		cfg:                  cfg,
 		agents:               nil,
@@ -553,6 +565,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		petEnabled:           cfg.Settings.Experimental.AsciiPet,
 		dino:                 newDinoGameModel(0, 0),
 		dinoEnabled:          cfg.Settings.Experimental.DinoGame,
+		codexSessionsDir:     codexSessions,
 	}
 }
 
@@ -563,6 +576,7 @@ func (m model) Init() tea.Cmd {
 		tickEvery(),
 		checkGHAvailable(),
 		loadRateLimit(),
+		loadCodexUsage(m.codexSessionsDir),
 		m.startupSpinner.Tick,
 	}
 	if m.petEnabled {
@@ -814,6 +828,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.tickCount%30 == 0 {
 			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
+			cmds = append(cmds, loadCodexUsage(m.codexSessionsDir))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -881,6 +896,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dbTotalCost = msg.total
 		m.dbTodayCost = msg.todayCost
 		m.dbDailyUsage = msg.days
+		return m, nil
+
+	case codexUsageMsg:
+		if m.db != nil {
+			return m, persistCodexUsage(m.db, msg.days)
+		}
+		return m, nil
+
+	case codexPersistMsg:
+		if m.db != nil {
+			return m, loadCodexDBUsage(m.db)
+		}
+		return m, nil
+
+	case codexDBUsageMsg:
+		m.codexDailyUsage = msg.days
+		m.codexTotalCost = msg.totalCost
+		m.codexTodayCost = msg.todayCost
 		return m, nil
 
 	case activityMsg:
@@ -976,8 +1009,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.capturedLines = msg.lines
 		m.updateRightContent()
 		// Auto-scroll live output to latest when user isn't focused on it
-		// Skip when plan is visible or mouse is hovering over the viewport
-		if m.focusedVP != focusMessage && !m.planVisible && !m.mouseOverMessage() {
+		// Skip when plan is visible, usage is open, or mouse is hovering over the viewport
+		if m.focusedVP != focusMessage && !m.planVisible && m.mode != modeUsage && !m.mouseOverMessage() {
 			m.messageVP.GotoBottom()
 		}
 		return m, nil
