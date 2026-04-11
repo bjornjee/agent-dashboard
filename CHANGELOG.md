@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.11.1](https://github.com/bjornjee/agent-dashboard/compare/v0.11.0...v0.11.1) (2026-04-11)
+
+
+### Bug Fixes
+
+* allow destructive commands on worktree directories ([#206](https://github.com/bjornjee/agent-dashboard/issues/206)) ([5ae97d0](https://github.com/bjornjee/agent-dashboard/commit/5ae97d0b67e63716122351d734474b1a5ace350a))
+* capture user messages with mixed array content in conversation history ([#205](https://github.com/bjornjee/agent-dashboard/issues/205)) ([b24f35d](https://github.com/bjornjee/agent-dashboard/commit/b24f35d66533aee2e157dccdf54cde971218f96a))
+* gate Codex delegation on user request or task size threshold ([#203](https://github.com/bjornjee/agent-dashboard/issues/203)) ([549f6ad](https://github.com/bjornjee/agent-dashboard/commit/549f6adce50d7adfda779ae13cb8ead9ec147838))
+
 ## [0.11.0](https://github.com/bjornjee/agent-dashboard/compare/v0.10.0...v0.11.0) (2026-04-10)
 
 
