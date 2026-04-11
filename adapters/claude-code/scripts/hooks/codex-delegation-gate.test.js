@@ -143,6 +143,7 @@ describe('hook integration', () => {
       const result = runHook({ cwd: tmp, tool_name: 'ExitPlanMode' });
       assert.equal(result.status, 0);
       assert.ok(result.stderr.includes('/codex-delegate'));
+      assert.ok(result.stderr.includes('10+ files'));
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

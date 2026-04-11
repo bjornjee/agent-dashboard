@@ -15,8 +15,10 @@ const path = require('node:path');
 
 const NUDGE_MESSAGE = [
   'You are in a git worktree and Codex CLI is available.',
-  'Delegate implementation to Codex via /codex-delegate with the approved plan.',
-  'Use --write flag to ensure Codex has workspace write access.',
+  'Only delegate to Codex via /codex-delegate if:',
+  '  1. The user explicitly asked for Codex delegation, OR',
+  '  2. The plan touches 10+ files or ~3,000+ lines of implementation — below that threshold the orchestration overhead costs more tokens than Claude implementing directly.',
+  'If delegating, use --write flag to ensure Codex has workspace write access.',
   'To skip this nudge, set SKIP_CODEX_GATE=1.',
 ].join('\n');
 
