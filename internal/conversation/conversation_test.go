@@ -139,6 +139,73 @@ func TestReadConversation_HandlesUserContentArray(t *testing.T) {
 	}
 }
 
+func TestReadConversation_HandlesMixedArrayUserContent(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	// Plan mode response: array with tool_result + text block.
+	// The text block contains the user's actual feedback and must be captured.
+	jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"tool output"}]},{"type":"text","text":"looks good, ship it"}]},"timestamp":"2026-03-28T10:15:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry (user text from mixed array), got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Role != "human" {
+		t.Errorf("expected role 'human', got %q", entries[0].Role)
+	}
+	if entries[0].Content != "looks good, ship it" {
+		t.Errorf("expected 'looks good, ship it', got %q", entries[0].Content)
+	}
+}
+
+func TestReadConversation_PureToolResultArraySkipped(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	// Pure tool_result array with no text blocks — should produce no entries.
+	jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"tool output"}]},{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"more output"}]}]},"timestamp":"2026-03-28T10:15:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	if len(entries) != 0 {
+		t.Fatalf("expected 0 entries for pure tool_result array, got %d: %+v", len(entries), entries)
+	}
+}
+
+func TestReadConversation_MultipleTextBlocksJoined(t *testing.T) {
+	dir := t.TempDir()
+	slug := "test-project"
+	sessionID := "abc-123"
+
+	projDir := filepath.Join(dir, slug)
+	os.MkdirAll(projDir, 0755)
+
+	// Array with multiple text blocks — should be joined with newline.
+	jsonl := `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"first part"},{"type":"tool_result","tool_use_id":"t1","content":[]},{"type":"text","text":"second part"}]},"timestamp":"2026-03-28T10:15:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	entries := ReadConversation(filepath.Join(dir, slug), sessionID, 10)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Content != "first part\nsecond part" {
+		t.Errorf("expected joined text, got %q", entries[0].Content)
+	}
+}
+
 func TestHasPendingToolUse_NoPending(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "proj")

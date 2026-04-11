@@ -186,22 +186,41 @@ func parseUserEntry(entry jsonlEntry) *domain.ConversationEntry {
 		return nil
 	}
 
-	// User content can be a string or an array (tool_result).
-	// Only show string content (actual user messages).
+	var text string
+
+	// User content can be a plain string (direct messages) or an array
+	// (tool_result blocks, sometimes mixed with text blocks during plan mode).
 	var strContent string
-	if err := json.Unmarshal(env.Content, &strContent); err != nil {
-		return nil // array content (tool_result) -- skip
+	if err := json.Unmarshal(env.Content, &strContent); err == nil {
+		text = strings.TrimSpace(strContent)
+	} else {
+		// Array content: extract "text" blocks, skip "tool_result" blocks.
+		var blocks []contentBlock
+		if err := json.Unmarshal(env.Content, &blocks); err != nil {
+			return nil
+		}
+		var texts []string
+		for _, b := range blocks {
+			if b.Type == "text" {
+				if t := strings.TrimSpace(b.Text); t != "" {
+					texts = append(texts, t)
+				}
+			}
+		}
+		if len(texts) == 0 {
+			return nil // pure tool_result array -- skip
+		}
+		text = strings.Join(texts, "\n")
 	}
 
-	strContent = strings.TrimSpace(strContent)
-	if strContent == "" {
+	if text == "" {
 		return nil
 	}
-	strContent = cleanSlashCommand(strContent)
+	text = cleanSlashCommand(text)
 
 	return &domain.ConversationEntry{
 		Role:      "human",
-		Content:   truncate(strContent, 2000),
+		Content:   truncate(text, 2000),
 		Timestamp: entry.Timestamp,
 	}
 }
