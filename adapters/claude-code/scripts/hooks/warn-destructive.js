@@ -15,7 +15,10 @@ const { writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'))
 function hasRmRF(cmd) {
   const segments = cmd.split(/[|;&\n]+/);
   for (const seg of segments) {
-    const tokens = seg.trim().split(/\s+/);
+    const trimmed = seg.trim();
+    // Allow rm -rf on worktree directories
+    if (/\brm\s+(-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)\s+.*worktrees?\b/.test(trimmed)) continue;
+    const tokens = trimmed.split(/\s+/);
     const rmIdx = tokens.indexOf('rm');
     if (rmIdx === -1) continue;
 
@@ -57,9 +60,15 @@ if (require.main === module && !process.stdin.isTTY) {
       const input = JSON.parse(data);
       const command = (input.tool_input && input.tool_input.command) || '';
 
+      // Allow git worktree remove (even with --force)
+      const isWorktreeRemove = /\bgit\s+worktree\s+remove\b/.test(command);
+      // Allow git clean/checkout/restore inside worktree directories
+      const isWorktreeClean = /worktrees?\//.test(command) &&
+        /\bgit\s+(clean|checkout|restore)\b/.test(command);
+
       for (const { pattern, test, label } of DESTRUCTIVE_PATTERNS) {
         const match = test ? test(command) : pattern.test(command);
-        if (match) {
+        if (match && !isWorktreeRemove && !isWorktreeClean) {
           const reason = `Blocked: "${label}" is a destructive command. If intentional, ask the user to run it manually.`;
           const sessionId = input.session_id;
           if (sessionId) {
