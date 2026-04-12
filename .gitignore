@@ -44,3 +44,4 @@ test-results/
 
 # Development screenshots (root-level)
 /*.png
+.env-setup-done
