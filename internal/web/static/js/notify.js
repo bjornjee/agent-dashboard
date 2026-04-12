@@ -21,22 +21,34 @@ function agentLabel(agent) {
   return agent.task || agent.worktree || agent.session_id;
 }
 
-function fireBrowserNotification(agent, body) {
+async function fireBrowserNotification(agent, body) {
   if (!isBrowserNotifyEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  if (document.visibilityState === 'visible' && document.hasFocus()) return; // skip if user is looking at the page
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
   try {
-    const n = new Notification(agentLabel(agent), {
-      body,
-      icon: '/icon-192.svg',
-      tag: agent.session_id,
-      data: { agentId: agent.session_id },
-    });
-    n.onclick = () => {
-      window.focus();
-      window.Dashboard.selectAgent(agent.session_id);
-      n.close();
-    };
-  } catch { /* notification constructor can throw in some contexts */ }
+    // Use SW showNotification — required on mobile Chrome/Android.
+    // Falls back to new Notification() on desktop if SW is unavailable.
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.ready;
+    if (reg) {
+      await reg.showNotification(agentLabel(agent), {
+        body,
+        icon: '/icon-192.svg',
+        tag: agent.session_id,
+        data: { agentId: agent.session_id },
+      });
+    } else {
+      const n = new Notification(agentLabel(agent), {
+        body,
+        icon: '/icon-192.svg',
+        tag: agent.session_id,
+        data: { agentId: agent.session_id },
+      });
+      n.onclick = () => {
+        window.focus();
+        window.Dashboard.selectAgent(agent.session_id);
+        n.close();
+      };
+    }
+  } catch { /* notification can throw in some contexts */ }
 }
 
 // Seed the state map without firing notifications
