@@ -1039,6 +1039,55 @@ func TestPRURLEndpoint(t *testing.T) {
 		}
 	})
 
+	t.Run("detects branch from git when not stored", func(t *testing.T) {
+		m := withMockCommandRunner(t)
+
+		cfg := config.DefaultConfig()
+		stateDir := t.TempDir()
+		cfg.Profile.StateDir = stateDir
+
+		agentsDir := filepath.Join(stateDir, "agents")
+		os.MkdirAll(agentsDir, 0700)
+
+		agentDir := t.TempDir()
+		agent := domain.Agent{
+			SessionID: "pr-4",
+			State:     "pr",
+			Cwd:       agentDir,
+			// Branch intentionally empty
+		}
+		data, _ := json.Marshal(agent)
+		os.WriteFile(filepath.Join(agentsDir, "pr-4.json"), data, 0600)
+
+		// Mock git branch --show-current
+		m.On("CombinedOutput", mock.Anything, agentDir, "git", "branch", "--show-current").
+			Return([]byte("feat/detected\n"), nil)
+
+		// Mock gh pr view returning an existing PR
+		m.On("CombinedOutput", mock.Anything, agentDir, "gh", "pr", "view", "feat/detected",
+			"--json", "url", "-q", ".url").
+			Return([]byte("https://github.com/owner/repo/pull/55\n"), nil)
+
+		srv := NewServer(cfg, nil, ServerOptions{})
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+
+		resp, err := http.Get(ts.URL + "/api/agents/pr-4/pr-url")
+		if err != nil {
+			t.Fatalf("GET pr-url: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		json.NewDecoder(resp.Body).Decode(&result)
+		if result["url"] != "https://github.com/owner/repo/pull/55/files" {
+			t.Errorf("expected detected branch PR url, got %q", result["url"])
+		}
+	})
+
 	t.Run("falls back to compare URL when gh fails", func(t *testing.T) {
 		m := withMockCommandRunner(t)
 

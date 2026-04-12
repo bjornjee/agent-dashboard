@@ -317,10 +317,22 @@ func (s *Server) handlePRURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dir := agent.EffectiveDir()
-	branch := agent.Branch
-	if dir == "" || branch == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent has no directory or branch"})
+	if dir == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent has no directory"})
 		return
+	}
+
+	// Detect branch from git if not stored in agent state.
+	branch := agent.Branch
+	if branch == "" {
+		brCtx, brCancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer brCancel()
+		out, err := cmdRunner.CombinedOutput(brCtx, dir, "git", "branch", "--show-current")
+		if err != nil || strings.TrimSpace(string(out)) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not determine branch"})
+			return
+		}
+		branch = strings.TrimSpace(string(out))
 	}
 
 	// Try gh pr view to find an existing PR.
