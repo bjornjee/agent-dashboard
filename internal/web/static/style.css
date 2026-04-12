@@ -1862,41 +1862,34 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 
 /* ============================================
    COMPONENT: Collapsible Section
+   Reusable <details>/<summary> component matching
+   the diff-dir-summary and tool-group-summary pattern.
    ============================================ */
-.collapsible-toggle {
+.collapsible-summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
+  gap: 6px;
   padding: var(--space-1) var(--space-6);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.collapsible-toggle:hover { color: var(--text-muted); }
-.collapsible-chevron {
+.collapsible-summary::-webkit-details-marker { display: none; }
+.collapsible-summary::before {
+  content: '\25B6';
+  font-size: 8px;
   transition: transform var(--transition-default);
-  display: flex;
-  align-items: center;
+  display: inline-block;
 }
-.collapsible-chevron.collapsed {
-  transform: rotate(-90deg);
+.collapsible-section[open] > .collapsible-summary::before {
+  transform: rotate(90deg);
 }
-.collapsible-body {
-  overflow: hidden;
-  max-height: 500px;
-  transition: max-height 0.25s ease, opacity 0.25s ease;
-  opacity: 1;
-}
-.collapsible-body.collapsed {
-  max-height: 0;
-  opacity: 0;
-}
+.collapsible-summary:hover { color: var(--text-muted); }
 
 /* ============================================
    COMPONENT: Action bar

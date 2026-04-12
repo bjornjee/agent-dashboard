@@ -101,15 +101,15 @@ export async function renderDetail(app, agents, agentId, setView) {
   ], 'conversation');
 
   const isMobile = window.innerWidth <= 480;
-  const vitalCollapsed = isMobile || sessionStorage.getItem('collapse-vital-signs-container-' + agentId) === 'true';
-  const subagentCollapsed = isMobile || sessionStorage.getItem('collapse-subagent-summary-' + agentId) === 'true';
+  const vitalOpen = !isMobile && sessionStorage.getItem('collapse-vital-signs-container-' + agentId) !== 'true';
+  const subagentOpen = !isMobile && sessionStorage.getItem('collapse-subagent-summary-' + agentId) !== 'true';
 
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
         ${detailHeader}
-        ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalCollapsed)}
-        ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentCollapsed)}
+        ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalOpen)}
+        ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentOpen)}
         ${tabs}
       </div>
       <div class="detail-scroll">
@@ -136,17 +136,13 @@ export async function renderDetail(app, agents, agentId, setView) {
     });
   });
 
-  // Collapsible section toggles
-  document.querySelectorAll('.collapsible-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const sectionId = btn.dataset.section;
-      const body = document.getElementById(sectionId);
-      const chevron = btn.querySelector('.collapsible-chevron');
-      if (!body) return;
-      const isCollapsed = body.classList.contains('collapsed');
-      body.classList.toggle('collapsed', !isCollapsed);
-      if (chevron) chevron.classList.toggle('collapsed', !isCollapsed);
-      try { sessionStorage.setItem('collapse-' + sectionId + '-' + agentId, String(!isCollapsed)); } catch {}
+  // Persist collapsible section state
+  document.querySelectorAll('.collapsible-section').forEach(details => {
+    details.addEventListener('toggle', () => {
+      const summary = details.querySelector('.collapsible-summary');
+      if (!summary) return;
+      const sectionId = summary.dataset.section;
+      try { sessionStorage.setItem('collapse-' + sectionId + '-' + agentId, String(!details.open)); } catch {}
     });
   });
 

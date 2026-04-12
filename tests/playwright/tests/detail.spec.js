@@ -134,24 +134,24 @@ test.describe('Collapsible Sections', () => {
     // Wait for vital signs to load
     await page.waitForSelector('.vital-signs', { timeout: 5000 });
 
-    const toggles = page.locator('.collapsible-toggle');
+    const toggles = page.locator('.collapsible-summary');
     await expect(toggles).toHaveCount(2);
   });
 
   test('should collapse vital signs on toggle click', async ({ page }) => {
-    // Use desktop viewport so sections start expanded
+    // Use desktop viewport so sections start expanded (open)
     await page.setViewportSize({ width: 1024, height: 768 });
     const agent = makeAgent({ state: 'running' });
     await setupAndNavigate(page, agent);
 
     await page.waitForSelector('.vital-signs', { timeout: 5000 });
 
-    const vitalBody = page.locator('#vital-signs-container');
-    await expect(vitalBody).not.toHaveClass(/collapsed/);
+    const vitalSection = page.locator('#vital-signs-container-section');
+    await expect(vitalSection).toHaveAttribute('open', '');
 
-    // Click the vital signs toggle
-    await page.click('.collapsible-toggle[data-section="vital-signs-container"]');
-    await expect(vitalBody).toHaveClass(/collapsed/);
+    // Click the summary to collapse
+    await page.click('.collapsible-summary[data-section="vital-signs-container"]');
+    await expect(vitalSection).not.toHaveAttribute('open', '');
   });
 
   test('should expand vital signs after second click', async ({ page }) => {
@@ -161,15 +161,15 @@ test.describe('Collapsible Sections', () => {
 
     await page.waitForSelector('.vital-signs', { timeout: 5000 });
 
-    const vitalBody = page.locator('#vital-signs-container');
+    const vitalSection = page.locator('#vital-signs-container-section');
 
     // Collapse
-    await page.click('.collapsible-toggle[data-section="vital-signs-container"]');
-    await expect(vitalBody).toHaveClass(/collapsed/);
+    await page.click('.collapsible-summary[data-section="vital-signs-container"]');
+    await expect(vitalSection).not.toHaveAttribute('open', '');
 
     // Expand
-    await page.click('.collapsible-toggle[data-section="vital-signs-container"]');
-    await expect(vitalBody).not.toHaveClass(/collapsed/);
+    await page.click('.collapsible-summary[data-section="vital-signs-container"]');
+    await expect(vitalSection).toHaveAttribute('open', '');
   });
 
   test('should default to collapsed on mobile viewport', async ({ page }) => {
@@ -177,13 +177,13 @@ test.describe('Collapsible Sections', () => {
     const agent = makeAgent({ state: 'running' });
     await setupAndNavigate(page, agent);
 
-    await page.waitForSelector('.collapsible-toggle', { timeout: 5000 });
+    await page.waitForSelector('.collapsible-summary', { timeout: 5000 });
 
-    const vitalBody = page.locator('#vital-signs-container');
-    await expect(vitalBody).toHaveClass(/collapsed/);
+    const vitalSection = page.locator('#vital-signs-container-section');
+    await expect(vitalSection).not.toHaveAttribute('open', '');
 
-    const subagentBody = page.locator('#subagent-summary');
-    await expect(subagentBody).toHaveClass(/collapsed/);
+    const subagentSection = page.locator('#subagent-summary-section');
+    await expect(subagentSection).not.toHaveAttribute('open', '');
   });
 });
 
