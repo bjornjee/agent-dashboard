@@ -1,5 +1,4 @@
-// Notification system — state transition detection, in-app nudge, and browser notifications.
-import { UI } from './ui.js';
+// Notification system — state transition detection and browser Notification API.
 
 const STORAGE_KEY = 'notify-enabled';
 
@@ -9,24 +8,25 @@ let seeded = false;
 
 // States that warrant a notification when an agent transitions INTO them
 const NOTIFY_STATES = {
-  permission: { type: 'blocked', message: 'needs permission' },
-  plan:       { type: 'blocked', message: 'plan ready for review' },
-  question:   { type: 'waiting', message: 'has a question' },
-  error:      { type: 'waiting', message: 'hit an error' },
-  done:       { type: 'review',  message: 'finished' },
-  idle_prompt:{ type: 'review',  message: 'finished' },
-  pr:         { type: 'review',  message: 'PR ready' },
+  permission: 'Needs permission',
+  plan:       'Plan ready for review',
+  question:   'Has a question',
+  error:      'Hit an error',
+  done:       'Finished',
+  idle_prompt:'Finished',
+  pr:         'PR ready',
 };
 
 function agentLabel(agent) {
   return agent.task || agent.worktree || agent.session_id;
 }
 
-function fireBrowserNotification(agent, info) {
+function fireBrowserNotification(agent, body) {
   if (!isBrowserNotifyEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible' && document.hasFocus()) return; // skip if user is looking at the page
   try {
     const n = new Notification(agentLabel(agent), {
-      body: info.message.charAt(0).toUpperCase() + info.message.slice(1),
+      body,
       icon: '/icon-192.svg',
       tag: agent.session_id,
       data: { agentId: agent.session_id },
@@ -39,22 +39,19 @@ function fireBrowserNotification(agent, info) {
   } catch { /* notification constructor can throw in some contexts */ }
 }
 
-// Seed the state map without firing notifications (called on first SSE message)
+// Seed the state map without firing notifications
 export function initNotify(agents) {
   if (seeded) return;
-  const snapshot = {};
   for (const agent of agents) {
     prevStateMap.set(agent.session_id, agent.state);
-    snapshot[agent.session_id] = agent.state;
   }
   seeded = true;
-  console.log('[notify] seeded with', agents.length, 'agents:', snapshot);
+  console.log('[notify] seeded with', agents.length, 'agents');
 }
 
-// Diff new agent states against previous, fire nudge + browser notification for transitions
+// Diff new agent states against previous, fire browser notification for transitions
 export function processNotifications(newAgents) {
   if (!seeded) {
-    console.log('[notify] not seeded yet, seeding from SSE');
     initNotify(newAgents);
     return;
   }
@@ -65,25 +62,11 @@ export function processNotifications(newAgents) {
     currentIds.add(id);
     const newState = agent.state;
     const oldState = prevStateMap.get(id);
-
-    if (newState !== oldState) {
-      console.log('[notify] transition:', id, oldState, '→', newState,
-        NOTIFY_STATES[newState] ? '(WILL NUDGE)' : '(no nudge for this state)');
-    }
-
     prevStateMap.set(id, newState);
 
-    // Only notify on transitions into notify-worthy states
     if (newState !== oldState && NOTIFY_STATES[newState]) {
-      const info = NOTIFY_STATES[newState];
-      const label = agentLabel(agent);
-      console.log('[notify] firing nudge:', label, info.message, info.type);
-      UI.nudge(label + ' ' + info.message, {
-        type: info.type,
-        agentId: id,
-        agentName: label,
-      });
-      fireBrowserNotification(agent, info);
+      console.log('[notify] transition:', id, oldState, '→', newState);
+      fireBrowserNotification(agent, NOTIFY_STATES[newState]);
     }
   }
 
