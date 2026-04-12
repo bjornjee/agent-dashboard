@@ -308,6 +308,10 @@ func (s *Server) handlePRURL(w http.ResponseWriter, r *http.Request) {
 	// If pr_url is already stored, use it directly.
 	if agent.PRURL != "" {
 		prURL := strings.TrimRight(agent.PRURL, "/") + "/files"
+		if !isGitHubURL(prURL) {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "stored PR URL is not a GitHub URL"})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"url": prURL})
 		return
 	}
@@ -320,19 +324,21 @@ func (s *Server) handlePRURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Try gh pr view to find an existing PR.
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	out, err := cmdRunner.CombinedOutput(ctx, dir, "gh", "pr", "view", branch,
+	ghCtx, ghCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer ghCancel()
+	out, err := cmdRunner.CombinedOutput(ghCtx, dir, "gh", "pr", "view", branch,
 		"--json", "url", "-q", ".url")
 	if err == nil {
-		if prURL := strings.TrimSpace(string(out)); prURL != "" {
+		if prURL := strings.TrimSpace(string(out)); prURL != "" && isGitHubURL(prURL) {
 			writeJSON(w, http.StatusOK, map[string]string{"url": strings.TrimRight(prURL, "/") + "/files"})
 			return
 		}
 	}
 
-	// Fall back to compare URL.
-	prURL, err := buildCompareURL(ctx, dir, branch)
+	// Fall back to compare URL with a fresh context budget.
+	fallbackCtx, fallbackCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer fallbackCancel()
+	prURL, err := buildCompareURL(fallbackCtx, dir, branch)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -389,6 +395,12 @@ func parseGitHubRemote(remoteURL string) (owner, repo string, ok bool) {
 	}
 
 	return "", "", false
+}
+
+// isGitHubURL validates that a URL points to github.com over HTTPS.
+func isGitHubURL(u string) bool {
+	parsed, err := url.Parse(u)
+	return err == nil && parsed.Scheme == "https" && parsed.Host == "github.com"
 }
 
 // gitDefaultBranchFromDir returns the default branch for the repo in dir.
