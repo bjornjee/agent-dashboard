@@ -229,10 +229,9 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Remove worktree if applicable
 	if worktreeCwd != "" {
-		_, err := cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd)
-		if err != nil {
-			// Fallback: remove directory directly
-			os.RemoveAll(worktreeCwd)
+		if _, err := cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "worktree remove failed"})
+			return
 		}
 		cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "worktree", "prune")
 	}
@@ -255,10 +254,13 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 6. Remove agent state file
-	state.RemoveAgent(s.cfg.Profile.StateDir, id)
+	if err := state.RemoveAgent(s.cfg.Profile.StateDir, id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove state file"})
+		return
+	}
 
-	// 7. Clean up diagram data
-	diagrams.CleanupSession(s.cfg.Profile.StateDir, id)
+	// 7. Clean up diagram data (best-effort — diagrams are cosmetic)
+	_ = diagrams.CleanupSession(s.cfg.Profile.StateDir, id)
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "cleaned up"})
 }

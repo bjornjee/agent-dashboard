@@ -1241,6 +1241,49 @@ func TestCleanupRejectsInvalidCwd(t *testing.T) {
 	}
 }
 
+func TestCleanupWorktreeRemoveFailureReturns500(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	agent := domain.Agent{
+		SessionID:   "cleanup-fail",
+		State:       "merged",
+		Cwd:         "/tmp/repo",
+		WorktreeCwd: "/tmp/worktree",
+		Branch:      "feat/fail",
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, "cleanup-fail.json"), data, 0600)
+
+	m := withMockCommandRunner(t)
+
+	// Mock: resolve default branch
+	m.On("CombinedOutput", mock.Anything, "/tmp/repo", "git", "symbolic-ref", "refs/remotes/origin/HEAD").
+		Return([]byte("refs/remotes/origin/main\n"), nil)
+	// Mock: worktree remove fails
+	m.On("CombinedOutput", mock.Anything, "/tmp/repo", "git", "-C", "/tmp/repo", "worktree", "remove", "--force", "/tmp/worktree").
+		Return([]byte("error: failed"), fmt.Errorf("exit status 1"))
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/api/agents/cleanup-fail/cleanup", nil)
+	req.Header.Set("X-Requested-With", "dashboard")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST cleanup: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500 when worktree remove fails, got %d", resp.StatusCode)
+	}
+}
+
 func TestCleanupNotFoundReturns404(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
