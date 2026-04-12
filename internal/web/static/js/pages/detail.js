@@ -25,25 +25,29 @@ function kindLabel(kind) {
 
 function renderActionBar(agent) {
   const st = effectiveState(agent);
+  const id = agent.session_id;
   let actions = '';
 
-  actions += UI.btn('Open Claude', { variant: 'primary', onclick: "Dashboard.openClaude()" });
+  // Reply input for all non-terminal states
+  if (st !== 'merged') {
+    const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
+    actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}', event)` });
+  }
 
+  // State-specific buttons
   if (st === 'permission' || st === 'plan') {
-    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}', event)` });
-    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}', event)` });
-  } else if (st === 'question' || st === 'error') {
-    actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
-    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}', event)` });
+    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${id}', event)` });
+    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${id}', event)` });
   } else if (st === 'pr') {
-    actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });
-    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
+    actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${id}')` });
+    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${id}')` });
   } else if (st === 'merged') {
-    actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${agent.session_id}')` });
+    actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${id}')` });
   }
 
   if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question') {
-    actions += UI.stopBtn(`Dashboard.confirmStop('${agent.session_id}')`);
+    actions += UI.stopBtn(`Dashboard.confirmStop('${id}')`);
   }
 
   return `<div class="action-bar">${actions}</div>`;
@@ -95,12 +99,16 @@ export async function renderDetail(app, agents, agentId, setView) {
     { key: 'plan', label: 'Plan' },
   ], 'conversation');
 
+  const isMobile = window.innerWidth <= 480;
+  const vitalCollapsed = isMobile || sessionStorage.getItem('collapse-vital-signs-container-' + agentId) === 'true';
+  const subagentCollapsed = isMobile || sessionStorage.getItem('collapse-subagent-summary-' + agentId) === 'true';
+
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
         ${detailHeader}
-        <div id="vital-signs-container"></div>
-        <div class="subagent-pills-section" id="subagent-summary"></div>
+        ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalCollapsed)}
+        ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentCollapsed)}
         ${tabs}
       </div>
       <div class="detail-scroll">
@@ -124,6 +132,20 @@ export async function renderDetail(app, agents, agentId, setView) {
       document.getElementById('tab-' + target).classList.add('active');
       currentTab = target;
       loadTabContent(target, agentId);
+    });
+  });
+
+  // Collapsible section toggles
+  document.querySelectorAll('.collapsible-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sectionId = btn.dataset.section;
+      const body = document.getElementById(sectionId);
+      const chevron = btn.querySelector('.collapsible-chevron');
+      if (!body) return;
+      const isCollapsed = body.classList.contains('collapsed');
+      body.classList.toggle('collapsed', !isCollapsed);
+      if (chevron) chevron.classList.toggle('collapsed', !isCollapsed);
+      try { sessionStorage.setItem('collapse-' + sectionId + '-' + agentId, String(!isCollapsed)); } catch {}
     });
   });
 
@@ -153,10 +175,13 @@ async function loadSubagentSummary(agentId) {
   const container = document.getElementById('subagent-summary');
   if (!container) return;
   const subs = await get('/api/agents/' + agentId + '/subagents');
+  const section = container.closest('.collapsible-section');
   if (!subs || subs.length === 0) {
     container.innerHTML = '';
+    if (section) section.style.display = 'none';
     return;
   }
+  if (section) section.style.display = '';
 
   const completed = subs.filter(s => s.Completed || s.completed).length;
   const running = subs.length - completed;

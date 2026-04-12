@@ -134,8 +134,6 @@ window.Dashboard = {
 
   cycleTheme() { Theme.cycle(); },
 
-  openClaude() { window.open('https://claude.ai', '_blank'); },
-
   openPR(id) {
     const agent = agents.find(a => a.session_id === id);
     if (agent && agent.pr_url) {

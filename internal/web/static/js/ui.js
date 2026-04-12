@@ -168,6 +168,17 @@ export const UI = {
     </label>`;
   },
 
+  collapsibleSection(id, label, collapsed) {
+    const collapsedCls = collapsed ? ' collapsed' : '';
+    return `<div class="collapsible-section" id="${id}-section">
+      <button class="collapsible-toggle" data-section="${id}">
+        <span class="collapsible-label">${escapeHtml(label)}</span>
+        <span class="collapsible-chevron${collapsedCls}">${ICONS.chevronDown}</span>
+      </button>
+      <div class="collapsible-body${collapsedCls}" id="${id}"></div>
+    </div>`;
+  },
+
   vitalSigns(opts) {
     const phase = opts.phase || '';
     const totalPhases = opts.totalPhases || 0;
