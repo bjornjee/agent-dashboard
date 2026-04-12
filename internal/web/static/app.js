@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshConversation } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -36,6 +36,7 @@ function navigateTo(view, agentId, push) {
   switch (view) {
     case 'list':
       cancelNav();
+      stopConversationPoll();
       setView('list');
       renderList(app, agents);
       break;
@@ -44,10 +45,12 @@ function navigateTo(view, agentId, push) {
       else navigateTo('list', null, false);
       break;
     case 'usage':
+      stopConversationPoll();
       setView('usage');
       renderUsage(app, agents);
       break;
     case 'create':
+      stopConversationPoll();
       setView('create');
       renderCreate(app, agents);
       break;
@@ -84,8 +87,11 @@ function connectSSE() {
       if (currentView === 'list') renderList(app, agents);
       else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
-        if (agent) updateActionBar(agent);
-        refreshConversation(selectedAgentId);
+        if (agent) {
+          updateActionBar(agent);
+          refreshDetailHeader(agent);
+        }
+        refreshActiveTab(selectedAgentId);
       }
     } catch (err) { /* ignore parse errors */ }
   };
@@ -154,11 +160,29 @@ window.Dashboard = {
   },
 
   confirmMerge(id) {
+    // Capture branch before async merge — SSE may update agents mid-flight
+    const agentPre = agents.find(a => a.session_id === id);
+    const branch = agentPre ? agentPre.branch : '';
     showModal('Merge PR', 'Merge this PR with --squash?', async (evt) => {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/merge');
-        if (result && result.ok) toast('Merged', 'success');
-        else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        if (result && result.ok) {
+          toast('Merged', 'success');
+          const label = branch ? `Clean up ${branch}?` : 'Clean up worktree and branch?';
+          showModal('Post-Merge Cleanup', label + ' This will remove the worktree, checkout the default branch, pull, and delete the local feature branch.', async (cleanEvt) => {
+            await withSpinner(cleanEvt, async () => {
+              const cleanResult = await post('/api/agents/' + id + '/cleanup');
+              if (cleanResult && cleanResult.ok) {
+                toast('Cleaned up', 'success');
+                navigateTo('list', null, true);
+              } else {
+                toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error');
+              }
+            });
+          });
+        } else {
+          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        }
       });
     });
   },

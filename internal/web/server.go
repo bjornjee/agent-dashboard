@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/agents/{id}/stop", s.requireAuth(s.requireCSRF(s.handleStop)))
 	mux.HandleFunc("POST /api/agents/{id}/close", s.requireAuth(s.requireCSRF(s.handleClose)))
 	mux.HandleFunc("POST /api/agents/{id}/merge", s.requireAuth(s.requireCSRF(s.handleMerge)))
+	mux.HandleFunc("POST /api/agents/{id}/cleanup", s.requireAuth(s.requireCSRF(s.handleCleanup)))
 	mux.HandleFunc("POST /api/agents/create", s.requireAuth(s.requireCSRF(s.handleCreate)))
 
 	// SSE endpoint

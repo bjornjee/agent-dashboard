@@ -217,6 +217,10 @@ func parseUserEntry(entry jsonlEntry) *domain.ConversationEntry {
 		return nil
 	}
 	text = cleanSlashCommand(text)
+	text = stripSystemTags(text)
+	if text == "" {
+		return nil
+	}
 
 	return &domain.ConversationEntry{
 		Role:      "human",
@@ -260,6 +264,38 @@ func cleanSlashCommand(s string) string {
 		return cmdName
 	}
 	return cmdName + " " + args
+}
+
+// systemTags lists XML tag names injected by the Claude Code harness
+// that appear inline within user messages. These are not user content
+// and should be stripped before display.
+// Note: <task-notification> is NOT listed here — those are entire messages
+// handled separately by markNotifications + IsNotification filtering.
+var systemTags = []string{
+	"system-reminder",
+	"command-message",
+}
+
+// stripSystemTags removes all known system-injected XML tag pairs and
+// their content from a string. Uses simple string matching (not regex)
+// for predictable performance on large messages.
+func stripSystemTags(s string) string {
+	for _, tag := range systemTags {
+		open := "<" + tag
+		close := "</" + tag + ">"
+		for {
+			start := strings.Index(s, open)
+			if start < 0 {
+				break
+			}
+			end := strings.Index(s[start:], close)
+			if end < 0 {
+				break
+			}
+			s = s[:start] + s[start+end+len(close):]
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 func parseAssistantEntry(entry jsonlEntry) *domain.ConversationEntry {

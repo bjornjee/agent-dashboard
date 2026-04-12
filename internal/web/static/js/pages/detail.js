@@ -7,7 +7,7 @@ import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
 
-export { showModal, toast };
+export { showModal, toast, stopConversationPoll };
 
 // Update the action bar in-place when agent state changes via SSE.
 export function updateActionBar(agent) {
@@ -93,14 +93,19 @@ let activityFilter = 'all';
 let currentPRUrl = '';
 let currentDetailTab = 'conversation';
 let currentDetailAgentId = null;
+let lastAgentState = null;
+let conversationPollTimer = null;
 
 // Build conversation HTML from an array of message entries.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
   let lastRole = '';
   for (const entry of entries) {
+    // Skip task-notification messages (internal agent-to-agent noise)
+    if (entry.IsNotification) continue;
     const role = entry.Role || entry.role;
     const content = entry.Content || entry.content || '';
+    if (!content) continue;
     const time = entry.Timestamp || entry.timestamp || '';
     if (role !== lastRole) {
       const icon = role === 'human' ? ICONS.human : ICONS.assistant;
@@ -132,6 +137,85 @@ export async function refreshConversation(agentId) {
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
+// Poll conversation every 2s while the chat tab is active.
+// This provides near-realtime streaming of agent responses since the JSONL
+// is written by Claude Code (not the dashboard), so fsnotify/SSE doesn't
+// trigger on new conversation lines.
+function startConversationPoll(agentId) {
+  stopConversationPoll();
+  conversationPollTimer = setInterval(() => {
+    if (currentDetailTab === 'conversation' && currentDetailAgentId === agentId) {
+      refreshConversation(agentId);
+    } else {
+      stopConversationPoll();
+    }
+  }, 2000);
+}
+
+function stopConversationPoll() {
+  if (conversationPollTimer) {
+    clearInterval(conversationPollTimer);
+    conversationPollTimer = null;
+  }
+}
+
+// Refresh whichever tab is currently active. Called on SSE events.
+// Conversation uses its own fetch path (no nav signal). Activity and plan
+// use loadTabContent which creates a nav signal, so we debounce to avoid
+// rapid SSE events causing cancellation churn.
+let refreshTimer = null;
+export function refreshActiveTab(agentId) {
+  if (currentDetailAgentId !== agentId) return;
+  if (currentDetailTab === 'conversation') {
+    refreshConversation(agentId);
+    return;
+  }
+  if (currentDetailTab === 'diff') return; // expensive, skip
+  // Debounce activity/plan refreshes to avoid nav signal churn
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (currentDetailAgentId !== agentId) return;
+    if (currentDetailTab === 'activity' || currentDetailTab === 'plan') {
+      loadTabContent(currentDetailTab, agentId);
+    }
+  }, 500);
+}
+
+// Update the detail header (status badge, duration) from SSE agent data.
+export function refreshDetailHeader(agent) {
+  if (!agent) return;
+  const st = effectiveState(agent);
+  const prev = lastAgentState;
+  lastAgentState = st;
+
+  // Update status badge
+  const badge = document.querySelector('.detail-title .badge');
+  if (badge) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = UI.badge(st, st);
+    const newBadge = tmp.firstElementChild;
+    if (newBadge) badge.replaceWith(newBadge);
+  }
+
+  // Update duration
+  const meta = document.querySelector('.detail-meta');
+  if (meta && agent.started_at) {
+    const spans = meta.querySelectorAll('span');
+    const last = spans[spans.length - 1];
+    if (last) last.textContent = duration(agent);
+  }
+
+  // Refresh vital signs only on state change
+  if (prev !== null && prev !== st) {
+    loadVitalSigns(getAgentId(agent), agent);
+    loadSubagentSummary(getAgentId(agent));
+  }
+}
+
+function getAgentId(agent) {
+  return agent.session_id;
+}
+
 function applyActivityFilter(container) {
   container.querySelectorAll('.timeline-entry').forEach(el => {
     const kind = el.dataset.kind;
@@ -146,6 +230,7 @@ function applyActivityFilter(container) {
 
 export async function renderDetail(app, agents, agentId, setView) {
   cancelNav();
+  stopConversationPoll();
   activityFilter = 'all';
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);
@@ -155,7 +240,6 @@ export async function renderDetail(app, agents, agentId, setView) {
   const st = effectiveState(agent);
   const detailHeader = `
     <div class="detail-header">
-      <button class="btn btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
       <div class="detail-title">
         <h2>${escapeHtml(repoName(agent))}</h2>
         ${UI.badge(st, st)}
@@ -182,6 +266,9 @@ export async function renderDetail(app, agents, agentId, setView) {
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
+        ${UI.header('Agent Dashboard', {
+          actions: [{ label: '&larr; Back', onclick: 'Dashboard.showList()' }],
+        })}
         ${detailHeader}
         ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalOpen)}
         ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentOpen)}
@@ -200,6 +287,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   // Tab switching
   currentDetailTab = 'conversation';
   currentDetailAgentId = agentId;
+  lastAgentState = st;
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -209,6 +297,9 @@ export async function renderDetail(app, agents, agentId, setView) {
       document.getElementById('tab-' + target).classList.add('active');
       currentDetailTab = target;
       loadTabContent(target, agentId);
+      // Start/stop conversation polling based on active tab
+      if (target === 'conversation') startConversationPoll(agentId);
+      else stopConversationPoll();
     });
   });
 
@@ -226,6 +317,9 @@ export async function renderDetail(app, agents, agentId, setView) {
   loadTabContent('conversation', agentId);
   loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
+
+  // Start conversation polling for near-realtime updates
+  startConversationPoll(agentId);
 }
 
 async function loadVitalSigns(agentId, agent) {
