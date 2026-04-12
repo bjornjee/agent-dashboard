@@ -2071,9 +2071,12 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .usage-metric:last-child { padding-bottom: 0; }
 
   /* Usage: rate-limit rows stack on mobile */
-  .rate-limit-row { flex-wrap: wrap; gap: 6px; }
+  .rate-limit-card { padding: 16px; }
+  .rate-limit-row { flex-wrap: wrap; gap: 4px 8px; }
   .rate-limit-label { min-width: 0; flex-basis: 100%; flex-shrink: 1; }
-  .rate-limit-reset { min-width: 0; }
+  .rate-limit-bar-track { min-width: 0; flex-basis: 0; }
+  .rate-limit-pct { min-width: 0; }
+  .rate-limit-reset { min-width: 0; font-size: 11px; flex-basis: 100%; }
 
   /* Usage: chart card header wraps */
   .usage-chart-card { padding: 16px; }
