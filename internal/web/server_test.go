@@ -954,3 +954,142 @@ func TestIsSensitivePath(t *testing.T) {
 		}
 	}
 }
+
+func TestPRURLEndpoint(t *testing.T) {
+	t.Run("returns stored pr_url when set", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		stateDir := t.TempDir()
+		cfg.Profile.StateDir = stateDir
+
+		agentsDir := filepath.Join(stateDir, "agents")
+		os.MkdirAll(agentsDir, 0700)
+
+		agent := domain.Agent{
+			SessionID: "pr-1",
+			State:     "pr",
+			Cwd:       "/tmp/repo",
+			Branch:    "feat/test",
+			PRURL:     "https://github.com/owner/repo/pull/42",
+		}
+		data, _ := json.Marshal(agent)
+		os.WriteFile(filepath.Join(agentsDir, "pr-1.json"), data, 0600)
+
+		srv := NewServer(cfg, nil, ServerOptions{})
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+
+		resp, err := http.Get(ts.URL + "/api/agents/pr-1/pr-url")
+		if err != nil {
+			t.Fatalf("GET pr-url: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		json.NewDecoder(resp.Body).Decode(&result)
+		if result["url"] != "https://github.com/owner/repo/pull/42/files" {
+			t.Errorf("expected stored PR url with /files, got %q", result["url"])
+		}
+	})
+
+	t.Run("resolves via gh pr view when pr_url empty", func(t *testing.T) {
+		m := withMockCommandRunner(t)
+
+		cfg := config.DefaultConfig()
+		stateDir := t.TempDir()
+		cfg.Profile.StateDir = stateDir
+
+		agentsDir := filepath.Join(stateDir, "agents")
+		os.MkdirAll(agentsDir, 0700)
+
+		agentDir := t.TempDir()
+		agent := domain.Agent{
+			SessionID: "pr-2",
+			State:     "pr",
+			Cwd:       agentDir,
+			Branch:    "feat/test",
+		}
+		data, _ := json.Marshal(agent)
+		os.WriteFile(filepath.Join(agentsDir, "pr-2.json"), data, 0600)
+
+		// Mock gh pr view returning an existing PR URL
+		m.On("CombinedOutput", mock.Anything, agentDir, "gh", "pr", "view", "feat/test",
+			"--json", "url", "-q", ".url").
+			Return([]byte("https://github.com/owner/repo/pull/99\n"), nil)
+
+		srv := NewServer(cfg, nil, ServerOptions{})
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+
+		resp, err := http.Get(ts.URL + "/api/agents/pr-2/pr-url")
+		if err != nil {
+			t.Fatalf("GET pr-url: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		json.NewDecoder(resp.Body).Decode(&result)
+		if result["url"] != "https://github.com/owner/repo/pull/99/files" {
+			t.Errorf("expected gh-resolved PR url, got %q", result["url"])
+		}
+	})
+
+	t.Run("falls back to compare URL when gh fails", func(t *testing.T) {
+		m := withMockCommandRunner(t)
+
+		cfg := config.DefaultConfig()
+		stateDir := t.TempDir()
+		cfg.Profile.StateDir = stateDir
+
+		agentsDir := filepath.Join(stateDir, "agents")
+		os.MkdirAll(agentsDir, 0700)
+
+		agentDir := t.TempDir()
+		agent := domain.Agent{
+			SessionID: "pr-3",
+			State:     "pr",
+			Cwd:       agentDir,
+			Branch:    "feat/test",
+		}
+		data, _ := json.Marshal(agent)
+		os.WriteFile(filepath.Join(agentsDir, "pr-3.json"), data, 0600)
+
+		// gh pr view fails (no existing PR)
+		m.On("CombinedOutput", mock.Anything, agentDir, "gh", "pr", "view", "feat/test",
+			"--json", "url", "-q", ".url").
+			Return(nil, fmt.Errorf("no PRs found"))
+
+		// git remote get-url origin returns the remote URL
+		m.On("CombinedOutput", mock.Anything, agentDir, "git", "remote", "get-url", "origin").
+			Return([]byte("https://github.com/myowner/myrepo.git\n"), nil)
+
+		// git symbolic-ref for default branch
+		m.On("CombinedOutput", mock.Anything, agentDir, "git", "symbolic-ref", "refs/remotes/origin/HEAD").
+			Return([]byte("refs/remotes/origin/main\n"), nil)
+
+		srv := NewServer(cfg, nil, ServerOptions{})
+		ts := httptest.NewServer(srv.Handler())
+		defer ts.Close()
+
+		resp, err := http.Get(ts.URL + "/api/agents/pr-3/pr-url")
+		if err != nil {
+			t.Fatalf("GET pr-url: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		json.NewDecoder(resp.Body).Decode(&result)
+		expected := "https://github.com/myowner/myrepo/compare/main...feat%2Ftest?expand=1"
+		if result["url"] != expected {
+			t.Errorf("expected compare URL %q, got %q", expected, result["url"])
+		}
+	})
+}

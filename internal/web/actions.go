@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -291,4 +292,113 @@ func firstTmuxSession() (string, error) {
 		return "", err
 	}
 	return sessions[0], nil
+}
+
+// handlePRURL resolves and returns the PR URL for an agent.
+// If the agent already has a pr_url, it appends /files and returns it.
+// Otherwise it tries `gh pr view` to find an existing PR, falling back
+// to a GitHub compare URL constructed from the remote and branch.
+func (s *Server) handlePRURL(w http.ResponseWriter, r *http.Request) {
+	agent, ok := s.lookupAgent(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	// If pr_url is already stored, use it directly.
+	if agent.PRURL != "" {
+		prURL := strings.TrimRight(agent.PRURL, "/") + "/files"
+		writeJSON(w, http.StatusOK, map[string]string{"url": prURL})
+		return
+	}
+
+	dir := agent.EffectiveDir()
+	branch := agent.Branch
+	if dir == "" || branch == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent has no directory or branch"})
+		return
+	}
+
+	// Try gh pr view to find an existing PR.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	out, err := cmdRunner.CombinedOutput(ctx, dir, "gh", "pr", "view", branch,
+		"--json", "url", "-q", ".url")
+	if err == nil {
+		if prURL := strings.TrimSpace(string(out)); prURL != "" {
+			writeJSON(w, http.StatusOK, map[string]string{"url": strings.TrimRight(prURL, "/") + "/files"})
+			return
+		}
+	}
+
+	// Fall back to compare URL.
+	prURL, err := buildCompareURL(ctx, dir, branch)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": prURL})
+}
+
+// buildCompareURL constructs a GitHub compare URL from the repo remote and branch.
+func buildCompareURL(ctx context.Context, dir, branch string) (string, error) {
+	out, err := cmdRunner.CombinedOutput(ctx, dir, "git", "remote", "get-url", "origin")
+	if err != nil {
+		return "", fmt.Errorf("failed to get remote: %w", err)
+	}
+	remoteURL := strings.TrimSpace(string(out))
+
+	owner, repo, ok := parseGitHubRemote(remoteURL)
+	if !ok {
+		return "", fmt.Errorf("not a GitHub remote: %s", remoteURL)
+	}
+
+	base := gitDefaultBranchFromDir(ctx, dir)
+	return fmt.Sprintf("https://github.com/%s/%s/compare/%s...%s?expand=1",
+		url.PathEscape(owner),
+		url.PathEscape(repo),
+		url.PathEscape(base),
+		url.PathEscape(branch),
+	), nil
+}
+
+// parseGitHubRemote extracts owner and repo from a GitHub remote URL.
+func parseGitHubRemote(remoteURL string) (owner, repo string, ok bool) {
+	remoteURL = strings.TrimSpace(remoteURL)
+
+	// SSH: git@github.com:owner/repo.git
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		path := strings.TrimPrefix(remoteURL, "git@github.com:")
+		path = strings.TrimSuffix(path, ".git")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+		return "", "", false
+	}
+
+	// HTTPS: https://github.com/owner/repo.git
+	if strings.HasPrefix(remoteURL, "https://github.com/") {
+		path := strings.TrimPrefix(remoteURL, "https://github.com/")
+		path = strings.TrimSuffix(path, ".git")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+		return "", "", false
+	}
+
+	return "", "", false
+}
+
+// gitDefaultBranchFromDir returns the default branch for the repo in dir.
+func gitDefaultBranchFromDir(ctx context.Context, dir string) string {
+	out, err := cmdRunner.CombinedOutput(ctx, dir, "git", "symbolic-ref", "refs/remotes/origin/HEAD")
+	if err == nil {
+		ref := strings.TrimSpace(string(out))
+		if parts := strings.Split(ref, "/"); len(parts) > 0 {
+			return parts[len(parts)-1]
+		}
+	}
+	return "main"
 }
