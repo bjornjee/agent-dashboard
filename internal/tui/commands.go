@@ -16,6 +16,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
@@ -417,50 +418,14 @@ func sendReply(paneID, text, selfPaneID string) tea.Cmd {
 // by scanning existing agents' working directories.
 // It first tries an exact path match, then falls back to repo-name matching
 // only when at least one side is a worktree path (to avoid false collisions
-// between unrelated repos that share the same basename).
-// selfPaneID is the dashboard's own pane ID (%N) to exclude.
+// findWindowForRepo delegates to repowin.FindWindowForRepo.
 func findWindowForRepo(agents []domain.Agent, folder, selfPaneID string) (string, bool) {
-	// Pass 1: exact path match
-	for _, agent := range agents {
-		if agent.TmuxPaneID == selfPaneID {
-			continue
-		}
-		if agent.Cwd == folder {
-			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
-		}
-	}
-
-	// Pass 2: repo-name match, only when at least one side is a worktree
-	folderRepo := repoFromCwd(folder)
-	if folderRepo == "" {
-		return "", false
-	}
-	folderIsWorktree := strings.Contains(folder, "/worktrees/")
-	for _, agent := range agents {
-		if agent.TmuxPaneID == selfPaneID {
-			continue
-		}
-		agentIsWorktree := strings.Contains(agent.Cwd, "/worktrees/") || agent.WorktreeCwd != ""
-		if !folderIsWorktree && !agentIsWorktree {
-			continue
-		}
-		if repoFromCwd(agent.Cwd) == folderRepo {
-			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
-		}
-	}
-	return "", false
+	return repowin.FindWindowForRepo(agents, folder, selfPaneID)
 }
 
-// findWindowByName returns the first window whose Name equals repoName,
-// excluding the window identified by dashboardSW (e.g. "main:2").
+// findWindowByName delegates to repowin.FindWindowByName.
 func findWindowByName(windows []domain.TmuxWindowInfo, repoName, session, dashboardSW string) (string, bool) {
-	for _, w := range windows {
-		candidate := fmt.Sprintf("%s:%d", session, w.Index)
-		if w.Name == repoName && candidate != dashboardSW {
-			return candidate, true
-		}
-	}
-	return "", false
+	return repowin.FindWindowByName(windows, repoName, session, dashboardSW)
 }
 
 // expandPath expands ~ and resolves to an absolute path.
@@ -475,7 +440,7 @@ func expandPath(path string) (string, error) {
 	return filepath.Abs(path)
 }
 
-const maxPanesPerWindow = 8
+const maxPanesPerWindow = repowin.MaxPanesPerWindow
 
 // validateFolder expands and validates a folder path, returning the absolute path.
 func validateFolder(path string) (string, error) {

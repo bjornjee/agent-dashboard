@@ -7,7 +7,12 @@ export function escapeHtml(s) {
 
 export function repoName(agent) {
   const dir = agent.worktree_cwd || agent.cwd || '';
-  const parts = dir.replace(/\/+$/, '').split('/');
+  const clean = dir.replace(/\/+$/, '');
+  // Worktree paths: /foo/worktrees/repo/branch → repo
+  const wtMatch = clean.match(/\/worktrees\/([^/]+)/);
+  if (wtMatch) return wtMatch[1];
+  // Normal paths: last segment
+  const parts = clean.split('/');
   return parts[parts.length - 1] || 'unknown';
 }
 

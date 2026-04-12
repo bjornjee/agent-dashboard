@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
@@ -231,32 +232,67 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a new tmux window for the agent
-	repoName := repoFromPath(folder)
+	// Derive repo name for the tmux window.
+	repoName := repowin.SanitizeWindowName(repowin.RepoFromCwd(folder))
 	if repoName == "" {
 		repoName = s.cfg.Profile.Command
 	}
 
-	// Find a tmux session to create the window in.
-	// Use the first available session from tmux list-sessions.
-	session, err := firstTmuxSession()
-	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no tmux sessions available"})
-		return
-	}
-
-	// Build the shell command — passed directly to new-window as the
-	// pane's initial process to avoid tmux send-keys buffer limits.
+	// Build the shell command — passed directly to new-window/split-window
+	// as the pane's initial process to avoid tmux send-keys buffer limits.
 	cmd := s.cfg.Profile.Command
 	prompt := buildPrompt(req.Skill, req.Message)
 	if prompt != "" {
 		cmd = cmd + " " + shellQuote(prompt)
 	}
 
-	target, err := tmux.TmuxNewWindow(session, repoName, folder, cmd)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", err)})
-		return
+	// Look for an existing window with agents in the same repo.
+	agents := s.readAgentState()
+	sw, found := repowin.FindWindowForRepo(agents, folder, "")
+	if !found {
+		// Fallback: match by tmux window name.
+		session, sErr := firstTmuxSession()
+		if sErr == nil {
+			windows, wErr := tmux.TmuxListWindows(session)
+			if wErr == nil {
+				sw, found = repowin.FindWindowByName(windows, repoName, session, "")
+			}
+		}
+	}
+
+	var target string
+	if found {
+		// Split into the existing window if under the pane limit.
+		count, cErr := tmux.TmuxCountPanes(sw)
+		if cErr != nil {
+			found = false // window may have been destroyed; fall through
+		} else if count >= repowin.MaxPanesPerWindow {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": fmt.Sprintf("8-pane limit reached for %s", repoName),
+			})
+			return
+		} else {
+			var sErr error
+			target, sErr = tmux.TmuxSplitWindow(sw, folder, cmd)
+			if sErr != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("split window: %v", sErr)})
+				return
+			}
+		}
+	}
+	if !found {
+		// No existing window — create a new one.
+		session, sErr := firstTmuxSession()
+		if sErr != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no tmux sessions available"})
+			return
+		}
+		var nErr error
+		target, nErr = tmux.TmuxNewWindow(session, repoName, folder, cmd)
+		if nErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", nErr)})
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
@@ -275,14 +311,6 @@ func buildPrompt(skill, message string) string {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
-}
-
-func repoFromPath(path string) string {
-	path = strings.TrimRight(path, "/")
-	if i := strings.LastIndex(path, "/"); i >= 0 {
-		return path[i+1:]
-	}
-	return path
 }
 
 // firstTmuxSession returns the name of the first available tmux session.

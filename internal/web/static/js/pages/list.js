@@ -34,8 +34,8 @@ export function renderList(app, agents) {
           <span class="agent-name">${escapeHtml(repoName(agent))}</span>
           ${UI.badge(st, st)}
         </div>
+        ${agent.branch ? '<div class="agent-branch">' + escapeHtml(agent.branch) + '</div>' : ''}
         <div class="agent-meta">
-          ${agent.branch ? '<span>' + escapeHtml(agent.branch) + '</span>' : ''}
           ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
           ${agent.started_at ? '<span>' + durationShort(agent) + '</span>' : ''}
           ${agent.subagent_count > 0 ? '<span>' + agent.subagent_count + ' subagents</span>' : ''}
