@@ -1441,7 +1441,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 /* ============================================
    VIEW: Usage
    ============================================ */
-.usage-view { padding: 12px; max-width: 960px; margin: 0 auto; }
+.usage-view { padding: 12px; max-width: 960px; margin: 0 auto; overflow-x: hidden; }
 
 /* Metrics strip */
 .usage-metrics {
@@ -2070,6 +2070,11 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .usage-metric:first-child { padding-top: 0; }
   .usage-metric:last-child { padding-bottom: 0; }
 
+  /* Usage: rate-limit rows stack on mobile */
+  .rate-limit-row { flex-wrap: wrap; gap: 6px; }
+  .rate-limit-label { min-width: 0; flex-basis: 100%; flex-shrink: 1; }
+  .rate-limit-reset { min-width: 0; }
+
   /* Usage: chart card header wraps */
   .usage-chart-card { padding: 16px; }
   .usage-chart-card__header { flex-wrap: wrap; gap: 8px; }
@@ -2081,7 +2086,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .usage-chart { height: 130px; }
 
   /* Usage: table card */
-  .usage-table-container { padding: 16px; }
+  .usage-table-container { padding: 16px; overflow-x: auto; }
 }
 
 /* Safe area for mobile notch */
