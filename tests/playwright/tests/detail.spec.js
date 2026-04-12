@@ -18,62 +18,45 @@ function makeAgent(overrides) {
 async function setupAndNavigate(page, agent) {
   const agents = [agent];
 
-  // Mock SSE events endpoint — return agent list
+  // Block SSE so real server data doesn't override mocks
   await page.route('**/events', async (route) => {
-    const body = `data: ${JSON.stringify(agents)}\n\n`;
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-      body,
-    });
+    route.abort('connectionrefused');
   });
 
-  // Mock agent list
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({ json: agents });
+  // Mock ALL /api/agents* routes with a single handler to avoid conflicts
+  await page.route(/\/api\/agents/, async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+
+    if (path === '/api/agents') {
+      await route.fulfill({ json: agents });
+    } else if (path.endsWith('/conversation')) {
+      await route.fulfill({
+        json: [
+          { Role: 'human', Content: 'Hello', Timestamp: new Date().toISOString() },
+          { Role: 'assistant', Content: 'Hi there', Timestamp: new Date().toISOString() },
+        ],
+      });
+    } else if (path.endsWith('/usage')) {
+      await route.fulfill({ json: { InputTokens: 1000, OutputTokens: 500, CostUSD: 0.05 } });
+    } else if (path.endsWith('/subagents')) {
+      await route.fulfill({
+        json: [
+          { AgentType: 'explore', Description: 'Search code', StartedAt: new Date().toISOString(), Completed: true },
+          { AgentType: 'plan', Description: 'Design approach', StartedAt: new Date().toISOString(), Completed: false },
+        ],
+      });
+    } else if (path.endsWith('/input')) {
+      await route.fulfill({ json: { ok: true } });
+    } else {
+      await route.fulfill({ json: {} });
+    }
   });
 
-  // Mock conversation
-  await page.route(`**/api/agents/${agent.session_id}/conversation`, async (route) => {
-    await route.fulfill({
-      json: [
-        { Role: 'human', Content: 'Hello', Timestamp: new Date().toISOString() },
-        { Role: 'assistant', Content: 'Hi there', Timestamp: new Date().toISOString() },
-      ],
-    });
-  });
-
-  // Mock usage
-  await page.route(`**/api/agents/${agent.session_id}/usage`, async (route) => {
-    await route.fulfill({ json: { InputTokens: 1000, OutputTokens: 500, CostUSD: 0.05 } });
-  });
-
-  // Mock subagents
-  await page.route(`**/api/agents/${agent.session_id}/subagents`, async (route) => {
-    await route.fulfill({
-      json: [
-        { AgentType: 'explore', Description: 'Search code', StartedAt: new Date().toISOString(), Completed: true },
-        { AgentType: 'plan', Description: 'Design approach', StartedAt: new Date().toISOString(), Completed: false },
-      ],
-    });
-  });
-
-  // Mock activity, diff, plan
-  await page.route(`**/api/agents/${agent.session_id}/activity`, async (route) => {
-    await route.fulfill({ json: [] });
-  });
-  await page.route(`**/api/agents/${agent.session_id}/diff`, async (route) => {
-    await route.fulfill({ json: {} });
-  });
-  await page.route(`**/api/agents/${agent.session_id}/plan`, async (route) => {
-    await route.fulfill({ json: {} });
-  });
-
+  // Navigate to the app — routes and initScript are already set
+  await page.addInitScript(() => sessionStorage.clear());
   await page.goto('/');
+  await page.evaluate(() => sessionStorage.clear());
   // Wait for the app to render with SSE data, then click the agent card
   await page.waitForSelector('.agent-card', { timeout: 5000 });
   await page.click('.agent-card');
@@ -125,20 +108,16 @@ test.describe('Reply Input Box', () => {
     const agent = makeAgent({ state: 'running' });
     await setupAndNavigate(page, agent);
 
-    // Intercept the POST to /input
-    let capturedBody = null;
-    await page.route(`**/api/agents/${agent.session_id}/input`, async (route) => {
-      capturedBody = route.request().postDataJSON();
-      await route.fulfill({ json: { ok: true } });
-    });
+    const requestPromise = page.waitForRequest(req =>
+      req.url().includes('/input') && req.method() === 'POST'
+    );
 
     const input = page.locator('#reply-input');
     await input.fill('test message');
     await page.click('.action-bar button:has-text("Send")');
 
-    // Wait for the POST to be intercepted
-    await page.waitForTimeout(500);
-    expect(capturedBody).toEqual({ text: 'test message' });
+    const request = await requestPromise;
+    expect(request.postDataJSON()).toEqual({ text: 'test message' });
 
     // Input should be cleared after send
     await expect(input).toHaveValue('');

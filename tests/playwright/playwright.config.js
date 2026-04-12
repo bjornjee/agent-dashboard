@@ -8,6 +8,7 @@ module.exports = defineConfig({
   use: {
     baseURL: 'http://localhost:8391',
     headless: true,
+    serviceWorkers: 'block',
   },
   webServer: {
     command: '../../bin/agent-dashboard-web --port 8391',

@@ -54,10 +54,10 @@ docs: ## Serve docs site locally (http://localhost:4000)
 	cd docs && bundle install --quiet && bundle exec jekyll serve --baseurl "" --livereload
 
 test-e2e: build-web ## Run Playwright end-to-end tests
-	cd tests/playwright && npm ci && npx playwright test
+	cd tests/playwright && npm install --silent && npx playwright test
 
 playwright-install: ## Install Playwright browsers (run once)
-	cd tests/playwright && npm ci && npx playwright install --with-deps chromium
+	cd tests/playwright && npm install --silent && npx playwright install --with-deps chromium
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/
