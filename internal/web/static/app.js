@@ -6,6 +6,7 @@ import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
 import { UI } from './js/ui.js';
 import { Theme } from './js/theme.js';
+import { initNotify, processNotifications, toggleBrowserNotifications } from './js/notify.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -83,7 +84,10 @@ function connectSSE() {
   eventSource = new EventSource('/events');
   eventSource.onmessage = (e) => {
     try {
+      const isFirstLoad = agents.length === 0;
       agents = JSON.parse(e.data);
+      if (isFirstLoad) initNotify(agents);
+      else processNotifications(agents);
       if (currentView === 'list') renderList(app, agents);
       else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
@@ -203,6 +207,24 @@ window.Dashboard = {
 
   cycleTheme() { Theme.cycle(); },
 
+  async toggleNotifications() {
+    const result = await toggleBrowserNotifications();
+    if (result.permission === 'unsupported') {
+      toast('Notifications not supported in this browser', 'error');
+    } else if (result.permission === 'denied') {
+      toast('Notifications blocked — check browser settings', 'error');
+    } else if (result.enabled) {
+      toast('Notifications enabled', 'success');
+    } else {
+      toast('Notifications disabled', 'success');
+    }
+    // Re-render current view to update bell icon
+    if (currentView === 'list') renderList(app, agents);
+    else if (currentView === 'detail' && selectedAgentId) renderDetail(app, agents, selectedAgentId, setView);
+    else if (currentView === 'usage') renderUsage(app, agents);
+    else if (currentView === 'create') renderCreate(app, agents);
+  },
+
   async openPR(id) {
     const agent = agents.find(a => a.session_id === id);
     if (agent && agent.pr_url) {
@@ -258,6 +280,15 @@ window.Dashboard = {
     }
   },
 };
+
+// --- Service worker messages ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'navigate-agent' && e.data.agentId) {
+      navigateTo('detail', e.data.agentId, true);
+    }
+  });
+}
 
 // --- Theme ---
 Theme.init();

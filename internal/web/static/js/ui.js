@@ -3,6 +3,7 @@ import { escapeHtml, formatCost, formatCostFull, formatTokens, formatDateShort, 
 import { STATE_BADGE } from './state.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
+import { isBrowserNotifyEnabled } from './notify.js';
 
 export const UI = {
   header(title, opts) {
@@ -17,6 +18,8 @@ export const UI = {
       controls += '<div class="header-divider"></div>';
     }
     if (showToggle) {
+      const notifyIcon = isBrowserNotifyEnabled() ? ICONS.bell : ICONS.bellOff;
+      controls += `<button class="header-icon-btn" onclick="Dashboard.toggleNotifications()" title="Toggle notifications" aria-label="Toggle notifications">${notifyIcon}</button>`;
       controls += `<button class="header-icon-btn" onclick="Dashboard.cycleTheme()" title="Toggle theme" aria-label="Toggle theme">${Theme.getIcon()}</button>`;
     }
     if (o.cta) {
@@ -166,6 +169,62 @@ export const UI = {
       <input type="checkbox" class="toggle-switch__input" data-key="${escapeHtml(key)}"${checked}>
       <span class="toggle-switch__track"></span>
     </label>`;
+  },
+
+  nudge(message, opts) {
+    const o = opts || {};
+    const type = o.type || 'review';
+    const agentId = o.agentId || '';
+    const autoDismissMs = o.autoDismissMs || 5000;
+
+    // Cap visible nudges at 3
+    const existing = document.querySelectorAll('.nudge-banner');
+    if (existing.length >= 3) {
+      const oldest = existing[0];
+      oldest.classList.remove('nudge-visible');
+      setTimeout(() => oldest.remove(), 300);
+    }
+
+    const el = document.createElement('div');
+    el.className = 'nudge-banner nudge-' + type;
+    el.setAttribute('role', 'alert');
+
+    // Stack offset: each existing nudge pushes this one down
+    const activeCount = document.querySelectorAll('.nudge-banner').length;
+    el.style.top = 'calc(' + (48 + activeCount * 56) + 'px + env(safe-area-inset-top, 0px))';
+
+    el.innerHTML =
+      '<div class="nudge-content"' + (agentId ? ' onclick="Dashboard.selectAgent(\'' + escapeHtml(agentId) + '\')"' : '') + '>' +
+        '<span class="nudge-message">' + escapeHtml(message) + '</span>' +
+      '</div>' +
+      '<button class="nudge-dismiss" aria-label="Dismiss">&times;</button>';
+
+    el.querySelector('.nudge-dismiss').addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismiss();
+    });
+
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('nudge-visible'));
+
+    function dismiss() {
+      el.classList.remove('nudge-visible');
+      setTimeout(() => {
+        el.remove();
+        repositionNudges();
+      }, 300);
+    }
+
+    const timer = setTimeout(dismiss, autoDismissMs);
+
+    function repositionNudges() {
+      const banners = document.querySelectorAll('.nudge-banner');
+      banners.forEach((b, i) => {
+        b.style.top = 'calc(' + (48 + i * 56) + 'px + env(safe-area-inset-top, 0px))';
+      });
+    }
+
+    return { dismiss, el };
   },
 
   collapsibleSection(id, label, open) {
