@@ -134,15 +134,22 @@ window.Dashboard = {
 
   cycleTheme() { Theme.cycle(); },
 
-  openClaude() { window.open('https://claude.ai', '_blank'); },
-
-  openPR(id) {
+  async openPR(id) {
     const agent = agents.find(a => a.session_id === id);
     if (agent && agent.pr_url) {
       window.open(agent.pr_url, '_blank');
-    } else {
-      toast('No PR URL available', 'error');
+      return;
     }
+    try {
+      const resp = await fetch(`/api/agents/${encodeURIComponent(id)}/pr-url`);
+      if (!resp.ok) throw new Error('failed to resolve PR URL');
+      const data = await resp.json();
+      if (data.url) {
+        window.open(data.url, '_blank');
+        return;
+      }
+    } catch {}
+    toast('No PR URL available', 'error');
   },
 
   async createAgent(evt) {

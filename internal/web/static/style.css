@@ -892,10 +892,6 @@ body {
 /* ============================================
    COMPONENT: Subagent Pills Section
    ============================================ */
-.subagent-pills-section {
-  padding: 0 var(--space-6);
-}
-.subagent-pills-section:empty { display: none; }
 .subagent-summary-list {
   display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) 0;
 }
@@ -1865,6 +1861,37 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 }
 
 /* ============================================
+   COMPONENT: Collapsible Section
+   Reusable <details>/<summary> component matching
+   the diff-dir-summary and tool-group-summary pattern.
+   ============================================ */
+.collapsible-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-6);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.collapsible-summary::-webkit-details-marker { display: none; }
+.collapsible-summary::before {
+  content: '\25B6';
+  font-size: 8px;
+  transition: transform var(--transition-default);
+  display: inline-block;
+}
+.collapsible-section[open] > .collapsible-summary::before {
+  transform: rotate(90deg);
+}
+.collapsible-summary:hover { color: var(--text-muted); }
+
+/* ============================================
    COMPONENT: Action bar
    ============================================ */
 .action-bar {
@@ -2017,6 +2044,14 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .progress-segments { flex-basis: 100%; }
   .subagent-summary-list { flex-direction: column; }
   .subagent-pill { max-width: 100%; }
+
+  /* Action bar: wrap so buttons don't overflow */
+  .action-bar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+  }
+  .action-input { flex: 1 1 60%; min-width: 0; }
 
   /* Usage: metrics strip stacks on mobile */
   .usage-metrics {

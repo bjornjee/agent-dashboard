@@ -39,6 +39,8 @@ docs/.sass-cache/
 # Test/tool artifacts
 .playwright-mcp/
 screenshots/
+node_modules/
+test-results/
 
 # Development screenshots (root-level)
 /*.png

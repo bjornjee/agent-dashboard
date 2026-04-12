@@ -25,25 +25,30 @@ function kindLabel(kind) {
 
 function renderActionBar(agent) {
   const st = effectiveState(agent);
+  const id = agent.session_id;
   let actions = '';
 
-  actions += UI.btn('Open Claude', { variant: 'primary', onclick: "Dashboard.openClaude()" });
-
-  if (st === 'permission' || st === 'plan') {
-    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${agent.session_id}', event)` });
-    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${agent.session_id}', event)` });
-  } else if (st === 'question' || st === 'error') {
-    actions += `<input class="action-input" id="reply-input" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')Dashboard.sendInput('${agent.session_id}')">`;
-    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${agent.session_id}', event)` });
-  } else if (st === 'pr') {
-    actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${agent.session_id}')` });
-    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${agent.session_id}')` });
-  } else if (st === 'merged') {
-    actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${agent.session_id}')` });
+  // Reply input for active agent states
+  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr'];
+  if (INPUT_STATES.includes(st)) {
+    const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
+    actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}', event)` });
   }
 
-  if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question') {
-    actions += UI.stopBtn(`Dashboard.confirmStop('${agent.session_id}')`);
+  // State-specific buttons
+  if (st === 'permission' || st === 'plan') {
+    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${id}', event)` });
+    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${id}', event)` });
+  } else if (st === 'pr') {
+    actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${id}')` });
+    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${id}')` });
+  } else if (st === 'merged') {
+    actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${id}')` });
+  }
+
+  if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question' || st === 'error') {
+    actions += UI.stopBtn(`Dashboard.confirmStop('${id}')`);
   }
 
   return `<div class="action-bar">${actions}</div>`;
@@ -95,12 +100,16 @@ export async function renderDetail(app, agents, agentId, setView) {
     { key: 'plan', label: 'Plan' },
   ], 'conversation');
 
+  const isMobile = window.innerWidth <= 480;
+  const vitalOpen = !isMobile && sessionStorage.getItem('collapse-vital-signs-container-' + agentId) !== 'true';
+  const subagentOpen = !isMobile && sessionStorage.getItem('collapse-subagent-summary-' + agentId) !== 'true';
+
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
         ${detailHeader}
-        <div id="vital-signs-container"></div>
-        <div class="subagent-pills-section" id="subagent-summary"></div>
+        ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalOpen)}
+        ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentOpen)}
         ${tabs}
       </div>
       <div class="detail-scroll">
@@ -124,6 +133,16 @@ export async function renderDetail(app, agents, agentId, setView) {
       document.getElementById('tab-' + target).classList.add('active');
       currentTab = target;
       loadTabContent(target, agentId);
+    });
+  });
+
+  // Persist collapsible section state
+  document.querySelectorAll('.collapsible-section').forEach(details => {
+    details.addEventListener('toggle', () => {
+      const summary = details.querySelector('.collapsible-summary');
+      if (!summary) return;
+      const sectionId = summary.dataset.section;
+      try { sessionStorage.setItem('collapse-' + sectionId + '-' + agentId, String(!details.open)); } catch {}
     });
   });
 
@@ -152,11 +171,22 @@ async function loadVitalSigns(agentId, agent) {
 async function loadSubagentSummary(agentId) {
   const container = document.getElementById('subagent-summary');
   if (!container) return;
-  const subs = await get('/api/agents/' + agentId + '/subagents');
-  if (!subs || subs.length === 0) {
+  let subs;
+  try {
+    subs = await get('/api/agents/' + agentId + '/subagents');
+  } catch {
     container.innerHTML = '';
+    const section = container.closest('.collapsible-section');
+    if (section) section.style.display = 'none';
     return;
   }
+  const section = container.closest('.collapsible-section');
+  if (!subs || subs.length === 0) {
+    container.innerHTML = '';
+    if (section) section.style.display = 'none';
+    return;
+  }
+  if (section) section.style.display = '';
 
   const completed = subs.filter(s => s.Completed || s.completed).length;
   const running = subs.length - completed;

@@ -168,6 +168,14 @@ export const UI = {
     </label>`;
   },
 
+  collapsibleSection(id, label, open) {
+    const openAttr = open ? ' open' : '';
+    return `<details class="collapsible-section" id="${id}-section"${openAttr}>
+      <summary class="collapsible-summary" data-section="${id}">${escapeHtml(label)}</summary>
+      <div class="collapsible-body" id="${id}"></div>
+    </details>`;
+  },
+
   vitalSigns(opts) {
     const phase = opts.phase || '';
     const totalPhases = opts.totalPhases || 0;

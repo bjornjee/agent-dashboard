@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race install install-web uninstall clean seed web docs help
+.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web uninstall clean seed web docs help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -52,6 +52,12 @@ web: build-web ## Run web server locally
 
 docs: ## Serve docs site locally (http://localhost:4000)
 	cd docs && bundle install --quiet && bundle exec jekyll serve --baseurl "" --livereload
+
+test-e2e: build-web ## Run Playwright end-to-end tests (run playwright-install first)
+	cd tests/playwright && [ -d node_modules ] || npm install --silent && npx playwright test
+
+playwright-install: ## Install Playwright browsers (run once)
+	cd tests/playwright && npm install --silent && npx playwright install --with-deps chromium
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/
