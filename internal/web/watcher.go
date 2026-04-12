@@ -108,5 +108,6 @@ func (s *Server) readAgentState() []domain.Agent {
 		state.ResolveAgentBranches(&sf, tmux.TmuxListPaneCwds())
 	}
 	state.ApplyPinnedStates(&sf)
+	state.ApplyIdleOverrides(&sf, s.cfg.Profile.ProjectsDir)
 	return state.SortedAgents(sf, "")
 }

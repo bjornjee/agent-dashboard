@@ -145,8 +145,7 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 // handleAgent returns a single agent by session ID.
 func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	sf := state.ReadState(s.cfg.Profile.StateDir)
-	agent, ok := sf.Agents[id]
+	agent, ok := s.lookupAgent(id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
@@ -161,6 +160,7 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 		state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
 	}
 	state.ApplyPinnedStates(&sf)
+	state.ApplyIdleOverrides(&sf, s.cfg.Profile.ProjectsDir)
 	agent, ok := sf.Agents[id]
 	return agent, ok
 }

@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -41,6 +41,10 @@ function connectSSE() {
     try {
       agents = JSON.parse(e.data);
       if (currentView === 'list') renderList(app, agents);
+      else if (currentView === 'detail' && selectedAgentId) {
+        const agent = agents.find(a => a.session_id === selectedAgentId);
+        if (agent) updateActionBar(agent);
+      }
     } catch (err) { /* ignore parse errors */ }
   };
   eventSource.onerror = () => {
@@ -91,10 +95,10 @@ window.Dashboard = {
     if (!input || !input.value.trim()) return;
     const text = input.value.trim();
     input.value = '';
+    appendUserMessage(text);
     await withSpinner(evt, async () => {
       const result = await post('/api/agents/' + id + '/input', { text });
-      if (result && result.ok) toast('Sent', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (!result || !result.ok) toast('Failed: ' + (result?.error || 'unknown'), 'error');
     });
   },
 

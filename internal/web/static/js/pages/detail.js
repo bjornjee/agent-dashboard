@@ -9,6 +9,41 @@ import { Theme } from '../theme.js';
 
 export { showModal, toast };
 
+// Update the action bar in-place when agent state changes via SSE.
+export function updateActionBar(agent) {
+  const bar = document.querySelector('.action-bar');
+  if (!bar) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderActionBar(agent);
+  const newBar = tmp.firstElementChild;
+  if (newBar) bar.replaceWith(newBar);
+}
+
+// Optimistically append a user message bubble to the chat.
+export function appendUserMessage(text) {
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  // Add role label if the last message was not from the user
+  const lastLabel = container.querySelector('.msg-role-label:last-of-type');
+  const lastLabelText = lastLabel ? lastLabel.textContent.trim() : '';
+  if (!lastLabelText.includes('You')) {
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'msg-role-label';
+    labelDiv.innerHTML = `${ICONS.human} You`;
+    container.appendChild(labelDiv);
+  }
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'msg msg-human';
+  msgDiv.textContent = text;
+  const timeDiv = document.createElement('div');
+  timeDiv.className = 'msg-time';
+  timeDiv.textContent = formatTimeShort(new Date().toISOString());
+  msgDiv.appendChild(timeDiv);
+  container.appendChild(msgDiv);
+  const scrollParent = container.closest('.detail-scroll');
+  if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
 function timelineIcon(kind) {
   const svg = ICONS[kind] || '';
   const cls = kind === 'human' ? 'timeline-icon--human'
@@ -245,7 +280,8 @@ async function loadTabContent(tab, agentId) {
       }
       html += '</div>';
       container.innerHTML = html;
-      container.scrollTop = container.scrollHeight;
+      const scrollParent = container.closest('.detail-scroll');
+      if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
       break;
     }
     case 'activity': {
