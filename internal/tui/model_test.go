@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
 
@@ -403,7 +404,7 @@ func TestFindWindowForRepo_MatchesByFolder(t *testing.T) {
 		{Target: "main:2.0", Session: "main", Window: 2, Pane: 0, Cwd: "/home/user/code/other"},
 	}
 
-	sw, found := findWindowForRepo(agents, "/home/user/code/skills", "%0")
+	sw, found := repowin.FindWindowForRepo(agents, "/home/user/code/skills", "%0")
 	if !found {
 		t.Fatal("expected to find window for matching folder")
 	}
@@ -417,14 +418,14 @@ func TestFindWindowForRepo_NoMatch(t *testing.T) {
 		{Target: "main:1.0", Session: "main", Window: 1, Pane: 0, Cwd: "/home/user/code/skills"},
 	}
 
-	_, found := findWindowForRepo(agents, "/home/user/code/newrepo", "%0")
+	_, found := repowin.FindWindowForRepo(agents, "/home/user/code/newrepo", "%0")
 	if found {
 		t.Error("expected no match for different folder")
 	}
 }
 
 func TestFindWindowForRepo_EmptyAgents(t *testing.T) {
-	_, found := findWindowForRepo(nil, "/home/user/code/skills", "%0")
+	_, found := repowin.FindWindowForRepo(nil, "/home/user/code/skills", "%0")
 	if found {
 		t.Error("expected no match with empty agents")
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
@@ -413,56 +414,6 @@ func sendReply(paneID, text, selfPaneID string) tea.Cmd {
 	}
 }
 
-// findWindowForRepo finds an existing tmux session:window for a given folder
-// by scanning existing agents' working directories.
-// It first tries an exact path match, then falls back to repo-name matching
-// only when at least one side is a worktree path (to avoid false collisions
-// between unrelated repos that share the same basename).
-// selfPaneID is the dashboard's own pane ID (%N) to exclude.
-func findWindowForRepo(agents []domain.Agent, folder, selfPaneID string) (string, bool) {
-	// Pass 1: exact path match
-	for _, agent := range agents {
-		if agent.TmuxPaneID == selfPaneID {
-			continue
-		}
-		if agent.Cwd == folder {
-			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
-		}
-	}
-
-	// Pass 2: repo-name match, only when at least one side is a worktree
-	folderRepo := repoFromCwd(folder)
-	if folderRepo == "" {
-		return "", false
-	}
-	folderIsWorktree := strings.Contains(folder, "/worktrees/")
-	for _, agent := range agents {
-		if agent.TmuxPaneID == selfPaneID {
-			continue
-		}
-		agentIsWorktree := strings.Contains(agent.Cwd, "/worktrees/") || agent.WorktreeCwd != ""
-		if !folderIsWorktree && !agentIsWorktree {
-			continue
-		}
-		if repoFromCwd(agent.Cwd) == folderRepo {
-			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
-		}
-	}
-	return "", false
-}
-
-// findWindowByName returns the first window whose Name equals repoName,
-// excluding the window identified by dashboardSW (e.g. "main:2").
-func findWindowByName(windows []domain.TmuxWindowInfo, repoName, session, dashboardSW string) (string, bool) {
-	for _, w := range windows {
-		candidate := fmt.Sprintf("%s:%d", session, w.Index)
-		if w.Name == repoName && candidate != dashboardSW {
-			return candidate, true
-		}
-	}
-	return "", false
-}
-
 // expandPath expands ~ and resolves to an absolute path.
 func expandPath(path string) (string, error) {
 	if strings.HasPrefix(path, "~/") || path == "~" {
@@ -475,7 +426,7 @@ func expandPath(path string) (string, error) {
 	return filepath.Abs(path)
 }
 
-const maxPanesPerWindow = 8
+const maxPanesPerWindow = repowin.MaxPanesPerWindow
 
 // validateFolder expands and validates a folder path, returning the absolute path.
 func validateFolder(path string) (string, error) {
@@ -530,7 +481,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		selfTarget := tmux.ResolveTarget(selfPaneID)
 		session := tmux.ExtractSession(selfTarget)
 		dashboardSW := tmux.ExtractSessionWindow(selfTarget)
-		repoName := sanitizeWindowName(repoFromCwd(absFolder))
+		repoName := repowin.SanitizeWindowName(repowin.RepoFromCwd(absFolder))
 		if repoName == "" {
 			repoName = profile.Command
 		}
@@ -538,12 +489,12 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		var newTarget string
 
 		// Check for existing window
-		sw, found := findWindowForRepo(agents, absFolder, selfPaneID)
+		sw, found := repowin.FindWindowForRepo(agents, absFolder, selfPaneID)
 		if !found {
 			// Fallback: check window names
 			windows, wErr := tmux.TmuxListWindows(session)
 			if wErr == nil {
-				sw, found = findWindowByName(windows, repoName, session, dashboardSW)
+				sw, found = repowin.FindWindowByName(windows, repoName, session, dashboardSW)
 			}
 		}
 
@@ -661,7 +612,7 @@ func openWorktreeWindowCmd(session, branch, dir string) tea.Cmd {
 	return func() tea.Msg {
 		windowName := "shell"
 		if branch != "" {
-			windowName = sanitizeWindowName(branch)
+			windowName = repowin.SanitizeWindowName(branch)
 		}
 		_, err := tmux.TmuxNewWindow(session, windowName, dir)
 		return openWorktreeMsg{err: err, dir: dir}

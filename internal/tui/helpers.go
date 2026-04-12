@@ -4,30 +4,16 @@ import (
 	_ "embed"
 	"fmt"
 	"image/color"
-	"path/filepath"
-	"regexp"
 	"strings"
 
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/repowin"
 )
 
 //go:embed catppuccin-frappe.json
 var catppuccinFrappeStyle []byte
-
-// safeWindowNameRe matches characters safe for tmux window names.
-var safeWindowNameRe = regexp.MustCompile(`[^a-zA-Z0-9_.\-]`)
-
-// sanitizeWindowName strips unsafe characters from a tmux window name.
-// Characters like : would break target parsing (session:window.pane).
-func sanitizeWindowName(name string) string {
-	safe := safeWindowNameRe.ReplaceAllString(name, "_")
-	if safe == "" {
-		return "claude"
-	}
-	return safe
-}
 
 // highlightLine applies a background highlight to a line while preserving
 // inner ANSI foreground colors. It pads the line to the given width and
@@ -54,31 +40,11 @@ func highlightLine(line string, width int) string {
 	return bgCode + boldCode + inner + padding + resetFull
 }
 
-// repoFromCwd extracts the repo name from a working directory path.
-// For worktree paths like /foo/worktrees/skills/branch-name, returns "skills".
-// For normal paths like /foo/skills, returns "skills" (filepath.Base).
-func repoFromCwd(cwd string) string {
-	if cwd == "" {
-		return ""
-	}
-	parts := strings.SplitN(cwd, "/worktrees/", 2)
-	if len(parts) == 2 && parts[1] != "" {
-		// Worktree: repo is the first component after /worktrees/
-		repo := strings.SplitN(parts[1], "/", 2)[0]
-		return repo
-	}
-	base := filepath.Base(cwd)
-	if base == "." || base == "/" {
-		return ""
-	}
-	return base
-}
-
 // agentRepo extracts the repo name from an agent, preferring WorktreeCwd.
 func agentRepo(agent domain.Agent) string {
-	repo := repoFromCwd(agent.WorktreeCwd)
+	repo := repowin.RepoFromCwd(agent.WorktreeCwd)
 	if repo == "" {
-		repo = repoFromCwd(agent.Cwd)
+		repo = repowin.RepoFromCwd(agent.Cwd)
 	}
 	return repo
 }

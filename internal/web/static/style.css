@@ -690,6 +690,15 @@ body {
   letter-spacing: -0.005em;
 }
 
+.agent-branch {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .agent-meta {
   display: flex;
   gap: 0;

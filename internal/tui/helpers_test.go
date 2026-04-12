@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/repowin"
 )
 
 func TestRepoFromCwd(t *testing.T) {
@@ -51,7 +52,7 @@ func TestRepoFromCwd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := repoFromCwd(tt.cwd)
+			got := repowin.RepoFromCwd(tt.cwd)
 			if got != tt.want {
 				t.Errorf("repoFromCwd(%q) = %q, want %q", tt.cwd, got, tt.want)
 			}
@@ -104,7 +105,7 @@ func TestSanitizeWindowName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := sanitizeWindowName(tt.input)
+			got := repowin.SanitizeWindowName(tt.input)
 			if got != tt.want {
 				t.Errorf("sanitizeWindowName(%q) = %q, want %q", tt.input, got, tt.want)
 			}
@@ -148,7 +149,7 @@ func TestFindWindowForRepo_MatchesWorktrees(t *testing.T) {
 		},
 	}
 	// Different path but same repo — should find the window
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/skills", "%0")
+	sw, found := repowin.FindWindowForRepo(agents, "/Users/test/Code/skills", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match worktree agent to same repo")
 	}
@@ -166,7 +167,7 @@ func TestFindWindowForRepo_ExactPathMatch(t *testing.T) {
 			Cwd:     "/Users/test/Code/bjornjee/agent-dashboard",
 		},
 	}
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/bjornjee/agent-dashboard", "%0")
+	sw, found := repowin.FindWindowForRepo(agents, "/Users/test/Code/bjornjee/agent-dashboard", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match exact path")
 	}
@@ -185,7 +186,7 @@ func TestFindWindowForRepo_DifferentReposSameBasename(t *testing.T) {
 		},
 	}
 	// Different parent, same basename "app" — should NOT match
-	_, found := findWindowForRepo(agents, "/Users/test/Code/project-b/app", "%0")
+	_, found := repowin.FindWindowForRepo(agents, "/Users/test/Code/project-b/app", "%0")
 	if found {
 		t.Error("findWindowForRepo should not match different repos with same basename")
 	}
@@ -201,7 +202,7 @@ func TestFindWindowForRepo_WorktreeToPlain(t *testing.T) {
 		},
 	}
 	// Worktree folder should match agent at plain repo path
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feature-x", "%0")
+	sw, found := repowin.FindWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feature-x", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match worktree folder to plain agent cwd")
 	}
@@ -220,7 +221,7 @@ func TestFindWindowForRepo_WorktreeToWorktree(t *testing.T) {
 		},
 	}
 	// Both sides are worktrees for the same repo
-	sw, found := findWindowForRepo(agents, "/Users/test/Code/worktrees/skills/branch-b", "%0")
+	sw, found := repowin.FindWindowForRepo(agents, "/Users/test/Code/worktrees/skills/branch-b", "%0")
 	if !found {
 		t.Error("findWindowForRepo should match two worktrees of the same repo")
 	}
@@ -238,7 +239,7 @@ func TestFindWindowForRepo_NoMatchDifferentRepo(t *testing.T) {
 			Cwd:     "/Users/test/Code/other-repo",
 		},
 	}
-	_, found := findWindowForRepo(agents, "/Users/test/Code/skills", "%0")
+	_, found := repowin.FindWindowForRepo(agents, "/Users/test/Code/skills", "%0")
 	if found {
 		t.Error("findWindowForRepo should not match different repos")
 	}
@@ -250,13 +251,13 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 		{Index: 2, Name: "agent-dashboard"}, // dashboard's own window
 	}
 	// dashboardSW is "main:2" — the fallback should NOT match window 2
-	sw, found := findWindowByName(windows, "agent-dashboard", "main", "main:2")
+	sw, found := repowin.FindWindowByName(windows, "agent-dashboard", "main", "main:2")
 	if found {
 		t.Errorf("findWindowByName should skip dashboard's own window, but matched %s", sw)
 	}
 
 	// But it SHOULD match a different window with the same name
-	sw, found = findWindowByName(windows, "other-project", "main", "main:2")
+	sw, found = repowin.FindWindowByName(windows, "other-project", "main", "main:2")
 	if !found {
 		t.Error("findWindowByName should match non-dashboard window")
 	}
@@ -265,7 +266,7 @@ func TestFindWindowByName_SkipsDashboardWindow(t *testing.T) {
 	}
 
 	// Empty window list should return not-found
-	_, found = findWindowByName(nil, "agent-dashboard", "main", "main:2")
+	_, found = repowin.FindWindowByName(nil, "agent-dashboard", "main", "main:2")
 	if found {
 		t.Error("findWindowByName should return false for empty window list")
 	}
