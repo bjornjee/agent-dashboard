@@ -34,9 +34,9 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
         if (client.url.includes(self.location.origin)) {
-          client.focus();
-          if (agentId) client.postMessage({ type: 'navigate-agent', agentId });
-          return;
+          return client.focus().then((focusedClient) => {
+            if (agentId && focusedClient) focusedClient.postMessage({ type: 'navigate-agent', agentId });
+          });
         }
       }
       // No existing tab — open a new one

@@ -84,10 +84,8 @@ function connectSSE() {
   eventSource = new EventSource('/events');
   eventSource.onmessage = (e) => {
     try {
-      const isFirstLoad = agents.length === 0;
       agents = JSON.parse(e.data);
-      if (isFirstLoad) initNotify(agents);
-      else processNotifications(agents);
+      processNotifications(agents);
       if (currentView === 'list') renderList(app, agents);
       else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
@@ -296,7 +294,10 @@ Theme.init();
 // --- Init ---
 async function init() {
   const data = await get('/api/agents');
-  if (data) agents = data;
+  if (data) {
+    agents = data;
+    initNotify(agents);
+  }
 
   // Restore saved view state
   let restored = false;

@@ -194,10 +194,17 @@ export const UI = {
     el.style.top = 'calc(' + (48 + activeCount * 56) + 'px + env(safe-area-inset-top, 0px))';
 
     el.innerHTML =
-      '<div class="nudge-content"' + (agentId ? ' onclick="Dashboard.selectAgent(\'' + escapeHtml(agentId) + '\')"' : '') + '>' +
+      '<div class="nudge-content">' +
         '<span class="nudge-message">' + escapeHtml(message) + '</span>' +
       '</div>' +
       '<button class="nudge-dismiss" aria-label="Dismiss">&times;</button>';
+
+    if (agentId) {
+      el.querySelector('.nudge-content').addEventListener('click', () => {
+        window.Dashboard.selectAgent(agentId);
+        dismiss();
+      });
+    }
 
     el.querySelector('.nudge-dismiss').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -207,7 +214,9 @@ export const UI = {
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('nudge-visible'));
 
+    let timer;
     function dismiss() {
+      clearTimeout(timer);
       el.classList.remove('nudge-visible');
       setTimeout(() => {
         el.remove();
@@ -215,7 +224,7 @@ export const UI = {
       }, 300);
     }
 
-    const timer = setTimeout(dismiss, autoDismissMs);
+    timer = setTimeout(dismiss, autoDismissMs);
 
     function repositionNudges() {
       const banners = document.querySelectorAll('.nudge-banner');

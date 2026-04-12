@@ -2108,7 +2108,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   top: calc(48px + env(safe-area-inset-top, 0px));
   left: 8px;
   right: 8px;
-  z-index: 90;
+  z-index: 110; /* above header (100), below modal (200) and toast (300) */
   padding: 12px 16px;
   border-radius: 10px;
   display: flex;
