@@ -213,7 +213,6 @@ export async function renderDetail(app, agents, agentId, setView) {
   const st = effectiveState(agent);
   const detailHeader = `
     <div class="detail-header">
-      <button class="btn btn-ghost" onclick="Dashboard.showList()">&larr; Back</button>
       <div class="detail-title">
         <h2>${escapeHtml(repoName(agent))}</h2>
         ${UI.badge(st, st)}
@@ -240,6 +239,9 @@ export async function renderDetail(app, agents, agentId, setView) {
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
+        ${UI.header('Agent Dashboard', {
+          actions: [{ label: '&larr; Back', onclick: 'Dashboard.showList()' }],
+        })}
         ${detailHeader}
         ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalOpen)}
         ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentOpen)}

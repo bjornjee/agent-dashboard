@@ -2097,6 +2097,5 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 @supports (padding-top: env(safe-area-inset-top)) {
   .header { padding-top: env(safe-area-inset-top); height: calc(48px + env(safe-area-inset-top)); }
   .detail-layout { height: 100dvh; }
-  .detail-pinned { padding-top: env(safe-area-inset-top); }
   .action-bar { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 }
