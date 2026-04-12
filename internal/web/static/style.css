@@ -171,7 +171,6 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   min-height: 100vh;
-  overflow: hidden;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -804,6 +803,8 @@ body {
   content: ' \00B7 ';
   margin: 0 4px;
 }
+
+body.view-detail { overflow: hidden; }
 
 .detail-layout {
   display: flex;

@@ -22,8 +22,49 @@ let eventSource = null;
 function setView(view, agentId) {
   currentView = view;
   selectedAgentId = agentId || null;
+  document.body.classList.toggle('view-detail', view === 'detail');
   try { sessionStorage.setItem('dashboard-view', JSON.stringify({ view, agentId: agentId || null })); } catch {}
 }
+
+// --- History navigation ---
+function pushView(view, agentId) {
+  const state = { view, agentId: agentId || null };
+  history.pushState(state, '', null);
+}
+
+function navigateTo(view, agentId, push) {
+  switch (view) {
+    case 'list':
+      cancelNav();
+      setView('list');
+      renderList(app, agents);
+      break;
+    case 'detail':
+      if (agentId) renderDetail(app, agents, agentId, setView);
+      else navigateTo('list', null, false);
+      break;
+    case 'usage':
+      setView('usage');
+      renderUsage(app, agents);
+      break;
+    case 'create':
+      setView('create');
+      renderCreate(app, agents);
+      break;
+    default:
+      navigateTo('list', null, false);
+  }
+  if (push) pushView(view, agentId);
+}
+
+window.addEventListener('popstate', (e) => {
+  const state = e.state;
+  if (state && state.view) {
+    navigateTo(state.view, state.agentId, false);
+  } else {
+    navigateTo('list', null, false);
+  }
+});
 
 // Wrap an async action with button spinner feedback.
 async function withSpinner(evt, fn) {
@@ -56,23 +97,19 @@ function connectSSE() {
 // --- Public API (used by onclick handlers in HTML strings) ---
 window.Dashboard = {
   showList() {
-    cancelNav();
-    setView('list');
-    renderList(app, agents);
+    navigateTo('list', null, true);
   },
 
   showUsage() {
-    setView('usage');
-    renderUsage(app, agents);
+    navigateTo('usage', null, true);
   },
 
   showCreate() {
-    setView('create');
-    renderCreate(app, agents);
+    navigateTo('create', null, true);
   },
 
   selectAgent(id) {
-    renderDetail(app, agents, id, setView);
+    navigateTo('detail', id, true);
   },
 
   async approve(id, evt) {
@@ -132,7 +169,7 @@ window.Dashboard = {
         const result = await post('/api/agents/' + id + '/close');
         if (result && result.ok) {
           toast('Closed', 'success');
-          renderList(app, agents);
+          navigateTo('list', null, true);
         } else {
           toast('Failed: ' + (result?.error || 'unknown'), 'error');
         }
@@ -174,7 +211,7 @@ window.Dashboard = {
       const result = await post('/api/agents/create', { folder, skill, message });
       if (result && result.ok) {
         toast('Agent created', 'success');
-        renderList(app, agents);
+        navigateTo('list', null, true);
       } else {
         toast('Failed: ' + (result?.error || 'unknown'), 'error');
       }
@@ -213,21 +250,23 @@ async function init() {
     const saved = JSON.parse(sessionStorage.getItem('dashboard-view'));
     if (saved && saved.view) {
       if (saved.view === 'detail' && saved.agentId && agents.find(a => a.session_id === saved.agentId)) {
-        renderDetail(app, agents, saved.agentId, setView);
+        navigateTo('detail', saved.agentId, false);
         restored = true;
       } else if (saved.view === 'usage') {
-        setView('usage');
-        renderUsage(app, agents);
+        navigateTo('usage', null, false);
         restored = true;
       } else if (saved.view === 'create') {
-        setView('create');
-        renderCreate(app, agents);
+        navigateTo('create', null, false);
         restored = true;
       }
     }
   } catch {}
 
-  if (!restored) renderList(app, agents);
+  if (!restored) navigateTo('list', null, false);
+
+  // Set initial history entry so popstate has something to land on
+  history.replaceState({ view: currentView, agentId: selectedAgentId }, '', null);
+
   connectSSE();
 }
 
