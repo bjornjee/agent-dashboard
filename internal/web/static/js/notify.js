@@ -22,12 +22,25 @@ function agentLabel(agent) {
 }
 
 async function fireBrowserNotification(agent, body) {
-  if (!isBrowserNotifyEnabled() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  const enabled = isBrowserNotifyEnabled();
+  const hasAPI = typeof Notification !== 'undefined';
+  const perm = hasAPI ? Notification.permission : 'no-api';
+  const vis = document.visibilityState;
+  const focused = document.hasFocus();
+  console.log('[notify] fire check:', { enabled, hasAPI, perm, vis, focused, agent: agent.session_id });
+
+  if (!enabled || !hasAPI || perm !== 'granted') {
+    console.log('[notify] BLOCKED:', !enabled ? 'disabled' : !hasAPI ? 'no Notification API' : 'permission=' + perm);
+    return;
+  }
+  if (vis === 'visible' && focused) {
+    console.log('[notify] SKIPPED: tab is focused');
+    return;
+  }
   try {
-    // Use SW showNotification — required on mobile Chrome/Android.
-    // Falls back to new Notification() on desktop if SW is unavailable.
-    const reg = navigator.serviceWorker && await navigator.serviceWorker.ready;
+    const hasSW = !!navigator.serviceWorker;
+    console.log('[notify] dispatching via', hasSW ? 'SW showNotification' : 'new Notification');
+    const reg = hasSW && await navigator.serviceWorker.ready;
     if (reg) {
       await reg.showNotification(agentLabel(agent), {
         body,
@@ -35,6 +48,7 @@ async function fireBrowserNotification(agent, body) {
         tag: agent.session_id,
         data: { agentId: agent.session_id },
       });
+      console.log('[notify] SW showNotification OK');
     } else {
       const n = new Notification(agentLabel(agent), {
         body,
@@ -47,8 +61,11 @@ async function fireBrowserNotification(agent, body) {
         window.Dashboard.selectAgent(agent.session_id);
         n.close();
       };
+      console.log('[notify] new Notification OK');
     }
-  } catch { /* notification can throw in some contexts */ }
+  } catch (err) {
+    console.error('[notify] ERROR:', err);
+  }
 }
 
 // Seed the state map without firing notifications
