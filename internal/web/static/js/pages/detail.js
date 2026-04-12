@@ -9,6 +9,41 @@ import { Theme } from '../theme.js';
 
 export { showModal, toast };
 
+// Update the action bar in-place when agent state changes via SSE.
+export function updateActionBar(agent) {
+  const bar = document.querySelector('.action-bar');
+  if (!bar) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderActionBar(agent);
+  const newBar = tmp.firstElementChild;
+  if (newBar) bar.replaceWith(newBar);
+}
+
+// Optimistically append a user message bubble to the chat.
+export function appendUserMessage(text) {
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  // Add role label if the last message was not from the user
+  const lastLabel = container.querySelector('.msg-role-label:last-of-type');
+  const lastLabelText = lastLabel ? lastLabel.textContent.trim() : '';
+  if (!lastLabelText.includes('You')) {
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'msg-role-label';
+    labelDiv.innerHTML = `${ICONS.human} You`;
+    container.appendChild(labelDiv);
+  }
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'msg msg-human';
+  msgDiv.textContent = text;
+  const timeDiv = document.createElement('div');
+  timeDiv.className = 'msg-time';
+  timeDiv.textContent = formatTimeShort(new Date().toISOString());
+  msgDiv.appendChild(timeDiv);
+  container.appendChild(msgDiv);
+  const scrollParent = container.closest('.detail-scroll');
+  if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
 function timelineIcon(kind) {
   const svg = ICONS[kind] || '';
   const cls = kind === 'human' ? 'timeline-icon--human'
@@ -33,7 +68,7 @@ function renderActionBar(agent) {
   if (INPUT_STATES.includes(st)) {
     const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
     actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
-    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}', event)` });
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}')` });
   }
 
   // State-specific buttons
@@ -56,6 +91,46 @@ function renderActionBar(agent) {
 
 let activityFilter = 'all';
 let currentPRUrl = '';
+let currentDetailTab = 'conversation';
+let currentDetailAgentId = null;
+
+// Build conversation HTML from an array of message entries.
+function renderConversationHtml(entries) {
+  let html = '<div class="conversation">';
+  let lastRole = '';
+  for (const entry of entries) {
+    const role = entry.Role || entry.role;
+    const content = entry.Content || entry.content || '';
+    const time = entry.Timestamp || entry.timestamp || '';
+    if (role !== lastRole) {
+      const icon = role === 'human' ? ICONS.human : ICONS.assistant;
+      const label = role === 'human' ? 'You' : 'Claude';
+      html += `<div class="msg-role-label">${icon} ${label}</div>`;
+      lastRole = role;
+    }
+    if (role === 'human') {
+      html += `<div class="msg msg-human">${escapeHtml(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+    } else {
+      html += `<div class="msg msg-assistant">${renderMarkdown(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+// Re-fetch and re-render the conversation tab if it is currently active.
+// Called by the SSE handler to keep the chat view up to date.
+export async function refreshConversation(agentId) {
+  if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
+  const container = document.getElementById('tab-conversation');
+  if (!container) return;
+  const entries = await get('/api/agents/' + agentId + '/conversation');
+  if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
+  const scrollParent = container.closest('.detail-scroll');
+  const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
+  container.innerHTML = renderConversationHtml(entries);
+  if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
 
 function applyActivityFilter(container) {
   container.querySelectorAll('.timeline-entry').forEach(el => {
@@ -123,7 +198,8 @@ export async function renderDetail(app, agents, agentId, setView) {
   `;
 
   // Tab switching
-  let currentTab = 'conversation';
+  currentDetailTab = 'conversation';
+  currentDetailAgentId = agentId;
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -131,7 +207,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       tab.classList.add('active');
       const target = tab.dataset.tab;
       document.getElementById('tab-' + target).classList.add('active');
-      currentTab = target;
+      currentDetailTab = target;
       loadTabContent(target, agentId);
     });
   });
@@ -191,10 +267,17 @@ async function loadSubagentSummary(agentId) {
   const completed = subs.filter(s => s.Completed || s.completed).length;
   const running = subs.length - completed;
 
+  const MAX_VISIBLE = 3;
+  const visible = subs.slice(-MAX_VISIBLE);
+  const hidden = subs.length - visible.length;
+
   let html = '';
 
   html += '<div class="subagent-summary-list">';
-  for (const sub of subs) {
+  if (hidden > 0) {
+    html += `<div class="subagent-pill subagent-pill--muted"><span class="subagent-type">+${hidden} more</span></div>`;
+  }
+  for (const sub of visible) {
     const isDone = sub.Completed || sub.completed;
     const type = sub.AgentType || sub.agent_type || 'agent';
     const desc = sub.Description || sub.description || '';
@@ -225,27 +308,9 @@ async function loadTabContent(tab, agentId) {
         container.innerHTML = UI.emptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
         return;
       }
-      let html = '<div class="conversation">';
-      let lastRole = '';
-      for (const entry of entries) {
-        const role = entry.Role || entry.role;
-        const content = entry.Content || entry.content || '';
-        const time = entry.Timestamp || entry.timestamp || '';
-        if (role !== lastRole) {
-          const icon = role === 'human' ? ICONS.human : ICONS.assistant;
-          const label = role === 'human' ? 'You' : 'Claude';
-          html += `<div class="msg-role-label">${icon} ${label}</div>`;
-          lastRole = role;
-        }
-        if (role === 'human') {
-          html += `<div class="msg msg-human">${escapeHtml(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
-        } else {
-          html += `<div class="msg msg-assistant">${renderMarkdown(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
-        }
-      }
-      html += '</div>';
-      container.innerHTML = html;
-      container.scrollTop = container.scrollHeight;
+      container.innerHTML = renderConversationHtml(entries);
+      const scrollParent = container.closest('.detail-scroll');
+      if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
       break;
     }
     case 'activity': {

@@ -804,10 +804,12 @@ body {
   margin: 0 4px;
 }
 
+body.view-detail { overflow: hidden; }
+
 .detail-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px);
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -915,6 +917,7 @@ body {
   background: var(--bg-elevated);
 }
 
+.subagent-pill--muted { border-style: dashed; opacity: 0.6; }
 .subagent-type { font-weight: 500; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; }
 .subagent-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-weight: 400; }
 .subagent-time { color: var(--text-tertiary); white-space: nowrap; margin-left: auto; flex-shrink: 0; font-weight: 400; }
@@ -1439,7 +1442,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 /* ============================================
    VIEW: Usage
    ============================================ */
-.usage-view { padding: 12px; max-width: 960px; margin: 0 auto; }
+.usage-view { padding: 12px; max-width: 960px; margin: 0 auto; overflow-x: hidden; }
 
 /* Metrics strip */
 .usage-metrics {
@@ -1997,7 +2000,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   padding: 6px 8px;
   font-size: 13px;
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--bg-surface);
 }
 .mobile-diff-file-path {
   flex: 1;
@@ -2024,7 +2027,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   background: var(--accent-green-hover, #1a7f37);
 }
 .mobile-pr-link--inactive {
-  background: var(--bg-tertiary);
+  background: var(--bg-elevated);
   color: var(--text-tertiary);
   font-weight: 400;
   font-size: 13px;
@@ -2068,6 +2071,14 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .usage-metric:first-child { padding-top: 0; }
   .usage-metric:last-child { padding-bottom: 0; }
 
+  /* Usage: rate-limit rows stack on mobile */
+  .rate-limit-card { padding: 16px; }
+  .rate-limit-row { flex-wrap: wrap; gap: 4px 8px; }
+  .rate-limit-label { min-width: 0; flex-basis: 100%; flex-shrink: 1; }
+  .rate-limit-bar-track { min-width: 0; flex-basis: 0; }
+  .rate-limit-pct { min-width: 0; }
+  .rate-limit-reset { min-width: 0; font-size: 11px; flex-basis: 100%; }
+
   /* Usage: chart card header wraps */
   .usage-chart-card { padding: 16px; }
   .usage-chart-card__header { flex-wrap: wrap; gap: 8px; }
@@ -2079,12 +2090,13 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .usage-chart { height: 130px; }
 
   /* Usage: table card */
-  .usage-table-container { padding: 16px; }
+  .usage-table-container { padding: 16px; overflow-x: auto; }
 }
 
 /* Safe area for mobile notch */
 @supports (padding-top: env(safe-area-inset-top)) {
   .header { padding-top: env(safe-area-inset-top); height: calc(48px + env(safe-area-inset-top)); }
-  .detail-layout { height: calc(100vh - 48px - env(safe-area-inset-top)); }
+  .detail-layout { height: 100dvh; }
+  .detail-pinned { padding-top: env(safe-area-inset-top); }
   .action-bar { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 }
