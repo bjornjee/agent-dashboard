@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshConversation, refreshActiveTab, refreshDetailHeader } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
