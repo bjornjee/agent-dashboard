@@ -262,10 +262,17 @@ async function loadSubagentSummary(agentId) {
   const completed = subs.filter(s => s.Completed || s.completed).length;
   const running = subs.length - completed;
 
+  const MAX_VISIBLE = 3;
+  const visible = subs.slice(-MAX_VISIBLE);
+  const hidden = subs.length - visible.length;
+
   let html = '';
 
   html += '<div class="subagent-summary-list">';
-  for (const sub of subs) {
+  if (hidden > 0) {
+    html += `<div class="subagent-pill subagent-pill--muted"><span class="subagent-type">+${hidden} more</span></div>`;
+  }
+  for (const sub of visible) {
     const isDone = sub.Completed || sub.completed;
     const type = sub.AgentType || sub.agent_type || 'agent';
     const desc = sub.Description || sub.description || '';

@@ -916,6 +916,7 @@ body {
   background: var(--bg-elevated);
 }
 
+.subagent-pill--muted { border-style: dashed; opacity: 0.6; }
 .subagent-type { font-weight: 500; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; }
 .subagent-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-weight: 400; }
 .subagent-time { color: var(--text-tertiary); white-space: nowrap; margin-left: auto; flex-shrink: 0; font-weight: 400; }
