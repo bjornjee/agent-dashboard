@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshConversation } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -44,6 +44,7 @@ function connectSSE() {
       else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
         if (agent) updateActionBar(agent);
+        refreshConversation(selectedAgentId);
       }
     } catch (err) { /* ignore parse errors */ }
   };
@@ -90,16 +91,19 @@ window.Dashboard = {
     });
   },
 
-  async sendInput(id, evt) {
+  async sendInput(id) {
     const input = document.getElementById('reply-input');
     if (!input || !input.value.trim()) return;
     const text = input.value.trim();
     input.value = '';
+    input.disabled = true;
     appendUserMessage(text);
-    await withSpinner(evt, async () => {
+    try {
       const result = await post('/api/agents/' + id + '/input', { text });
       if (!result || !result.ok) toast('Failed: ' + (result?.error || 'unknown'), 'error');
-    });
+    } finally {
+      if (input) input.disabled = false;
+    }
   },
 
   confirmStop(id) {

@@ -68,7 +68,7 @@ function renderActionBar(agent) {
   if (INPUT_STATES.includes(st)) {
     const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
     actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
-    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}', event)` });
+    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}')` });
   }
 
   // State-specific buttons
@@ -91,6 +91,41 @@ function renderActionBar(agent) {
 
 let activityFilter = 'all';
 let currentPRUrl = '';
+let currentDetailTab = 'conversation';
+let currentDetailAgentId = null;
+
+// Re-fetch and re-render the conversation tab if it is currently active.
+// Called by the SSE handler to keep the chat view up to date.
+export async function refreshConversation(agentId) {
+  if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
+  const container = document.getElementById('tab-conversation');
+  if (!container) return;
+  const entries = await get('/api/agents/' + agentId + '/conversation');
+  if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
+  let html = '<div class="conversation">';
+  let lastRole = '';
+  for (const entry of entries) {
+    const role = entry.Role || entry.role;
+    const content = entry.Content || entry.content || '';
+    const time = entry.Timestamp || entry.timestamp || '';
+    if (role !== lastRole) {
+      const icon = role === 'human' ? ICONS.human : ICONS.assistant;
+      const label = role === 'human' ? 'You' : 'Claude';
+      html += `<div class="msg-role-label">${icon} ${label}</div>`;
+      lastRole = role;
+    }
+    if (role === 'human') {
+      html += `<div class="msg msg-human">${escapeHtml(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+    } else {
+      html += `<div class="msg msg-assistant">${renderMarkdown(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+    }
+  }
+  html += '</div>';
+  const scrollParent = container.closest('.detail-scroll');
+  const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
+  container.innerHTML = html;
+  if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
 
 function applyActivityFilter(container) {
   container.querySelectorAll('.timeline-entry').forEach(el => {
@@ -158,7 +193,8 @@ export async function renderDetail(app, agents, agentId, setView) {
   `;
 
   // Tab switching
-  let currentTab = 'conversation';
+  currentDetailTab = 'conversation';
+  currentDetailAgentId = agentId;
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -166,7 +202,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       tab.classList.add('active');
       const target = tab.dataset.tab;
       document.getElementById('tab-' + target).classList.add('active');
-      currentTab = target;
+      currentDetailTab = target;
       loadTabContent(target, agentId);
     });
   });
