@@ -85,6 +85,7 @@ function connectSSE() {
   eventSource.onmessage = (e) => {
     try {
       agents = JSON.parse(e.data);
+      console.log('[sse] received', agents.length, 'agents');
       processNotifications(agents);
       if (currentView === 'list') renderList(app, agents);
       else if (currentView === 'detail' && selectedAgentId) {

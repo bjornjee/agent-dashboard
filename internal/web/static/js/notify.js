@@ -42,15 +42,19 @@ function fireBrowserNotification(agent, info) {
 // Seed the state map without firing notifications (called on first SSE message)
 export function initNotify(agents) {
   if (seeded) return;
+  const snapshot = {};
   for (const agent of agents) {
     prevStateMap.set(agent.session_id, agent.state);
+    snapshot[agent.session_id] = agent.state;
   }
   seeded = true;
+  console.log('[notify] seeded with', agents.length, 'agents:', snapshot);
 }
 
 // Diff new agent states against previous, fire nudge + browser notification for transitions
 export function processNotifications(newAgents) {
   if (!seeded) {
+    console.log('[notify] not seeded yet, seeding from SSE');
     initNotify(newAgents);
     return;
   }
@@ -61,12 +65,19 @@ export function processNotifications(newAgents) {
     currentIds.add(id);
     const newState = agent.state;
     const oldState = prevStateMap.get(id);
+
+    if (newState !== oldState) {
+      console.log('[notify] transition:', id, oldState, '→', newState,
+        NOTIFY_STATES[newState] ? '(WILL NUDGE)' : '(no nudge for this state)');
+    }
+
     prevStateMap.set(id, newState);
 
     // Only notify on transitions into notify-worthy states
     if (newState !== oldState && NOTIFY_STATES[newState]) {
       const info = NOTIFY_STATES[newState];
       const label = agentLabel(agent);
+      console.log('[notify] firing nudge:', label, info.message, info.type);
       UI.nudge(label + ' ' + info.message, {
         type: info.type,
         agentId: id,
