@@ -1,11 +1,12 @@
 // Service Worker for Agent Dashboard PWA
-const CACHE_NAME = 'agent-dashboard-v1';
+const CACHE_NAME = 'agent-dashboard-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/app.js',
   '/style.css',
   '/manifest.json',
+  '/js/notify.js',
 ];
 
 // Install: cache static shell
