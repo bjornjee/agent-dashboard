@@ -96,12 +96,6 @@ let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
 
-// Strip system-injected XML tags from message content for display.
-// These include <system-reminder>, <task-notification>, <command-message>, etc.
-function stripSystemTags(text) {
-  return text.replace(/<(system-reminder|task-notification|command-message|command-name|command-args)[^>]*>[\s\S]*?<\/\1>/g, '').trim();
-}
-
 // Build conversation HTML from an array of message entries.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
@@ -110,8 +104,7 @@ function renderConversationHtml(entries) {
     // Skip task-notification messages (internal agent-to-agent noise)
     if (entry.IsNotification) continue;
     const role = entry.Role || entry.role;
-    const raw = entry.Content || entry.content || '';
-    const content = stripSystemTags(raw);
+    const content = entry.Content || entry.content || '';
     if (!content) continue;
     const time = entry.Timestamp || entry.timestamp || '';
     if (role !== lastRole) {

@@ -766,6 +766,59 @@ func TestCleanSlashCommand(t *testing.T) {
 	}
 }
 
+func TestStripSystemTags(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "system-reminder stripped",
+			input: "hello <system-reminder>\nsome internal stuff\n</system-reminder> world",
+			want:  "hello  world",
+		},
+		{
+			name:  "task-notification NOT stripped (handled by IsNotification)",
+			input: "<task-notification>\n<task-id>abc</task-id>\n</task-notification>\nActual message",
+			want:  "<task-notification>\n<task-id>abc</task-id>\n</task-notification>\nActual message",
+		},
+		{
+			name:  "command-message stripped",
+			input: "<command-message>skill:foo</command-message>\nrest of text",
+			want:  "rest of text",
+		},
+		{
+			name:  "multiple tags stripped",
+			input: "start <system-reminder>x</system-reminder> middle <command-message>y</command-message> end",
+			want:  "start  middle  end",
+		},
+		{
+			name:  "no tags unchanged",
+			input: "plain user message",
+			want:  "plain user message",
+		},
+		{
+			name:  "system-reminder with attributes",
+			input: "before <system-reminder foo=\"bar\">\ncontent\n</system-reminder> after",
+			want:  "before  after",
+		},
+		{
+			name:  "empty after stripping",
+			input: "<system-reminder>only this</system-reminder>",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripSystemTags(tt.input)
+			if got != tt.want {
+				t.Errorf("stripSystemTags(%q)\n  got:  %q\n  want: %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConversationEqual(t *testing.T) {
 	a := []domain.ConversationEntry{
 		{Role: "human", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
