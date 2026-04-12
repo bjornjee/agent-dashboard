@@ -1,6 +1,5 @@
 // Notification system — state transition detection, in-app nudge, and browser notifications.
 import { UI } from './ui.js';
-import { effectiveState } from './state.js';
 
 const STORAGE_KEY = 'notify-enabled';
 
@@ -43,7 +42,7 @@ function fireBrowserNotification(agent, info) {
 export function initNotify(agents) {
   if (seeded) return;
   for (const agent of agents) {
-    prevStateMap.set(agent.session_id, effectiveState(agent));
+    prevStateMap.set(agent.session_id, agent.state);
   }
   seeded = true;
 }
@@ -59,7 +58,7 @@ export function processNotifications(newAgents) {
   for (const agent of newAgents) {
     const id = agent.session_id;
     currentIds.add(id);
-    const newState = effectiveState(agent);
+    const newState = agent.state;
     const oldState = prevStateMap.get(id);
     prevStateMap.set(id, newState);
 
