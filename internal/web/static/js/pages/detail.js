@@ -93,6 +93,7 @@ let activityFilter = 'all';
 let currentPRUrl = '';
 let currentDetailTab = 'conversation';
 let currentDetailAgentId = null;
+let lastAgentState = null;
 
 // Build conversation HTML from an array of message entries.
 function renderConversationHtml(entries) {
@@ -130,6 +131,60 @@ export async function refreshConversation(agentId) {
   const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
   container.innerHTML = renderConversationHtml(entries);
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
+// Refresh whichever tab is currently active. Called on SSE events.
+export async function refreshActiveTab(agentId) {
+  if (currentDetailAgentId !== agentId) return;
+  switch (currentDetailTab) {
+    case 'conversation':
+      await refreshConversation(agentId);
+      break;
+    case 'activity':
+      await loadTabContent('activity', agentId);
+      break;
+    case 'diff':
+      // Skip diff refresh — it's expensive and rarely changes mid-session
+      break;
+    case 'plan':
+      await loadTabContent('plan', agentId);
+      break;
+  }
+}
+
+// Update the detail header (status badge, duration) from SSE agent data.
+export function refreshDetailHeader(agent) {
+  if (!agent) return;
+  const st = effectiveState(agent);
+  const prev = lastAgentState;
+  lastAgentState = st;
+
+  // Update status badge
+  const badge = document.querySelector('.detail-title .badge');
+  if (badge) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = UI.badge(st, st);
+    const newBadge = tmp.firstElementChild;
+    if (newBadge) badge.replaceWith(newBadge);
+  }
+
+  // Update duration
+  const meta = document.querySelector('.detail-meta');
+  if (meta && agent.started_at) {
+    const spans = meta.querySelectorAll('span');
+    const last = spans[spans.length - 1];
+    if (last) last.textContent = duration(agent);
+  }
+
+  // Refresh vital signs only on state change
+  if (prev !== null && prev !== st) {
+    loadVitalSigns(agentId(agent), agent);
+    loadSubagentSummary(agentId(agent));
+  }
+}
+
+function agentId(agent) {
+  return agent.session_id;
 }
 
 function applyActivityFilter(container) {
@@ -200,6 +255,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   // Tab switching
   currentDetailTab = 'conversation';
   currentDetailAgentId = agentId;
+  lastAgentState = st;
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));

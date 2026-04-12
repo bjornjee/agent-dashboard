@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshConversation } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshConversation, refreshActiveTab, refreshDetailHeader } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -84,8 +84,11 @@ function connectSSE() {
       if (currentView === 'list') renderList(app, agents);
       else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
-        if (agent) updateActionBar(agent);
-        refreshConversation(selectedAgentId);
+        if (agent) {
+          updateActionBar(agent);
+          refreshDetailHeader(agent);
+        }
+        refreshActiveTab(selectedAgentId);
       }
     } catch (err) { /* ignore parse errors */ }
   };
@@ -157,8 +160,26 @@ window.Dashboard = {
     showModal('Merge PR', 'Merge this PR with --squash?', async (evt) => {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/merge');
-        if (result && result.ok) toast('Merged', 'success');
-        else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        if (result && result.ok) {
+          toast('Merged', 'success');
+          // Prompt for cleanup after successful merge
+          const agent = agents.find(a => a.session_id === id);
+          const branch = agent ? agent.branch : '';
+          const label = branch ? `Clean up ${branch}?` : 'Clean up worktree and branch?';
+          showModal('Post-Merge Cleanup', label + ' This will remove the worktree, checkout the default branch, pull, and delete the local feature branch.', async (cleanEvt) => {
+            await withSpinner(cleanEvt, async () => {
+              const cleanResult = await post('/api/agents/' + id + '/cleanup');
+              if (cleanResult && cleanResult.ok) {
+                toast('Cleaned up', 'success');
+                navigateTo('list', null, true);
+              } else {
+                toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error');
+              }
+            });
+          });
+        } else {
+          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        }
       });
     });
   },

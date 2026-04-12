@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -187,6 +188,79 @@ func (s *Server) handleMerge(w http.ResponseWriter, r *http.Request) {
 	// Pin state to "merged"
 	state.PinAgentState(s.cfg.Profile.StateDir, r.PathValue("id"), "merged")
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "merged"})
+}
+
+// handleCleanup performs post-merge cleanup: kills the tmux pane, removes the
+// worktree, checks out the default branch, pulls, deletes the local feature
+// branch, removes the agent state file, and cleans up diagram data.
+func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	agent, ok := s.lookupAgent(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
+	cwd := agent.Cwd
+	worktreeCwd := agent.WorktreeCwd
+	branch := agent.Branch
+
+	if cwd == "" || !filepath.IsAbs(cwd) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent has no valid working directory"})
+		return
+	}
+	if worktreeCwd != "" && !filepath.IsAbs(worktreeCwd) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid worktree path"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	// Resolve default branch
+	defaultBranch := gitDefaultBranchFromDir(ctx, cwd)
+
+	// 1. Kill tmux pane (ignore errors — pane may already be dead)
+	if tmux.TmuxIsAvailable() {
+		if target := tmux.ResolveTarget(agent.TmuxPaneID); target != "" {
+			tmux.TmuxKillPane(target)
+		}
+	}
+
+	// 2. Remove worktree if applicable
+	if worktreeCwd != "" {
+		_, err := cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd)
+		if err != nil {
+			// Fallback: remove directory directly
+			os.RemoveAll(worktreeCwd)
+		}
+		cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "worktree", "prune")
+	}
+
+	// 3. Checkout default branch
+	if _, err := cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "checkout", defaultBranch); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("checkout %s failed", defaultBranch)})
+		return
+	}
+
+	// 4. Pull default branch
+	if _, err := cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "pull", "origin", defaultBranch); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("pull origin %s failed", defaultBranch)})
+		return
+	}
+
+	// 5. Delete local feature branch (ignore errors — may already be gone)
+	if branch != "" {
+		cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "branch", "-d", branch)
+	}
+
+	// 6. Remove agent state file
+	state.RemoveAgent(s.cfg.Profile.StateDir, id)
+
+	// 7. Clean up diagram data
+	diagrams.CleanupSession(s.cfg.Profile.StateDir, id)
+
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "cleaned up"})
 }
 
 // createRequest is the JSON body for agent creation.
