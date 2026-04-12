@@ -64,7 +64,7 @@ function renderActionBar(agent) {
   let actions = '';
 
   // Reply input for active agent states
-  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr'];
+  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr', 'idle_prompt'];
   if (INPUT_STATES.includes(st)) {
     const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
     actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
