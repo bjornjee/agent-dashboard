@@ -2045,6 +2045,14 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   .subagent-summary-list { flex-direction: column; }
   .subagent-pill { max-width: 100%; }
 
+  /* Action bar: wrap so buttons don't overflow */
+  .action-bar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+  }
+  .action-input { flex: 1 1 60%; min-width: 0; }
+
   /* Usage: metrics strip stacks on mobile */
   .usage-metrics {
     flex-direction: column;
