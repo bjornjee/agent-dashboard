@@ -235,7 +235,6 @@ window.Dashboard = {
   },
 };
 
-// --- Init ---
 // --- Theme ---
 Theme.init();
 

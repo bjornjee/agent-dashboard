@@ -2000,7 +2000,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   padding: 6px 8px;
   font-size: 13px;
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--bg-surface);
 }
 .mobile-diff-file-path {
   flex: 1;
@@ -2027,7 +2027,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   background: var(--accent-green-hover, #1a7f37);
 }
 .mobile-pr-link--inactive {
-  background: var(--bg-tertiary);
+  background: var(--bg-elevated);
   color: var(--text-tertiary);
   font-weight: 400;
   font-size: 13px;

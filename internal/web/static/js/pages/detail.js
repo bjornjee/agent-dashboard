@@ -94,14 +94,8 @@ let currentPRUrl = '';
 let currentDetailTab = 'conversation';
 let currentDetailAgentId = null;
 
-// Re-fetch and re-render the conversation tab if it is currently active.
-// Called by the SSE handler to keep the chat view up to date.
-export async function refreshConversation(agentId) {
-  if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
-  const container = document.getElementById('tab-conversation');
-  if (!container) return;
-  const entries = await get('/api/agents/' + agentId + '/conversation');
-  if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
+// Build conversation HTML from an array of message entries.
+function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
   let lastRole = '';
   for (const entry of entries) {
@@ -121,9 +115,20 @@ export async function refreshConversation(agentId) {
     }
   }
   html += '</div>';
+  return html;
+}
+
+// Re-fetch and re-render the conversation tab if it is currently active.
+// Called by the SSE handler to keep the chat view up to date.
+export async function refreshConversation(agentId) {
+  if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
+  const container = document.getElementById('tab-conversation');
+  if (!container) return;
+  const entries = await get('/api/agents/' + agentId + '/conversation');
+  if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
   const scrollParent = container.closest('.detail-scroll');
   const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
-  container.innerHTML = html;
+  container.innerHTML = renderConversationHtml(entries);
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
@@ -303,26 +308,7 @@ async function loadTabContent(tab, agentId) {
         container.innerHTML = UI.emptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
         return;
       }
-      let html = '<div class="conversation">';
-      let lastRole = '';
-      for (const entry of entries) {
-        const role = entry.Role || entry.role;
-        const content = entry.Content || entry.content || '';
-        const time = entry.Timestamp || entry.timestamp || '';
-        if (role !== lastRole) {
-          const icon = role === 'human' ? ICONS.human : ICONS.assistant;
-          const label = role === 'human' ? 'You' : 'Claude';
-          html += `<div class="msg-role-label">${icon} ${label}</div>`;
-          lastRole = role;
-        }
-        if (role === 'human') {
-          html += `<div class="msg msg-human">${escapeHtml(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
-        } else {
-          html += `<div class="msg msg-assistant">${renderMarkdown(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
-        }
-      }
-      html += '</div>';
-      container.innerHTML = html;
+      container.innerHTML = renderConversationHtml(entries);
       const scrollParent = container.closest('.detail-scroll');
       if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
       break;
