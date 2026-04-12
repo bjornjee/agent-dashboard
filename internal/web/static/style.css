@@ -892,10 +892,6 @@ body {
 /* ============================================
    COMPONENT: Subagent Pills Section
    ============================================ */
-.subagent-pills-section {
-  padding: 0 var(--space-6);
-}
-.subagent-pills-section:empty { display: none; }
 .subagent-summary-list {
   display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) 0;
 }

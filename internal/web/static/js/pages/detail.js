@@ -28,8 +28,9 @@ function renderActionBar(agent) {
   const id = agent.session_id;
   let actions = '';
 
-  // Reply input for all non-terminal states
-  if (st !== 'merged') {
+  // Reply input for active agent states
+  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr'];
+  if (INPUT_STATES.includes(st)) {
     const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
     actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
     actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}', event)` });
@@ -46,7 +47,7 @@ function renderActionBar(agent) {
     actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${id}')` });
   }
 
-  if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question') {
+  if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question' || st === 'error') {
     actions += UI.stopBtn(`Dashboard.confirmStop('${id}')`);
   }
 
@@ -174,7 +175,15 @@ async function loadVitalSigns(agentId, agent) {
 async function loadSubagentSummary(agentId) {
   const container = document.getElementById('subagent-summary');
   if (!container) return;
-  const subs = await get('/api/agents/' + agentId + '/subagents');
+  let subs;
+  try {
+    subs = await get('/api/agents/' + agentId + '/subagents');
+  } catch {
+    container.innerHTML = '';
+    const section = container.closest('.collapsible-section');
+    if (section) section.style.display = 'none';
+    return;
+  }
   const section = container.closest('.collapsible-section');
   if (!subs || subs.length === 0) {
     container.innerHTML = '';
