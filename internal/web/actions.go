@@ -233,10 +233,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Derive repo name for the tmux window.
-	repoName := repowin.SanitizeWindowName(repowin.RepoFromCwd(folder))
-	if repoName == "" {
-		repoName = s.cfg.Profile.Command
+	rawRepo := repowin.RepoFromCwd(folder)
+	if rawRepo == "" {
+		rawRepo = s.cfg.Profile.Command
 	}
+	repoName := repowin.SanitizeWindowName(rawRepo)
 
 	// Build the shell command — passed directly to new-window/split-window
 	// as the pane's initial process to avoid tmux send-keys buffer limits.
@@ -250,7 +251,8 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	agents := s.readAgentState()
 	sw, found := repowin.FindWindowForRepo(agents, folder, "")
 	if !found {
-		// Fallback: match by tmux window name.
+		// Fallback: match by tmux window name in the first session.
+		// Mirrors TUI behavior which also searches a single session.
 		session, sErr := firstTmuxSession()
 		if sErr == nil {
 			windows, wErr := tmux.TmuxListWindows(session)
@@ -268,7 +270,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			found = false // window may have been destroyed; fall through
 		} else if count >= repowin.MaxPanesPerWindow {
 			writeJSON(w, http.StatusConflict, map[string]string{
-				"error": fmt.Sprintf("8-pane limit reached for %s", repoName),
+				"error": fmt.Sprintf("%d-pane limit reached for %s", repowin.MaxPanesPerWindow, repoName),
 			})
 			return
 		} else {

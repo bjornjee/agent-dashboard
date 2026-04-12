@@ -414,10 +414,6 @@ func sendReply(paneID, text, selfPaneID string) tea.Cmd {
 	}
 }
 
-// findWindowForRepo finds an existing tmux session:window for a given folder
-// by scanning existing agents' working directories.
-// It first tries an exact path match, then falls back to repo-name matching
-// only when at least one side is a worktree path (to avoid false collisions
 // findWindowForRepo delegates to repowin.FindWindowForRepo.
 func findWindowForRepo(agents []domain.Agent, folder, selfPaneID string) (string, bool) {
 	return repowin.FindWindowForRepo(agents, folder, selfPaneID)

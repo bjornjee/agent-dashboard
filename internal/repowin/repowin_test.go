@@ -144,6 +144,35 @@ func TestFindWindowForRepo_SkipsSelfPane(t *testing.T) {
 	}
 }
 
+func TestFindWindowForRepo_MatchesWorktreeCwd(t *testing.T) {
+	agents := []domain.Agent{
+		{Session: "main", Window: 1, Cwd: "/Users/test/Code/skills", WorktreeCwd: "/Users/test/Code/worktrees/skills/feat-x"},
+	}
+	// Exact match against WorktreeCwd
+	sw, found := FindWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feat-x", "")
+	if !found {
+		t.Fatal("expected exact match against WorktreeCwd")
+	}
+	if sw != "main:1" {
+		t.Errorf("got %s, want main:1", sw)
+	}
+}
+
+func TestFindWindowForRepo_Pass2UsesWorktreeCwd(t *testing.T) {
+	// Agent launched from plain path but switched to worktree
+	agents := []domain.Agent{
+		{Session: "main", Window: 1, Cwd: "/Users/test/Code/skills", WorktreeCwd: "/Users/test/Code/worktrees/skills/feat-a"},
+	}
+	// New session for a different worktree branch of the same repo
+	sw, found := FindWindowForRepo(agents, "/Users/test/Code/worktrees/skills/feat-b", "")
+	if !found {
+		t.Fatal("expected pass-2 match using agent's WorktreeCwd")
+	}
+	if sw != "main:1" {
+		t.Errorf("got %s, want main:1", sw)
+	}
+}
+
 func TestFindWindowForRepo_EmptySelfPaneID(t *testing.T) {
 	agents := []domain.Agent{
 		{Session: "main", Window: 1, TmuxPaneID: "%5", Cwd: "/Users/test/Code/skills"},

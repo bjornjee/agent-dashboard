@@ -52,12 +52,12 @@ func SanitizeWindowName(name string) string {
 // between unrelated repos that share the same basename).
 // selfPaneID is the dashboard's own pane ID (%N) to exclude; pass "" from web.
 func FindWindowForRepo(agents []domain.Agent, folder, selfPaneID string) (string, bool) {
-	// Pass 1: exact path match
+	// Pass 1: exact path match against both Cwd and WorktreeCwd
 	for _, agent := range agents {
 		if selfPaneID != "" && agent.TmuxPaneID == selfPaneID {
 			continue
 		}
-		if agent.Cwd == folder {
+		if agent.Cwd == folder || (agent.WorktreeCwd != "" && agent.WorktreeCwd == folder) {
 			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
 		}
 	}
@@ -76,7 +76,12 @@ func FindWindowForRepo(agents []domain.Agent, folder, selfPaneID string) (string
 		if !folderIsWorktree && !agentIsWorktree {
 			continue
 		}
-		if RepoFromCwd(agent.Cwd) == folderRepo {
+		// Use WorktreeCwd when available — it reflects the agent's actual directory.
+		agentDir := agent.Cwd
+		if agent.WorktreeCwd != "" {
+			agentDir = agent.WorktreeCwd
+		}
+		if RepoFromCwd(agentDir) == folderRepo {
 			return fmt.Sprintf("%s:%d", agent.Session, agent.Window), true
 		}
 	}
