@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -36,6 +36,7 @@ function navigateTo(view, agentId, push) {
   switch (view) {
     case 'list':
       cancelNav();
+      stopConversationPoll();
       setView('list');
       renderList(app, agents);
       break;
@@ -44,10 +45,12 @@ function navigateTo(view, agentId, push) {
       else navigateTo('list', null, false);
       break;
     case 'usage':
+      stopConversationPoll();
       setView('usage');
       renderUsage(app, agents);
       break;
     case 'create':
+      stopConversationPoll();
       setView('create');
       renderCreate(app, agents);
       break;

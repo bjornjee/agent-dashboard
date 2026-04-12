@@ -7,7 +7,7 @@ import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
 
-export { showModal, toast };
+export { showModal, toast, stopConversationPoll };
 
 // Update the action bar in-place when agent state changes via SSE.
 export function updateActionBar(agent) {
@@ -94,14 +94,25 @@ let currentPRUrl = '';
 let currentDetailTab = 'conversation';
 let currentDetailAgentId = null;
 let lastAgentState = null;
+let conversationPollTimer = null;
+
+// Strip system-injected XML tags from message content for display.
+// These include <system-reminder>, <task-notification>, <command-message>, etc.
+function stripSystemTags(text) {
+  return text.replace(/<(system-reminder|task-notification|command-message|command-name|command-args)[^>]*>[\s\S]*?<\/\1>/g, '').trim();
+}
 
 // Build conversation HTML from an array of message entries.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
   let lastRole = '';
   for (const entry of entries) {
+    // Skip task-notification messages (internal agent-to-agent noise)
+    if (entry.IsNotification) continue;
     const role = entry.Role || entry.role;
-    const content = entry.Content || entry.content || '';
+    const raw = entry.Content || entry.content || '';
+    const content = stripSystemTags(raw);
+    if (!content) continue;
     const time = entry.Timestamp || entry.timestamp || '';
     if (role !== lastRole) {
       const icon = role === 'human' ? ICONS.human : ICONS.assistant;
@@ -131,6 +142,28 @@ export async function refreshConversation(agentId) {
   const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
   container.innerHTML = renderConversationHtml(entries);
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
+// Poll conversation every 2s while the chat tab is active.
+// This provides near-realtime streaming of agent responses since the JSONL
+// is written by Claude Code (not the dashboard), so fsnotify/SSE doesn't
+// trigger on new conversation lines.
+function startConversationPoll(agentId) {
+  stopConversationPoll();
+  conversationPollTimer = setInterval(() => {
+    if (currentDetailTab === 'conversation' && currentDetailAgentId === agentId) {
+      refreshConversation(agentId);
+    } else {
+      stopConversationPoll();
+    }
+  }, 2000);
+}
+
+function stopConversationPoll() {
+  if (conversationPollTimer) {
+    clearInterval(conversationPollTimer);
+    conversationPollTimer = null;
+  }
 }
 
 // Refresh whichever tab is currently active. Called on SSE events.
@@ -204,6 +237,7 @@ function applyActivityFilter(container) {
 
 export async function renderDetail(app, agents, agentId, setView) {
   cancelNav();
+  stopConversationPoll();
   activityFilter = 'all';
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);
@@ -270,6 +304,9 @@ export async function renderDetail(app, agents, agentId, setView) {
       document.getElementById('tab-' + target).classList.add('active');
       currentDetailTab = target;
       loadTabContent(target, agentId);
+      // Start/stop conversation polling based on active tab
+      if (target === 'conversation') startConversationPoll(agentId);
+      else stopConversationPoll();
     });
   });
 
@@ -287,6 +324,9 @@ export async function renderDetail(app, agents, agentId, setView) {
   loadTabContent('conversation', agentId);
   loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
+
+  // Start conversation polling for near-realtime updates
+  startConversationPoll(agentId);
 }
 
 async function loadVitalSigns(agentId, agent) {
