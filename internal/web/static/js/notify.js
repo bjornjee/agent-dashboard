@@ -15,6 +15,7 @@ const NOTIFY_STATES = {
   error:      { type: 'waiting', message: 'hit an error' },
   done:       { type: 'review',  message: 'finished' },
   idle_prompt:{ type: 'review',  message: 'finished' },
+  pr:         { type: 'review',  message: 'PR ready' },
 };
 
 function agentLabel(agent) {
