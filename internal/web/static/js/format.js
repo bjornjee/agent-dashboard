@@ -16,21 +16,6 @@ export function repoName(agent) {
   return parts[parts.length - 1] || 'unknown';
 }
 
-export function duration(agent) {
-  if (!agent.started_at) return '';
-  const start = new Date(agent.started_at);
-  const now = new Date();
-  const totalSecs = Math.floor((now - start) / 1000);
-  if (totalSecs < 60) return '< 1m';
-  const mins = Math.floor(totalSecs / 60);
-  const secs = totalSecs % 60;
-  if (mins >= 60) {
-    const hours = Math.floor(mins / 60);
-    return hours + 'h ' + (mins % 60) + 'm';
-  }
-  return mins + 'm ' + secs + 's';
-}
-
 export function durationFromTimestamp(ts) {
   if (!ts) return '';
   const start = new Date(ts);
@@ -44,6 +29,10 @@ export function durationFromTimestamp(ts) {
     return hours + 'h ' + (mins % 60) + 'm';
   }
   return mins + 'm ' + secs + 's';
+}
+
+export function duration(agent) {
+  return durationFromTimestamp(agent.started_at);
 }
 
 export function durationShort(agent) {

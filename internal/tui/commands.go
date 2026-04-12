@@ -414,16 +414,6 @@ func sendReply(paneID, text, selfPaneID string) tea.Cmd {
 	}
 }
 
-// findWindowForRepo delegates to repowin.FindWindowForRepo.
-func findWindowForRepo(agents []domain.Agent, folder, selfPaneID string) (string, bool) {
-	return repowin.FindWindowForRepo(agents, folder, selfPaneID)
-}
-
-// findWindowByName delegates to repowin.FindWindowByName.
-func findWindowByName(windows []domain.TmuxWindowInfo, repoName, session, dashboardSW string) (string, bool) {
-	return repowin.FindWindowByName(windows, repoName, session, dashboardSW)
-}
-
 // expandPath expands ~ and resolves to an absolute path.
 func expandPath(path string) (string, error) {
 	if strings.HasPrefix(path, "~/") || path == "~" {
@@ -491,7 +481,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		selfTarget := tmux.ResolveTarget(selfPaneID)
 		session := tmux.ExtractSession(selfTarget)
 		dashboardSW := tmux.ExtractSessionWindow(selfTarget)
-		repoName := sanitizeWindowName(repoFromCwd(absFolder))
+		repoName := repowin.SanitizeWindowName(repowin.RepoFromCwd(absFolder))
 		if repoName == "" {
 			repoName = profile.Command
 		}
@@ -499,12 +489,12 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		var newTarget string
 
 		// Check for existing window
-		sw, found := findWindowForRepo(agents, absFolder, selfPaneID)
+		sw, found := repowin.FindWindowForRepo(agents, absFolder, selfPaneID)
 		if !found {
 			// Fallback: check window names
 			windows, wErr := tmux.TmuxListWindows(session)
 			if wErr == nil {
-				sw, found = findWindowByName(windows, repoName, session, dashboardSW)
+				sw, found = repowin.FindWindowByName(windows, repoName, session, dashboardSW)
 			}
 		}
 
@@ -622,7 +612,7 @@ func openWorktreeWindowCmd(session, branch, dir string) tea.Cmd {
 	return func() tea.Msg {
 		windowName := "shell"
 		if branch != "" {
-			windowName = sanitizeWindowName(branch)
+			windowName = repowin.SanitizeWindowName(branch)
 		}
 		_, err := tmux.TmuxNewWindow(session, windowName, dir)
 		return openWorktreeMsg{err: err, dir: dir}

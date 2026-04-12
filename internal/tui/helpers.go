@@ -15,11 +15,6 @@ import (
 //go:embed catppuccin-frappe.json
 var catppuccinFrappeStyle []byte
 
-// sanitizeWindowName delegates to repowin.SanitizeWindowName.
-func sanitizeWindowName(name string) string {
-	return repowin.SanitizeWindowName(name)
-}
-
 // highlightLine applies a background highlight to a line while preserving
 // inner ANSI foreground colors. It pads the line to the given width and
 // re-applies the background after each SGR reset so colors aren't lost.
@@ -45,16 +40,11 @@ func highlightLine(line string, width int) string {
 	return bgCode + boldCode + inner + padding + resetFull
 }
 
-// repoFromCwd delegates to repowin.RepoFromCwd.
-func repoFromCwd(cwd string) string {
-	return repowin.RepoFromCwd(cwd)
-}
-
 // agentRepo extracts the repo name from an agent, preferring WorktreeCwd.
 func agentRepo(agent domain.Agent) string {
-	repo := repoFromCwd(agent.WorktreeCwd)
+	repo := repowin.RepoFromCwd(agent.WorktreeCwd)
 	if repo == "" {
-		repo = repoFromCwd(agent.Cwd)
+		repo = repowin.RepoFromCwd(agent.Cwd)
 	}
 	return repo
 }

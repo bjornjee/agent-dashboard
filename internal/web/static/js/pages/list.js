@@ -2,7 +2,7 @@
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { effectiveState, stateGroup } from '../state.js';
-import { escapeHtml, repoName, durationShort, stripMarkdown, formatCost } from '../format.js';
+import { escapeHtml, repoName, durationShort, formatCost } from '../format.js';
 import { get } from '../api.js';
 
 export function renderList(app, agents) {
