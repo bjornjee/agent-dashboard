@@ -134,22 +134,25 @@ export async function refreshConversation(agentId) {
 }
 
 // Refresh whichever tab is currently active. Called on SSE events.
-export async function refreshActiveTab(agentId) {
+// Conversation uses its own fetch path (no nav signal). Activity and plan
+// use loadTabContent which creates a nav signal, so we debounce to avoid
+// rapid SSE events causing cancellation churn.
+let refreshTimer = null;
+export function refreshActiveTab(agentId) {
   if (currentDetailAgentId !== agentId) return;
-  switch (currentDetailTab) {
-    case 'conversation':
-      await refreshConversation(agentId);
-      break;
-    case 'activity':
-      await loadTabContent('activity', agentId);
-      break;
-    case 'diff':
-      // Skip diff refresh — it's expensive and rarely changes mid-session
-      break;
-    case 'plan':
-      await loadTabContent('plan', agentId);
-      break;
+  if (currentDetailTab === 'conversation') {
+    refreshConversation(agentId);
+    return;
   }
+  if (currentDetailTab === 'diff') return; // expensive, skip
+  // Debounce activity/plan refreshes to avoid nav signal churn
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (currentDetailAgentId !== agentId) return;
+    if (currentDetailTab === 'activity' || currentDetailTab === 'plan') {
+      loadTabContent(currentDetailTab, agentId);
+    }
+  }, 500);
 }
 
 // Update the detail header (status badge, duration) from SSE agent data.
@@ -178,12 +181,12 @@ export function refreshDetailHeader(agent) {
 
   // Refresh vital signs only on state change
   if (prev !== null && prev !== st) {
-    loadVitalSigns(agentId(agent), agent);
-    loadSubagentSummary(agentId(agent));
+    loadVitalSigns(getAgentId(agent), agent);
+    loadSubagentSummary(getAgentId(agent));
   }
 }
 
-function agentId(agent) {
+function getAgentId(agent) {
   return agent.session_id;
 }
 

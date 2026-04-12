@@ -157,14 +157,14 @@ window.Dashboard = {
   },
 
   confirmMerge(id) {
+    // Capture branch before async merge — SSE may update agents mid-flight
+    const agentPre = agents.find(a => a.session_id === id);
+    const branch = agentPre ? agentPre.branch : '';
     showModal('Merge PR', 'Merge this PR with --squash?', async (evt) => {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/merge');
         if (result && result.ok) {
           toast('Merged', 'success');
-          // Prompt for cleanup after successful merge
-          const agent = agents.find(a => a.session_id === id);
-          const branch = agent ? agent.branch : '';
           const label = branch ? `Clean up ${branch}?` : 'Clean up worktree and branch?';
           showModal('Post-Merge Cleanup', label + ' This will remove the worktree, checkout the default branch, pull, and delete the local feature branch.', async (cleanEvt) => {
             await withSpinner(cleanEvt, async () => {
