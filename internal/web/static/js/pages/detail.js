@@ -19,8 +19,12 @@ export function updateActionBar(agent) {
   if (newBar) bar.replaceWith(newBar);
 }
 
+// Track optimistic messages so refreshConversation can preserve them
+let pendingUserMessage = null;
+
 // Optimistically append a user message bubble to the chat.
 export function appendUserMessage(text) {
+  pendingUserMessage = text;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   // Add role label if the last message was not from the user
@@ -33,7 +37,7 @@ export function appendUserMessage(text) {
     container.appendChild(labelDiv);
   }
   const msgDiv = document.createElement('div');
-  msgDiv.className = 'msg msg-human';
+  msgDiv.className = 'msg msg-human msg-optimistic';
   msgDiv.textContent = text;
   const timeDiv = document.createElement('div');
   timeDiv.className = 'msg-time';
@@ -64,7 +68,7 @@ function renderActionBar(agent) {
   let actions = '';
 
   // Reply input for active agent states
-  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr'];
+  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr', 'idle_prompt'];
   if (INPUT_STATES.includes(st)) {
     const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
     actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
@@ -125,7 +129,7 @@ function renderConversationHtml(entries) {
 
 // Re-fetch and re-render the conversation tab if it is currently active.
 // Called by the SSE handler to keep the chat view up to date.
-export async function refreshConversation(agentId) {
+async function refreshConversation(agentId) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
   if (!container) return;
@@ -133,7 +137,37 @@ export async function refreshConversation(agentId) {
   if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
   const scrollParent = container.closest('.detail-scroll');
   const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
+
+  // Check if the API has caught up with our optimistic message
+  if (pendingUserMessage) {
+    const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
+    const lastContent = lastHuman ? (lastHuman.Content || lastHuman.content || '') : '';
+    if (lastContent.includes(pendingUserMessage)) {
+      pendingUserMessage = null; // API caught up, clear optimistic state
+    }
+  }
+
   container.innerHTML = renderConversationHtml(entries);
+
+  // Re-append optimistic message if API hasn't caught up yet
+  if (pendingUserMessage) {
+    const conv = container.querySelector('.conversation');
+    if (conv) {
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'msg-role-label';
+      labelDiv.innerHTML = `${ICONS.human} You`;
+      conv.appendChild(labelDiv);
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'msg msg-human msg-optimistic';
+      msgDiv.textContent = pendingUserMessage;
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'msg-time';
+      timeDiv.textContent = formatTimeShort(new Date().toISOString());
+      msgDiv.appendChild(timeDiv);
+      conv.appendChild(msgDiv);
+    }
+  }
+
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
@@ -207,13 +241,9 @@ export function refreshDetailHeader(agent) {
 
   // Refresh vital signs only on state change
   if (prev !== null && prev !== st) {
-    loadVitalSigns(getAgentId(agent), agent);
-    loadSubagentSummary(getAgentId(agent));
+    loadVitalSigns(agent.session_id, agent);
+    loadSubagentSummary(agent.session_id);
   }
-}
-
-function getAgentId(agent) {
-  return agent.session_id;
 }
 
 function applyActivityFilter(container) {
@@ -231,6 +261,7 @@ function applyActivityFilter(container) {
 export async function renderDetail(app, agents, agentId, setView) {
   cancelNav();
   stopConversationPoll();
+  pendingUserMessage = null;
   activityFilter = 'all';
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);

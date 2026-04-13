@@ -1,11 +1,12 @@
 // Service Worker for Agent Dashboard PWA
-const CACHE_NAME = 'agent-dashboard-v1';
+const CACHE_NAME = 'agent-dashboard-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/app.js',
   '/style.css',
   '/manifest.json',
+  '/js/notify.js',
 ];
 
 // Install: cache static shell
@@ -24,6 +25,25 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+// Notification click: focus tab and navigate to agent
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const agentId = event.notification.data && event.notification.data.agentId;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin)) {
+          return client.focus().then((focusedClient) => {
+            if (agentId && focusedClient) focusedClient.postMessage({ type: 'navigate-agent', agentId });
+          });
+        }
+      }
+      // No existing tab — open a new one
+      self.clients.openWindow('/');
+    })
+  );
 });
 
 // Fetch: network-first for API, cache-first for static

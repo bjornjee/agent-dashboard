@@ -993,6 +993,7 @@ body.view-detail { overflow: hidden; }
 }
 
 .msg-human .msg-time { color: var(--text-tertiary); }
+.msg-optimistic { opacity: 0.7; }
 
 .msg-assistant .markdown-body { color: var(--text-secondary); }
 .msg-assistant .markdown-body code { background: var(--code-bg); color: var(--code-text); }

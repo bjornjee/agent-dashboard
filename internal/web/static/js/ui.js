@@ -3,6 +3,7 @@ import { escapeHtml, formatCost, formatCostFull, formatTokens, formatDateShort, 
 import { STATE_BADGE } from './state.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
+import { isBrowserNotifyEnabled } from './notify.js';
 
 export const UI = {
   header(title, opts) {
@@ -17,6 +18,8 @@ export const UI = {
       controls += '<div class="header-divider"></div>';
     }
     if (showToggle) {
+      const notifyIcon = isBrowserNotifyEnabled() ? ICONS.bell : ICONS.bellOff;
+      controls += `<button class="header-icon-btn" onclick="Dashboard.toggleNotifications()" title="Toggle notifications" aria-label="Toggle notifications">${notifyIcon}</button>`;
       controls += `<button class="header-icon-btn" onclick="Dashboard.cycleTheme()" title="Toggle theme" aria-label="Toggle theme">${Theme.getIcon()}</button>`;
     }
     if (o.cta) {
