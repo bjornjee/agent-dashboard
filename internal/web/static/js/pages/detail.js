@@ -46,9 +46,6 @@ export function appendUserMessage(text) {
   container.appendChild(msgDiv);
   const scrollParent = container.closest('.detail-scroll');
   if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
-
-  // Switch to fast polling to pick up the response quickly
-  if (currentDetailAgentId) startFastPoll(currentDetailAgentId);
 }
 
 function timelineIcon(kind) {
@@ -174,13 +171,10 @@ export async function refreshConversation(agentId) {
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
-// Poll conversation while the chat tab is active.
-// Normal rate: 2s. Fast rate (after sending input): 500ms for 30s then back to 2s.
-const POLL_NORMAL = 2000;
-const POLL_FAST = 500;
-const POLL_FAST_DURATION = 30000;
-let fastPollTimeout = null;
-
+// Poll conversation every 2s while the chat tab is active.
+// This provides near-realtime streaming of agent responses since the JSONL
+// is written by Claude Code (not the dashboard), so fsnotify/SSE doesn't
+// trigger on new conversation lines.
 function startConversationPoll(agentId) {
   stopConversationPoll();
   conversationPollTimer = setInterval(() => {
@@ -189,34 +183,13 @@ function startConversationPoll(agentId) {
     } else {
       stopConversationPoll();
     }
-  }, POLL_NORMAL);
-}
-
-function startFastPoll(agentId) {
-  stopConversationPoll();
-  conversationPollTimer = setInterval(() => {
-    if (currentDetailTab === 'conversation' && currentDetailAgentId === agentId) {
-      refreshConversation(agentId);
-    } else {
-      stopConversationPoll();
-    }
-  }, POLL_FAST);
-  // Fall back to normal polling after the fast window
-  if (fastPollTimeout) clearTimeout(fastPollTimeout);
-  fastPollTimeout = setTimeout(() => {
-    fastPollTimeout = null;
-    if (currentDetailAgentId === agentId) startConversationPoll(agentId);
-  }, POLL_FAST_DURATION);
+  }, 2000);
 }
 
 function stopConversationPoll() {
   if (conversationPollTimer) {
     clearInterval(conversationPollTimer);
     conversationPollTimer = null;
-  }
-  if (fastPollTimeout) {
-    clearTimeout(fastPollTimeout);
-    fastPollTimeout = null;
   }
 }
 
