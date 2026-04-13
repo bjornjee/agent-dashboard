@@ -6,6 +6,12 @@ const STORAGE_KEY = 'notify-enabled';
 const prevStateMap = new Map();
 let seeded = false;
 
+// Cache the SW registration so we don't await navigator.serviceWorker.ready on every notification
+let swReg = null;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.ready.then(reg => { swReg = reg; });
+}
+
 // States that warrant a notification when an agent transitions INTO them
 const NOTIFY_STATES = {
   permission: 'Needs permission',
@@ -21,13 +27,13 @@ function agentLabel(agent) {
   return agent.task || agent.worktree || agent.session_id;
 }
 
-async function fireBrowserNotification(agent, body) {
+function fireBrowserNotification(agent, body) {
   const enabled = isBrowserNotifyEnabled();
   const hasAPI = typeof Notification !== 'undefined';
   const perm = hasAPI ? Notification.permission : 'no-api';
   const vis = document.visibilityState;
   const focused = document.hasFocus();
-  console.log('[notify] fire check:', { enabled, hasAPI, perm, vis, focused, agent: agent.session_id });
+  console.log('[notify] fire check:', { enabled, perm, vis, focused, swReg: !!swReg });
 
   if (!enabled || !hasAPI || perm !== 'granted') {
     console.log('[notify] BLOCKED:', !enabled ? 'disabled' : !hasAPI ? 'no Notification API' : 'permission=' + perm);
@@ -37,31 +43,29 @@ async function fireBrowserNotification(agent, body) {
     console.log('[notify] SKIPPED: tab is focused');
     return;
   }
+
+  const title = agentLabel(agent);
+  const opts = {
+    body,
+    icon: '/icon-192.svg',
+    tag: agent.session_id,
+    data: { agentId: agent.session_id },
+  };
+
   try {
-    const hasSW = !!navigator.serviceWorker;
-    console.log('[notify] dispatching via', hasSW ? 'SW showNotification' : 'new Notification');
-    const reg = hasSW && await navigator.serviceWorker.ready;
-    if (reg) {
-      await reg.showNotification(agentLabel(agent), {
-        body,
-        icon: '/icon-192.svg',
-        tag: agent.session_id,
-        data: { agentId: agent.session_id },
-      });
-      console.log('[notify] SW showNotification OK');
+    if (swReg) {
+      swReg.showNotification(title, opts).then(
+        () => console.log('[notify] SW showNotification OK'),
+        err => console.error('[notify] SW showNotification FAILED:', err)
+      );
     } else {
-      const n = new Notification(agentLabel(agent), {
-        body,
-        icon: '/icon-192.svg',
-        tag: agent.session_id,
-        data: { agentId: agent.session_id },
-      });
+      console.log('[notify] no SW reg, using new Notification()');
+      const n = new Notification(title, opts);
       n.onclick = () => {
         window.focus();
         window.Dashboard.selectAgent(agent.session_id);
         n.close();
       };
-      console.log('[notify] new Notification OK');
     }
   } catch (err) {
     console.error('[notify] ERROR:', err);
