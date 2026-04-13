@@ -19,12 +19,12 @@ type DayCost struct {
 
 // DayUsage is a single day's aggregated token counts and cost.
 type DayUsage struct {
-	Date             string  `db:"date"`
-	InputTokens      int     `db:"input_tokens"`
-	OutputTokens     int     `db:"output_tokens"`
-	CacheReadTokens  int     `db:"cache_read_tokens"`
-	CacheWriteTokens int     `db:"cache_write_tokens"`
-	CostUSD          float64 `db:"cost_usd"`
+	Date             string  `db:"date" json:"date"`
+	InputTokens      int     `db:"input_tokens" json:"input_tokens"`
+	OutputTokens     int     `db:"output_tokens" json:"output_tokens"`
+	CacheReadTokens  int     `db:"cache_read_tokens" json:"cache_read_tokens"`
+	CacheWriteTokens int     `db:"cache_write_tokens" json:"cache_write_tokens"`
+	CostUSD          float64 `db:"cost_usd" json:"cost_usd"`
 }
 
 // DB wraps sqlx.DB with repository methods for usage tracking.

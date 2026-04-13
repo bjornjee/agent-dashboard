@@ -24,10 +24,10 @@ func TestFetchRateLimit_FullResponse(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(`{
-			"five_hour": {"utilization": 42.5, "resets_at": "2026-04-09T14:00:00Z"},
-			"seven_day": {"utilization": 30.0, "resets_at": "2026-04-12T00:00:00Z"},
-			"seven_day_opus": {"utilization": 10.0, "resets_at": "2026-04-12T00:00:00Z"},
-			"seven_day_sonnet": {"utilization": 25.0, "resets_at": "2026-04-12T00:00:00Z"},
+			"five_hour": {"utilization": 0.425, "resets_at": "2026-04-09T14:00:00Z"},
+			"seven_day": {"utilization": 0.30, "resets_at": "2026-04-12T00:00:00Z"},
+			"seven_day_opus": {"utilization": 0.10, "resets_at": "2026-04-12T00:00:00Z"},
+			"seven_day_sonnet": {"utilization": 0.25, "resets_at": "2026-04-12T00:00:00Z"},
 			"extra_usage": {
 				"is_enabled": true,
 				"monthly_limit": 5000,
@@ -96,7 +96,7 @@ func TestFetchRateLimit_PartialResponse(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(`{
-			"five_hour": {"utilization": 50.0}
+			"five_hour": {"utilization": 0.50}
 		}`))
 	}))
 	defer srv.Close()
