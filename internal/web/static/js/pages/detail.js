@@ -19,8 +19,12 @@ export function updateActionBar(agent) {
   if (newBar) bar.replaceWith(newBar);
 }
 
+// Track optimistic messages so refreshConversation can preserve them
+let pendingUserMessage = null;
+
 // Optimistically append a user message bubble to the chat.
 export function appendUserMessage(text) {
+  pendingUserMessage = text;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   // Add role label if the last message was not from the user
@@ -33,7 +37,7 @@ export function appendUserMessage(text) {
     container.appendChild(labelDiv);
   }
   const msgDiv = document.createElement('div');
-  msgDiv.className = 'msg msg-human';
+  msgDiv.className = 'msg msg-human msg-optimistic';
   msgDiv.textContent = text;
   const timeDiv = document.createElement('div');
   timeDiv.className = 'msg-time';
@@ -42,6 +46,9 @@ export function appendUserMessage(text) {
   container.appendChild(msgDiv);
   const scrollParent = container.closest('.detail-scroll');
   if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+
+  // Switch to fast polling to pick up the response quickly
+  if (currentDetailAgentId) startFastPoll(currentDetailAgentId);
 }
 
 function timelineIcon(kind) {
@@ -133,14 +140,47 @@ export async function refreshConversation(agentId) {
   if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
   const scrollParent = container.closest('.detail-scroll');
   const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
+
+  // Check if the API has caught up with our optimistic message
+  if (pendingUserMessage) {
+    const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
+    const lastContent = lastHuman ? (lastHuman.Content || lastHuman.content || '') : '';
+    if (lastContent.includes(pendingUserMessage)) {
+      pendingUserMessage = null; // API caught up, clear optimistic state
+    }
+  }
+
   container.innerHTML = renderConversationHtml(entries);
+
+  // Re-append optimistic message if API hasn't caught up yet
+  if (pendingUserMessage) {
+    const conv = container.querySelector('.conversation');
+    if (conv) {
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'msg-role-label';
+      labelDiv.innerHTML = `${ICONS.human} You`;
+      conv.appendChild(labelDiv);
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'msg msg-human msg-optimistic';
+      msgDiv.textContent = pendingUserMessage;
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'msg-time';
+      timeDiv.textContent = formatTimeShort(new Date().toISOString());
+      msgDiv.appendChild(timeDiv);
+      conv.appendChild(msgDiv);
+    }
+  }
+
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
-// Poll conversation every 2s while the chat tab is active.
-// This provides near-realtime streaming of agent responses since the JSONL
-// is written by Claude Code (not the dashboard), so fsnotify/SSE doesn't
-// trigger on new conversation lines.
+// Poll conversation while the chat tab is active.
+// Normal rate: 2s. Fast rate (after sending input): 500ms for 30s then back to 2s.
+const POLL_NORMAL = 2000;
+const POLL_FAST = 500;
+const POLL_FAST_DURATION = 30000;
+let fastPollTimeout = null;
+
 function startConversationPoll(agentId) {
   stopConversationPoll();
   conversationPollTimer = setInterval(() => {
@@ -149,13 +189,34 @@ function startConversationPoll(agentId) {
     } else {
       stopConversationPoll();
     }
-  }, 2000);
+  }, POLL_NORMAL);
+}
+
+function startFastPoll(agentId) {
+  stopConversationPoll();
+  conversationPollTimer = setInterval(() => {
+    if (currentDetailTab === 'conversation' && currentDetailAgentId === agentId) {
+      refreshConversation(agentId);
+    } else {
+      stopConversationPoll();
+    }
+  }, POLL_FAST);
+  // Fall back to normal polling after the fast window
+  if (fastPollTimeout) clearTimeout(fastPollTimeout);
+  fastPollTimeout = setTimeout(() => {
+    fastPollTimeout = null;
+    if (currentDetailAgentId === agentId) startConversationPoll(agentId);
+  }, POLL_FAST_DURATION);
 }
 
 function stopConversationPoll() {
   if (conversationPollTimer) {
     clearInterval(conversationPollTimer);
     conversationPollTimer = null;
+  }
+  if (fastPollTimeout) {
+    clearTimeout(fastPollTimeout);
+    fastPollTimeout = null;
   }
 }
 
@@ -231,6 +292,7 @@ function applyActivityFilter(container) {
 export async function renderDetail(app, agents, agentId, setView) {
   cancelNav();
   stopConversationPoll();
+  pendingUserMessage = null;
   activityFilter = 'all';
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);
