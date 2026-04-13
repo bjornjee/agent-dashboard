@@ -129,7 +129,7 @@ function renderConversationHtml(entries) {
 
 // Re-fetch and re-render the conversation tab if it is currently active.
 // Called by the SSE handler to keep the chat view up to date.
-export async function refreshConversation(agentId) {
+async function refreshConversation(agentId) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
   if (!container) return;
@@ -241,13 +241,9 @@ export function refreshDetailHeader(agent) {
 
   // Refresh vital signs only on state change
   if (prev !== null && prev !== st) {
-    loadVitalSigns(getAgentId(agent), agent);
-    loadSubagentSummary(getAgentId(agent));
+    loadVitalSigns(agent.session_id, agent);
+    loadSubagentSummary(agent.session_id);
   }
-}
-
-function getAgentId(agent) {
-  return agent.session_id;
 }
 
 function applyActivityFilter(container) {

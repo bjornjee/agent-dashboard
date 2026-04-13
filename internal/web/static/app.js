@@ -85,7 +85,6 @@ function connectSSE() {
   eventSource.onmessage = (e) => {
     try {
       agents = JSON.parse(e.data);
-      console.log('[sse] received', agents.length, 'agents');
       if (currentView === 'list') renderList(app, agents);
       else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);

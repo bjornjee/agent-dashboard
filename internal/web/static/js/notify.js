@@ -31,18 +31,9 @@ function fireBrowserNotification(agent, body) {
   const enabled = isBrowserNotifyEnabled();
   const hasAPI = typeof Notification !== 'undefined';
   const perm = hasAPI ? Notification.permission : 'no-api';
-  const vis = document.visibilityState;
-  const focused = document.hasFocus();
-  console.log('[notify] fire check:', { enabled, perm, vis, focused, swReg: !!swReg });
 
-  if (!enabled || !hasAPI || perm !== 'granted') {
-    console.log('[notify] BLOCKED:', !enabled ? 'disabled' : !hasAPI ? 'no Notification API' : 'permission=' + perm);
-    return;
-  }
-  if (vis === 'visible' && focused) {
-    console.log('[notify] SKIPPED: tab is focused');
-    return;
-  }
+  if (!enabled || !hasAPI || perm !== 'granted') return;
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
 
   const title = agentLabel(agent);
   const opts = {
@@ -55,11 +46,10 @@ function fireBrowserNotification(agent, body) {
   try {
     if (swReg) {
       swReg.showNotification(title, opts).then(
-        () => console.log('[notify] SW showNotification OK'),
+        null,
         err => console.error('[notify] SW showNotification FAILED:', err)
       );
     } else {
-      console.log('[notify] no SW reg, using new Notification()');
       const n = new Notification(title, opts);
       n.onclick = () => {
         window.focus();
