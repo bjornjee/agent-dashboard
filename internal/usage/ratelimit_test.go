@@ -147,6 +147,30 @@ func TestFetchRateLimit_ServerError(t *testing.T) {
 	}
 }
 
+func TestMapWindow_ClampsToHundred(t *testing.T) {
+	tests := []struct {
+		name        string
+		utilization float64
+		wantPercent float64
+	}{
+		{"normal fraction", 0.64, 64.0},
+		{"zero", 0.0, 0.0},
+		{"full", 1.0, 100.0},
+		{"over 1 already percent", 64.0, 100.0}, // API returns percent directly — clamp
+		{"huge value", 6400.0, 100.0},           // should never show 6400%
+		{"slightly over", 1.05, 100.0},          // 105% → clamped to 100
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := tt.utilization
+			rw := mapWindow(&oauthUsageWindow{Utilization: &u})
+			if rw.UsedPercent != tt.wantPercent {
+				t.Errorf("UsedPercent = %f, want %f", rw.UsedPercent, tt.wantPercent)
+			}
+		})
+	}
+}
+
 func TestFetchRateLimit_EmptyResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
