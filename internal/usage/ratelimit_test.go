@@ -24,10 +24,10 @@ func TestFetchRateLimit_FullResponse(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(`{
-			"five_hour": {"utilization": 0.425, "resets_at": "2026-04-09T14:00:00Z"},
-			"seven_day": {"utilization": 0.30, "resets_at": "2026-04-12T00:00:00Z"},
-			"seven_day_opus": {"utilization": 0.10, "resets_at": "2026-04-12T00:00:00Z"},
-			"seven_day_sonnet": {"utilization": 0.25, "resets_at": "2026-04-12T00:00:00Z"},
+			"five_hour": {"utilization": 42.5, "resets_at": "2026-04-09T14:00:00Z"},
+			"seven_day": {"utilization": 30.0, "resets_at": "2026-04-12T00:00:00Z"},
+			"seven_day_opus": {"utilization": 10.0, "resets_at": "2026-04-12T00:00:00Z"},
+			"seven_day_sonnet": {"utilization": 25.0, "resets_at": "2026-04-12T00:00:00Z"},
 			"extra_usage": {
 				"is_enabled": true,
 				"monthly_limit": 5000,
@@ -96,7 +96,7 @@ func TestFetchRateLimit_PartialResponse(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		_, _ = w.Write([]byte(`{
-			"five_hour": {"utilization": 0.50}
+			"five_hour": {"utilization": 50.0}
 		}`))
 	}))
 	defer srv.Close()
@@ -147,18 +147,16 @@ func TestFetchRateLimit_ServerError(t *testing.T) {
 	}
 }
 
-func TestMapWindow_ClampsToHundred(t *testing.T) {
+func TestMapWindow(t *testing.T) {
 	tests := []struct {
 		name        string
 		utilization float64
 		wantPercent float64
 	}{
-		{"normal fraction", 0.64, 64.0},
+		{"normal percent", 64.0, 64.0},
 		{"zero", 0.0, 0.0},
-		{"full", 1.0, 100.0},
-		{"over 1 already percent", 64.0, 100.0}, // API returns percent directly — clamp
-		{"huge value", 6400.0, 100.0},           // should never show 6400%
-		{"slightly over", 1.05, 100.0},          // 105% → clamped to 100
+		{"full", 100.0, 100.0},
+		{"fractional", 42.5, 42.5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
