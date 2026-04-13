@@ -123,10 +123,49 @@ async function loadUsageData() {
   const chartHtml = buildChart(days, todayStr);
   const chartCard = UI.chartContainer(RANGE_LABELS[currentRange] || 'Usage', chartHtml, rangeSelector);
 
+  // Token summary table
+  const todayEntry = days.find(d => d.date === todayStr);
+  const todayTokens = todayEntry
+    ? { input: todayEntry.input_tokens || 0, output: todayEntry.output_tokens || 0, cache: (todayEntry.cache_read_tokens || 0) + (todayEntry.cache_write_tokens || 0) }
+    : { input: 0, output: 0, cache: 0 };
+  todayTokens.total = todayTokens.input + todayTokens.output + todayTokens.cache;
+
+  const periodTokens = days.reduce((acc, d) => {
+    acc.input += d.input_tokens || 0;
+    acc.output += d.output_tokens || 0;
+    acc.cache += (d.cache_read_tokens || 0) + (d.cache_write_tokens || 0);
+    return acc;
+  }, { input: 0, output: 0, cache: 0 });
+  periodTokens.total = periodTokens.input + periodTokens.output + periodTokens.cache;
+
+  const tokenTableHtml = UI.tableCard('Token Usage', `<table class="usage-breakdown-table">
+    <thead><tr>
+      <th>Period</th><th class="num">Input</th><th class="num">Output</th>
+      <th class="num">Cache</th><th class="num">Total</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td>Today</td>
+        <td class="num">${formatTokens(todayTokens.input)}</td>
+        <td class="num">${formatTokens(todayTokens.output)}</td>
+        <td class="num">${formatTokens(todayTokens.cache)}</td>
+        <td class="num">${formatTokens(todayTokens.total)}</td>
+      </tr>
+      <tr>
+        <td>${periodLabel}</td>
+        <td class="num">${formatTokens(periodTokens.input)}</td>
+        <td class="num">${formatTokens(periodTokens.output)}</td>
+        <td class="num">${formatTokens(periodTokens.cache)}</td>
+        <td class="num">${formatTokens(periodTokens.total)}</td>
+      </tr>
+    </tbody>
+  </table>`);
+
   const view = document.querySelector('.usage-view');
   if (!view) return;
   view.innerHTML =
     metricsHtml +
+    tokenTableHtml +
     '<div id="usage-chart-section">' + chartCard + '</div>' +
     '<div id="usage-agent-breakdown">' + UI.loadingBlock() + '</div>';
 

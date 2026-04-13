@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
+	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
@@ -326,16 +327,11 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, u)
 }
 
-// dailyUsageResponse holds the daily cost breakdown.
+// dailyUsageResponse holds the daily usage breakdown.
 type dailyUsageResponse struct {
-	Days      []dayEntry `json:"days"`
-	TotalCost float64    `json:"total_cost"`
-	TodayCost float64    `json:"today_cost"`
-}
-
-type dayEntry struct {
-	Date    string  `json:"date"`
-	CostUSD float64 `json:"cost_usd"`
+	Days      []db.DayUsage `json:"days"`
+	TotalCost float64       `json:"total_cost"`
+	TodayCost float64       `json:"today_cost"`
 }
 
 // handleDailyUsage returns the daily cost breakdown.
@@ -355,23 +351,21 @@ func (s *Server) handleDailyUsage(w http.ResponseWriter, r *http.Request) {
 		numDays = 365 * 10 // all time
 	}
 	since := time.Now().AddDate(0, 0, -numDays)
-	days := s.db.CostByDay(since)
+	days := s.db.UsageByDay(since)
 	today := time.Now().Format("2006-01-02")
 
-	var entries []dayEntry
 	var todayCost float64
 	for _, d := range days {
-		entries = append(entries, dayEntry{Date: d.Date, CostUSD: d.CostUSD})
 		if d.Date == today {
 			todayCost = d.CostUSD
 		}
 	}
-	if entries == nil {
-		entries = make([]dayEntry, 0)
+	if days == nil {
+		days = make([]db.DayUsage, 0)
 	}
 
 	writeJSON(w, http.StatusOK, dailyUsageResponse{
-		Days:      entries,
+		Days:      days,
 		TotalCost: s.db.TotalCost(),
 		TodayCost: todayCost,
 	})

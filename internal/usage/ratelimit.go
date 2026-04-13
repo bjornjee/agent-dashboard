@@ -119,7 +119,7 @@ func mapResponse(r oauthUsageResponse) domain.RateLimit {
 func mapWindow(w *oauthUsageWindow) *domain.RateWindow {
 	rw := &domain.RateWindow{}
 	if w.Utilization != nil {
-		rw.UsedPercent = *w.Utilization
+		rw.UsedPercent = *w.Utilization * 100
 	}
 	if w.ResetsAt != "" {
 		rw.ResetsAt = parseISO8601(w.ResetsAt)
