@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"time"
 
@@ -120,7 +119,7 @@ func mapResponse(r oauthUsageResponse) domain.RateLimit {
 func mapWindow(w *oauthUsageWindow) *domain.RateWindow {
 	rw := &domain.RateWindow{}
 	if w.Utilization != nil {
-		rw.UsedPercent = math.Min(*w.Utilization*100, 100)
+		rw.UsedPercent = *w.Utilization
 	}
 	if w.ResetsAt != "" {
 		rw.ResetsAt = parseISO8601(w.ResetsAt)
