@@ -86,6 +86,10 @@ type codexUsageMsg struct {
 	days []usage.CodexDayUsage
 }
 type codexPersistMsg struct{}
+type filesChangedMsg struct {
+	target string
+	files  []string
+}
 type codexDBUsageMsg struct {
 	days      []db.DayUsage
 	totalCost float64

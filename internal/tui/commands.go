@@ -139,7 +139,53 @@ func (m model) loadSelectionData() tea.Cmd {
 	if m.selectedSubagent() != nil {
 		return m.loadSubagentActivity()
 	}
-	return tea.Batch(m.captureSelected(), m.loadConversation(), m.loadPlan(), m.loadDiagrams())
+	return tea.Batch(m.captureSelected(), m.loadConversation(), m.loadPlan(), m.loadDiagrams(), m.loadFilesChanged())
+}
+
+// loadFilesChanged computes changed files for the selected agent via git.
+func (m model) loadFilesChanged() tea.Cmd {
+	agent := m.selectedAgent()
+	if agent == nil {
+		return nil
+	}
+	dir := agent.EffectiveDir()
+	if dir == "" {
+		return nil
+	}
+	target := agent.Target
+	return func() tea.Msg {
+		base := findMergeBase(dir)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		out, err := gitRunner.Output(ctx, "git", "-C", dir, "diff", "--name-status", base)
+		if err != nil {
+			return filesChangedMsg{target: target}
+		}
+		return filesChangedMsg{target: target, files: parseNameStatus(string(out))}
+	}
+}
+
+// parseNameStatus converts "git diff --name-status" output to ["+file", "~file", "-file"].
+func parseNameStatus(out string) []string {
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return nil
+	}
+	prefixMap := map[byte]string{'A': "+", 'M': "~", 'D': "-"}
+	var result []string
+	for _, line := range strings.Split(trimmed, "\n") {
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 || len(parts[0]) == 0 {
+			continue
+		}
+		file := parts[len(parts)-1] // last field handles renames (R100\told\tnew)
+		prefix := "~"
+		if p, ok := prefixMap[parts[0][0]]; ok {
+			prefix = p
+		}
+		result = append(result, prefix+file)
+	}
+	return result
 }
 
 // loadSubagentActivity loads activity log for the selected subagent.

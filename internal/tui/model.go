@@ -780,6 +780,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case filesChangedMsg:
+		for i, a := range m.agents {
+			if a.Target == msg.target {
+				m.agents[i].FilesChanged = msg.files
+				break
+			}
+		}
+		m.updateRightContent()
+		return m, nil
+
 	case planMsg:
 		m.planContent = msg.content
 		if msg.content != "" {

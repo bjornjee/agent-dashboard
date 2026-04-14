@@ -113,6 +113,21 @@ describe('buildReportEntry', () => {
     assert.equal(entry.model, 'claude-opus-4-6');
   });
 
+  it('preserves existing cwd on non-SessionStart events', () => {
+    const { entry } = buildReportEntry({
+      input: { ...BASE_INPUT, hook_event_name: 'SubagentStart', cwd: '/Users/bjornjee/Code/project/src/subdir' },
+      existing: { cwd: '/Users/bjornjee/Code/project', subagent_count: 0 },
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      state: 'running',
+      filesChanged: [],
+      parsed: BASE_PARSED,
+      cwd: '/Users/bjornjee/Code/project/src/subdir',
+    });
+
+    assert.equal(entry.cwd, '/Users/bjornjee/Code/project');
+  });
+
   it('always reports changed when existing has no state (first write)', () => {
     const { changed } = buildReportEntry({
       input: BASE_INPUT,

@@ -83,7 +83,7 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     window: parsed.window,
     pane: parsed.pane,
     state,
-    cwd: cwd || existing.cwd || '',
+    cwd: existing.cwd || cwd || '',
     files_changed: filesChanged,
     last_message_preview: preview,
     session_id: input.session_id,
