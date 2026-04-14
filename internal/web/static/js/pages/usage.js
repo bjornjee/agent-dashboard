@@ -72,7 +72,7 @@ async function loadRateLimits() {
 function renderRateBar(label, window) {
   const pct = Math.min(100, Math.max(0, window.used_percent || 0));
   const resetText = window.resets_at ? formatResetDuration(window.resets_at) : '';
-  const barColor = pct >= 80 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
+  const barColor = pct >= 80 ? 'var(--accent-red)' : pct >= 60 ? 'var(--accent-amber)' : 'var(--accent-green)';
   return `<div class="rate-limit-row">
     <span class="rate-limit-label">${escapeHtml(label)}</span>
     <div class="rate-limit-bar-track">
