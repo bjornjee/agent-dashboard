@@ -238,3 +238,15 @@ Table from Phase 5.
 Concrete, minimal actions to prevent recurrence. Reference specific files and line numbers.
 
 **Gate:** Report delivered. Every claim cites evidence. Unknowns are stated explicitly.
+
+---
+
+### Transition to implementation
+
+This skill is read-only. If the user asks to implement a fix based on your findings, **do not start editing files**. Instead, hand off to the appropriate skill:
+
+- Bug fix or prevention → suggest `/fix <description>`
+- Structural change to prevent recurrence → suggest `/refactor <description>`
+- New safeguard or feature → suggest `/feature <description>`
+
+These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/rca` skips those gates.

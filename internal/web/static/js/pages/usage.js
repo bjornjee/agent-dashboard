@@ -4,13 +4,13 @@ import { escapeHtml, repoName, formatTokens, formatCostFull, formatDateShort } f
 import { get } from '../api.js';
 
 const RANGE_OPTIONS = [
-  { label: '7d', value: 7 },
+  { label: 'Week', value: 7 },
   { label: '30d', value: 30 },
   { label: '90d', value: 90 },
   { label: 'All', value: 0 },
 ];
 
-const RANGE_LABELS = { 7: 'Last 7 days', 30: 'Last 30 days', 90: 'Last 90 days', 0: 'All time' };
+const RANGE_LABELS = { 7: 'This week', 30: 'Last 30 days', 90: 'Last 90 days', 0: 'All time' };
 
 let currentAgents = [];
 let currentRange = 7;
