@@ -340,17 +340,18 @@ func TestReplyMode_PlanStateNoPrematureReplySent(t *testing.T) {
 		t.Fatalf("expected modeReply, got %d", m.mode)
 	}
 
-	// Process the sendRawKey("3") result — this simulates the raw key completing
+	// Process the sendRawKey("Escape") result — this triggers Deny in the
+	// permission prompt so the user can type feedback text.
 	result, _ = m.Update(rawKeySentMsg{err: nil})
 	m = result.(model)
 
 	// The status should NOT say "Reply sent" — the user hasn't typed yet
 	if m.statusMsg == "Reply sent" {
-		t.Error("status should not be 'Reply sent' after raw key send; user hasn't typed yet")
+		t.Error("status should not be 'Reply sent' after Escape; user hasn't typed feedback yet")
 	}
 }
 
-func TestReplyMode_RawKeySendFailureShowsError(t *testing.T) {
+func TestReplyMode_PlanStateSendsEscape(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
 	m.width = 120
 	m.height = 40
@@ -359,22 +360,15 @@ func TestReplyMode_RawKeySendFailureShowsError(t *testing.T) {
 		{Target: "main:2.0", Window: 2, Pane: 0, State: "plan", Cwd: "/tmp"},
 	}
 	m.buildTree()
+	m.selected = 1 // index 0 is group header
 	m.tmuxAvailable = true
 
-	// Enter reply mode on plan-state agent
+	// Enter reply mode on plan-state agent — should send Escape to trigger Deny
 	result, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = result.(model)
 
-	// Simulate raw key send failure
-	result, _ = m.Update(rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", "main:2.0")})
-	m = result.(model)
-
-	if !strings.Contains(m.statusMsg, "failed") {
-		t.Errorf("expected error status for raw key failure, got %q", m.statusMsg)
-	}
-	// Should exit reply mode on failure since the pane isn't available
-	if m.mode != modeNormal {
-		t.Errorf("expected modeNormal after raw key failure, got %d", m.mode)
+	if m.mode != modeReply {
+		t.Fatalf("expected modeReply, got %d", m.mode)
 	}
 }
 
