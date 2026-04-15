@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.12.0](https://github.com/bjornjee/agent-dashboard/compare/v0.11.1...v0.12.0) (2026-04-14)
+
+
+### Features
+
+* mobile PWA reply input, collapsible top bar, and PR URL fix ([#207](https://github.com/bjornjee/agent-dashboard/issues/207)) ([3cca699](https://github.com/bjornjee/agent-dashboard/commit/3cca699d1c81b1484b37274a55a684fdf31b71b9))
+* reuse tmux panes for same-repo agents from web ([#212](https://github.com/bjornjee/agent-dashboard/issues/212)) ([7d6cbf8](https://github.com/bjornjee/agent-dashboard/commit/7d6cbf8ff10e62da90650ba6f9810458eb5d1bba))
+* web notification nudge and browser notifications ([#210](https://github.com/bjornjee/agent-dashboard/issues/210)) ([135c34c](https://github.com/bjornjee/agent-dashboard/commit/135c34c2a44f07ba07950434ee1bd572b6827f67))
+* web SSE detail refresh and post-merge cleanup ([#211](https://github.com/bjornjee/agent-dashboard/issues/211)) ([0ff3168](https://github.com/bjornjee/agent-dashboard/commit/0ff3168081b02709b2de79938e20ef82d85c6a1f))
+
+
+### Bug Fixes
+
+* clamp usage percent to 100 in mapWindow ([#214](https://github.com/bjornjee/agent-dashboard/issues/214)) ([9220039](https://github.com/bjornjee/agent-dashboard/commit/92200397baffbfe714a979d8d5524f0e0761b2cb))
+* PWA overflow, state mismatch, and chat UX ([#209](https://github.com/bjornjee/agent-dashboard/issues/209)) ([ed93967](https://github.com/bjornjee/agent-dashboard/commit/ed9396744a5f09ff85a6b7c8b994092a0fac53a2))
+* remove incorrect *100 multiplier on usage utilization ([#215](https://github.com/bjornjee/agent-dashboard/issues/215)) ([75358d1](https://github.com/bjornjee/agent-dashboard/commit/75358d105b8b1896164ccf7923b60aaec2ee5489))
+* resolve empty history and files changed panels ([#217](https://github.com/bjornjee/agent-dashboard/issues/217)) ([45076ee](https://github.com/bjornjee/agent-dashboard/commit/45076eeed7ccded25b99de03f904f9525bdc362e))
+* usage progress bar and add token table to web ([#213](https://github.com/bjornjee/agent-dashboard/issues/213)) ([a068ba8](https://github.com/bjornjee/agent-dashboard/commit/a068ba8dbcfa25a904fb16a2dcca7ac1838de742))
+* use correct CSS variable names for rate limit bar fill colors ([#216](https://github.com/bjornjee/agent-dashboard/issues/216)) ([74b672a](https://github.com/bjornjee/agent-dashboard/commit/74b672ad5caee94861a166817c146eb35672723a))
+
 ## [0.11.1](https://github.com/bjornjee/agent-dashboard/compare/v0.11.0...v0.11.1) (2026-04-11)
 
 
