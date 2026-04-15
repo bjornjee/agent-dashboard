@@ -341,16 +341,17 @@ func (s *Server) handleDailyUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	daysParam := r.URL.Query().Get("days")
-	numDays := 7
+	var since time.Time
 	switch daysParam {
 	case "30":
-		numDays = 30
+		since = time.Now().AddDate(0, 0, -30)
 	case "90":
-		numDays = 90
+		since = time.Now().AddDate(0, 0, -90)
 	case "0":
-		numDays = 365 * 10 // all time
+		since = time.Now().AddDate(-10, 0, 0) // all time
+	default:
+		since = startOfWeek(time.Now())
 	}
-	since := time.Now().AddDate(0, 0, -numDays)
 	days := s.db.UsageByDay(since)
 	today := time.Now().Format("2006-01-02")
 
@@ -500,4 +501,14 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// startOfWeek returns Monday 00:00 of the week containing t.
+func startOfWeek(t time.Time) time.Time {
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Sunday → 7
+	}
+	mon := t.AddDate(0, 0, -(weekday - 1))
+	return time.Date(mon.Year(), mon.Month(), mon.Day(), 0, 0, 0, 0, t.Location())
 }

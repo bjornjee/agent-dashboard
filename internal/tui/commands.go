@@ -313,7 +313,7 @@ func persistUsage(database *db.DB, agents []domain.Agent, perAgent map[string]do
 func loadDBDailyUsage(database *db.DB) tea.Cmd {
 	return func() tea.Msg {
 		today := time.Now().Format("2006-01-02")
-		since := time.Now().AddDate(0, 0, -6) // 7 days including today
+		since := startOfWeek(time.Now())
 		return dbDailyUsageMsg{
 			total:     database.TotalCostForProvider("claude"),
 			todayCost: database.CostForDateAndProvider(today, "claude"),
@@ -368,7 +368,7 @@ func loadRateLimit() tea.Cmd {
 
 func loadCodexUsage(sessionsDir string) tea.Cmd {
 	return func() tea.Msg {
-		since := time.Now().AddDate(0, 0, -6) // 7 days including today
+		since := startOfWeek(time.Now())
 		days := usage.ReadCodexDailyUsage(sessionsDir, since)
 		return codexUsageMsg{days: days}
 	}
@@ -396,7 +396,7 @@ func persistCodexUsage(database *db.DB, days []usage.CodexDayUsage) tea.Cmd {
 func loadCodexDBUsage(database *db.DB) tea.Cmd {
 	return func() tea.Msg {
 		today := time.Now().Format("2006-01-02")
-		since := time.Now().AddDate(0, 0, -6)
+		since := startOfWeek(time.Now())
 		return codexDBUsageMsg{
 			days:      database.UsageByDayForProvider(since, "codex"),
 			totalCost: database.TotalCostForProvider("codex"),
@@ -950,4 +950,14 @@ func WatchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotif
 	}()
 
 	return watcher, nil
+}
+
+// startOfWeek returns Monday 00:00 of the week containing t.
+func startOfWeek(t time.Time) time.Time {
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Sunday → 7
+	}
+	mon := t.AddDate(0, 0, -(weekday - 1))
+	return time.Date(mon.Year(), mon.Month(), mon.Day(), 0, 0, 0, 0, t.Location())
 }

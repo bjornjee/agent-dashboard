@@ -734,7 +734,7 @@ func (m model) usageContent() string {
 		}
 
 		// Daily breakdown table — combined Claude + Codex.
-		lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (7d)"))
+		lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (this week)"))
 		lines = append(lines, "")
 		lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 			helpStyle.Render("DATE      "),

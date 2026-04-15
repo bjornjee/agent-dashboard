@@ -55,3 +55,15 @@ Present a structured report to the user:
 4. **Recommended next steps** — concrete actions the user could take (e.g., "run `/fix` to address the null check at `src/auth.py:42`", "run `/refactor` to extract the retry logic into a shared utility").
 
 **Gate:** The user has received a clear, actionable report. No files were modified.
+
+---
+
+### Transition to implementation
+
+This skill is read-only. If the user asks to implement changes based on your findings, **do not start editing files**. Instead, hand off to the appropriate skill:
+
+- New feature or behavioral change → suggest `/feature <description>`
+- Bug fix → suggest `/fix <description>`
+- Restructuring existing code → suggest `/refactor <description>`
+
+These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/investigate` skips those gates.
