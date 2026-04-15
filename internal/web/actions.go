@@ -18,8 +18,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
-// handleApprove sends approval to an agent's tmux pane.
-// For permission state: sends "y". For plan state: sends "1".
+// handleApprove sends approval ("y") to an agent's tmux pane.
 func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
@@ -37,9 +36,6 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := "y"
-	if agent.EffectiveState() == "plan" {
-		key = "1"
-	}
 	if err := tmux.TmuxSendKeys(target, key); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

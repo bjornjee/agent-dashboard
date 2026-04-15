@@ -968,9 +968,11 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil {
 			var cmds []tea.Cmd
-			// Plan state: send "3" (feedback option) before entering reply mode
+			// Plan state: send Escape to select "Deny" in the permission prompt,
+			// which opens the feedback text input. The user's reply text is then
+			// sent as the denial reason.
 			if agent.State == "plan" {
-				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "3", "Plan feedback selected"))
+				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "Escape", "Plan feedback selected"))
 			}
 			m.mode = modeReply
 			focusCmd := m.textInput.Focus()
@@ -1118,9 +1120,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if isBlocked(es) || isWaiting(es) {
 				sendKey := key
 				label := fmt.Sprintf("Sent '%s'", key)
-				// Plan state: y→"1" (approve+bypass), n stays as "n"
 				if es == "plan" && key == "y" {
-					sendKey = "1"
 					label = "Plan approved"
 				}
 				m.mode = modeConfirmSend
