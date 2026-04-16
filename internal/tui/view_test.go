@@ -375,12 +375,22 @@ func TestHelpBarShowsWeeklyCost(t *testing.T) {
 	m.width = 120
 	m.tmuxAvailable = true
 
+	// Use dynamic dates so the test stays valid regardless of when it runs.
+	// Monday-of-this-week and a day before Monday (should be excluded from
+	// the Monday-anchored aggregate).
+	weekStart := startOfWeek(time.Now())
+	beforeWeek := weekStart.AddDate(0, 0, -1).Format("2006-01-02")
+	inWeek1 := weekStart.Format("2006-01-02")
+	inWeek2 := weekStart.AddDate(0, 0, 1).Format("2006-01-02")
+
 	m.dbDailyUsage = []db.DayUsage{
-		{Date: "2026-04-13", CostUSD: 1.50},
-		{Date: "2026-04-14", CostUSD: 2.25},
+		{Date: beforeWeek, CostUSD: 99.00}, // must be excluded
+		{Date: inWeek1, CostUSD: 1.50},
+		{Date: inWeek2, CostUSD: 2.25},
 	}
 	m.codexDailyUsage = []db.DayUsage{
-		{Date: "2026-04-13", CostUSD: 0.75},
+		{Date: beforeWeek, CostUSD: 42.00}, // must be excluded
+		{Date: inWeek1, CostUSD: 0.75},
 	}
 
 	bar := m.renderHelpBar()
@@ -389,6 +399,9 @@ func TestHelpBarShowsWeeklyCost(t *testing.T) {
 	}
 	if !strings.Contains(bar, "$4.50") {
 		t.Errorf("help bar should contain '$4.50' weekly cost, got %q", bar)
+	}
+	if strings.Contains(bar, "$141.00") || strings.Contains(bar, "$146.50") {
+		t.Errorf("help bar should not include pre-week rows in weekly cost, got %q", bar)
 	}
 	if strings.Contains(bar, "All-time") {
 		t.Error("help bar should not contain 'All-time' anymore")

@@ -659,6 +659,7 @@ func (m model) usageContent() string {
 	}
 
 	todayStr := time.Now().Format("2006-01-02")
+	weekStartStr := startOfWeek(time.Now()).Format("2006-01-02")
 	hasCodex := m.codexTotalCost > 0 || len(m.codexDailyUsage) > 0
 
 	if m.db != nil {
@@ -673,7 +674,11 @@ func (m model) usageContent() string {
 		claudeToday := claudeDayMap[todayStr]
 		var cWeekIn, cWeekOut, cWeekCache int
 		var cWeekCost float64
+		// Week aggregate is Monday-anchored even though the table renders rolling 7d.
 		for _, d := range m.dbDailyUsage {
+			if d.Date < weekStartStr {
+				continue
+			}
 			cWeekIn += d.InputTokens
 			cWeekOut += d.OutputTokens
 			cWeekCache += d.CacheReadTokens + d.CacheWriteTokens
@@ -702,7 +707,11 @@ func (m model) usageContent() string {
 			codexToday := codexDayMap[todayStr]
 			var xWeekIn, xWeekOut, xWeekCache int
 			var xWeekCost float64
+			// Week aggregate is Monday-anchored even though the table renders rolling 7d.
 			for _, d := range m.codexDailyUsage {
+				if d.Date < weekStartStr {
+					continue
+				}
 				xWeekIn += d.InputTokens
 				xWeekOut += d.OutputTokens
 				xWeekCache += d.CacheReadTokens
@@ -734,7 +743,7 @@ func (m model) usageContent() string {
 		}
 
 		// Daily breakdown table — combined Claude + Codex.
-		lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (this week)"))
+		lines = append(lines, boldStyle.Render("  DAILY BREAKDOWN (7d)"))
 		lines = append(lines, "")
 		lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s  %s",
 			helpStyle.Render("DATE      "),
@@ -1330,13 +1339,20 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, "│")
 	}
 
-	// Weekly total (Claude + Codex) — dbDailyUsage/codexDailyUsage already
-	// contain only the current Monday-anchored week.
+	// Weekly total (Claude + Codex) — Monday-anchored. The daily slices may
+	// contain a rolling 7 days (for the breakdown table), so filter here.
+	weekStartStr := startOfWeek(time.Now()).Format("2006-01-02")
 	var weekCost float64
 	for _, d := range m.dbDailyUsage {
+		if d.Date < weekStartStr {
+			continue
+		}
 		weekCost += d.CostUSD
 	}
 	for _, d := range m.codexDailyUsage {
+		if d.Date < weekStartStr {
+			continue
+		}
 		weekCost += d.CostUSD
 	}
 	if weekCost > 0 {
