@@ -313,7 +313,7 @@ func persistUsage(database *db.DB, agents []domain.Agent, perAgent map[string]do
 func loadDBDailyUsage(database *db.DB) tea.Cmd {
 	return func() tea.Msg {
 		today := time.Now().Format("2006-01-02")
-		since := startOfWeek(time.Now())
+		since := time.Now().AddDate(0, 0, -6) // rolling 7 days including today
 		return dbDailyUsageMsg{
 			total:     database.TotalCostForProvider("claude"),
 			todayCost: database.CostForDateAndProvider(today, "claude"),
@@ -368,7 +368,7 @@ func loadRateLimit() tea.Cmd {
 
 func loadCodexUsage(sessionsDir string) tea.Cmd {
 	return func() tea.Msg {
-		since := startOfWeek(time.Now())
+		since := time.Now().AddDate(0, 0, -6) // rolling 7 days including today
 		days := usage.ReadCodexDailyUsage(sessionsDir, since)
 		return codexUsageMsg{days: days}
 	}
@@ -396,7 +396,7 @@ func persistCodexUsage(database *db.DB, days []usage.CodexDayUsage) tea.Cmd {
 func loadCodexDBUsage(database *db.DB) tea.Cmd {
 	return func() tea.Msg {
 		today := time.Now().Format("2006-01-02")
-		since := startOfWeek(time.Now())
+		since := time.Now().AddDate(0, 0, -6) // rolling 7 days including today
 		return codexDBUsageMsg{
 			days:      database.UsageByDayForProvider(since, "codex"),
 			totalCost: database.TotalCostForProvider("codex"),
