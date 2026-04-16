@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
@@ -364,6 +365,33 @@ func TestHelpBarContainsSpawningSpinner(t *testing.T) {
 	bar := m.renderHelpBar()
 	if !strings.Contains(bar, "Spawning agent") {
 		t.Errorf("help bar should contain 'Spawning agent', got %q", bar)
+	}
+}
+
+func TestHelpBarShowsWeeklyCost(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.tmuxAvailable = true
+
+	m.dbDailyUsage = []db.DayUsage{
+		{Date: "2026-04-13", CostUSD: 1.50},
+		{Date: "2026-04-14", CostUSD: 2.25},
+	}
+	m.codexDailyUsage = []db.DayUsage{
+		{Date: "2026-04-13", CostUSD: 0.75},
+	}
+
+	bar := m.renderHelpBar()
+	if !strings.Contains(bar, "Week:") {
+		t.Errorf("help bar should contain 'Week:', got %q", bar)
+	}
+	if !strings.Contains(bar, "$4.50") {
+		t.Errorf("help bar should contain '$4.50' weekly cost, got %q", bar)
+	}
+	if strings.Contains(bar, "All-time") {
+		t.Error("help bar should not contain 'All-time' anymore")
 	}
 }
 

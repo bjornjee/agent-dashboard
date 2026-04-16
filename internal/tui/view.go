@@ -1330,15 +1330,19 @@ func (m model) renderHelpBar() string {
 		parts = append(parts, "│")
 	}
 
-	// All-time total (Claude + Codex)
-	totalCost := m.dbTotalCost + m.codexTotalCost
-	if totalCost == 0 {
-		totalCost = m.totalUsage.CostUSD
+	// Weekly total (Claude + Codex) — dbDailyUsage/codexDailyUsage already
+	// contain only the current Monday-anchored week.
+	var weekCost float64
+	for _, d := range m.dbDailyUsage {
+		weekCost += d.CostUSD
 	}
-	if totalCost > 0 {
+	for _, d := range m.codexDailyUsage {
+		weekCost += d.CostUSD
+	}
+	if weekCost > 0 {
 		costStr := lipgloss.NewStyle().Foreground(themePeach).Bold(true).
-			Render(usage.FormatCost(totalCost))
-		parts = append(parts, fmt.Sprintf("All-time: %s", costStr))
+			Render(usage.FormatCost(weekCost))
+		parts = append(parts, fmt.Sprintf("Week: %s", costStr))
 		parts = append(parts, "│")
 	}
 
