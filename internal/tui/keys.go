@@ -1121,6 +1121,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				sendKey := key
 				label := fmt.Sprintf("Sent '%s'", key)
 				if es == "plan" && key == "y" {
+					sendKey = "Enter" // ExitPlanMode prompt: Enter selects default "Allow"
 					label = "Plan approved"
 				}
 				m.mode = modeConfirmSend

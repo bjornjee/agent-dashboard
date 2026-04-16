@@ -1034,7 +1034,7 @@ func TestYKey_BlockedAgent_EntersConfirmSend(t *testing.T) {
 	}
 }
 
-func TestYKey_PlanAgent_SendsY(t *testing.T) {
+func TestYKey_PlanAgent_SendsEnter(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.agents = []domain.Agent{
@@ -1045,8 +1045,10 @@ func TestYKey_PlanAgent_SendsY(t *testing.T) {
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	updated := result.(model)
-	if updated.confirmSendKey != "y" {
-		t.Errorf("expected plan 'y' to send 'y', got %q", updated.confirmSendKey)
+	// Plan approval sends Enter (to select default "Allow") rather than bare "y"
+	// which Claude Code 6.1's ExitPlanMode prompt does not accept.
+	if updated.confirmSendKey != "Enter" {
+		t.Errorf("expected plan 'y' to send 'Enter', got %q", updated.confirmSendKey)
 	}
 }
 
@@ -1568,8 +1570,8 @@ func TestYKey_PlanState_SetsConfirmSendLabel(t *testing.T) {
 	if updated.confirmSendLabel != "Plan approved" {
 		t.Errorf("expected label 'Plan approved', got %q", updated.confirmSendLabel)
 	}
-	if updated.confirmSendKey != "y" {
-		t.Errorf("expected sendKey 'y' for plan approve, got %q", updated.confirmSendKey)
+	if updated.confirmSendKey != "Enter" {
+		t.Errorf("expected sendKey 'Enter' for plan approve, got %q", updated.confirmSendKey)
 	}
 }
 
