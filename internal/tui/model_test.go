@@ -2348,3 +2348,150 @@ func TestGroupHeaderSelection_SurvivesTreeRebuild(t *testing.T) {
 		t.Errorf("after tree rebuild, expected group header 3, got %d (selected=%d)", m.selectedGroupHeader(), m.selected)
 	}
 }
+
+// -- Trust prompt detection --
+
+func TestSpawningCaptureMsg_DetectsTrustPrompt(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.agents = []domain.Agent{{Target: "main:2.0", State: "running"}}
+	m.buildTree()
+
+	updated, _ := m.Update(spawningCaptureMsg{
+		lines:  []string{"", "Yes, I trust this folder", "Yes / No"},
+		target: "main:2.0",
+	})
+	um := updated.(model)
+
+	if !um.trustDetected {
+		t.Error("expected trustDetected to be true")
+	}
+	if um.statusMsg == "" {
+		t.Error("expected status message to be set")
+	}
+	if um.statusMsgTick != -1 {
+		t.Error("expected persistent status (statusMsgTick = -1)")
+	}
+}
+
+func TestSpawningCaptureMsg_NoTrustPrompt(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+
+	updated, _ := m.Update(spawningCaptureMsg{
+		lines:  []string{"Loading...", "Starting Claude Code"},
+		target: "main:2.0",
+	})
+	um := updated.(model)
+
+	if um.trustDetected {
+		t.Error("expected trustDetected to remain false")
+	}
+	if um.statusMsg != "" {
+		t.Errorf("expected no status message, got %q", um.statusMsg)
+	}
+}
+
+func TestSpawningCaptureMsg_IdempotentOnSecondDetection(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.trustDetected = true // already detected
+
+	updated, _ := m.Update(spawningCaptureMsg{
+		lines:  []string{"Yes, I trust this folder"},
+		target: "main:2.0",
+	})
+	um := updated.(model)
+
+	// Should not change status again
+	if um.statusMsg != "" {
+		t.Errorf("expected no status change on second detection, got %q", um.statusMsg)
+	}
+}
+
+func TestSpawningCaptureMsg_StaleTargetIgnored(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = ""
+	m.spawningTarget = "" // already cleared
+
+	updated, _ := m.Update(spawningCaptureMsg{
+		lines:  []string{"Yes, I trust this folder"},
+		target: "main:2.0", // stale message from previous spawn
+	})
+	um := updated.(model)
+
+	if um.trustDetected {
+		t.Error("expected trustDetected to remain false for stale target")
+	}
+	if um.statusMsg != "" {
+		t.Errorf("expected no status for stale target, got %q", um.statusMsg)
+	}
+}
+
+func TestCreateSessionMsg_SetsSpawningTarget(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/tmp/new-repo"
+	m.statusMsg = "spawning"
+	m.statusMsgTick = -1
+
+	updated, _ := m.Update(createSessionMsg{target: "main:2.0"})
+	um := updated.(model)
+
+	if um.spawningTarget != "main:2.0" {
+		t.Errorf("expected spawningTarget to be set, got %q", um.spawningTarget)
+	}
+}
+
+func TestSpawningTarget_ClearedOnStateUpdateMatch(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.trustDetected = true
+	m.tmuxAvailable = true
+	m.startupDone = true
+
+	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"sess1": {Target: "main:2.0", State: "running", Cwd: "/tmp/new-repo"},
+		},
+	}})
+	um := updated.(model)
+
+	if um.spawningTarget != "" {
+		t.Errorf("expected spawningTarget to be cleared, got %q", um.spawningTarget)
+	}
+	if um.trustDetected {
+		t.Error("expected trustDetected to be cleared")
+	}
+}
+
+func TestSpawningTarget_ClearedOnSafetyExpiry(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.trustDetected = true
+	m.statusMsg = "Trust prompt — press Enter to accept"
+	m.statusMsgTick = -1
+	m.spawningTick = 0
+	m.tickCount = 29 // will become 30 after tickCount++
+
+	updated, _ := m.Update(tickMsg{})
+	um := updated.(model)
+
+	if um.spawningTarget != "" {
+		t.Errorf("expected spawningTarget to be cleared on expiry, got %q", um.spawningTarget)
+	}
+	if um.trustDetected {
+		t.Error("expected trustDetected to be cleared on expiry")
+	}
+	if um.statusMsg != "" {
+		t.Errorf("expected trust status to be cleared on expiry, got %q", um.statusMsg)
+	}
+}
