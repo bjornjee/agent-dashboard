@@ -1009,7 +1009,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
 
 	case spawningCaptureMsg:
-		if m.trustDetected || !containsTrustPrompt(msg.lines) {
+		if msg.target != m.spawningTarget || m.trustDetected || !containsTrustPrompt(msg.lines) {
 			return m, nil
 		}
 		m.trustDetected = true

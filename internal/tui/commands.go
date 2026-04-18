@@ -122,6 +122,7 @@ func (m model) captureSpawning() tea.Cmd {
 func notifyTrustPrompt() tea.Cmd {
 	return func() tea.Msg {
 		script := `display notification "New folder needs trust confirmation" with title "Claude Code — Trust Prompt" sound name "Blow"`
+		// osascript is macOS-only; failure is non-fatal on other platforms.
 		_ = gitRunner.SilentRun(context.Background(), "osascript", "-e", script)
 		return nil
 	}

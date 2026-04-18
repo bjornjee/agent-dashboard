@@ -2415,6 +2415,26 @@ func TestSpawningCaptureMsg_IdempotentOnSecondDetection(t *testing.T) {
 	}
 }
 
+func TestSpawningCaptureMsg_StaleTargetIgnored(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = ""
+	m.spawningTarget = "" // already cleared
+
+	updated, _ := m.Update(spawningCaptureMsg{
+		lines:  []string{"Do you trust the files in this folder?"},
+		target: "main:2.0", // stale message from previous spawn
+	})
+	um := updated.(model)
+
+	if um.trustDetected {
+		t.Error("expected trustDetected to remain false for stale target")
+	}
+	if um.statusMsg != "" {
+		t.Errorf("expected no status for stale target, got %q", um.statusMsg)
+	}
+}
+
 func TestCreateSessionMsg_SetsSpawningTarget(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.spawningFolder = "/tmp/new-repo"
