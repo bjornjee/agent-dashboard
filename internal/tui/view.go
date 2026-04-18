@@ -1316,6 +1316,10 @@ func (m model) statusLine() string {
 			" " +
 			lipgloss.NewStyle().Foreground(themeSapphire).Render("Spawning agent...")
 	}
+	if m.trustDetected {
+		return " " + lipgloss.NewStyle().Foreground(permissionColor).Bold(true).
+			Render("⚿ Agent needs folder trust — press Enter to jump and accept")
+	}
 	if m.statusMsg != "" {
 		clr := themeGreen
 		if m.statusIsError {
