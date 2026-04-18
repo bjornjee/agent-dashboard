@@ -221,6 +221,8 @@ type model struct {
 	// until the agent's state file appears on disk or 30s safety expiry.
 	spawningFolder string // folder path; cleared when matching Cwd appears in stateUpdatedMsg
 	spawningTick   int    // tick when spawning started; used for safety expiry
+	spawningTarget string // tmux target for spawning pane
+	trustDetected  bool   // true once trust prompt detected in spawning pane
 
 	// Banner
 	quote       string           // random quote text selected at startup
@@ -640,6 +642,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, a := range m.agents {
 				if a.Cwd == m.spawningFolder || a.WorktreeCwd == m.spawningFolder {
 					m.spawningFolder = ""
+					m.spawningTarget = ""
+					m.trustDetected = false
 					if m.statusMsg == "spawning" {
 						m.clearStatus()
 					}
@@ -806,6 +810,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Safety expiry for spawning status (30s)
 		if m.spawningFolder != "" && m.tickCount-m.spawningTick >= 30 {
 			m.spawningFolder = ""
+			m.spawningTarget = ""
+			m.trustDetected = false
 			if m.statusMsg == "spawning" {
 				m.clearStatus()
 			}
@@ -820,7 +826,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.clearStatus()
 			}
 		}
-		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation()}
+		cmds := []tea.Cmd{tickEvery(), m.captureSelected(), m.loadConversation(), m.captureSpawning()}
 		if m.selectedSubagent() != nil {
 			cmds = append(cmds, m.loadSubagentActivity())
 		}
@@ -952,6 +958,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Keep statusMsgTick = -1 so "Spawning agent..." spinner persists
 		// until stateUpdatedMsg matches the folder (or 30s safety expiry).
+		m.spawningTarget = msg.target
+		m.trustDetected = false
 
 		// Insert a placeholder agent immediately so the panel doesn't jump
 		// when the state file appears on the next tick. The placeholder is
@@ -1000,6 +1008,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateRightContent()
 		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
 
+	case spawningCaptureMsg:
+		if m.trustDetected || !containsTrustPrompt(msg.lines) {
+			return m, nil
+		}
+		m.trustDetected = true
+		m.statusMsg = "Trust prompt — press Enter to accept"
+		m.statusIsError = false
+		m.statusMsgTick = -1 // persistent
+		return m, notifyTrustPrompt()
+
 	case closeResultMsg:
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Close failed: %v", msg.err), true)
@@ -1028,7 +1046,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Jump failed: %v", msg.err), true)
 		} else {
-			m.setStatus("Jumped — switch back to this window for dashboard", false)
+			if m.trustDetected {
+				m.trustDetected = false
+				m.spawningTarget = ""
+				m.clearStatus()
+			} else {
+				m.setStatus("Jumped — switch back to this window for dashboard", false)
+			}
 		}
 		return m, nil
 

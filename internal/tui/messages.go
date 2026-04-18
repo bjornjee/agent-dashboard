@@ -79,6 +79,10 @@ type createSessionMsg struct {
 	target string
 	err    error
 }
+type spawningCaptureMsg struct {
+	lines  []string
+	target string
+}
 type rateLimitMsg struct {
 	rateLimit *domain.RateLimit
 }

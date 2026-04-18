@@ -94,6 +94,45 @@ func (m model) captureSelected() tea.Cmd {
 	}
 }
 
+// containsTrustPrompt returns true if the pane buffer contains
+// Claude Code's folder trust dialog.
+func containsTrustPrompt(lines []string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, "Do you trust the files in this folder") {
+			return true
+		}
+	}
+	return false
+}
+
+func (m model) captureSpawning() tea.Cmd {
+	if !m.tmuxAvailable || m.spawningTarget == "" || m.trustDetected {
+		return nil
+	}
+	target := m.spawningTarget
+	return func() tea.Msg {
+		lines, err := tmux.TmuxCapture(target, 30)
+		if err != nil {
+			return spawningCaptureMsg{lines: nil, target: target}
+		}
+		return spawningCaptureMsg{lines: trimTrailingBlankLines(lines), target: target}
+	}
+}
+
+func notifyTrustPrompt() tea.Cmd {
+	return func() tea.Msg {
+		script := `display notification "New folder needs trust confirmation" with title "Claude Code — Trust Prompt" sound name "Blow"`
+		_ = gitRunner.SilentRun(context.Background(), "osascript", "-e", script)
+		return nil
+	}
+}
+
+func jumpToTarget(target string) tea.Cmd {
+	return func() tea.Msg {
+		return jumpResultMsg{err: tmux.TmuxJump(target)}
+	}
+}
+
 func (m model) loadConversation() tea.Cmd {
 	agent := m.selectedAgent()
 	if agent == nil || m.selectedSubagent() != nil {

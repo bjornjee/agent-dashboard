@@ -953,6 +953,9 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.setStatus("Cannot jump: tmux not detected", true)
 			return m, nil
 		}
+		if m.trustDetected && m.spawningTarget != "" {
+			return m, jumpToTarget(m.spawningTarget)
+		}
 		if agent := m.selectedAgent(); agent != nil {
 			m.mode = modeConfirmJump
 			m.confirmEnteredAt = time.Now()
