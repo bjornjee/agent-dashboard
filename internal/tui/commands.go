@@ -119,7 +119,6 @@ func (m model) captureSpawning() tea.Cmd {
 	}
 }
 
-
 func jumpToTarget(target string) tea.Cmd {
 	return func() tea.Msg {
 		return jumpResultMsg{err: tmux.TmuxJump(target)}
