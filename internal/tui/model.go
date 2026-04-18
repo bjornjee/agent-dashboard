@@ -1017,7 +1017,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = "Trust prompt — press Enter to accept"
 		m.statusIsError = false
 		m.statusMsgTick = -1 // persistent
-		return m, notifyTrustPrompt()
+		return m, nil
 
 	case closeResultMsg:
 		if msg.err != nil {

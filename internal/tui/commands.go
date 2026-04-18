@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -120,18 +119,6 @@ func (m model) captureSpawning() tea.Cmd {
 	}
 }
 
-func notifyTrustPrompt() tea.Cmd {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
-	return func() tea.Msg {
-		script := `display notification "New folder needs trust confirmation" with title "Claude Code — Trust Prompt" sound name "Blow"`
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = gitRunner.SilentRun(ctx, "osascript", "-e", script)
-		return nil
-	}
-}
 
 func jumpToTarget(target string) tea.Cmd {
 	return func() tea.Msg {
