@@ -2477,7 +2477,7 @@ func TestSpawningTarget_ClearedOnSafetyExpiry(t *testing.T) {
 	m.spawningFolder = "/tmp/new-repo"
 	m.spawningTarget = "main:2.0"
 	m.trustDetected = true
-	m.statusMsg = "spawning"
+	m.statusMsg = "Trust prompt — press Enter to accept"
 	m.statusMsgTick = -1
 	m.spawningTick = 0
 	m.tickCount = 29 // will become 30 after tickCount++
@@ -2490,5 +2490,8 @@ func TestSpawningTarget_ClearedOnSafetyExpiry(t *testing.T) {
 	}
 	if um.trustDetected {
 		t.Error("expected trustDetected to be cleared on expiry")
+	}
+	if um.statusMsg != "" {
+		t.Errorf("expected trust status to be cleared on expiry, got %q", um.statusMsg)
 	}
 }

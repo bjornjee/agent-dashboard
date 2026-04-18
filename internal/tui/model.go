@@ -809,10 +809,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tickCount++
 		// Safety expiry for spawning status (30s)
 		if m.spawningFolder != "" && m.tickCount-m.spawningTick >= 30 {
+			wasTrust := m.trustDetected
 			m.spawningFolder = ""
 			m.spawningTarget = ""
 			m.trustDetected = false
-			if m.statusMsg == "spawning" {
+			if m.statusMsg == "spawning" || wasTrust {
 				m.clearStatus()
 			}
 		}
