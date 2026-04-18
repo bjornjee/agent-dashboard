@@ -229,3 +229,39 @@ func TestValidateFolder_TildeExpansion(t *testing.T) {
 		t.Errorf("expected %q, got %q", home, absPath)
 	}
 }
+
+func TestContainsTrustPrompt_Positive(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+	}{
+		{"exact match", []string{"Do you trust the files in this folder?"}},
+		{"surrounded by other text", []string{"", "  Do you trust the files in this folder?  ", ""}},
+		{"mixed with other lines", []string{"Claude Code", "Do you trust the files in this folder?", "Yes / No"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !containsTrustPrompt(tt.lines) {
+				t.Errorf("expected trust prompt to be detected in %v", tt.lines)
+			}
+		})
+	}
+}
+
+func TestContainsTrustPrompt_Negative(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+	}{
+		{"empty", nil},
+		{"no match", []string{"Hello world", "Running..."}},
+		{"partial match", []string{"trust the files"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if containsTrustPrompt(tt.lines) {
+				t.Errorf("did not expect trust prompt to be detected in %v", tt.lines)
+			}
+		})
+	}
+}

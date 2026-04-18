@@ -2087,3 +2087,43 @@ func TestGuardedKey_NotSwallowedAfterMouseScroll(t *testing.T) {
 		}
 	}
 }
+
+func TestEnterKey_TrustDetected_JumpsDirectly(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.trustDetected = true
+	m.spawningTarget = "main:2.0"
+	m.mode = modeNormal
+	m.startupDone = true
+
+	_, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	// Should return a jump command (not nil, and not enter modeConfirmJump)
+	if cmd == nil {
+		t.Fatal("expected a jump command, got nil")
+	}
+	if m.mode == modeConfirmJump {
+		t.Error("should skip confirm dialog and jump directly when trust is detected")
+	}
+}
+
+func TestEnterKey_NoTrust_NormalBehavior(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.trustDetected = false
+	m.spawningTarget = ""
+	m.mode = modeNormal
+	m.startupDone = true
+	m.agents = []domain.Agent{{Target: "main:1.0", State: "running", TmuxPaneID: "%5"}}
+	m.buildTree()
+	// Select the agent (index 1 because index 0 is group header)
+	m.selected = 1
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	um := result.(model)
+
+	// Should enter confirm mode as usual
+	if um.mode != modeConfirmJump {
+		t.Errorf("expected modeConfirmJump, got %d", um.mode)
+	}
+}
