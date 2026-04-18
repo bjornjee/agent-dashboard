@@ -95,10 +95,11 @@ func (m model) captureSelected() tea.Cmd {
 }
 
 // containsTrustPrompt returns true if the pane buffer contains
-// Claude Code's folder trust dialog.
+// Claude Code's folder trust dialog. Matches the select menu options
+// rendered by the trust dialog component.
 func containsTrustPrompt(lines []string) bool {
 	for _, line := range lines {
-		if strings.Contains(line, "Do you trust the files in this folder") {
+		if strings.Contains(line, "Yes, I trust this folder") {
 			return true
 		}
 	}

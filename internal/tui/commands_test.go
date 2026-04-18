@@ -235,9 +235,9 @@ func TestContainsTrustPrompt_Positive(t *testing.T) {
 		name  string
 		lines []string
 	}{
-		{"exact match", []string{"Do you trust the files in this folder?"}},
-		{"surrounded by other text", []string{"", "  Do you trust the files in this folder?  ", ""}},
-		{"mixed with other lines", []string{"Claude Code", "Do you trust the files in this folder?", "Yes / No"}},
+		{"exact match", []string{"Yes, I trust this folder"}},
+		{"surrounded by other text", []string{"", "  Yes, I trust this folder  ", ""}},
+		{"mixed with other lines", []string{"Claude Code", "Yes, I trust this folder", "Yes / No"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -255,7 +255,7 @@ func TestContainsTrustPrompt_Negative(t *testing.T) {
 	}{
 		{"empty", nil},
 		{"no match", []string{"Hello world", "Running..."}},
-		{"partial match", []string{"trust the files"}},
+		{"partial match", []string{"I trust this"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

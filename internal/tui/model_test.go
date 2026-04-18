@@ -2360,7 +2360,7 @@ func TestSpawningCaptureMsg_DetectsTrustPrompt(t *testing.T) {
 	m.buildTree()
 
 	updated, _ := m.Update(spawningCaptureMsg{
-		lines:  []string{"", "Do you trust the files in this folder?", "Yes / No"},
+		lines:  []string{"", "Yes, I trust this folder", "Yes / No"},
 		target: "main:2.0",
 	})
 	um := updated.(model)
@@ -2404,7 +2404,7 @@ func TestSpawningCaptureMsg_IdempotentOnSecondDetection(t *testing.T) {
 	m.trustDetected = true // already detected
 
 	updated, _ := m.Update(spawningCaptureMsg{
-		lines:  []string{"Do you trust the files in this folder?"},
+		lines:  []string{"Yes, I trust this folder"},
 		target: "main:2.0",
 	})
 	um := updated.(model)
@@ -2422,7 +2422,7 @@ func TestSpawningCaptureMsg_StaleTargetIgnored(t *testing.T) {
 	m.spawningTarget = "" // already cleared
 
 	updated, _ := m.Update(spawningCaptureMsg{
-		lines:  []string{"Do you trust the files in this folder?"},
+		lines:  []string{"Yes, I trust this folder"},
 		target: "main:2.0", // stale message from previous spawn
 	})
 	um := updated.(model)
