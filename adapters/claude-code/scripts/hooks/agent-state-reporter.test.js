@@ -143,8 +143,8 @@ describe('buildReportEntry', () => {
   });
 });
 
-describe('SubagentStop preserves stop-derived states', () => {
-  it('preserves idle_prompt state on SubagentStop', () => {
+describe('SubagentStop state handling', () => {
+  it('preserves idle_prompt when Stop already wrote it', () => {
     const { entry } = buildReportEntry({
       input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
       existing: {
@@ -156,7 +156,7 @@ describe('SubagentStop preserves stop-derived states', () => {
       },
       target: 'main:1.0',
       tmuxPane: '%0',
-      state: 'idle_prompt',  // caller should preserve stop state
+      state: 'idle_prompt',  // report() preserves existing stop state
       filesChanged: [],
       parsed: BASE_PARSED,
     });
@@ -165,7 +165,7 @@ describe('SubagentStop preserves stop-derived states', () => {
     assert.equal(entry.subagent_count, 0, 'subagent_count should still decrement');
   });
 
-  it('preserves done state on SubagentStop', () => {
+  it('preserves done when Stop already wrote it', () => {
     const { entry } = buildReportEntry({
       input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
       existing: {
@@ -177,7 +177,7 @@ describe('SubagentStop preserves stop-derived states', () => {
       },
       target: 'main:1.0',
       tmuxPane: '%0',
-      state: 'done',  // caller should preserve stop state
+      state: 'done',  // report() preserves existing stop state
       filesChanged: [],
       parsed: BASE_PARSED,
     });
@@ -186,7 +186,9 @@ describe('SubagentStop preserves stop-derived states', () => {
     assert.equal(entry.subagent_count, 1);
   });
 
-  it('allows SubagentStop to set running when existing is running', () => {
+  it('carries self-healed idle_prompt when Stop handler failed', () => {
+    // When Stop failed silently, existing.state is still "running".
+    // report() detects idle from pane buffer and passes the detected state.
     const { entry } = buildReportEntry({
       input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
       existing: {
@@ -198,13 +200,78 @@ describe('SubagentStop preserves stop-derived states', () => {
       },
       target: 'main:1.0',
       tmuxPane: '%0',
-      state: 'running',
+      state: 'idle_prompt',  // report() detected idle via capture-pane fallback
       filesChanged: [],
       parsed: BASE_PARSED,
     });
 
-    assert.equal(entry.state, 'running', 'SubagentStop should keep running when already running');
+    assert.equal(entry.state, 'idle_prompt', 'self-healed state should propagate');
     assert.equal(entry.subagent_count, 0);
+  });
+
+  it('keeps running when subagents remain active', () => {
+    const { entry } = buildReportEntry({
+      input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
+      existing: {
+        state: 'running',
+        subagent_count: 3,
+        last_message_preview: null,
+        permission_mode: 'default',
+        files_changed: [],
+      },
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      state: 'running',  // report() preserves running when subagents > 0
+      filesChanged: [],
+      parsed: BASE_PARSED,
+    });
+
+    assert.equal(entry.state, 'running', 'should stay running with active subagents');
+    assert.equal(entry.subagent_count, 2);
+  });
+});
+
+describe('SubagentStop writeState guard prevents TOCTOU race', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+  const { writeState, readAgentState } = require('../../packages/agent-state');
+
+  it('guardStates aborts write when on-disk state is idle_prompt', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
+    const sessionId = 'race-test-session';
+    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+
+    // Simulate: Stop hook already wrote idle_prompt to disk
+    writeState(sessionId, { state: 'idle_prompt', target: 'main:2.1' }, tmpDir);
+
+    // Simulate: SubagentStop tries to overwrite with running + guardStates
+    writeState(sessionId, { state: 'running', target: 'main:2.1' }, tmpDir, { guardStates: STOP_STATES });
+
+    const onDisk = readAgentState(sessionId, tmpDir);
+    assert.equal(onDisk.state, 'idle_prompt', 'guardStates should prevent SubagentStop from overwriting idle_prompt');
+
+    // Cleanup
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it('allows write when on-disk state is running (no guard hit)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
+    const sessionId = 'race-test-session-2';
+    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+
+    // On-disk state is running (Stop hook hasn't fired yet)
+    writeState(sessionId, { state: 'running', target: 'main:2.1', subagent_count: 1 }, tmpDir);
+
+    // SubagentStop writes running with decremented count — should succeed
+    writeState(sessionId, { state: 'running', target: 'main:2.1', subagent_count: 0 }, tmpDir, { guardStates: STOP_STATES });
+
+    const onDisk = readAgentState(sessionId, tmpDir);
+    assert.equal(onDisk.state, 'running');
+    assert.equal(onDisk.subagent_count, 0, 'subagent_count should update when guard does not fire');
+
+    // Cleanup
+    fs.rmSync(tmpDir, { recursive: true });
   });
 });
 
