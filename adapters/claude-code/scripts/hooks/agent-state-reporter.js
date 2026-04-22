@@ -149,9 +149,15 @@ function report(input) {
 
   // Determine agent state based on hook event.
   // PreToolUse/PostToolUse/PermissionRequest are handled by agent-state-fast.js.
+  const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
   let state;
   if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart' || hookEvent === 'SubagentStop') {
     state = 'running';
+    // Don't overwrite stop-derived states on SubagentStop — the Stop hook already
+    // wrote the correct terminal state. Only decrement subagent_count.
+    if (hookEvent === 'SubagentStop' && STOP_STATES.has(existing.state)) {
+      state = existing.state;
+    }
   } else {
     // Stop event — detect from pane buffer + last message
     const paneBuffer = capture(target, 15);
