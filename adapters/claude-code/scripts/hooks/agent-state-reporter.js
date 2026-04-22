@@ -151,12 +151,19 @@ function report(input) {
   // PreToolUse/PostToolUse/PermissionRequest are handled by agent-state-fast.js.
   const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
   let state;
-  if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart' || hookEvent === 'SubagentStop') {
+  if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart') {
     state = 'running';
-    // Don't overwrite stop-derived states on SubagentStop — the Stop hook already
-    // wrote the correct terminal state. Only decrement subagent_count.
-    if (hookEvent === 'SubagentStop' && STOP_STATES.has(existing.state)) {
-      state = existing.state;
+  } else if (hookEvent === 'SubagentStop') {
+    // SubagentStop doesn't know the parent's state — preserve what's on disk.
+    state = existing.state || 'running';
+    // Self-heal: when the last subagent finishes and the agent appears stuck at
+    // "running", the Stop hook may have failed silently. Detect the real state
+    // from the pane buffer as a fallback.
+    const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
+    if (state === 'running' && subagentCount <= 0) {
+      const paneBuffer = capture(target, 15);
+      const lastMessage = input.last_assistant_message || null;
+      state = detectState(lastMessage, paneBuffer);
     }
   } else {
     // Stop event — detect from pane buffer + last message
@@ -175,7 +182,11 @@ function report(input) {
   });
 
   if (changed) {
-    writeState(sessionId, entry);
+    // Pass guardStates on SubagentStop to eliminate the TOCTOU race with the
+    // async Stop hook: the application-level guard at line 158 reads stale state,
+    // but writeState re-reads from disk — the guard must run against that fresh read.
+    const writeOpts = hookEvent === 'SubagentStop' ? { guardStates: STOP_STATES } : {};
+    writeState(sessionId, entry, undefined, writeOpts);
   }
 }
 
