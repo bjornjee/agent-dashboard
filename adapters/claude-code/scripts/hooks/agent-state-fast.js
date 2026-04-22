@@ -22,7 +22,7 @@ const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
 // States set by the Stop hook that PostToolUse must not overwrite.
-const STOP_STATES = new Set(['idle_prompt', 'done', 'question']);
+const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
 
 /**
  * Determine the agent state from the hook event.
@@ -38,6 +38,12 @@ function resolveState(hookEvent, toolName) {
   // It always blocks for user input — the agent asked a question.
   if (hookEvent === 'PreToolUse' && toolName === 'AskUserQuestion') {
     return 'question';
+  }
+  // ExitPlanMode blocks for plan approval. Detect it on PreToolUse directly
+  // instead of relying on PermissionRequest, which may not fire in
+  // bypassPermissions mode on newer Claude Code versions.
+  if (hookEvent === 'PreToolUse' && toolName === 'ExitPlanMode') {
+    return 'plan';
   }
   return 'running';
 }
