@@ -41,6 +41,10 @@ describe('resolveState', () => {
     assert.equal(resolveState('PreToolUse', 'AskUserQuestion'), 'question');
   });
 
+  it('returns "plan" for PreToolUse with ExitPlanMode', () => {
+    assert.equal(resolveState('PreToolUse', 'ExitPlanMode'), 'plan');
+  });
+
   it('returns "running" for PostToolUse', () => {
     assert.equal(resolveState('PostToolUse', 'Bash'), 'running');
   });
@@ -463,6 +467,29 @@ describe('fast hook state updates (per-agent files)', () => {
     });
 
     assert.equal(changed, false, 'PostToolUse should not overwrite idle_prompt');
+    assert.equal(update, null);
+  });
+
+  it('PostToolUse skips when existing state is plan (stop-state guard)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'ExitPlanMode',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'PostToolUse should not overwrite plan');
     assert.equal(update, null);
   });
 
