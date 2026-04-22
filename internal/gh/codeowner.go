@@ -56,16 +56,23 @@ func IsCodeOwner(r Runner, dir string) bool {
 	return false
 }
 
-// codeownersFromDefault reads .github/CODEOWNERS from origin/main via
-// `git show`, so it cannot be spoofed by local working-tree changes.
+// codeownersFromDefault reads CODEOWNERS from origin/main via `git show`.
+// GitHub supports three locations; we try each in priority order.
 func codeownersFromDefault(r Runner, dir string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	out, err := r.Output(ctx, "git", "-C", dir, "show", "origin/main:.github/CODEOWNERS")
-	if err != nil {
-		return ""
+	paths := []string{
+		".github/CODEOWNERS",
+		"CODEOWNERS",
+		"docs/CODEOWNERS",
 	}
-	return string(out)
+	for _, p := range paths {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		out, err := r.Output(ctx, "git", "-C", dir, "show", "origin/main:"+p)
+		cancel()
+		if err == nil {
+			return string(out)
+		}
+	}
+	return ""
 }
 
 // ghUser returns the authenticated GitHub username, cached after first call.

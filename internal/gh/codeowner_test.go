@@ -3,17 +3,33 @@ package gh
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 )
 
 // fakeRunner returns canned responses keyed by the binary name ("gh" or "git").
+// For finer-grained matching, argResponses maps a substring found anywhere in
+// the joined args to a response (checked before the name-level map).
 type fakeRunner struct {
-	responses map[string]string
-	errors    map[string]error
+	responses    map[string]string
+	errors       map[string]error
+	argResponses map[string]string // key = substring to match in joined args
+	argErrors    map[string]error
 }
 
-func (f *fakeRunner) Output(_ context.Context, name string, _ ...string) ([]byte, error) {
+func (f *fakeRunner) Output(_ context.Context, name string, args ...string) ([]byte, error) {
+	joined := name + " " + strings.Join(args, " ")
+	for substr, err := range f.argErrors {
+		if strings.Contains(joined, substr) {
+			return nil, err
+		}
+	}
+	for substr, resp := range f.argResponses {
+		if strings.Contains(joined, substr) {
+			return []byte(resp), nil
+		}
+	}
 	if err, ok := f.errors[name]; ok {
 		return nil, err
 	}
@@ -86,6 +102,27 @@ func TestIsCodeOwner_NoCODEOWNERS(t *testing.T) {
 
 	if IsCodeOwner(r, "/repo") {
 		t.Fatal("expected false when CODEOWNERS does not exist on default branch")
+	}
+}
+
+func TestIsCodeOwner_RootCODEOWNERS(t *testing.T) {
+	t.Cleanup(resetCache)
+
+	// CODEOWNERS at repo root instead of .github/CODEOWNERS
+	r := &fakeRunner{
+		responses: map[string]string{
+			"gh": "alice\n",
+		},
+		argResponses: map[string]string{
+			"CODEOWNERS": "* @alice\n",
+		},
+		argErrors: map[string]error{
+			".github/CODEOWNERS": fmt.Errorf("path not found"),
+		},
+	}
+
+	if !IsCodeOwner(r, "/repo") {
+		t.Fatal("expected alice to be a code owner via root CODEOWNERS")
 	}
 }
 
