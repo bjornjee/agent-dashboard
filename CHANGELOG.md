@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.13.0](https://github.com/bjornjee/agent-dashboard/compare/v0.12.0...v0.13.0) (2026-04-22)
+
+
+### Features
+
+* anchor weekly usage range to Monday instead of rolling 7 days ([#220](https://github.com/bjornjee/agent-dashboard/issues/220)) ([f7f7aaa](https://github.com/bjornjee/agent-dashboard/commit/f7f7aaacc9007e16e571e5312dad32014dd9c3dc))
+* detect trust folder prompt during agent spawn ([#223](https://github.com/bjornjee/agent-dashboard/issues/223)) ([d62deb5](https://github.com/bjornjee/agent-dashboard/commit/d62deb56b1dfa4bcb2653558d7427bf1a2afc160))
+* weekly cost in bottom bar, rolling 7d breakdown ([#222](https://github.com/bjornjee/agent-dashboard/issues/222)) ([7729527](https://github.com/bjornjee/agent-dashboard/commit/7729527dc5fcf5677eb6c075673cd47a1f540254))
+
+
+### Bug Fixes
+
+* check all three CODEOWNERS locations for admin merge ([#225](https://github.com/bjornjee/agent-dashboard/issues/225)) ([f101797](https://github.com/bjornjee/agent-dashboard/commit/f101797c1e1dae9933fd8f80bdb9f6c228b2ec6e))
+* detect plan state on PreToolUse and bypass sandbox for env copy ([#224](https://github.com/bjornjee/agent-dashboard/issues/224)) ([be9b3e7](https://github.com/bjornjee/agent-dashboard/commit/be9b3e772d35740d6566f977d1837a86b11cbb57))
+* prevent async hooks from overwriting idle_prompt with running ([#226](https://github.com/bjornjee/agent-dashboard/issues/226)) ([6ed8514](https://github.com/bjornjee/agent-dashboard/commit/6ed8514f4ac466b01bd7474045273327d722ca95))
+* self-heal SubagentStop state when Stop hook fails silently ([#227](https://github.com/bjornjee/agent-dashboard/issues/227)) ([b41777e](https://github.com/bjornjee/agent-dashboard/commit/b41777e6ffc167f573280fd6c516ebf935505475))
+* send correct keys for plan mode approve/feedback in tmux panes ([#218](https://github.com/bjornjee/agent-dashboard/issues/218)) ([8cd64af](https://github.com/bjornjee/agent-dashboard/commit/8cd64af03d6a8a9dba433d6b99c9282ece7ab23d))
+* send Enter instead of bare y for plan approval in TUI ([#221](https://github.com/bjornjee/agent-dashboard/issues/221)) ([28c72a1](https://github.com/bjornjee/agent-dashboard/commit/28c72a1a213ba5695d9f6b2becd4eb65685a65e9))
+
 ## [0.12.0](https://github.com/bjornjee/agent-dashboard/compare/v0.11.1...v0.12.0) (2026-04-14)
 
 
