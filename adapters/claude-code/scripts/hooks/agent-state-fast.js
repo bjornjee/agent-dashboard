@@ -169,7 +169,11 @@ function fastUpdate(input) {
 
   const { changed, update } = buildUpdate({ input, existing, target, tmuxPane, worktreeCwd });
   if (changed && update) {
-    writeState(sessionId, update);
+    // Pass guardStates on PostToolUse to eliminate the TOCTOU race with the
+    // async Stop hook: buildUpdate's guard reads stale state, but writeState
+    // re-reads from disk — the guard must run against that fresh read.
+    const opts = input.hook_event_name === 'PostToolUse' ? { guardStates: STOP_STATES } : {};
+    writeState(sessionId, update, undefined, opts);
   }
 }
 

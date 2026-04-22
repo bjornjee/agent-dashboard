@@ -143,6 +143,71 @@ describe('buildReportEntry', () => {
   });
 });
 
+describe('SubagentStop preserves stop-derived states', () => {
+  it('preserves idle_prompt state on SubagentStop', () => {
+    const { entry } = buildReportEntry({
+      input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
+      existing: {
+        state: 'idle_prompt',
+        subagent_count: 1,
+        last_message_preview: null,
+        permission_mode: 'default',
+        files_changed: [],
+      },
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      state: 'idle_prompt',  // caller should preserve stop state
+      filesChanged: [],
+      parsed: BASE_PARSED,
+    });
+
+    assert.equal(entry.state, 'idle_prompt', 'SubagentStop should not overwrite idle_prompt');
+    assert.equal(entry.subagent_count, 0, 'subagent_count should still decrement');
+  });
+
+  it('preserves done state on SubagentStop', () => {
+    const { entry } = buildReportEntry({
+      input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
+      existing: {
+        state: 'done',
+        subagent_count: 2,
+        last_message_preview: null,
+        permission_mode: 'default',
+        files_changed: [],
+      },
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      state: 'done',  // caller should preserve stop state
+      filesChanged: [],
+      parsed: BASE_PARSED,
+    });
+
+    assert.equal(entry.state, 'done', 'SubagentStop should not overwrite done');
+    assert.equal(entry.subagent_count, 1);
+  });
+
+  it('allows SubagentStop to set running when existing is running', () => {
+    const { entry } = buildReportEntry({
+      input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
+      existing: {
+        state: 'running',
+        subagent_count: 1,
+        last_message_preview: null,
+        permission_mode: 'default',
+        files_changed: [],
+      },
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      state: 'running',
+      filesChanged: [],
+      parsed: BASE_PARSED,
+    });
+
+    assert.equal(entry.state, 'running', 'SubagentStop should keep running when already running');
+    assert.equal(entry.subagent_count, 0);
+  });
+});
+
 describe('detectState (Stop event path)', () => {
   it('returns idle_prompt when pane buffer has prompt char and no question', () => {
     const state = detectState('Here is the investigation report.', ['some output', '\u276f']);

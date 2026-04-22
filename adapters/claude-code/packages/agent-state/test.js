@@ -330,6 +330,41 @@ describe('writeState concurrent (per-agent files)', () => {
   });
 });
 
+describe('writeState guardStates', () => {
+  it('skips write when on-disk state matches guardStates', () => {
+    const sessionId = 'sess-guard';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt' }, agentsDir);
+
+    // Attempt to overwrite idle_prompt → running, guarded by STOP_STATES
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
+    writeState(sessionId, { state: 'running' }, agentsDir, { guardStates });
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'idle_prompt', 'guardStates should prevent overwriting idle_prompt');
+  });
+
+  it('allows write when on-disk state does not match guardStates', () => {
+    const sessionId = 'sess-guard-pass';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'running' }, agentsDir);
+
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
+    writeState(sessionId, { state: 'permission' }, agentsDir, { guardStates });
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'permission', 'write should proceed when state is not guarded');
+  });
+
+  it('allows write when guardStates is not provided', () => {
+    const sessionId = 'sess-no-guard';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt' }, agentsDir);
+
+    writeState(sessionId, { state: 'running' }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'running', 'without guardStates, write should proceed normally');
+  });
+});
+
 describe('cleanStale', () => {
   it('removes agent files older than threshold', () => {
     const old = new Date(Date.now() - 600000).toISOString(); // 10 min ago

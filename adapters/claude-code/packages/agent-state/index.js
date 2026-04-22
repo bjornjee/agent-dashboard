@@ -77,11 +77,18 @@ function readAllState(agentsDir = DEFAULT_AGENTS_DIR) {
  * @param {Object} update - fields to merge into the agent entry
  * @param {string} [agentsDir] - directory containing per-agent files
  */
-function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR) {
+function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}) {
   fs.mkdirSync(agentsDir, { recursive: true });
 
   const filePath = agentFilePath(sessionId, agentsDir);
   const existing = readAgentState(sessionId, agentsDir) || {};
+
+  // Guard: skip write if current on-disk state is protected.
+  // This eliminates the TOCTOU race where a caller checks stale state and then
+  // writeState re-reads fresh state — the guard now runs against the fresh read.
+  if (opts.guardStates && opts.guardStates.has(existing.state)) {
+    return;
+  }
 
   const merged = {
     ...existing,
