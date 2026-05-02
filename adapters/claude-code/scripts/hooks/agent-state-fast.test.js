@@ -28,25 +28,41 @@ afterEach(() => {
 
 describe('resolveState', () => {
   it('returns "permission" for PermissionRequest', () => {
-    assert.equal(resolveState('PermissionRequest', 'Bash'), 'permission');
+    assert.equal(resolveState('PermissionRequest', 'Bash', ''), 'permission');
   });
 
   it('returns "running" for PreToolUse with normal tools', () => {
-    assert.equal(resolveState('PreToolUse', 'Bash'), 'running');
-    assert.equal(resolveState('PreToolUse', 'Read'), 'running');
-    assert.equal(resolveState('PreToolUse', 'Edit'), 'running');
+    assert.equal(resolveState('PreToolUse', 'Bash', ''), 'running');
+    assert.equal(resolveState('PreToolUse', 'Read', ''), 'running');
+    assert.equal(resolveState('PreToolUse', 'Edit', ''), 'running');
   });
 
   it('returns "question" for PreToolUse with AskUserQuestion', () => {
-    assert.equal(resolveState('PreToolUse', 'AskUserQuestion'), 'question');
+    assert.equal(resolveState('PreToolUse', 'AskUserQuestion', ''), 'question');
   });
 
   it('returns "running" for PostToolUse', () => {
-    assert.equal(resolveState('PostToolUse', 'Bash'), 'running');
+    assert.equal(resolveState('PostToolUse', 'Bash', ''), 'running');
   });
 
   it('returns "running" for unknown events', () => {
-    assert.equal(resolveState('SomeOther', 'Bash'), 'running');
+    assert.equal(resolveState('SomeOther', 'Bash', ''), 'running');
+  });
+
+  it('returns "plan" when permission_mode is plan, regardless of event', () => {
+    // CC 2.1.116+: EnterPlanMode/ExitPlanMode are deferred tools the model
+    // may never call. permission_mode is the stable signal.
+    assert.equal(resolveState('PreToolUse', 'Bash', 'plan'), 'plan');
+    assert.equal(resolveState('PostToolUse', 'Edit', 'plan'), 'plan');
+    assert.equal(resolveState('PreToolUse', 'AskUserQuestion', 'plan'), 'plan');
+  });
+
+  it('plan permission_mode takes precedence over PermissionRequest', () => {
+    assert.equal(resolveState('PermissionRequest', 'Edit', 'plan'), 'plan');
+  });
+
+  it('returns "running" when permission_mode is bypassPermissions', () => {
+    assert.equal(resolveState('PreToolUse', 'Bash', 'bypassPermissions'), 'running');
   });
 });
 
@@ -510,6 +526,56 @@ describe('fast hook state updates (per-agent files)', () => {
 
     assert.equal(changed, true, 'PreToolUse should transition from idle_prompt to running');
     assert.equal(update.state, 'running');
+  });
+
+  it('buildUpdate sets state to "plan" when input.permission_mode is plan', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'plan');
+    assert.equal(update.permission_mode, 'plan');
+  });
+
+  it('PostToolUse does not overwrite existing "plan" state', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      permission_mode: 'plan',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'PostToolUse must not overwrite plan');
+    assert.equal(update, null);
   });
 
   it('preserves existing fields not updated by fast hook', () => {

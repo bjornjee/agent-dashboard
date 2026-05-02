@@ -21,16 +21,26 @@ const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages',
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
-// States set by the Stop hook that PostToolUse must not overwrite.
-const STOP_STATES = new Set(['idle_prompt', 'done', 'question']);
+// States that PostToolUse must not overwrite. "plan" is included because
+// permission_mode='plan' arrives on every hook event while planning is active —
+// without the guard, a stale PostToolUse from before plan entry could clobber it.
+const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
 
 /**
  * Determine the agent state from the hook event.
  * @param {string} hookEvent - hook_event_name from stdin
  * @param {string} toolName - tool_name from stdin
- * @returns {string} "permission", "question", or "running"
+ * @param {string} permissionMode - permission_mode from stdin
+ * @returns {string} "plan", "permission", "question", or "running"
  */
-function resolveState(hookEvent, toolName) {
+function resolveState(hookEvent, toolName, permissionMode) {
+  // permission_mode='plan' is set by Claude Code itself the moment plan mode
+  // activates. Detecting from this field avoids depending on EnterPlanMode/
+  // ExitPlanMode tool calls, which are deferred tools in CC 2.1.116+ and may
+  // never be invoked.
+  if (permissionMode === 'plan') {
+    return 'plan';
+  }
   if (hookEvent === 'PermissionRequest') {
     return 'permission';
   }
@@ -80,7 +90,7 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
 
-  let state = resolveState(hookEvent, toolName);
+  let state = resolveState(hookEvent, toolName, permissionMode);
 
   // Only consume hook_blocked on PreToolUse — the same event type that blocking
   // hooks fire on. Ignoring it on PostToolUse prevents a rapid PostToolUse from

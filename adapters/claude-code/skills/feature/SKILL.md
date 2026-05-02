@@ -64,10 +64,9 @@ Start two tracks in parallel:
 **Foreground — Planning:**
 
 1. Research the codebase and design the implementation approach. Do not wait for environment setup to finish.
-2. **Enter plan mode** using the `EnterPlanMode` tool. Present the plan and wait for user approval.
-3. Once the user approves, **exit plan mode** using `ExitPlanMode` before proceeding.
+2. Present the plan to the user as text and wait for explicit approval before proceeding. Do not call `EnterPlanMode`/`ExitPlanMode` from inside this skill — they are deferred tools in CC 2.1.116+ that may not be loaded, and `ExitPlanMode` resets the session permission mode (losing `bypassPermissions`), causing every subsequent step to re-prompt for approval.
 
-**Gate:** User has approved the approach in plan mode. No code has been written yet.
+**Gate:** User has approved the approach. No code has been written yet.
 
 ---
 
