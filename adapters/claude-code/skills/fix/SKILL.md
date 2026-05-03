@@ -1,6 +1,8 @@
 ---
 name: fix
 description: Diagnose and fix a bug in an isolated git worktree with reproduce-first, test-first methodology
+when_to_use: when the user reports a bug, regression, error message, stack trace, failing test, or production incident that needs a code fix. NOT for new features (use /feature), pure investigation without a fix (use /investigate), or system-level crash forensics (use /rca).
+version: 1.0.0
 disable-model-invocation: true
 ---
 
@@ -30,8 +32,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
      - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-6. cd into the worktree and confirm with `pwd` and `git branch --show-current`
-7. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+7. cd into the worktree and confirm with `pwd` and `git branch --show-current`
+8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -62,7 +64,7 @@ Start two tracks in parallel:
 
 **Foreground — Evidence gathering:**
 
-Before touching code, collect **grounded evidence** from observable sources. Do not guess from reading code alone.
+Before touching code, collect **grounded evidence** from observable sources. **Reading code is not evidence.** A hypothesis from reading the source is a guess until logs, traces, or a reproduction confirm it.
 
 1. Take the bug description — this may be an error message, stack trace, issue URL, or user description.
 2. Collect evidence from these sources (check all that are available):
@@ -72,7 +74,12 @@ Before touching code, collect **grounded evidence** from observable sources. Do 
    - **Steps to reproduce:** exact inputs, environment, and sequence that triggers the bug.
    - **Git history:** `git log --oneline --since="2 weeks ago" -- <affected files>` — what changed recently in the area?
    - **Issue tracker:** if an issue URL was provided, read it fully including comments for additional context.
-3. Summarize the evidence. State what is **known** (from logs/metrics/traces) vs what is **hypothesized**.
+3. Summarize the evidence. **Label every claim as either known (cite the source) or hypothesized.** No mixing.
+
+**No exceptions:**
+- Don't skip to code reading because "the bug is obvious from the description".
+- Don't write the failing test from the bug description alone — confirm the actual error first.
+- Don't accept a stack trace's top frame as the cause without checking the rest of the trace.
 
 **Gate:** At least one source of grounded evidence (log, trace, metric, or reproducible steps) is collected. Do not proceed on hypothesis alone.
 
@@ -85,14 +92,18 @@ Before touching code, collect **grounded evidence** from observable sources. Do 
 - If `.env-setup-failed` exists: surface the error and halt.
 - If neither file exists: the background agent is still running — wait for it to finish before proceeding.
 
-1. Using the evidence from Phase 2, write a **failing test** that reproduces the bug. The test should:
-   - Replicate the exact conditions from the evidence (inputs, state, sequence)
-   - Target the specific behavior that is broken
-   - Fail for the right reason (matching the observed error, not a typo or import error)
-   - Be minimal — test only the broken behavior
-2. Run `make test` and confirm the new test **fails**.
-3. Compare the test failure output against the evidence from Phase 2 — the failure should match the observed bug (same error type, same behavior). If it doesn't, the test is wrong, not the code.
-4. Show the failing test output to the user.
+1. Using the evidence from Phase 2, write a **failing test** that reproduces the bug. The test must:
+   - Replicate the exact conditions from the evidence (inputs, state, sequence).
+   - Target the specific behavior that is broken.
+   - Fail for the right reason (matching the observed error, not a typo or import error).
+   - Be minimal — test only the broken behavior.
+2. Run `make test`. Paste the failing output into the conversation.
+3. **Compare the failure to the Phase 2 evidence.** Same error type, same behavior, same line if applicable. If it doesn't match, **the test is wrong, not the code** — fix the test before continuing.
+
+**Wrote the fix before the test? Delete it. Start over.** No exceptions:
+- Don't keep the fix as "scaffolding" while you back-fill the test.
+- Don't write a test that exercises *your fix* instead of the bug.
+- Don't claim "the test would obviously fail" — show it failing.
 
 **Gate:** A test exists that fails, reproducing the bug. The failure matches the observed evidence.
 
@@ -100,15 +111,20 @@ Before touching code, collect **grounded evidence** from observable sources. Do 
 
 ### Phase 4: Diagnose
 
-Root cause analysis must be grounded in the evidence and the failing test, not speculation from reading code.
+Root cause analysis must be grounded in the evidence and the failing test, **not speculation from reading code**.
 
-1. Trace the code path **from the failing test** to identify where the behavior diverges from what is expected.
+1. Trace the code path **from the failing test** to where behavior diverges from what's expected.
 2. Cross-reference with git history: `git log -S "<relevant term>"` and `git bisect` if the bug is a regression.
 3. Identify the root cause — explain:
-   - What the code **does** (observed via test failure and logs)
-   - What it **should do** (expected behavior from evidence)
-   - **Why** it diverges (the specific line or logic that causes the mismatch)
-4. Present the diagnosis to the user for confirmation. Include evidence citations (log lines, metric values, test output) — not just "I read the code and think X."
+   - What the code **does** (observed via test failure and logs).
+   - What it **should do** (expected behavior from evidence).
+   - **Why** it diverges (the specific line or logic that causes the mismatch).
+4. Present the diagnosis to the user for confirmation. Cite evidence (log lines, metric values, test output, file:line) for every claim. **No "I read the code and think X" without an evidence citation.**
+
+**No exceptions:**
+- Don't propose a fix in this phase. Diagnosis only.
+- Don't accept the first plausible cause — rule out alternatives (e.g. caching, timing, config drift).
+- Don't restate the test failure as the root cause. The failure is the *symptom*; trace one level deeper.
 
 **Gate:** User agrees with the root cause analysis. Diagnosis cites observable evidence.
 
@@ -118,12 +134,16 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the diagnosis (Phase 4) and failing test (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
-1. Implement the **minimal fix** — change only what is necessary to fix the bug.
-2. Run `make test` — the previously failing test must now **pass**.
-3. Run the full test suite via `make test` — no regressions.
-4. Show the passing test output.
+1. Implement the **minimal fix** — change only what is necessary to make the failing test pass.
+2. Run `make test`. Paste the passing output (both the previously failing test and the full suite).
+3. **Wrote more than the diagnosis demanded? Revert and re-do.** No exceptions:
+   - No "while I'm here" cleanups.
+   - No defensive null checks "for similar bugs".
+   - No refactoring the surrounding function.
+   - No adding logging that wasn't asked for.
+4. If the full suite shows new failures, **revert immediately** — your fix introduced a regression. Don't paper over it.
 
-**Gate:** The reproducing test passes. The full test suite passes. No unrelated changes.
+**Gate:** The reproducing test passes. The full test suite passes. The diff contains nothing beyond the minimal fix.
 
 ---
 
@@ -161,3 +181,17 @@ Triggered when the user indicates the fix has been merged upstream.
 2. Tear down environment resources: remove symlinks, stop dev servers or emulators, delete `.env-setup-done`/`.env-setup-failed` sentinel files
 3. Remove worktree and delete branch
 4. Confirm cleanup is complete
+
+---
+
+## Red Flags — STOP
+
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+
+- "I see the bug from the description, let me write the fix" → Phase 2 + 3 violation. Reproduce first.
+- "The test would obviously fail, no need to run it" → Phase 3 violation. Run `make test`. Paste output.
+- "I read the code, the cause is X" → Phase 4 violation. Cite logs, traces, or the failing test — not your reading.
+- "I'll fix this related issue while I'm in the file" → Phase 5 violation. Open a separate `/fix` for it.
+- "The full suite has unrelated failures, I'll skip it" → no. Investigate. Either they're related or you broke them.
+- "I'll add a defensive null check just in case" → Phase 5 violation. Fix the diagnosed bug only.
+- "Let me bundle the cleaner's diff into the fix commit" → Phase 7 violation. Commit `chore: ai-fmt` separately.

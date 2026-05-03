@@ -1,6 +1,8 @@
 ---
 name: refactor
 description: Safely restructure code in an isolated git worktree with test-preserved, incremental transformations
+when_to_use: when the user wants to restructure existing code without changing behavior — extract a function, rename, move files, consolidate duplicates, or untangle a module. NOT for adding new behavior (use /feature), fixing bugs (use /fix), or working on a codebase with failing tests.
+version: 1.0.0
 disable-model-invocation: true
 ---
 
@@ -30,8 +32,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
      - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-6. cd into the worktree and confirm with `pwd` and `git branch --show-current`
-7. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+7. cd into the worktree and confirm with `pwd` and `git branch --show-current`
+8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -94,13 +96,14 @@ Apply the refactoring in small, atomic steps. For each step:
 
 1. Make a single, focused change (e.g., extract a function, rename a variable, move a file).
 2. Run `make test` immediately after the change.
-3. If tests fail:
-   - Revert only the changed files (`git checkout -- <file1> <file2> ...`)
-   - Analyze why it failed
-   - Try a different approach
+3. If tests fail: **revert that step** (`git checkout -- <files>`), analyze, try a smaller approach.
 4. If tests pass, proceed to the next step.
 
-Do not batch multiple changes between test runs. One change, one test run.
+**One change, one test run. No exceptions:**
+- Don't batch "while I'm here" changes into a single step.
+- Don't change behavior — refactor is structure-only. If a test starts failing because behavior changed, you're no longer refactoring; revert.
+- Don't skip `make test` between steps to "save time". The next failure becomes impossible to bisect if you do.
+- Don't fix unrelated test failures inline. If the baseline broke during the refactor, revert and investigate before continuing.
 
 **Gate:** All transformations applied. All tests pass after each step.
 
@@ -141,3 +144,17 @@ Triggered when the user indicates the refactor has been merged upstream.
 2. Tear down environment resources: remove symlinks, stop dev servers or emulators, delete `.env-setup-done`/`.env-setup-failed` sentinel files
 3. Remove worktree and delete branch
 4. Confirm cleanup is complete
+
+---
+
+## Red Flags — STOP
+
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+
+- "I'll fix this bug while I'm refactoring" → wrong skill. Revert that change. Hand off to `/fix`.
+- "Test broke because the old behavior was wrong" → not refactor's job. Revert, then `/fix` separately.
+- "I'll batch 3 small steps and test once" → no. One change, one `make test`. Bisect-friendly history matters.
+- "Baseline is broken but I'll proceed" → Phase 3 violation. Hand off to `/fix` first.
+- "Insufficient test coverage but I'll refactor anyway" → STOP. Write tests first, then refactor.
+- "Add a feature flag for the new shape" → no. Refactor is one-shot, not migrated. If you need a flag, it's a feature.
+- "Bundle the cleaner's diff into the refactor commit" → commit `chore: ai-fmt` separately as Phase 6 says.

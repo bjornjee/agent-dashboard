@@ -1,10 +1,12 @@
 ---
 name: rca
 description: Root cause analysis for process crashes, server deaths, and unexplained system failures using macOS logs, session forensics, and code tracing
+when_to_use: when a process died unexpectedly, a server crashed, the tmux server vanished, an agent exited mid-task, or any system-level failure with no clear cause. Use when the user says "what killed X", "RCA", "post-mortem", or "why did Y crash". NOT for bugs with clear stack traces (use /fix) or feature design (use /feature).
+version: 1.0.0
 disable-model-invocation: true
 ---
 
-Root cause analysis for a system-level failure. **Gather ALL evidence before reasoning about the cause.**
+Root cause analysis for a system-level failure. **Gather ALL evidence before reasoning about the cause. No exceptions.**
 
 Incident description: $ARGUMENTS
 
@@ -190,6 +192,12 @@ Trace the code paths that were active at the time of the crash:
 
 **Only now may you reason about the cause.** Build the argument from evidence, not speculation.
 
+**No exceptions:**
+- Don't reason about the cause in Phases 1–4. Collect first; reason later.
+- Don't skip a Phase 2 log category because "I'm sure it's not that". Empty results are evidence too.
+- Don't shortcut to a likely cause without ruling out alternatives in step 4.
+- Don't claim a root cause with gaps in the timeline. State the gap as an unknown instead.
+
 1. **Construct the event chain** — a timestamped sequence from the trigger to the final failure. Every link must cite evidence from Phases 2-4:
    - `HH:MM:SS.mmm` — [source: unified log / session log / crash log] — event description
 
@@ -250,3 +258,16 @@ This skill is read-only. If the user asks to implement a fix based on your findi
 - New safeguard or feature → suggest `/feature <description>`
 
 These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/rca` skips those gates.
+
+---
+
+## Red Flags — STOP
+
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+
+- "I see the cause already, skip to the report" → no. Phase 2 collects evidence the report cites. Skipping it means an uncited report.
+- "AMFI/jetsam/sleep is unlikely, skip those queries" → run them anyway. Empty result is evidence.
+- "I'll start fixing the cause inline" → wrong skill. This is read-only. Hand off to `/fix` after the report.
+- "The session log doesn't have the smoking gun, the cause must be code" → check the other log categories first. The smoking gun is rarely where you expect.
+- "I'll write a one-line summary instead of the structured report" → the structure exists because RCAs without it get re-relitigated. Use it.
+- "Gap in the timeline? I'll fill it with a likely event" → no. Mark it as unknown. Speculation in an RCA report is worse than gaps.

@@ -1,10 +1,12 @@
 ---
 name: investigate
 description: Deep-dive into a codebase question, failure, or architectural concern without making changes
+when_to_use: when the user asks "how does X work", "why does Y do Z", "what would happen if", or wants a structured exploration of a codebase area without changing anything. NOT for fixing bugs (use /fix), implementing features (use /feature), or system-crash forensics (use /rca).
+version: 1.0.0
 disable-model-invocation: true
 ---
 
-Investigate a codebase question or concern. **This is a read-only skill — do not modify any files.**
+Investigate a codebase question or concern. **This is a read-only skill — do not modify any files. No exceptions.**
 
 Question or concern: $ARGUMENTS
 
@@ -33,7 +35,7 @@ Follow these phases in order. Apply all project rules and conventions that are i
 
 ### Phase 2: Research
 
-Use read-only tools only. Do not edit, write, or create any files.
+**Read-only tools only. No Edit, no Write, no Bash that mutates state.** Allowed: Read, Grep, Glob, `git log`/`git blame`/`git show`, context7 lookups.
 
 1. **Trace code paths** — read the relevant source files, following the call chain from entry point to the area of interest.
 2. **Read tests** — understand what is tested and what is not. Look for edge cases and assumptions.
@@ -42,6 +44,11 @@ Use read-only tools only. Do not edit, write, or create any files.
 5. **Check configuration** — read config files, environment variables, and infrastructure definitions that affect behavior.
 
 Explore broadly first, then narrow to the relevant areas. Take notes as you go.
+
+**No exceptions:**
+- Don't "quickly fix" something you notice — log it in the report instead.
+- Don't add a print/log statement to confirm a hypothesis — read the code or rerun a test from outside this skill.
+- Don't run commands that mutate working tree, config, branches, or remote state.
 
 ---
 
@@ -67,3 +74,15 @@ This skill is read-only. If the user asks to implement changes based on your fin
 - Restructuring existing code → suggest `/refactor <description>`
 
 These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/investigate` skips those gates.
+
+---
+
+## Red Flags — STOP
+
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+
+- "I'll just fix this typo while I'm here" → wrong skill. Hand off to `/fix` or `/chore`.
+- "Let me add a quick log statement to verify" → no. That's a code change. Read more, or hand off to `/fix`.
+- "The user clearly wants a fix, let me skip the report" → no. Deliver the report. Then hand off.
+- "I read the code, the answer is X" with no file:line citation → re-read with citations. The report needs them.
+- "I'll skip git history, the current code is enough" → check `git log -S` and `git blame`. Bugs hide in recent commits.
