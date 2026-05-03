@@ -65,9 +65,24 @@ Start two tracks in parallel:
 **Foreground — Planning:**
 
 1. Research the codebase and design the implementation approach. Do not wait for environment setup to finish.
-2. Present the plan to the user as text and wait for explicit approval before proceeding. Do not call `EnterPlanMode`/`ExitPlanMode` from inside this skill — they are deferred tools in CC 2.1.116+ that may not be loaded, and `ExitPlanMode` resets the session permission mode (losing `bypassPermissions`), causing every subsequent step to re-prompt for approval.
+2. **Resolve open decisions before drafting the plan.** Identify every decision the implementation depends on that you cannot determine from the codebase or the user's request — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask all of them in a single batch and wait for answers before drafting the plan.
 
-**Gate:** User has approved the approach. No code has been written yet.
+   The plan you submit must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body.
+
+   Symptoms you're about to violate:
+   - You're writing "Decisions needed before implementation" inside the plan.
+   - You're appending questions to the plan instead of asking them first.
+   - You're rationalizing "the user can answer these after approval."
+
+   Anti-pattern: *"I'll embed open questions inside the plan and ask them after approval."* This breaks plan-as-source-of-truth. If a user answer changes scope, return to this step and re-submit a revised plan.
+
+   <HARD-GATE>
+   The plan is not ready for review until every decision it gates is answered.
+   If you find yourself typing "TBD" / "?" / "Phase 0" / "Decisions needed" — STOP. Ask first, plan second.
+   </HARD-GATE>
+3. Present the plan to the user as text and wait for explicit approval before proceeding. Do not call `EnterPlanMode`/`ExitPlanMode` from inside this skill — they are deferred tools in CC 2.1.116+ that may not be loaded, and `ExitPlanMode` resets the session permission mode (losing `bypassPermissions`), causing every subsequent step to re-prompt for approval.
+
+**Gate:** User has approved the approach. The submitted plan contains no open decisions. No code has been written yet.
 
 ---
 
