@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/bjornjee/agent-dashboard/compare/v0.13.0...v0.13.1) (2026-05-03)
+
+
+### Bug Fixes
+
+* detect plan state from permission_mode for CC 2.1.116+ ([#228](https://github.com/bjornjee/agent-dashboard/issues/228)) ([59ef03e](https://github.com/bjornjee/agent-dashboard/commit/59ef03ef28873608d04ec9e62483ca2727da8215))
+
 ## [0.13.0](https://github.com/bjornjee/agent-dashboard/compare/v0.12.0...v0.13.0) (2026-04-22)
 
 
