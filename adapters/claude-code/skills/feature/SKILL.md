@@ -1,6 +1,8 @@
 ---
 name: feature
 description: Start a new feature in an isolated git worktree with TDD workflow
+when_to_use: when the user says "start a feature", "new feature", invokes "/agent-dashboard:feature", or describes work that needs an isolated branch + worktree + TDD loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use /chore, /fix, /investigate instead).
+version: 1.0.0
 disable-model-invocation: true
 ---
 
@@ -32,8 +34,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
    - **Important:** All Bash tool calls in this step must set `dangerouslyDisableSandbox: true` because they write outside the project root.
-6. cd into the worktree and confirm with `pwd` and `git branch --show-current`
-7. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+7. cd into the worktree and confirm with `pwd` and `git branch --show-current`
+8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -80,7 +82,14 @@ Start two tracks in parallel:
    The plan is not ready for review until every decision it gates is answered.
    If you find yourself typing "TBD" / "?" / "Phase 0" / "Decisions needed" — STOP. Ask first, plan second.
    </HARD-GATE>
-3. Present the plan to the user as text and wait for explicit approval before proceeding. Do not call `EnterPlanMode`/`ExitPlanMode` from inside this skill — they are deferred tools in CC 2.1.116+ that may not be loaded, and `ExitPlanMode` resets the session permission mode (losing `bypassPermissions`), causing every subsequent step to re-prompt for approval.
+3. **STOP. Present the plan as text. Wait for the user to type approval.**
+
+   Do not call `EnterPlanMode` or `ExitPlanMode` — they are deferred tools that won't load on CC 2.1.116+, and `ExitPlanMode` clears `bypassPermissions` and forces re-prompts on every subsequent edit.
+
+   **No exceptions:**
+   - Don't start a "small" preparatory edit while waiting.
+   - Don't write the test file "to save time".
+   - Don't ask "should I proceed?" — wait for unprompted approval.
 
 **Gate:** User has approved the approach. The submitted plan contains no open decisions. No code has been written yet.
 
@@ -97,9 +106,14 @@ Start two tracks in parallel:
 
 Build the feature following strict RED → GREEN → REFACTOR:
 
-1. **RED:** Write failing tests first. Run `make test` to confirm they fail. Show the failing output. Do not proceed until tests fail for the right reason.
-2. **GREEN:** Write the minimum implementation to make tests pass. Run `make test` to confirm all tests pass.
-3. **REFACTOR:** Clean up the implementation. Run `make test` to confirm tests still pass.
+1. **RED.** Write the failing test. Run `make test`. Paste the failing output into the conversation. **Wrote implementation before test? Delete it. Start over.** No exceptions:
+   - Don't keep it as "reference"
+   - Don't write tests *for* the implementation you already wrote
+   - Don't claim "the test would obviously fail" — show it failing
+
+2. **GREEN.** Write the minimum implementation to make the failing test pass. Run `make test`. Paste the passing output. **Wrote more than the test demanded? Revert and re-do.** No "while I'm here" additions, no premature abstractions.
+
+3. **REFACTOR.** Clean up. Run `make test` after each meaningful edit. **Tests broke during refactor? Revert that edit and try a smaller step.** Refactor is structure-only — if behavior changed, you're back in RED.
 
 **Gate:** Environment ready. All tests pass via `make test`. Implementation matches the approved plan.
 
@@ -136,3 +150,17 @@ Triggered when the user indicates the feature has been merged upstream.
 2. Tear down environment resources: remove symlinks, stop dev servers or emulators, delete `.env-setup-done`/`.env-setup-failed` sentinel files
 3. Remove worktree and delete branch
 4. Confirm cleanup is complete
+
+---
+
+## Red Flags — STOP
+
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+
+- "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
+- "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
+- "Tests pass on my reading of the code" → didn't run `make test`. Run it.
+- "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
+- "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
+- "The cleaner's diff is just style, no need for a separate commit" → squash discipline lost. Commit `chore: ai-fmt` separately as Phase 5 says.
+- "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
