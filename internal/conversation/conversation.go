@@ -1064,6 +1064,115 @@ func ReadPlanContent(plansDir, slug string) string {
 	return truncate(string(data), 32000)
 }
 
+// ReadDelegatedPlanContent scans a session JSONL for the tool_result matching
+// toolUseID and returns its text content. Used when an Agent tool with
+// subagent_type=Plan returned a plan persisted only in the parent transcript.
+// Returns the LAST matching tool_result (multiple delegations may occur).
+func ReadDelegatedPlanContent(projDir, sessionID, toolUseID string) string {
+	if toolUseID == "" {
+		return ""
+	}
+	path := filepath.Join(projDir, sessionID+".jsonl")
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	// Tail window sized for delegated plans (~30KB observed) plus surrounding
+	// transcript context. Larger than ReadPlanSlug's 32KB because plan text
+	// itself is the payload, not just a slug.
+	const tailSize = 256 * 1024
+	stat, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	if stat.Size() > tailSize {
+		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
+			return ""
+		}
+		// Skip the partial first line — same pattern as ReadPlanSlug.
+		var oneByte [1]byte
+		for {
+			_, err := f.Read(oneByte[:])
+			if err != nil || oneByte[0] == '\n' {
+				break
+			}
+		}
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, tailSize), tailSize)
+
+	type contentBlock struct {
+		Type       string          `json:"type"`
+		ToolUseID  string          `json:"tool_use_id"`
+		Text       string          `json:"text"`
+		RawContent json.RawMessage `json:"content"`
+	}
+	type entry struct {
+		Type    string `json:"type"`
+		Message struct {
+			Content []contentBlock `json:"content"`
+		} `json:"message"`
+	}
+
+	var lastMatch string
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var e entry
+		if json.Unmarshal(line, &e) != nil {
+			continue
+		}
+		if e.Type != "user" {
+			continue
+		}
+		for _, block := range e.Message.Content {
+			if block.Type != "tool_result" || block.ToolUseID != toolUseID {
+				continue
+			}
+			lastMatch = extractToolResultText(block.RawContent)
+		}
+	}
+	// scanner.Err() (notably bufio.ErrTooLong on lines >tailSize) is intentionally
+	// returned-as-found: callers prefer a partial match over silent failure on a
+	// pathologically large transcript line.
+	_ = scanner.Err()
+	return truncate(lastMatch, 32000)
+}
+
+// extractToolResultText decodes a tool_result.content payload into a string.
+// CC writes either a raw JSON string or an array of {type:"text", text:"..."}
+// blocks (subagent results use the array form). Multiple text blocks are
+// joined with a blank line — Plan subagent responses can contain a reasoning
+// block followed by the actual plan, both of which the dashboard should show.
+func extractToolResultText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) == nil {
+		var parts []string
+		for _, b := range blocks {
+			if b.Type == "text" && b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		}
+		return strings.Join(parts, "\n\n")
+	}
+	return ""
+}
+
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

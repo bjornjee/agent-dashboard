@@ -68,6 +68,26 @@ describe('resolveState', () => {
   it('returns "running" when permission_mode is bypassPermissions', () => {
     assert.equal(resolveState('PreToolUse', 'Bash', 'bypassPermissions'), 'running');
   });
+
+  it('returns "plan" for PreToolUse Agent with subagent_type=Plan', () => {
+    // Orchestrator delegates planning to the Plan subagent — main agent
+    // permission_mode stays bypassPermissions, so we detect via the tool call.
+    assert.equal(
+      resolveState('PreToolUse', 'Agent', '', { subagent_type: 'Plan' }),
+      'plan'
+    );
+  });
+
+  it('returns "running" for PreToolUse Agent with non-Plan subagent_type', () => {
+    assert.equal(
+      resolveState('PreToolUse', 'Agent', '', { subagent_type: 'Explore' }),
+      'running'
+    );
+    assert.equal(
+      resolveState('PreToolUse', 'Agent', '', { subagent_type: 'general-purpose' }),
+      'running'
+    );
+  });
 });
 
 describe('fast hook state updates (per-agent files)', () => {
@@ -603,6 +623,169 @@ describe('fast hook state updates (per-agent files)', () => {
 
     assert.equal(changed, false, 'PostToolUse must not overwrite plan');
     assert.equal(update, null);
+  });
+
+  it('PreToolUse Agent+Plan stamps delegated_plan_tool_use_id and sets state=plan', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Agent',
+        tool_input: { subagent_type: 'Plan', prompt: '...' },
+        tool_use_id: 'toolu_01ABC',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'plan');
+    assert.equal(update.delegated_plan_tool_use_id, 'toolu_01ABC');
+  });
+
+  it('PreToolUse Agent with non-Plan subagent_type does NOT stamp the id', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Agent',
+        tool_input: { subagent_type: 'Explore', prompt: '...' },
+        tool_use_id: 'toolu_01XYZ',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(update.state, 'running');
+    assert.equal(update.delegated_plan_tool_use_id, undefined);
+  });
+
+  it('PostToolUse Agent+Plan keeps state=plan via STOP_STATES guard', () => {
+    // After Plan PreToolUse stamped the id and set state=plan, the matching
+    // PostToolUse must not clobber state — STOP_STATES already includes plan.
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      delegated_plan_tool_use_id: 'toolu_01ABC',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Agent',
+        tool_input: { subagent_type: 'Plan' },
+        tool_use_id: 'toolu_01ABC',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, false, 'PostToolUse must not overwrite plan state');
+    assert.equal(update, null);
+  });
+
+  it('PreToolUse Bash after delegated plan clears the id and transitions to running', () => {
+    // User approved the plan and the agent resumed work — next non-Agent
+    // PreToolUse must clear the pointer so the dashboard stops showing the plan.
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      delegated_plan_tool_use_id: 'toolu_01ABC',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'go test ./...' },
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'running');
+    assert.equal(update.delegated_plan_tool_use_id, '', 'pointer must be cleared on transition out of plan');
+  });
+
+  it('PreToolUse Agent+Plan with missing tool_use_id sets state=plan but does not stamp id', () => {
+    // Defensive: if a future CC version renames or omits tool_use_id from
+    // hook stdin, state still flips to plan (consumers fall back to
+    // ReadPlanSlug) and we don't write a bogus empty pointer.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Agent',
+        tool_input: { subagent_type: 'Plan' },
+        // tool_use_id intentionally omitted
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'plan');
+    assert.equal(update.delegated_plan_tool_use_id, undefined);
+  });
+
+  it('does not clear delegated_plan_tool_use_id while state stays plan', () => {
+    // A subsequent PreToolUse for ExitPlanMode (e.g., dual-source scenario)
+    // keeps state=plan, so the existing pointer must be preserved.
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      delegated_plan_tool_use_id: 'toolu_01ABC',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'ExitPlanMode',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(update.state, 'plan');
+    assert.equal(update.delegated_plan_tool_use_id, undefined,
+      'should not write a clear when state stays plan');
   });
 
   it('preserves existing fields not updated by fast hook', () => {

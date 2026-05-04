@@ -619,6 +619,7 @@ func (m model) loadPlan() tea.Cmd {
 	cwd := agent.Cwd
 	plansDir := m.cfg.Profile.PlansDir
 	sessionsDir := m.cfg.Profile.SessionsDir
+	delegatedToolUseID := agent.DelegatedPlanToolUseID
 
 	return func() tea.Msg {
 		if sessionID == "" {
@@ -626,6 +627,13 @@ func (m model) loadPlan() tea.Cmd {
 		}
 		if sessionID == "" {
 			return planMsg{content: ""}
+		}
+		// Prefer the delegated-Plan-subagent pointer if set; the plan is
+		// persisted only inside the parent JSONL as a tool_result.
+		if delegatedToolUseID != "" {
+			if content := conversation.ReadDelegatedPlanContent(projDir, sessionID, delegatedToolUseID); content != "" {
+				return planMsg{content: content}
+			}
 		}
 		planSlug := conversation.ReadPlanSlug(projDir, sessionID)
 		if planSlug == "" {
