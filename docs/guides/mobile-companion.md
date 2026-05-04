@@ -1,12 +1,12 @@
 ---
-title: Mobile Companion (WIP)
+title: Mobile Companion
 parent: Guides
 nav_order: 6
 ---
 
 # Mobile Companion
 
-The mobile companion is a PWA (Progressive Web App) that lets you manage your agents from your phone over your local network. Approve permissions from the couch, check on long-running tasks from another room, or review diffs on your tablet.
+The mobile companion is a PWA (Progressive Web App) that lets you dispatch and manage your agents from your phone over your local network. Approve permissions from the couch, check on long-running tasks from another room, or review diffs on your tablet.
 
 ---
 
@@ -37,11 +37,25 @@ Then run it with `agent-dashboard-web`.
 
 The mobile interface mirrors the TUI's capabilities:
 
-- **Agent list and detail views** — same state grouping (needs attention, running, completed) with conversation timeline and diff viewer
-- **Full remote control** — approve/reject permissions, reply to questions, send numbered options, stop agents
+- **Agent list and detail views** — same state grouping (needs attention, running, completed) with a collapsible top bar, conversation timeline, and diff viewer
+- **Full remote control** — approve/reject permissions, reply with free-text via the PWA reply input, send numbered options, stop agents
 - **PR workflow** — open PRs, merge, and close from your phone
-- **Session creation** — create new agent sessions with z-plugin suggestions and skill selection
+- **Session creation** — spawn new agent sessions with z-plugin suggestions and skill selection; new sessions for the same repo reuse an existing tmux pane instead of stacking new ones
 - **Usage dashboard** — token breakdown and cost tracking
+
+## Live updates
+
+Detail pages stream updates over Server-Sent Events (SSE), so the conversation, diff, and PR state refresh in place as agents progress — no manual reload required. Once a PR is merged from the dashboard, the underlying tmux pane is cleaned up automatically.
+
+## Browser notifications
+
+Opt-in web notifications nudge you when an agent needs attention even if the tab is backgrounded:
+
+1. Open the dashboard in a desktop or mobile browser
+2. Accept the notification permission when prompted
+3. Background the tab and switch to other apps — alerts will surface natively
+
+The same `[notifications]` section in `settings.toml` (see [Settings](../../reference/settings/)) controls whether the underlying state changes generate notification events at all.
 
 ## Install as PWA
 

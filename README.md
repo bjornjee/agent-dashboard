@@ -1,8 +1,8 @@
 # agent-dashboard
 
-Real-time tmux dashboard to monitor, manage, and orchestrate AI coding agents — Claude Code, Codex, and more.
+A tmux-integrated orchestrator and dispatcher for AI coding agents — Claude Code, Codex, and more.
 
-A tmux-integrated TUI and mobile web companion for monitoring and controlling AI coding agents across sessions. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; the mobile companion is a PWA you run on your local network so you can manage agents from your phone.
+`agent-dashboard` runs Claude Code agents across tmux panes, dispatches your input to whichever one needs you, and gates each session through workflow skills (TDD, conventional commits, branch policy) enforced by hooks. The TUI is built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and styled with Catppuccin Frappe; a companion PWA exposes the same orchestration surface from your phone over your local network.
 
 https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
@@ -20,8 +20,8 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **File change tracking** — colour-coded additions, removals, and modifications
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Mermaid diagram viewer** — captures `mermaid` blocks from agent messages, browse per-session, render in browser via `D`
-- **Usage dashboard** — per-agent token breakdown (Claude and Codex), 7-day cost chart, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
-- **Session creation** — create new agent sessions with z-plugin frecency-ranked path autocomplete and skill selection (feature, fix, chore, refactor, investigate, pr, rca)
+- **Usage dashboard** — per-agent token breakdown (Claude and Codex), weekly cost in the bottom bar, rolling 7-day breakdown anchored to Monday, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
+- **Session creation** — spawn new agent sessions with z-plugin frecency-ranked path autocomplete, skill selection (feature, fix, chore, refactor, investigate, pr, rca), and automatic detection of Claude Code's "trust this folder?" prompt during spawn
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
 - **Dino runner game** — experimental Chrome-style endless runner in the left panel with jump, duck, speed ramp, and score counter (opt-in via settings)
 - **Quick reply** — send free-text responses directly to agent panes
@@ -35,13 +35,14 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 
 ### Mobile remote control
 
-A companion PWA (`cmd/web/`) for managing agents from your phone over your local network:
+A companion PWA (`cmd/web/`) for dispatching and managing agents from your phone over your local network:
 
-- **Agent list and detail views** — same state grouping as the TUI, with conversation timeline and diff viewer
-- **Full remote control** — approve/reject permissions, reply to questions, send numbered options, stop agents, open PRs, merge, and close — all from your phone
-- **Session creation** — create new agent sessions with z-plugin suggestions and skill selection
+- **Agent list and detail views** — same state grouping as the TUI, with a collapsible top bar, conversation timeline, and diff viewer; detail pages auto-refresh over Server-Sent Events as agents progress
+- **Full remote control** — approve/reject permissions, reply to questions via a free-text input, send numbered options, stop agents, open PRs, merge, and close — all from your phone
+- **Session creation** — spawn new agent sessions with z-plugin suggestions and skill selection; new sessions for the same repo reuse an existing tmux pane instead of stacking new ones
+- **Browser notifications** — opt-in web notifications nudge you when an agent needs attention, even when the tab is backgrounded
 - **Usage dashboard** — token breakdown and cost tracking
-- **Google OAuth** — optional single-user authentication so only you can access the dashboard
+- **Google OAuth** — optional single-user authentication so only you can access the companion
 - **Installable PWA** — add to home screen for a native app feel with offline caching via service worker
 
 <details>
