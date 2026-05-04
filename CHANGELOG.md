@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/bjornjee/agent-dashboard/compare/v0.13.1...v0.14.0) (2026-05-04)
+
+
+### Features
+
+* detect plan state from delegated Plan subagent ([#233](https://github.com/bjornjee/agent-dashboard/issues/233)) ([0fbdf61](https://github.com/bjornjee/agent-dashboard/commit/0fbdf614fcd6f5047a38668eea556a08b6b26ff3))
+
 ## [0.13.1](https://github.com/bjornjee/agent-dashboard/compare/v0.13.0...v0.13.1) (2026-05-03)
 
 
