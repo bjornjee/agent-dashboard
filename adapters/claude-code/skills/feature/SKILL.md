@@ -66,8 +66,31 @@ Start two tracks in parallel:
 
 **Foreground — Planning:**
 
-1. Research the codebase and design the implementation approach. Do not wait for environment setup to finish.
-2. **Resolve open decisions before drafting the plan.** Identify every decision the implementation depends on that you cannot determine from the codebase or the user's request — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask all of them in a single batch and wait for answers before drafting the plan.
+1. **Enter plan mode first.** Call `EnterPlanMode` (load via `ToolSearch` if it isn't already in scope). This switches the orchestrator's `permission_mode` to `plan`, restricts you to read-only tools, and lights up the dashboard's plan badge so the user can see planning is in progress.
+
+   This overrides any prior skill text or global doctrine that says to avoid plan mode. For this skill, plan mode is mandatory.
+
+   **Why:** under `bypassPermissions`, the parent's `permission_mode` only flips to `plan` when you explicitly enter it. Without that flip, the dashboard has no signal that planning is happening — neither the plan badge nor the plan panel render. Entering plan mode is the only way to make the work visible.
+
+   <HARD-GATE>
+   No research (`Explore`, `Read`, `Grep`) and no planning text until `EnterPlanMode` has been called and `permission_mode='plan'` is active.
+   </HARD-GATE>
+
+   Do not wait for environment setup to finish.
+2. **Research with `Explore`. Synthesize the plan yourself.** Do not call `Agent` with `subagent_type=Plan`. Use `Explore` for codebase research and library lookups; write the plan as your own assistant text. This overrides the global `core.md` "delegate to Plan" doctrine for this skill only.
+
+   **Why:** a delegated Plan subagent returns the plan inside a `tool_result` block that lives in the JSONL but never reaches the dashboard's plan panel, conversation view, or activity log. Synthesizing inline puts the plan in your assistant text — which the dashboard renders everywhere — and pairs with plan mode (step 1) so the parent's `permission_mode='plan'` actually corresponds to the orchestrator doing the planning.
+
+   Symptoms you're about to violate:
+   - You're about to call `Agent` with `subagent_type: "Plan"`.
+   - You're rationalizing *"the planner does this better."*
+   - You think *Explore-then-Plan* means delegate both.
+
+   <HARD-GATE>
+   Research subagent (`Explore`): allowed and encouraged.
+   Planning subagent (`Plan`): forbidden in this skill. Compose the plan yourself.
+   </HARD-GATE>
+3. **Resolve open decisions before drafting the plan.** Identify every decision the implementation depends on that you cannot determine from the codebase or the user's request — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask all of them in a single batch and wait for answers before drafting the plan.
 
    The plan you submit must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body.
 
@@ -82,14 +105,17 @@ Start two tracks in parallel:
    The plan is not ready for review until every decision it gates is answered.
    If you find yourself typing "TBD" / "?" / "Phase 0" / "Decisions needed" — STOP. Ask first, plan second.
    </HARD-GATE>
-3. **STOP. Present the plan as text. Wait for the user to type approval.**
+4. **STOP. Submit the plan via `ExitPlanMode`. Wait for user approval.**
 
-   Do not call `EnterPlanMode` or `ExitPlanMode` — they are deferred tools that won't load on CC 2.1.116+, and `ExitPlanMode` clears `bypassPermissions` and forces re-prompts on every subsequent edit.
+   Pass the full plan markdown as the `plan` argument to `ExitPlanMode`. This renders the plan in CC's native plan-mode UI for the user to approve or reject — the same surface the user already uses for plan review.
+
+   Caveat: on approval, CC drops out of plan mode to its default `permission_mode`, not back to `bypassPermissions`. Subsequent edits in Phase 3 will re-prompt unless the user re-enables bypass. That is an accepted trade-off — visible planning is worth the one-time mode reset.
 
    **No exceptions:**
    - Don't start a "small" preparatory edit while waiting.
    - Don't write the test file "to save time".
-   - Don't ask "should I proceed?" — wait for unprompted approval.
+   - Don't ask "should I proceed?" — wait for unprompted approval (the plan-mode UI's accept action is the approval).
+   - Don't paste the plan as plain text *instead of* calling `ExitPlanMode` — both are fine, but `ExitPlanMode` is required.
 
 **Gate:** User has approved the approach. The submitted plan contains no open decisions. No code has been written yet.
 
@@ -158,6 +184,9 @@ Triggered when the user indicates the feature has been merged upstream.
 If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
 
 - "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
+- "I'll delegate the plan to a Plan subagent" → Phase 2 violation. Research with `Explore`; plan inline. The dashboard can't surface delegated plans.
+- "I'll skip `EnterPlanMode`, plan mode resets `bypassPermissions`" → Phase 2 step 1 violation. Plan mode is mandatory in this skill — the dashboard can't see planning otherwise.
+- "I'll just paste the plan as text instead of calling `ExitPlanMode`" → Phase 2 step 4 violation. Submit via `ExitPlanMode` so the user gets the native plan-review UI.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.
 - "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
