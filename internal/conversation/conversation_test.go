@@ -696,6 +696,150 @@ func TestReadPlanContent_TruncatesLarge(t *testing.T) {
 	}
 }
 
+func TestReadDelegatedPlanContent_HappyPath(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	toolUseID := "toolu_01ABC"
+	planText := "# Plan\n\n## Phase 1\nDo the thing."
+
+	// One assistant tool_use (the Agent call) followed by a user message
+	// containing the tool_result. Mirrors the real CC transcript shape.
+	jsonl := `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01ABC","name":"Agent","input":{"subagent_type":"Plan"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01ABC","content":[{"type":"text","text":"# Plan\n\n## Phase 1\nDo the thing."}]}]}}
+`
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ReadDelegatedPlanContent(projDir, sessionID, toolUseID)
+	if got != planText {
+		t.Errorf("expected plan text %q, got %q", planText, got)
+	}
+}
+
+func TestReadDelegatedPlanContent_EmptyToolUseID(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	jsonl := `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01ABC","content":[{"type":"text","text":"plan"}]}]}}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if got := ReadDelegatedPlanContent(projDir, sessionID, ""); got != "" {
+		t.Errorf("expected empty when toolUseID is empty, got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_MismatchedID(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	jsonl := `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_OTHER","content":[{"type":"text","text":"plan"}]}]}}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if got := ReadDelegatedPlanContent(projDir, sessionID, "toolu_01ABC"); got != "" {
+		t.Errorf("expected empty when no tool_result matches, got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_MissingFile(t *testing.T) {
+	if got := ReadDelegatedPlanContent("/nonexistent", "no-such", "toolu_01"); got != "" {
+		t.Errorf("expected empty for missing file, got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_MultipleMatchesReturnsLast(t *testing.T) {
+	// The orchestrator may delegate to Plan multiple times in a session. The
+	// dashboard should always show the most recent plan.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	jsonl := `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_X","content":[{"type":"text","text":"first plan"}]}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_X","content":[{"type":"text","text":"second plan"}]}]}}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if got := ReadDelegatedPlanContent(projDir, sessionID, "toolu_X"); got != "second plan" {
+		t.Errorf("expected last match 'second plan', got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_MalformedLineSkipped(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	jsonl := "this is not json\n" +
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_X","content":[{"type":"text","text":"good plan"}]}]}}` + "\n" +
+		"another bad line\n"
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if got := ReadDelegatedPlanContent(projDir, sessionID, "toolu_X"); got != "good plan" {
+		t.Errorf("expected 'good plan' (malformed lines skipped), got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_RawStringContent(t *testing.T) {
+	// Some tool_result payloads use a raw JSON string for content (e.g. Bash
+	// results, older subagent responses). Verify both content shapes are
+	// supported.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	jsonl := `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_X","content":"raw plan text"}]}}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if got := ReadDelegatedPlanContent(projDir, sessionID, "toolu_X"); got != "raw plan text" {
+		t.Errorf("expected 'raw plan text', got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_MultipleTextBlocksJoined(t *testing.T) {
+	// Plan subagent results can include a reasoning block followed by the
+	// actual plan. Both should be returned, joined.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+	jsonl := `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_X","content":[{"type":"text","text":"reasoning"},{"type":"text","text":"plan body"}]}]}}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadDelegatedPlanContent(projDir, sessionID, "toolu_X")
+	if !strings.Contains(got, "reasoning") || !strings.Contains(got, "plan body") {
+		t.Errorf("expected both blocks present, got %q", got)
+	}
+}
+
+func TestReadDelegatedPlanContent_LargeFile(t *testing.T) {
+	// Plan tool_results live near the end of the transcript \u2014 verify the
+	// tail-scan window is large enough (>32KB) to find them.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	var b strings.Builder
+	padLine := `{"type":"user","message":{"content":"` + strings.Repeat("x", 200) + `"}}` + "\n"
+	for b.Len() < 64*1024 { // push past 32KB
+		b.WriteString(padLine)
+	}
+	b.WriteString(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_LATE","content":[{"type":"text","text":"the plan in the tail"}]}]}}` + "\n")
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(b.String()), 0644)
+
+	if got := ReadDelegatedPlanContent(projDir, sessionID, "toolu_LATE"); got != "the plan in the tail" {
+		t.Errorf("expected 'the plan in the tail', got %q", got)
+	}
+}
+
 func TestIsSubagentCompleted_LargeFinalEntry(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "agent.jsonl")

@@ -305,6 +305,14 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := conversation.ProjectSlug(agent.Cwd)
 	projDir := filepath.Join(s.cfg.Profile.ProjectsDir, slug)
+	// Prefer the delegated-Plan-subagent pointer if set; the plan is persisted
+	// only inside the parent JSONL as a tool_result.
+	if agent.DelegatedPlanToolUseID != "" {
+		if content := conversation.ReadDelegatedPlanContent(projDir, agent.SessionID, agent.DelegatedPlanToolUseID); content != "" {
+			writeJSON(w, http.StatusOK, map[string]string{"content": content})
+			return
+		}
+	}
 	planSlug := conversation.ReadPlanSlug(projDir, agent.SessionID)
 	if planSlug == "" {
 		writeJSON(w, http.StatusOK, map[string]string{"content": ""})

@@ -31,9 +31,10 @@ const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
  * @param {string} hookEvent - hook_event_name from stdin
  * @param {string} toolName - tool_name from stdin
  * @param {string} permissionMode - permission_mode from stdin
+ * @param {object} [toolInput] - tool_input from stdin (used to detect delegated planning)
  * @returns {string} "plan", "permission", "question", or "running"
  */
-function resolveState(hookEvent, toolName, permissionMode) {
+function resolveState(hookEvent, toolName, permissionMode, toolInput) {
   // permission_mode='plan' is set by Claude Code itself the moment plan mode
   // activates. Detecting from this field avoids depending on EnterPlanMode/
   // ExitPlanMode tool calls, which are deferred tools in CC 2.1.116+ and may
@@ -53,6 +54,13 @@ function resolveState(hookEvent, toolName, permissionMode) {
   // instead of relying on PermissionRequest, which may not fire in
   // bypassPermissions mode on newer Claude Code versions.
   if (hookEvent === 'PreToolUse' && toolName === 'ExitPlanMode') {
+    return 'plan';
+  }
+  // Orchestrator delegates planning to a Plan subagent. The subagent's
+  // permission_mode is invisible to the parent's hooks, so detect via the
+  // Agent tool call itself.
+  if (hookEvent === 'PreToolUse' && toolName === 'Agent'
+      && toolInput && toolInput.subagent_type === 'Plan') {
     return 'plan';
   }
   return 'running';
@@ -95,8 +103,9 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
+  const toolInput = input.tool_input || {};
 
-  let state = resolveState(hookEvent, toolName, permissionMode);
+  let state = resolveState(hookEvent, toolName, permissionMode, toolInput);
 
   // Only consume hook_blocked on PreToolUse — the same event type that blocking
   // hooks fire on. Ignoring it on PostToolUse prevents a rapid PostToolUse from
@@ -117,11 +126,22 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
 
   const currentTool = hookEvent === 'PostToolUse' ? '' : toolName;
 
+  // Stamp delegated_plan_tool_use_id on PreToolUse Agent+Plan; clear it once
+  // state transitions out of plan (next user turn / next non-Plan tool call).
+  const stampDelegatedPlanId = state === 'plan'
+    && hookEvent === 'PreToolUse'
+    && toolName === 'Agent'
+    && toolInput.subagent_type === 'Plan'
+    && !!input.tool_use_id;
+  const clearDelegatedPlanId = state !== 'plan' && !!existing.delegated_plan_tool_use_id;
+
   const changed = existing.state !== state
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
     || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
-    || consumeBlocked;
+    || consumeBlocked
+    || stampDelegatedPlanId
+    || clearDelegatedPlanId;
 
   if (!changed && existing.state) {
     return { changed: false, update: null };
@@ -139,6 +159,12 @@ function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
 
   if (worktreeCwd) {
     update.worktree_cwd = worktreeCwd;
+  }
+
+  if (stampDelegatedPlanId) {
+    update.delegated_plan_tool_use_id = input.tool_use_id;
+  } else if (clearDelegatedPlanId) {
+    update.delegated_plan_tool_use_id = '';
   }
 
   // Clear hook_blocked after consuming it (one-shot signal from blocking hooks).

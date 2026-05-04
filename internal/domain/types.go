@@ -52,6 +52,11 @@ type Agent struct {
 	PinnedState        string   `json:"pinned_state,omitempty"`
 	DiagramCount       int      `json:"diagram_count,omitempty"`
 	DiagramLatestTS    int64    `json:"diagram_latest_ts,omitempty"`
+	// DelegatedPlanToolUseID points at the Agent tool_use_id in the parent
+	// session's JSONL whose tool_result is the plan markdown produced by a
+	// delegated Plan subagent. Set by agent-state-fast.js on PreToolUse Agent+Plan;
+	// cleared when state transitions out of "plan".
+	DelegatedPlanToolUseID string `json:"delegated_plan_tool_use_id,omitempty"`
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.
