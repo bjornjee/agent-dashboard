@@ -1,0 +1,31 @@
+---
+layout: default
+---
+<section class="blog-index">
+  <header class="blog-index__header">
+    <h1>{{ page.title }}</h1>
+    {% if page.deck %}<p class="blog-index__deck">{{ page.deck }}</p>{% endif %}
+  </header>
+
+  {{ content }}
+
+  <ul class="post-list">
+    {% assign posts = site.html_pages
+        | where: "parent", "Blog"
+        | sort: "date"
+        | reverse %}
+    {% for post in posts %}
+    <li class="post-list__item">
+      <a class="post-list__link" href="{{ post.url | relative_url }}">
+        {% if post.date %}
+        <time class="post-list__date" datetime="{{ post.date | date: '%Y-%m-%d' }}">
+          {{ post.date | date: "%b %-d, %Y" }}
+        </time>
+        {% endif %}
+        <span class="post-list__title">{{ post.title }}</span>
+        {% if post.deck %}<span class="post-list__deck">{{ post.deck }}</span>{% endif %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>

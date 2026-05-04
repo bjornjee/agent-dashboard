@@ -521,41 +521,61 @@ div.highlighter-rouge:hover .copy-code-button {
 
 // --------------- Tables ---------------
 
+// Dark-by-default. Site is always dark (color_scheme: agent-dashboard-dark)
+// — do not gate on prefers-color-scheme; the parent light scheme leaks
+// through tbody td background otherwise.
 .main-content table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   font-size: 14px;
+  margin: 1.5rem 0;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  overflow: hidden;
 
   thead th {
-    background: $zinc-100;
+    background-color: $warm-850;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: $zinc-500;
-    padding: 10px 12px;
-    border-bottom: 2px solid $zinc-200;
+    letter-spacing: 0.06em;
+    color: $warm-400;
+    padding: 11px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    text-align: left;
   }
 
   tbody td {
-    padding: 10px 12px;
-    border-bottom: 1px solid $zinc-100;
-    color: $zinc-600;
+    background-color: transparent;
+    padding: 11px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: $warm-300;
+    vertical-align: top;
   }
 
-  tbody tr:hover {
-    background: rgba(217, 119, 87, 0.03);
+  tbody tr:last-child td {
+    border-bottom: none;
   }
 
-  // Keybinding keys — monospace + pill style
+  tbody tr:hover td {
+    background-color: rgba(217, 119, 87, 0.04);
+  }
+
+  // Keycap pill — used for keys, flags, short file names inside cells.
+  // Uses $warm-700 (~Material 12dp elevation) so it reads as a tactile
+  // chip against both page bg ($warm-900) and the muted thead strip.
   code {
     font-family: $mono-font-family;
     font-size: 12px;
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: 4px;
-    background: $zinc-100;
-    border: 1px solid $zinc-200;
-    color: $zinc-600;
+    background: $warm-700;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: $warm-100;
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
   }
 }
 
@@ -604,25 +624,6 @@ div.highlighter-rouge:hover .copy-code-button {
     color: $indigo-400;
   }
 
-  .main-content table {
-    thead th {
-      background: $zinc-900;
-      color: $zinc-400;
-      border-bottom-color: $zinc-800;
-    }
-
-    tbody td {
-      border-bottom-color: $zinc-800;
-      color: $zinc-400;
-    }
-
-    code {
-      background: rgba(255,255,255,0.06);
-      border-color: $zinc-700;
-      color: $zinc-400;
-    }
-  }
-
   .site-title {
     color: $warm-050;
   }
@@ -638,5 +639,188 @@ div.highlighter-rouge:hover .copy-code-button {
 
   .main-content h2 {
     border-bottom-color: $zinc-800;
+  }
+}
+
+// --------------- Blog ---------------
+
+.blog-post,
+.blog-index {
+  max-width: 65ch;
+  margin: 0 auto;
+
+  p, ul, ol, blockquote, pre, table, figure {
+    margin-bottom: 1.25em;
+  }
+}
+
+.blog-post__body {
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.blog-post__header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(222, 220, 209, 0.08);
+}
+
+.blog-post .blog-post__title {
+  font-size: 2.5rem !important;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0 0 0.75rem 0;
+}
+
+.blog-post__deck {
+  font-size: 1.125rem;
+  font-weight: 400;
+  color: $warm-400;
+  line-height: 1.5;
+  margin: 0;
+
+  time {
+    color: $warm-500;
+    font-variant-numeric: tabular-nums;
+    margin-right: 0.25em;
+  }
+}
+
+.blog-post__body,
+.blog-index {
+  h2 {
+    font-size: 1.625rem !important;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin-top: 2.5rem;
+    padding-bottom: 0.4rem;
+  }
+
+  h3 {
+    font-size: 1.25rem !important;
+    margin-top: 1.75rem;
+  }
+
+  a:not(.btn-hero):not(.hero-badge):not(.post-list__link) {
+    color: $terra-400;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    text-decoration-color: rgba(227, 148, 121, 0.4);
+
+    &:hover {
+      text-decoration-color: $terra-400;
+    }
+  }
+
+  code {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: $warm-200;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    font-size: 0.85em;
+  }
+
+  a code {
+    color: inherit;
+  }
+
+  hr {
+    border: none;
+    height: 1px;
+    background: rgba(222, 220, 209, 0.06);
+    margin: 2.5rem auto;
+    width: 60%;
+  }
+}
+
+.blog-index .blog-index__header {
+  margin-bottom: 2rem;
+
+  h1 {
+    font-size: 2.25rem !important;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+}
+
+.blog-index__deck {
+  font-size: 1.125rem;
+  color: $warm-400;
+  line-height: 1.5;
+  margin: 0.5rem 0 0;
+}
+
+.post-list {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 2rem 0 0 !important;
+  border-top: 1px solid rgba(222, 220, 209, 0.08);
+}
+
+.post-list__item {
+  border-bottom: 1px solid rgba(222, 220, 209, 0.08);
+  margin: 0;
+
+  &::before {
+    content: none !important;
+  }
+}
+
+.post-list__link {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.5rem 1.5rem;
+  padding: 1.25rem 0;
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.02);
+
+    .post-list__title {
+      color: $terra-400;
+    }
+  }
+}
+
+.post-list__date {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 0.8125rem;
+  color: $warm-500;
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.15rem;
+}
+
+.post-list__title {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: $warm-100;
+  transition: color 0.15s ease;
+}
+
+.post-list__deck {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 0.9375rem;
+  color: $warm-400;
+  line-height: 1.5;
+}
+
+@media (max-width: 40rem) {
+  .post-list__link {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .post-list__date,
+  .post-list__title,
+  .post-list__deck {
+    grid-column: 1;
+    grid-row: auto;
   }
 }

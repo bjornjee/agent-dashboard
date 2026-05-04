@@ -3,13 +3,8 @@ title: Building an orchestrator for Claude Code
 parent: Blog
 nav_order: 1
 date: 2026-05-04
----
-
-# Building an orchestrator for Claude Code
-
-*Posted on 2026-05-04 — what I learned about Claude Code's internals by dispatching my own agents.*
-{: .fs-5 .fw-300 }
-
+layout: post
+deck: "What I learned about Claude Code's internals by dispatching my own agents."
 ---
 
 I run a handful of [Claude Code](https://claude.com/claude-code) agents in parallel most days. After a few weeks of context-switching between tmux panes — losing track of which agent was waiting on me, which one had silently failed, which one was about to commit straight to `main` — I built a thing to make the chaos legible. It's called [`agent-dashboard`](https://github.com/bjornjee/agent-dashboard). The name undersells it: it's a TUI **orchestrator and dispatcher** that spawns sessions, routes my replies, gates commits, enforces TDD, and runs a companion PWA so I can approve permissions from my phone.
