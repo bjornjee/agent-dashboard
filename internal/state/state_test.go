@@ -525,8 +525,8 @@ func TestResolveAgentBranches(t *testing.T) {
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
 			"with-cwd": {Cwd: "/valid/repo", Branch: "stale-branch", State: "running"},
-			"no-cwd":   {Cwd: "", Branch: "should-stay", State: "running"},
-			"bad-cwd":  {Cwd: "/nonexistent/path", Branch: "should-stay", State: "running"},
+			"no-cwd":   {Cwd: "", Branch: "stale", State: "running"},
+			"bad-cwd":  {Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
 		},
 	}
 
@@ -535,11 +535,11 @@ func TestResolveAgentBranches(t *testing.T) {
 	if sf.Agents["with-cwd"].Branch != "feat/mock-branch" {
 		t.Errorf("expected branch feat/mock-branch, got %q", sf.Agents["with-cwd"].Branch)
 	}
-	if sf.Agents["no-cwd"].Branch != "should-stay" {
-		t.Errorf("expected branch unchanged for no-cwd agent, got %q", sf.Agents["no-cwd"].Branch)
+	if sf.Agents["no-cwd"].Branch != "" {
+		t.Errorf("expected branch cleared for no-cwd agent, got %q", sf.Agents["no-cwd"].Branch)
 	}
-	if sf.Agents["bad-cwd"].Branch != "should-stay" {
-		t.Errorf("expected branch unchanged for bad-cwd agent, got %q", sf.Agents["bad-cwd"].Branch)
+	if sf.Agents["bad-cwd"].Branch != "" {
+		t.Errorf("expected branch cleared for bad-cwd agent, got %q", sf.Agents["bad-cwd"].Branch)
 	}
 }
 
@@ -553,10 +553,11 @@ func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			"worktree":    {WorktreeCwd: "/valid/worktree", Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
-			"fallback":    {WorktreeCwd: "/nonexistent/worktree", Cwd: "/valid/repo", Branch: "stale", State: "running"},
-			"no-worktree": {Cwd: "/valid/repo", Branch: "stale", State: "running"},
-			"both-bad":    {WorktreeCwd: "/bad/wt", Cwd: "/bad/cwd", Branch: "should-stay", State: "running"},
+			"worktree":         {WorktreeCwd: "/valid/worktree", Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
+			"fallback":         {WorktreeCwd: "/nonexistent/worktree", Cwd: "/valid/repo", Branch: "stale", State: "running"},
+			"no-worktree":      {Cwd: "/valid/repo", Branch: "stale", State: "running"},
+			"both-bad":         {WorktreeCwd: "/bad/wt", Cwd: "/bad/cwd", Branch: "stale", State: "running"},
+			"worktree-deleted": {WorktreeCwd: "/bad/wt", Branch: "feat/old-stale", State: "running"},
 		},
 	}
 
@@ -571,8 +572,11 @@ func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
 	if sf.Agents["no-worktree"].Branch != "feat/from-cwd" {
 		t.Errorf("no-worktree: expected feat/from-cwd, got %q", sf.Agents["no-worktree"].Branch)
 	}
-	if sf.Agents["both-bad"].Branch != "should-stay" {
-		t.Errorf("both-bad: expected unchanged, got %q", sf.Agents["both-bad"].Branch)
+	if sf.Agents["both-bad"].Branch != "" {
+		t.Errorf("both-bad: expected branch cleared, got %q", sf.Agents["both-bad"].Branch)
+	}
+	if sf.Agents["worktree-deleted"].Branch != "" {
+		t.Errorf("worktree-deleted: expected branch cleared after worktree gone, got %q", sf.Agents["worktree-deleted"].Branch)
 	}
 }
 
@@ -580,18 +584,21 @@ func TestResolveAgentBranches_PaneCwdFallback(t *testing.T) {
 	m := withMockBranchRunner(t)
 	mockGitBranch(m, "/pane/cwd", "feat/pane-branch")
 	mockGitBranch(m, "/existing/cwd", "feat/existing-branch")
+	mockGitBranch(m, "/worktree/path", "feat/x")
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			"no-cwd":  {TmuxPaneID: "%10", Branch: "stale", State: "running"},
-			"has-cwd": {TmuxPaneID: "%11", Cwd: "/existing/cwd", Branch: "stale", State: "running"},
-			"no-pane": {Branch: "should-stay", State: "running"},
+			"no-cwd":               {TmuxPaneID: "%10", Branch: "stale", State: "running"},
+			"has-cwd":              {TmuxPaneID: "%11", Cwd: "/existing/cwd", Branch: "stale", State: "running"},
+			"no-pane":              {Branch: "stale", State: "running"},
+			"cwd-stale-pane-fresh": {TmuxPaneID: "%20", Cwd: "/source/repo", Branch: "main", State: "running"},
 		},
 	}
 
 	paneCwds := map[string]string{
 		"%10": "/pane/cwd",
-		"%11": "/should/not/be/used",
+		"%11": "/existing/cwd",
+		"%20": "/worktree/path",
 	}
 
 	ResolveAgentBranches(&sf, paneCwds)
@@ -605,8 +612,14 @@ func TestResolveAgentBranches_PaneCwdFallback(t *testing.T) {
 	if sf.Agents["has-cwd"].Cwd != "/existing/cwd" {
 		t.Errorf("has-cwd: Cwd should remain /existing/cwd, got %q", sf.Agents["has-cwd"].Cwd)
 	}
-	if sf.Agents["no-pane"].Branch != "should-stay" {
-		t.Errorf("no-pane: expected unchanged, got %q", sf.Agents["no-pane"].Branch)
+	if sf.Agents["no-pane"].Branch != "" {
+		t.Errorf("no-pane: expected branch cleared (no resolvable cwd), got %q", sf.Agents["no-pane"].Branch)
+	}
+	// Live pane cwd wins over stored Cwd when both resolve — fixes the "agent
+	// cd'd into a worktree mid-session, hook hasn't refired yet" case.
+	if sf.Agents["cwd-stale-pane-fresh"].Branch != "feat/x" {
+		t.Errorf("cwd-stale-pane-fresh: expected live pane branch feat/x to win over stored main, got %q",
+			sf.Agents["cwd-stale-pane-fresh"].Branch)
 	}
 }
 

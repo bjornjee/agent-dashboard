@@ -135,30 +135,35 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 // ResolveAgentBranches overwrites each agent's Branch with the live value
 // from git using a hierarchical resolution strategy:
 //  1. WorktreeCwd — the agent may be operating in a worktree
-//  2. Cwd — the launch directory from the state file
-//  3. paneCwds — live tmux pane working directory (fallback when hooks omit cwd)
+//  2. Live tmux pane cwd — reflects the agent's *current* shell, so it wins
+//     over a stale stored Cwd when the agent has cd'd mid-session.
+//  3. Cwd — the launch directory from the state file (final fallback).
 //
 // When an agent has no Cwd but a tmux pane cwd is available, Cwd is
 // backfilled so that agentLabel() and the detail header can display it.
-// Agents where all sources fail are left unchanged.
+// When all sources fail to resolve, Branch is cleared to "" so the
+// dashboard does not display a stale value (e.g. after the worktree was
+// removed or git timed out).
 func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string) {
 	for key, agent := range sf.Agents {
-		// Backfill Cwd from tmux pane when the state file lacks it
-		if agent.Cwd == "" && agent.TmuxPaneID != "" && paneCwds != nil {
-			if pc, ok := paneCwds[agent.TmuxPaneID]; ok {
-				agent.Cwd = pc
-			}
+		var paneCwd string
+		if agent.TmuxPaneID != "" && paneCwds != nil {
+			paneCwd = paneCwds[agent.TmuxPaneID]
+		}
+		// Backfill Cwd from tmux pane when the state file lacks it.
+		if agent.Cwd == "" && paneCwd != "" {
+			agent.Cwd = paneCwd
 		}
 
 		var branch string
 		if agent.WorktreeCwd != "" {
 			branch = gitBranch(agent.WorktreeCwd)
 		}
+		if branch == "" && paneCwd != "" {
+			branch = gitBranch(paneCwd)
+		}
 		if branch == "" && agent.Cwd != "" {
 			branch = gitBranch(agent.Cwd)
-		}
-		if branch == "" {
-			continue
 		}
 		agent.Branch = branch
 		sf.Agents[key] = agent
