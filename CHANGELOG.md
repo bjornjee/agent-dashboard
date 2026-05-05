@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/bjornjee/agent-dashboard/compare/v0.14.0...v0.14.1) (2026-05-05)
+
+
+### Miscellaneous Chores
+
+* release 0.14.1 ([#238](https://github.com/bjornjee/agent-dashboard/issues/238)) ([9d80ed4](https://github.com/bjornjee/agent-dashboard/commit/9d80ed4efdab27358566a59cf65a8eace45548e5))
+
 ## [0.14.0](https://github.com/bjornjee/agent-dashboard/compare/v0.13.1...v0.14.0) (2026-05-04)
 
 
