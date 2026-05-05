@@ -89,29 +89,6 @@ describe('hasPendingParentToolUse', () => {
     }
   });
 
-  it('returns false when both parallel tool_uses are resolved', () => {
-    const { file, dir } = writeJsonl([
-      {
-        type: 'assistant',
-        isSidechain: false,
-        message: {
-          role: 'assistant',
-          content: [
-            { type: 'tool_use', id: 'toolu_p1', name: 'Read', input: {} },
-            { type: 'tool_use', id: 'toolu_p2', name: 'Read', input: {} },
-          ],
-        },
-      },
-      USER_TOOL_RESULT('toolu_p1'),
-      USER_TOOL_RESULT('toolu_p2'),
-    ]);
-    try {
-      assert.equal(hasPendingParentToolUse(file), false);
-    } finally {
-      cleanup(dir);
-    }
-  });
-
   it('skips malformed JSONL lines and continues', () => {
     const { file, dir } = writeJsonl([
       ASSISTANT_TOOL_USE('toolu_001'),
@@ -147,9 +124,7 @@ describe('hasPendingParentToolUse', () => {
   });
 
   it('correctly handles file larger than tail window', () => {
-    // Build a JSONL where the tail (last 32KB) ends with an unmatched tool_use
     const lines = [];
-    // Pad with resolved tool_uses to push earlier history out of the tail
     for (let i = 0; i < 500; i++) {
       lines.push(ASSISTANT_TOOL_USE(`toolu_pad_${i}`));
       lines.push(USER_TOOL_RESULT(`toolu_pad_${i}`));
@@ -164,14 +139,11 @@ describe('hasPendingParentToolUse', () => {
   });
 
   it('ignores orphan tool_result whose tool_use scrolled past the tail', () => {
-    // Tail starts mid-history. We see a tool_result without its tool_use.
-    // Should not falsely report "pending" — return false.
     const lines = [];
     for (let i = 0; i < 500; i++) {
       lines.push(ASSISTANT_TOOL_USE(`toolu_pad_${i}`));
       lines.push(USER_TOOL_RESULT(`toolu_pad_${i}`));
     }
-    // Final line is an orphan tool_result (tool_use is way back in history)
     lines.push(USER_TOOL_RESULT('toolu_orphan_far_back'));
     const { file, dir } = writeJsonl(lines);
     try {

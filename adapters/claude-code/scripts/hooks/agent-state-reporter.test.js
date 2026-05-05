@@ -287,7 +287,7 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'running', 'pending parent tool means parent is still working');
+    assert.equal(state, 'running');
   });
 
   it('SubagentStop falls through to detectState when no parent tool pending', () => {
@@ -298,7 +298,7 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'idle_prompt', 'no pending tool + idle pane → self-heal to idle_prompt');
+    assert.equal(state, 'idle_prompt');
   });
 
   it('SubagentStop preserves existing stop state regardless of pending', () => {
@@ -309,7 +309,7 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'idle_prompt', 'existing stop state must not be overwritten');
+    assert.equal(state, 'idle_prompt');
   });
 
   it('SubagentStop preserves running when subagents remain active', () => {
@@ -320,7 +320,7 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'running', 'subagent_count > 0 after decrement → still active');
+    assert.equal(state, 'running');
   });
 
   it('Stop preserves running when parent has a pending tool_use', () => {
@@ -331,7 +331,7 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'running', 'Stop must not flip to idle while a tool is in flight');
+    assert.equal(state, 'running');
   });
 
   it('Stop calls detectState when no pending tool', () => {
@@ -342,7 +342,7 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: 'Should I proceed?',
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'question', 'no pending tool + question text → question');
+    assert.equal(state, 'question');
   });
 
   it('Stop with pending tool but no existing state defaults to running', () => {

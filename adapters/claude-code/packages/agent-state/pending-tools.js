@@ -4,23 +4,8 @@ const fs = require('fs');
 
 const TAIL_SIZE = 32 * 1024;
 
-/**
- * Returns true if the parent transcript JSONL has any tool_use whose id has
- * no matching tool_result in a later user entry. A "pending parent tool" is a
- * deterministic signal that the parent agent is still actively working — far
- * more reliable than tmux pane heuristics.
- *
- * Mirrors the tail-scan pattern in internal/conversation/conversation.go's
- * LastPendingBlockingTool: read the last 32 KB, discard the partial first line
- * after seeking, JSON.parse per line. Sidechain (subagent) entries do not
- * appear in the parent JSONL, so no isSidechain filter is needed.
- *
- * Orphan tool_result entries (whose tool_use scrolled past the tail) do not
- * mark anything as pending — the corresponding tool_use is simply not seen.
- *
- * @param {string|null|undefined} transcriptPath - path to the parent .jsonl
- * @returns {boolean}
- */
+// Returns true if the parent transcript JSONL has an unresolved tool_use —
+// a deterministic signal that the parent is still working between turns.
 function hasPendingParentToolUse(transcriptPath) {
   if (!transcriptPath) return false;
 
