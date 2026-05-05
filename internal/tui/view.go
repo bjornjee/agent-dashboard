@@ -1545,83 +1545,164 @@ func (m model) truncateHelpBar(parts []string) string {
 	return m.composeHelpBarWithStatus(leftContent)
 }
 
-// renderHelpOverlay renders a full-screen help legend with all keybindings grouped by context.
+// helpEntry is a single key/description row in the help overlay.
+type helpEntry struct{ Key, Desc string }
+
+// helpSection groups related help entries under a header.
+type helpSection struct {
+	Title   string
+	Entries []helpEntry
+}
+
+// helpTwoColMinWidth is the minimum content width (after border) at which
+// the help overlay switches to a 2-column layout. Below this threshold the
+// overlay falls back to single-column to avoid awkward wrapping.
+const helpTwoColMinWidth = 90
+
+// buildHelpSections returns the data for the help overlay. The slice is
+// ordered the way it should appear top-to-bottom in single-column mode.
+func buildHelpSections(ghAvailable bool) []helpSection {
+	mergeDesc := "Mark merged + send cleanup"
+	if ghAvailable {
+		mergeDesc = "Merge PR (squash) + cleanup"
+	}
+
+	return []helpSection{
+		{Title: "Navigation", Entries: []helpEntry{
+			{"↑ / k", "Previous agent"},
+			{"↓ / j", "Next agent"},
+			{"⇧↑ / ⇧↓", "Jump to parent agent"},
+			{"tab", "Cycle focus forward"},
+			{"⇧tab", "Cycle focus backward"},
+			{"^u / ^d", "Half-page scroll"},
+			{"J / K", "Line scroll (plan/diff)"},
+		}},
+		{Title: "Agent Actions", Entries: []helpEntry{
+			{"enter", "Jump to agent pane"},
+			{"r", "Reply to agent"},
+			{"e", "Open editor"},
+			{"o", "Open dir in tmux window"},
+			{"a", "Create new session"},
+			{"x", "Close/dismiss agent"},
+			{"m", mergeDesc},
+			{"c", "Collapse/expand subagents"},
+			{"C", "Collapse/expand status group"},
+		}},
+		{Title: "View Controls", Entries: []helpEntry{
+			{"p", "Toggle plan view"},
+			{"u", "Toggle usage view"},
+			{"d", "View diff"},
+			{"D", "Toggle diagram view"},
+			{"g", "Open PR in browser"},
+			{"h", "Toggle this help"},
+		}},
+		{Title: "Diff Mode", Entries: []helpEntry{
+			{"↑ / k", "Previous file"},
+			{"↓ / j", "Next file"},
+			{"e", "Toggle expand all"},
+			{"^u / ^d", "Scroll"},
+			{"J / K", "Line scroll"},
+			{"d / esc", "Close diff"},
+		}},
+		{Title: "Diagram Mode", Entries: []helpEntry{
+			{"↑ / k", "Previous diagram"},
+			{"↓ / j", "Next diagram"},
+			{"enter", "Open diagram in browser"},
+			{"x", "Delete diagram"},
+			{"esc", "Close diagram view"},
+		}},
+		{Title: "Input Modes", Entries: []helpEntry{
+			{"enter", "Send reply / create session"},
+			{"tab", "Auto-complete (create mode)"},
+			{"esc", "Cancel"},
+		}},
+		{Title: "Quit", Entries: []helpEntry{
+			{"q / ^c", "Quit dashboard"},
+		}},
+	}
+}
+
+// sectionLineCount returns how many rendered lines a section occupies,
+// including its title and the trailing blank separator.
+func sectionLineCount(s helpSection) int {
+	return 1 + len(s.Entries) + 1
+}
+
+// splitSectionsBalanced greedily splits sections across two columns,
+// preserving order and never breaking a section. The split point is the
+// last index where the running line count is closest to half the total.
+func splitSectionsBalanced(secs []helpSection) (left, right []helpSection) {
+	total := 0
+	for _, s := range secs {
+		total += sectionLineCount(s)
+	}
+	target := total / 2
+
+	running, bestDiff, bestSplit := 0, total, 0
+	for i, s := range secs {
+		running += sectionLineCount(s)
+		// Diff between left-column height and target if we cut after section i.
+		diff := running - target
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff < bestDiff {
+			bestDiff = diff
+			bestSplit = i + 1
+		}
+	}
+	if bestSplit <= 0 || bestSplit >= len(secs) {
+		return secs, nil
+	}
+	return secs[:bestSplit], secs[bestSplit:]
+}
+
+// renderHelpColumn renders a single column of help sections.
+func renderHelpColumn(secs []helpSection) string {
+	row := func(key, desc string) string {
+		return fmt.Sprintf("  %s  %s", boldStyle.Render(fmt.Sprintf("%-12s", key)), helpStyle.Render(desc))
+	}
+
+	var lines []string
+	for _, s := range secs {
+		lines = append(lines, titleStyle.Render("  "+s.Title))
+		for _, e := range s.Entries {
+			lines = append(lines, row(e.Key, e.Desc))
+		}
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderHelpOverlay renders a full-screen help legend with all keybindings
+// grouped by context. Wide terminals get a balanced 2-column layout; narrow
+// terminals fall back to a single column.
 func (m model) renderHelpOverlay() string {
 	panelHeight := m.height - 5 - m.bannerHeight() // matches resizeViewports
 	contentWidth := m.width - 4                    // account for border
 
-	headerStyle := titleStyle
-	keyStyle := boldStyle
-	descStyle := helpStyle
+	secs := buildHelpSections(m.ghAvailable)
 
-	line := func(key, desc string) string {
-		return fmt.Sprintf("  %s  %s", keyStyle.Render(fmt.Sprintf("%-12s", key)), descStyle.Render(desc))
-	}
-
-	var lines []string
-
-	// Navigation
-	lines = append(lines, headerStyle.Render("  Navigation"))
-	lines = append(lines, line("↑ / k", "Previous agent"))
-	lines = append(lines, line("↓ / j", "Next agent"))
-	lines = append(lines, line("⇧↑ / ⇧↓", "Jump to parent agent"))
-	lines = append(lines, line("tab", "Cycle focus forward"))
-	lines = append(lines, line("⇧tab", "Cycle focus backward"))
-	lines = append(lines, line("^u / ^d", "Half-page scroll"))
-	lines = append(lines, line("J / K", "Line scroll (plan/diff)"))
-	lines = append(lines, "")
-
-	// Agent Actions
-	lines = append(lines, headerStyle.Render("  Agent Actions"))
-	lines = append(lines, line("enter", "Jump to agent pane"))
-	lines = append(lines, line("r", "Reply to agent"))
-	lines = append(lines, line("e", "Open editor"))
-	lines = append(lines, line("o", "Open dir in tmux window"))
-	lines = append(lines, line("a", "Create new session"))
-	lines = append(lines, line("x", "Close/dismiss agent"))
-	if m.ghAvailable {
-		lines = append(lines, line("m", "Merge PR (squash) + cleanup"))
+	var body string
+	if contentWidth < helpTwoColMinWidth {
+		body = renderHelpColumn(secs)
 	} else {
-		lines = append(lines, line("m", "Mark merged + send cleanup"))
+		left, right := splitSectionsBalanced(secs)
+		if right == nil {
+			body = renderHelpColumn(left)
+		} else {
+			colW := (contentWidth - 2) / 2
+			body = lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				lipgloss.NewStyle().Width(colW).Render(renderHelpColumn(left)),
+				lipgloss.NewStyle().Width(colW).Render(renderHelpColumn(right)),
+			)
+		}
 	}
-	lines = append(lines, line("c", "Collapse/expand subagents"))
-	lines = append(lines, line("C", "Collapse/expand status group"))
-	lines = append(lines, "")
-
-	// View Controls
-	lines = append(lines, headerStyle.Render("  View Controls"))
-	lines = append(lines, line("p", "Toggle plan view"))
-	lines = append(lines, line("u", "Toggle usage view"))
-	lines = append(lines, line("d", "View diff"))
-	lines = append(lines, line("g", "Open PR in browser"))
-	lines = append(lines, line("h", "Toggle this help"))
-	lines = append(lines, "")
-
-	// Diff Mode
-	lines = append(lines, headerStyle.Render("  Diff Mode"))
-	lines = append(lines, line("↑ / k", "Previous file"))
-	lines = append(lines, line("↓ / j", "Next file"))
-	lines = append(lines, line("e", "Toggle expand all"))
-	lines = append(lines, line("^u / ^d", "Scroll"))
-	lines = append(lines, line("J / K", "Line scroll"))
-	lines = append(lines, line("d / esc", "Close diff"))
-	lines = append(lines, "")
-
-	// Input Modes
-	lines = append(lines, headerStyle.Render("  Input Modes"))
-	lines = append(lines, line("enter", "Send reply / create session"))
-	lines = append(lines, line("tab", "Auto-complete (create mode)"))
-	lines = append(lines, line("esc", "Cancel"))
-	lines = append(lines, "")
-
-	// Quit
-	lines = append(lines, line("q / ^c", "Quit dashboard"))
-
-	content := strings.Join(lines, "\n")
 
 	style := borderStyle.
 		Width(contentWidth + 2).
 		Height(panelHeight + 2)
 
-	return style.Render(content)
+	return style.Render(body)
 }

@@ -141,10 +141,86 @@ func TestRenderHelpOverlayContainsSections(t *testing.T) {
 
 	content := m.renderHelpOverlay()
 
-	sections := []string{"Navigation", "Agent Actions", "View Controls", "Diff Mode", "Input Modes"}
+	sections := []string{"Navigation", "Agent Actions", "View Controls", "Diff Mode", "Diagram Mode", "Input Modes"}
 	for _, s := range sections {
 		if !strings.Contains(content, s) {
 			t.Errorf("help overlay missing section %q", s)
+		}
+	}
+}
+
+func TestRenderHelpOverlayDocumentsDiagramKeys(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 100
+	m.height = 40
+
+	content := m.renderHelpOverlay()
+
+	// View Controls should advertise the capital-D toggle.
+	if !strings.Contains(content, "Toggle diagram view") {
+		t.Error("help overlay should describe the D toggle for the diagram view")
+	}
+
+	// Diagram Mode section should mention browser open + delete + close.
+	for _, want := range []string{"Open diagram in browser", "Delete diagram", "Close diagram view"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("help overlay Diagram Mode section missing entry %q", want)
+		}
+	}
+}
+
+func TestRenderHelpOverlayTwoColumnsWide(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 200
+	m.height = 40
+
+	content := m.renderHelpOverlay()
+
+	// At wide width the layout must put two distinct section headers on the
+	// same visual line (proof of 2-col layout).
+	headers := []string{"Navigation", "Agent Actions", "View Controls", "Diff Mode", "Diagram Mode", "Input Modes"}
+	twoOnOneLine := false
+	for _, l := range strings.Split(content, "\n") {
+		hits := 0
+		for _, h := range headers {
+			if strings.Contains(l, h) {
+				hits++
+			}
+		}
+		if hits >= 2 {
+			twoOnOneLine = true
+			break
+		}
+	}
+	if !twoOnOneLine {
+		t.Error("expected at least one rendered line to contain two section headers (2-col layout)")
+	}
+}
+
+func TestRenderHelpOverlayOneColumnNarrow(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 70
+	m.height = 40
+
+	content := m.renderHelpOverlay()
+
+	// At narrow width, every line must contain at most one section header.
+	headers := []string{"Navigation", "Agent Actions", "View Controls", "Diff Mode", "Diagram Mode", "Input Modes"}
+	for _, l := range strings.Split(content, "\n") {
+		hits := 0
+		for _, h := range headers {
+			if strings.Contains(l, h) {
+				hits++
+			}
+		}
+		if hits > 1 {
+			t.Errorf("narrow layout should not stack two headers on one line: %q", l)
 		}
 	}
 }
