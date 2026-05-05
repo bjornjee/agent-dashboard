@@ -4,7 +4,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildReportEntry } = require('./agent-state-reporter');
+const { buildReportEntry, resolveStopState } = require('./agent-state-reporter');
 const { detectState } = require('../../packages/agent-state/detect');
 
 const BASE_INPUT = {
@@ -272,6 +272,88 @@ describe('SubagentStop writeState guard prevents TOCTOU race', () => {
 
     // Cleanup
     fs.rmSync(tmpDir, { recursive: true });
+  });
+});
+
+describe('resolveStopState (JSONL-gated detect)', () => {
+  const PANE_IDLE = ['some output', '❯'];
+  const MSG_PLAIN = 'Here is the report.';
+
+  it('SubagentStop preserves running when parent has a pending tool_use', () => {
+    const state = resolveStopState({
+      hookEvent: 'SubagentStop',
+      existing: { state: 'running', subagent_count: 1 },
+      hasPendingTool: true,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'running', 'pending parent tool means parent is still working');
+  });
+
+  it('SubagentStop falls through to detectState when no parent tool pending', () => {
+    const state = resolveStopState({
+      hookEvent: 'SubagentStop',
+      existing: { state: 'running', subagent_count: 1 },
+      hasPendingTool: false,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'idle_prompt', 'no pending tool + idle pane → self-heal to idle_prompt');
+  });
+
+  it('SubagentStop preserves existing stop state regardless of pending', () => {
+    const state = resolveStopState({
+      hookEvent: 'SubagentStop',
+      existing: { state: 'idle_prompt', subagent_count: 1 },
+      hasPendingTool: false,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'idle_prompt', 'existing stop state must not be overwritten');
+  });
+
+  it('SubagentStop preserves running when subagents remain active', () => {
+    const state = resolveStopState({
+      hookEvent: 'SubagentStop',
+      existing: { state: 'running', subagent_count: 3 },
+      hasPendingTool: false,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'running', 'subagent_count > 0 after decrement → still active');
+  });
+
+  it('Stop preserves running when parent has a pending tool_use', () => {
+    const state = resolveStopState({
+      hookEvent: 'Stop',
+      existing: { state: 'running' },
+      hasPendingTool: true,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'running', 'Stop must not flip to idle while a tool is in flight');
+  });
+
+  it('Stop calls detectState when no pending tool', () => {
+    const state = resolveStopState({
+      hookEvent: 'Stop',
+      existing: { state: 'running' },
+      hasPendingTool: false,
+      lastMessage: 'Should I proceed?',
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'question', 'no pending tool + question text → question');
+  });
+
+  it('Stop with pending tool but no existing state defaults to running', () => {
+    const state = resolveStopState({
+      hookEvent: 'Stop',
+      existing: {},
+      hasPendingTool: true,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'running');
   });
 });
 

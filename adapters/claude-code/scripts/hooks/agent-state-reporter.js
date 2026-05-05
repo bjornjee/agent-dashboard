@@ -17,6 +17,7 @@ const os = require('os');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
+const { hasPendingParentToolUse } = require(path.join(pluginRoot, 'packages', 'agent-state', 'pending-tools'));
 const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
@@ -103,6 +104,44 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
   return { changed: changed || !existing.state, entry };
 }
 
+/**
+ * Resolve the state to write for Stop and SubagentStop events. Pure function.
+ *
+ * The previous implementation called detectState() unconditionally on every
+ * SubagentStop where subagent_count reached 0. detectState is heuristic
+ * (regex on last_assistant_message + tmux pane buffer for the ❯ glyph), so
+ * it misclassifies the parent as idle/question while the parent is still
+ * actively running between turns — producing visible state flicker and
+ * spurious "Finished" notifications.
+ *
+ * The fix: gate the heuristic on a deterministic JSONL truth check. If the
+ * parent transcript shows a tool_use without a matching tool_result, the
+ * parent is definitively still working — preserve the existing state.
+ *
+ * @param {object} params
+ * @param {string} params.hookEvent - 'Stop' or 'SubagentStop'
+ * @param {object} params.existing - current on-disk agent state
+ * @param {boolean} params.hasPendingTool - parent JSONL has an in-flight tool_use
+ * @param {string|null} params.lastMessage - input.last_assistant_message
+ * @param {string[]} params.paneBuffer - tmux capture-pane lines
+ * @returns {string} resolved state
+ */
+function resolveStopState({ hookEvent, existing, hasPendingTool, lastMessage, paneBuffer }) {
+  if (hookEvent === 'SubagentStop') {
+    const state = existing.state || 'running';
+    const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
+    if (state === 'running' && subagentCount <= 0 && !hasPendingTool) {
+      return detectState(lastMessage, paneBuffer);
+    }
+    return state;
+  }
+  // Stop event — only run heuristic when JSONL says no tool is in flight.
+  if (hasPendingTool) {
+    return existing.state || 'running';
+  }
+  return detectState(lastMessage, paneBuffer);
+}
+
 // Only run stdin reader when executed directly (not when require()'d by tests)
 if (require.main === module) {
   const MAX_STDIN = 1024 * 1024;
@@ -153,23 +192,21 @@ function report(input) {
   let state;
   if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart') {
     state = 'running';
-  } else if (hookEvent === 'SubagentStop') {
-    // SubagentStop doesn't know the parent's state — preserve what's on disk.
-    state = existing.state || 'running';
-    // Self-heal: when the last subagent finishes and the agent appears stuck at
-    // "running", the Stop hook may have failed silently. Detect the real state
-    // from the pane buffer as a fallback.
-    const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
-    if (state === 'running' && subagentCount <= 0) {
-      const paneBuffer = capture(target, 15);
-      const lastMessage = input.last_assistant_message || null;
-      state = detectState(lastMessage, paneBuffer);
-    }
   } else {
-    // Stop event — detect from pane buffer + last message
-    const paneBuffer = capture(target, 15);
+    // SubagentStop / Stop: gate the heuristic detectState() on a deterministic
+    // JSONL check. A pending parent tool_use means the agent is still working.
+    const hasPendingTool = hasPendingParentToolUse(input.transcript_path);
     const lastMessage = input.last_assistant_message || null;
-    state = detectState(lastMessage, paneBuffer);
+    // Only capture the pane when detectState() will actually consume it.
+    const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
+    const willDetect = !hasPendingTool && (
+      hookEvent === 'Stop' ||
+      (hookEvent === 'SubagentStop' && (existing.state || 'running') === 'running' && subagentCount <= 0)
+    );
+    const paneBuffer = willDetect ? capture(target, 15) : [];
+    state = resolveStopState({
+      hookEvent, existing, hasPendingTool, lastMessage, paneBuffer,
+    });
   }
 
   const parsed = parseTarget(target);
@@ -191,4 +228,4 @@ function report(input) {
 }
 
 // Export for testing
-module.exports = { buildReportEntry };
+module.exports = { buildReportEntry, resolveStopState };
