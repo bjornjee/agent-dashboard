@@ -1,0 +1,9 @@
+{
+  "name": "agent-dashboard-pi-adapter",
+  "version": "0.0.1",
+  "private": true,
+  "description": "pi-coding-agent adapter for agent-dashboard",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
