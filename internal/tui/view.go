@@ -1659,17 +1659,13 @@ func splitSectionsBalanced(secs []helpSection) (left, right []helpSection) {
 
 // renderHelpColumn renders a single column of help sections.
 func renderHelpColumn(secs []helpSection) string {
-	keyStyle := boldStyle
-	descStyle := helpStyle
-	headerStyle := titleStyle
-
 	row := func(key, desc string) string {
-		return fmt.Sprintf("  %s  %s", keyStyle.Render(fmt.Sprintf("%-12s", key)), descStyle.Render(desc))
+		return fmt.Sprintf("  %s  %s", boldStyle.Render(fmt.Sprintf("%-12s", key)), helpStyle.Render(desc))
 	}
 
 	var lines []string
 	for _, s := range secs {
-		lines = append(lines, headerStyle.Render("  "+s.Title))
+		lines = append(lines, titleStyle.Render("  "+s.Title))
 		for _, e := range s.Entries {
 			lines = append(lines, row(e.Key, e.Desc))
 		}
