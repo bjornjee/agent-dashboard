@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/bjornjee/agent-dashboard/compare/v0.14.1...v0.14.2) (2026-05-05)
+
+
+### Bug Fixes
+
+* enforce plan-mode workflow in feature skill, revert eager plan badge ([#240](https://github.com/bjornjee/agent-dashboard/issues/240)) ([20a5874](https://github.com/bjornjee/agent-dashboard/commit/20a58745faf0064f88495bfcef14b5576aa68ced))
+
 ## [0.14.1](https://github.com/bjornjee/agent-dashboard/compare/v0.14.0...v0.14.1) (2026-05-05)
 
 
