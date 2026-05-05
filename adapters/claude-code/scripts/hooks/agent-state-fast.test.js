@@ -186,7 +186,7 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.branch, undefined, 'fast hook should not set branch');
   });
 
-  it('sets worktree_cwd when Bash cd targets a worktree path', () => {
+  it('sets worktree_cwd when input.cwd is a worktree path', () => {
     const existing = {
       target: 'main:1.0',
       state: 'running',
@@ -198,19 +198,18 @@ describe('fast hook state updates (per-agent files)', () => {
         session_id: 'abc123',
         hook_event_name: 'PostToolUse',
         tool_name: 'Bash',
-        cwd: '/Users/bjornjee/Code/bjornjee/skills',
+        cwd: '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature',
       },
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature',
     });
 
     assert.equal(changed, true);
     assert.equal(update.worktree_cwd, '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature');
   });
 
-  it('does not set worktree_cwd for non-worktree cd', () => {
+  it('does not set worktree_cwd when input.cwd is not a worktree path', () => {
     const existing = {
       target: 'main:1.0',
       state: 'running',
@@ -227,13 +226,12 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(update.worktree_cwd, undefined);
   });
 
-  it('preserves existing worktree_cwd when no new worktree cd detected', () => {
+  it('preserves existing worktree_cwd when current input.cwd is the source repo', () => {
     const existing = {
       target: 'main:1.0',
       state: 'running',
@@ -251,11 +249,38 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     // worktree_cwd should NOT be in the update — it's preserved via merge in writeState
     assert.equal(update.worktree_cwd, undefined);
+  });
+
+  it('detects worktree from input.cwd even when Bash command used a relative cd (regression)', () => {
+    // Regression for the dashboard-shows-wrong-branch bug: previously the hook
+    // parsed Bash commands for `cd /abs/path && ...` and rejected relative paths.
+    // Now we read input.cwd directly, so any cd form (relative, $(...), pushd)
+    // resolves correctly because Claude Code reports the live cwd.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'cd ../worktrees/skills/my-feature && pwd' },
+        cwd: '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.worktree_cwd, '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature');
   });
 
   it('allows transition out of "pr" state when not pinned', () => {

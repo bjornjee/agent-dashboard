@@ -19,7 +19,6 @@ const path = require('path');
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
-const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
 // States that PostToolUse must not overwrite. "plan" is included because once
 // ExitPlanMode flips state to "plan" (plan ready for review), a late
@@ -93,14 +92,18 @@ if (require.main === module) {
  * fields to merge, or null if nothing changed.
  *
  * @param {object} params
- * @param {object} params.input - parsed hook stdin
+ * @param {object} params.input - parsed hook stdin (includes input.cwd from Claude Code)
  * @param {object} params.existing - current agent state from disk
  * @param {string} params.target - tmux target string
  * @param {string} params.tmuxPane - TMUX_PANE env value
- * @param {string|null} params.worktreeCwd - detected worktree path from Bash cd, or null
  * @returns {{ changed: boolean, update: object|null }}
  */
-function buildUpdate({ input, existing, target, tmuxPane, worktreeCwd }) {
+function buildUpdate({ input, existing, target, tmuxPane }) {
+  // Detect worktree directly from Claude Code's reported live cwd. This is
+  // deterministic across all hook events and all `cd` forms (relative,
+  // command-substituted, pushd, etc.) — replaces a fragile Bash-string parse.
+  const liveCwd = input.cwd || null;
+  const worktreeCwd = (liveCwd && /\/worktrees\//.test(liveCwd)) ? liveCwd : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
@@ -194,17 +197,7 @@ function fastUpdate(input) {
     if (/\bgh\s+pr\s+(create|merge)\b/.test(cmd)) return;
   }
 
-  // Detect worktree cd from Bash PostToolUse commands.
-  // Pattern: cd /path/to/worktrees/<app>/<feature> && ...
-  let worktreeCwd = null;
-  if (input.hook_event_name === 'PostToolUse' && (input.tool_name || '') === 'Bash') {
-    const detectedCwd = extractCwdFromCommand((input.tool_input || {}).command);
-    if (detectedCwd && /\/worktrees\//.test(detectedCwd)) {
-      worktreeCwd = detectedCwd;
-    }
-  }
-
-  const { changed, update } = buildUpdate({ input, existing, target, tmuxPane, worktreeCwd });
+  const { changed, update } = buildUpdate({ input, existing, target, tmuxPane });
   if (changed && update) {
     // Pass guardStates on PostToolUse to eliminate the TOCTOU race with the
     // async Stop hook: buildUpdate's guard reads stale state, but writeState
