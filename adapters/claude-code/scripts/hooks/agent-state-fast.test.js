@@ -53,16 +53,16 @@ describe('resolveState', () => {
     assert.equal(resolveState('SomeOther', 'Bash', ''), 'running');
   });
 
-  it('returns "plan" when permission_mode is plan, regardless of event', () => {
-    // CC 2.1.116+: EnterPlanMode/ExitPlanMode are deferred tools the model
-    // may never call. permission_mode is the stable signal.
-    assert.equal(resolveState('PreToolUse', 'Bash', 'plan'), 'plan');
-    assert.equal(resolveState('PostToolUse', 'Edit', 'plan'), 'plan');
-    assert.equal(resolveState('PreToolUse', 'AskUserQuestion', 'plan'), 'plan');
+  it('does NOT return "plan" while permission_mode is plan but tool is busy', () => {
+    // The "plan" badge means "plan ready for review" — only ExitPlanMode triggers it.
+    // While the agent is researching/asking inside plan mode, state flows from the tool.
+    assert.equal(resolveState('PreToolUse', 'Bash', 'plan'), 'running');
+    assert.equal(resolveState('PostToolUse', 'Edit', 'plan'), 'running');
+    assert.equal(resolveState('PreToolUse', 'AskUserQuestion', 'plan'), 'question');
   });
 
-  it('plan permission_mode takes precedence over PermissionRequest', () => {
-    assert.equal(resolveState('PermissionRequest', 'Edit', 'plan'), 'plan');
+  it('PermissionRequest returns "permission" regardless of permission_mode', () => {
+    assert.equal(resolveState('PermissionRequest', 'Edit', 'plan'), 'permission');
   });
 
   it('returns "running" when permission_mode is bypassPermissions', () => {
@@ -575,7 +575,10 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.state, 'running');
   });
 
-  it('buildUpdate sets state to "plan" when input.permission_mode is plan', () => {
+  it('buildUpdate keeps state "running" while permission_mode is plan but tool is busy', () => {
+    // While planning, permission_mode='plan' is captured as a field but does not
+    // drive state — state still reflects the active tool. Only ExitPlanMode flips
+    // state to "plan" (meaning: plan ready for review).
     const existing = {
       target: 'main:1.0',
       state: 'running',
@@ -596,11 +599,39 @@ describe('fast hook state updates (per-agent files)', () => {
     });
 
     assert.equal(changed, true);
+    assert.equal(update.state, 'running');
+    assert.equal(update.permission_mode, 'plan',
+      'permission_mode field must still be captured for display');
+  });
+
+  it('buildUpdate sets state to "plan" on PreToolUse ExitPlanMode', () => {
+    // ExitPlanMode is the canonical "plan ready for review" signal.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'ExitPlanMode',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      worktreeCwd: null,
+    });
+
+    assert.equal(changed, true);
     assert.equal(update.state, 'plan');
-    assert.equal(update.permission_mode, 'plan');
   });
 
   it('PostToolUse does not overwrite existing "plan" state', () => {
+    // STOP_STATES guard: once state=plan (set by ExitPlanMode), a stale
+    // PostToolUse from any tool must not clobber it.
     const existing = {
       target: 'main:1.0',
       state: 'plan',
