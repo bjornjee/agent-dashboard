@@ -21,27 +21,28 @@ const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages',
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
-// States that PostToolUse must not overwrite. "plan" is included because
-// permission_mode='plan' arrives on every hook event while planning is active —
-// without the guard, a stale PostToolUse from before plan entry could clobber it.
+// States that PostToolUse must not overwrite. "plan" is included because once
+// ExitPlanMode flips state to "plan" (plan ready for review), a late
+// PostToolUse from a prior tool must not clobber it before the user approves.
 const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
 
 /**
  * Determine the agent state from the hook event.
+ *
+ * "plan" means *the plan is ready for the user's review* — set only on
+ * PreToolUse for ExitPlanMode (or a delegated Plan subagent). While the
+ * orchestrator is still researching/asking inside plan mode, state flows
+ * from the active tool. permission_mode='plan' is captured as a field but
+ * intentionally does NOT override state, so the dashboard badge fires only
+ * at the moment the user needs to act.
+ *
  * @param {string} hookEvent - hook_event_name from stdin
  * @param {string} toolName - tool_name from stdin
- * @param {string} permissionMode - permission_mode from stdin
+ * @param {string} _permissionMode - permission_mode from stdin (captured upstream; not used for state)
  * @param {object} [toolInput] - tool_input from stdin (used to detect delegated planning)
  * @returns {string} "plan", "permission", "question", or "running"
  */
-function resolveState(hookEvent, toolName, permissionMode, toolInput) {
-  // permission_mode='plan' is set by Claude Code itself the moment plan mode
-  // activates. Detecting from this field avoids depending on EnterPlanMode/
-  // ExitPlanMode tool calls, which are deferred tools in CC 2.1.116+ and may
-  // never be invoked.
-  if (permissionMode === 'plan') {
-    return 'plan';
-  }
+function resolveState(hookEvent, toolName, _permissionMode, toolInput) {
   if (hookEvent === 'PermissionRequest') {
     return 'permission';
   }

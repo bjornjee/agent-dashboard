@@ -66,58 +66,76 @@ Start two tracks in parallel:
 
 **Foreground — Planning:**
 
-1. **Enter plan mode first.** Call `EnterPlanMode` (load via `ToolSearch` if it isn't already in scope). This switches the orchestrator's `permission_mode` to `plan`, restricts you to read-only tools, and lights up the dashboard's plan badge so the user can see planning is in progress.
+The phase order matches `core.md`: research first, interview second, plan mode third, submit fourth. Plan mode is the *last* gate before approval, not a pre-research speed-bump. Each step has a HARD-GATE you cannot rationalize past.
 
-   This overrides any prior skill text or global doctrine that says to avoid plan mode. For this skill, plan mode is mandatory.
+1. **Research with `Explore`.** Use the built-in `Explore` subagent for any non-trivial codebase question or library lookup. Do not call `Agent` with `subagent_type=Plan` — composing the plan is your job, not a delegated subagent's. Synthesize what you found inline as your own assistant text.
 
-   **Why:** under `bypassPermissions`, the parent's `permission_mode` only flips to `plan` when you explicitly enter it. Without that flip, the dashboard has no signal that planning is happening — neither the plan badge nor the plan panel render. Entering plan mode is the only way to make the work visible.
-
-   <HARD-GATE>
-   No research (`Explore`, `Read`, `Grep`) and no planning text until `EnterPlanMode` has been called and `permission_mode='plan'` is active.
-   </HARD-GATE>
-
-   Do not wait for environment setup to finish.
-2. **Research with `Explore`. Synthesize the plan yourself.** Do not call `Agent` with `subagent_type=Plan`. Use `Explore` for codebase research and library lookups; write the plan as your own assistant text. This overrides the global `core.md` "delegate to Plan" doctrine for this skill only.
-
-   **Why:** a delegated Plan subagent returns the plan inside a `tool_result` block that lives in the JSONL but never reaches the dashboard's plan panel, conversation view, or activity log. Synthesizing inline puts the plan in your assistant text — which the dashboard renders everywhere — and pairs with plan mode (step 1) so the parent's `permission_mode='plan'` actually corresponds to the orchestrator doing the planning.
+   **Why:** a delegated Plan subagent returns the plan inside a `tool_result` block that lives in the JSONL but never reaches the dashboard's plan panel, conversation view, or activity log. Synthesizing inline puts the plan in your assistant text, which the dashboard renders everywhere.
 
    Symptoms you're about to violate:
    - You're about to call `Agent` with `subagent_type: "Plan"`.
    - You're rationalizing *"the planner does this better."*
-   - You think *Explore-then-Plan* means delegate both.
 
    <HARD-GATE>
    Research subagent (`Explore`): allowed and encouraged.
    Planning subagent (`Plan`): forbidden in this skill. Compose the plan yourself.
    </HARD-GATE>
-3. **Resolve open decisions before drafting the plan.** Identify every decision the implementation depends on that you cannot determine from the codebase or the user's request — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask all of them in a single batch and wait for answers before drafting the plan.
 
-   The plan you submit must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body.
+   Do not wait for environment setup to finish.
+
+2. **Interview the user via `AskUserQuestion`.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `AskUserQuestion` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
+
+   Load via `ToolSearch` if `AskUserQuestion` isn't in scope: `ToolSearch("select:AskUserQuestion")`.
+
+   Schema: 1–4 questions per call, each with a `header` (≤12 chars), 2–4 mutually exclusive `options`, `multiSelect: false` unless the choices genuinely combine. Recommended option goes first with `(Recommended)` suffix. The user always gets an "Other" escape hatch automatically.
+
+   Worked example:
+   ```
+   AskUserQuestion({
+     questions: [{
+       question: "Where should focus.json live?",
+       header: "Focus path",
+       multiSelect: false,
+       options: [
+         {label: "~/.agent-dashboard/focus.json (Recommended)", description: "Co-located with agents/ state dir already watched."},
+         {label: "$XDG_RUNTIME_DIR/agent-dashboard/focus.json", description: "Tmpfs-backed, cleared on reboot."},
+       ],
+     }]
+   })
+   ```
+
+   The plan you submit in step 4 must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body. If a user answer changes scope, return to this step and re-interview.
 
    Symptoms you're about to violate:
+   - You're typing "1." "2." "3." numbered questions in assistant text.
    - You're writing "Decisions needed before implementation" inside the plan.
-   - You're appending questions to the plan instead of asking them first.
    - You're rationalizing "the user can answer these after approval."
 
-   Anti-pattern: *"I'll embed open questions inside the plan and ask them after approval."* This breaks plan-as-source-of-truth. If a user answer changes scope, return to this step and re-submit a revised plan.
+   <HARD-GATE>
+   Freeform numbered questions in assistant text are a violation. If you find yourself typing "1." "2." "3." to ask the user something — STOP, call `AskUserQuestion` instead.
+   The plan is not ready for review until every decision it gates is answered.
+   </HARD-GATE>
+
+3. **Enter plan mode via `EnterPlanMode`, then draft the plan inline.** Now that research is done and decisions are resolved, call `EnterPlanMode` (load via `ToolSearch` if not in scope). This flips the parent's `permission_mode='plan'` and restricts you to read-only tools while you write the plan as your own assistant text.
+
+   **Why this order:** drafting inside plan mode pairs the visible mode-flip with the actual planning work, and `EnterPlanMode` is a load-bearing prerequisite for `ExitPlanMode` (step 4) — which is the only path to user approval.
+
+   Caveat: on approval (step 4), CC drops to its default `permission_mode`, not back to `bypassPermissions`. Subsequent edits in Phase 3 will re-prompt unless the user re-enables bypass. Accepted trade-off — visible planning is worth the one-time mode reset.
 
    <HARD-GATE>
-   The plan is not ready for review until every decision it gates is answered.
-   If you find yourself typing "TBD" / "?" / "Phase 0" / "Decisions needed" — STOP. Ask first, plan second.
+   No drafting the plan in assistant text until `EnterPlanMode` has been called and `permission_mode='plan'` is active.
    </HARD-GATE>
-4. **STOP. Submit the plan via `ExitPlanMode`. Wait for user approval.**
 
-   Pass the full plan markdown as the `plan` argument to `ExitPlanMode`. This renders the plan in CC's native plan-mode UI for the user to approve or reject — the same surface the user already uses for plan review.
+4. **Submit via `ExitPlanMode`. Wait for user approval.** Pass the full plan markdown to the plan file (per CC's plan-mode workflow) and call `ExitPlanMode`. This renders the plan in CC's native plan-review UI for accept/reject.
 
-   Caveat: on approval, CC drops out of plan mode to its default `permission_mode`, not back to `bypassPermissions`. Subsequent edits in Phase 3 will re-prompt unless the user re-enables bypass. That is an accepted trade-off — visible planning is worth the one-time mode reset.
+   **`ExitPlanMode` is the only acceptable submission.** Pasting the plan as assistant text is a violation, even if you also call `ExitPlanMode` afterwards. The user reviews and approves through the plan-review UI — nowhere else.
 
    **No exceptions:**
    - Don't start a "small" preparatory edit while waiting.
    - Don't write the test file "to save time".
-   - Don't ask "should I proceed?" — wait for unprompted approval (the plan-mode UI's accept action is the approval).
-   - Don't paste the plan as plain text *instead of* calling `ExitPlanMode` — both are fine, but `ExitPlanMode` is required.
+   - Don't ask "should I proceed?" in assistant text — the plan-mode UI's accept action is the approval.
 
-**Gate:** User has approved the approach. The submitted plan contains no open decisions. No code has been written yet.
+**Gate:** User has approved the approach via the plan-review UI. The submitted plan contains no open decisions. No code has been written yet.
 
 ---
 
@@ -184,9 +202,10 @@ Triggered when the user indicates the feature has been merged upstream.
 If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
 
 - "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
-- "I'll delegate the plan to a Plan subagent" → Phase 2 violation. Research with `Explore`; plan inline. The dashboard can't surface delegated plans.
-- "I'll skip `EnterPlanMode`, plan mode resets `bypassPermissions`" → Phase 2 step 1 violation. Plan mode is mandatory in this skill — the dashboard can't see planning otherwise.
-- "I'll just paste the plan as text instead of calling `ExitPlanMode`" → Phase 2 step 4 violation. Submit via `ExitPlanMode` so the user gets the native plan-review UI.
+- "I'll delegate the plan to a Plan subagent" → Phase 2 step 1 violation. Research with `Explore`; plan inline. The dashboard can't surface delegated plans.
+- "I'll just type the questions as numbered text" → Phase 2 step 2 violation. `AskUserQuestion` exists for exactly this. Load via `ToolSearch` and call it.
+- "I'll skip `EnterPlanMode`, plan mode resets `bypassPermissions`" → Phase 2 step 3 violation. After research and the `AskUserQuestion` interview, you call `EnterPlanMode` to draft the plan inside plan mode, then `ExitPlanMode` to submit. The reset to default `permission_mode` is the accepted cost.
+- "I'll just paste the plan as text instead of calling `ExitPlanMode`" → Phase 2 step 4 violation. `ExitPlanMode` is the only acceptable submission. Pasting in assistant text is not a fallback.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.
 - "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
