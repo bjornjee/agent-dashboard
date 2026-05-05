@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { mapToolCall, mapToolResult, mapSessionStart, mapAgentEnd, mapToolName } = require('../lib/event-mapper');
+const { mapToolCall, mapToolResult, mapSessionStart, mapAgentEnd, mapToolName, mapAutoRetryStart } = require('../lib/event-mapper');
 
 test('mapToolName: bash → Bash', () => {
   assert.equal(mapToolName('bash'), 'Bash');
@@ -57,7 +57,7 @@ test('mapToolCall: edit event preserves arbitrary input shape', () => {
   assert.deepEqual(payload.tool_input, { path: '/x', oldString: 'a', newString: 'b' });
 });
 
-test('mapToolResult: bash result → PostToolUse Claude payload', () => {
+test('mapToolResult: bash result → PostToolUse Claude payload includes tool_result text', () => {
   const event = {
     type: 'tool_result',
     toolCallId: 'tc_abc',
@@ -75,6 +75,89 @@ test('mapToolResult: bash result → PostToolUse Claude payload', () => {
   assert.equal(payload.session_id, 'sid-1');
   assert.deepEqual(payload.tool_input, { command: 'git commit -m wip' });
   assert.equal(payload.tool_response_is_error, false);
+  assert.equal(payload.tool_result, 'ok');
+});
+
+test('mapToolResult: joins multiple text blocks into tool_result', () => {
+  const event = {
+    type: 'tool_result',
+    toolCallId: 'tc',
+    toolName: 'bash',
+    input: { command: 'gh pr create' },
+    content: [
+      { type: 'text', text: 'Creating PR...' },
+      { type: 'text', text: 'https://github.com/owner/repo/pull/42' },
+    ],
+    isError: false,
+  };
+
+  const payload = mapToolResult(event, { sessionId: 'sid', cwd: '/' });
+  assert.match(payload.tool_result, /pull\/42/);
+});
+
+test('mapToolResult: skips non-text content blocks', () => {
+  const event = {
+    type: 'tool_result',
+    toolCallId: 'tc',
+    toolName: 'bash',
+    input: { command: 'foo' },
+    content: [
+      { type: 'image', data: '...' },
+      { type: 'text', text: 'after image' },
+    ],
+    isError: false,
+  };
+
+  const payload = mapToolResult(event, { sessionId: 's', cwd: '/' });
+  assert.equal(payload.tool_result, 'after image');
+});
+
+test('mapToolResult: empty content → empty tool_result', () => {
+  const event = {
+    type: 'tool_result',
+    toolCallId: 'tc',
+    toolName: 'bash',
+    input: { command: 'foo' },
+    content: [],
+    isError: false,
+  };
+
+  const payload = mapToolResult(event, { sessionId: 's', cwd: '/' });
+  assert.equal(payload.tool_result, '');
+});
+
+test('mapAutoRetryStart: → StopFailure rate_limit Claude payload', () => {
+  const event = {
+    type: 'auto_retry_start',
+    attempt: 2,
+    maxAttempts: 5,
+    delayMs: 30000,
+    errorMessage: 'rate limit exceeded',
+  };
+
+  const payload = mapAutoRetryStart(event, { sessionId: 'sid-1', cwd: '/work' });
+
+  assert.equal(payload.hook_event_name, 'StopFailure');
+  assert.equal(payload.session_id, 'sid-1');
+  assert.equal(payload.cwd, '/work');
+  assert.equal(payload.error, 'rate_limit');
+  assert.equal(payload.error_details, 'rate limit exceeded');
+  assert.equal(payload.attempt, 2);
+  assert.equal(payload.max_attempts, 5);
+});
+
+test('mapAutoRetryStart: classifies non-rate-limit errors generically', () => {
+  const event = {
+    type: 'auto_retry_start',
+    attempt: 1,
+    maxAttempts: 3,
+    delayMs: 5000,
+    errorMessage: 'connection timeout',
+  };
+
+  const payload = mapAutoRetryStart(event, { sessionId: 's', cwd: '/' });
+  assert.equal(payload.error, 'transient');
+  assert.equal(payload.error_details, 'connection timeout');
 });
 
 test('mapSessionStart: → SessionStart Claude payload', () => {

@@ -21,6 +21,14 @@ function mapToolCall(event, { sessionId, cwd }) {
   };
 }
 
+function joinTextBlocks(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter(b => b && b.type === 'text' && typeof b.text === 'string')
+    .map(b => b.text)
+    .join('\n');
+}
+
 function mapToolResult(event, { sessionId, cwd }) {
   return {
     hook_event_name: 'PostToolUse',
@@ -30,6 +38,26 @@ function mapToolResult(event, { sessionId, cwd }) {
     tool_input: event.input,
     tool_call_id: event.toolCallId,
     tool_response_is_error: !!event.isError,
+    tool_result: joinTextBlocks(event.content),
+  };
+}
+
+function classifyRetryError(message) {
+  if (typeof message === 'string' && /\brate[\s_-]?limit/i.test(message)) {
+    return 'rate_limit';
+  }
+  return 'transient';
+}
+
+function mapAutoRetryStart(event, { sessionId, cwd }) {
+  return {
+    hook_event_name: 'StopFailure',
+    session_id: sessionId,
+    cwd,
+    error: classifyRetryError(event.errorMessage),
+    error_details: event.errorMessage || '',
+    attempt: event.attempt,
+    max_attempts: event.maxAttempts,
   };
 }
 
@@ -75,5 +103,8 @@ module.exports = {
   mapToolResult,
   mapSessionStart,
   mapAgentEnd,
+  mapAutoRetryStart,
   lastAssistantText,
+  joinTextBlocks,
+  classifyRetryError,
 };

@@ -46,6 +46,7 @@ const PRE_BASH_GATES = [
 
 const POST_BASH_GATES = [
   gateScript('commit-lint.js'),
+  gateScript('pr-detect.js'),
 ];
 
 const STOP_HOOKS = [

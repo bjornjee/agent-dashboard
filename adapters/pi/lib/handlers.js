@@ -131,6 +131,25 @@ function onAgentEnd(event, ctx, depsArg) {
   }
 }
 
+function onAutoRetryStart(event, ctx, depsArg) {
+  const deps = depsArg || defaultDeps();
+  const s = buildSession(ctx, deps);
+  if (!s.sessionId || !s.target) return;
+
+  const payload = eventMapper.mapAutoRetryStart(event, { sessionId: s.sessionId, cwd: s.cwd });
+
+  deps.writePiState(s.sessionId, {
+    target: s.target,
+    state: 'error',
+    last_error: event.errorMessage || '',
+    last_hook_event: 'StopFailure',
+  });
+
+  for (const hook of deps.stopHooks) {
+    deps.runGate(hook, payload);
+  }
+}
+
 function onSessionShutdown(event, ctx, depsArg) {
   const deps = depsArg || defaultDeps();
   const s = buildSession(ctx, deps);
@@ -151,5 +170,6 @@ module.exports = {
   onToolExecutionEnd,
   onToolResult,
   onAgentEnd,
+  onAutoRetryStart,
   onSessionShutdown,
 };

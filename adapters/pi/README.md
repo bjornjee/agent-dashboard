@@ -36,8 +36,10 @@ Open the dashboard — the pi session renders as a tile.
 | `session_start` | Initialize agent JSON: target, model, cwd, agent_id="pi" |
 | `tool_call` | Run safety gates (destructive, main-commit, test-gate). Block on exit code 2. |
 | `tool_execution_start` | Set `current_tool`, `state: "running"` |
-| `tool_execution_end` | Clear `current_tool`. On Bash: run `commit-lint`. |
-| `agent_end` | Set `state: "done"` or `"idle_prompt"`; fire desktop notification |
+| `tool_execution_end` | Clear `current_tool` |
+| `tool_result` | On Bash: run `commit-lint` and `pr-detect` (sets state to `pr` / `merged` on `gh pr create` / `gh pr merge`) |
+| `agent_end` | Set `state: "idle_prompt"`; fire desktop notification |
+| `auto_retry_start` | Set `state: "error"`; fire desktop notification (rate-limit / transient errors — Claude `StopFailure` equivalent) |
 | `session_shutdown` | Final state flush |
 
 ## What does NOT port from the Claude adapter
@@ -46,7 +48,8 @@ These have no pi equivalent today and are intentionally out of scope:
 
 - **`codex-delegation-gate`** — pi has no `ExitPlanMode` event
 - **`codex-write-gate`** — codex-specific
-- **`mermaid-extractor`**, **`pr-detect`** — deferred (not required for tile-state parity)
+- **`mermaid-extractor`** — deferred (not required for tile-state parity; can be added by listening on `agent_end` / `message_end`)
+- **Subagent tracking** — pi has no spawn/stop subagent pair (only `session_before_fork`); subagent counts can't replicate
 - **Conversation panel rendering for pi** — the dashboard's JSONL parser is currently Claude-schema-only; pi tiles will show state/tools/notifications but the conversation viewer will be empty until a follow-up PR adds a pi parser
 
 ## Test

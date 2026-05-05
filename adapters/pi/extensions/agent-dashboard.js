@@ -13,6 +13,7 @@ module.exports = function (pi) {
   pi.on('tool_execution_end', (event, ctx) => handlers.onToolExecutionEnd(event, ctx));
   pi.on('tool_result', (event, ctx) => handlers.onToolResult(event, ctx));
   pi.on('agent_end', (event, ctx) => handlers.onAgentEnd(event, ctx));
+  pi.on('auto_retry_start', (event, ctx) => handlers.onAutoRetryStart(event, ctx));
   pi.on('session_shutdown', (event, ctx) => handlers.onSessionShutdown(event, ctx));
 };
 

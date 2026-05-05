@@ -18,6 +18,7 @@ test('extension entry: registers all expected event handlers', () => {
   const events = subscriptions.map(s => s.eventName).sort();
   assert.deepEqual(events, [
     'agent_end',
+    'auto_retry_start',
     'session_shutdown',
     'session_start',
     'tool_call',

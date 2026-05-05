@@ -94,3 +94,10 @@ test('runGates: all pass → null', () => {
   const result = runGates(['/a.js', '/b.js'], {}, { spawn });
   assert.equal(result, null);
 });
+
+test('POST_BASH_GATES: includes commit-lint and pr-detect', () => {
+  const { POST_BASH_GATES } = require('../lib/gates');
+  const names = POST_BASH_GATES.map(p => p.split('/').pop());
+  assert.ok(names.includes('commit-lint.js'), `missing commit-lint.js in: ${names.join(',')}`);
+  assert.ok(names.includes('pr-detect.js'), `missing pr-detect.js in: ${names.join(',')}`);
+});

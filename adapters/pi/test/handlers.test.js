@@ -167,6 +167,42 @@ test('onSessionShutdown: writes done state', () => {
   assert.equal(writes[0].update.state, 'done');
 });
 
+test('onAutoRetryStart: writes error state and fires desktop-notify', () => {
+  const ctx = makeCtx();
+  const { deps, writes, singleGateCalls } = makeDeps();
+
+  handlers.onAutoRetryStart({
+    type: 'auto_retry_start',
+    attempt: 2,
+    maxAttempts: 5,
+    delayMs: 30000,
+    errorMessage: 'rate limit exceeded',
+  }, ctx, deps);
+
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].update.state, 'error');
+  assert.equal(writes[0].update.last_error, 'rate limit exceeded');
+  assert.equal(writes[0].update.last_hook_event, 'StopFailure');
+
+  assert.equal(singleGateCalls.length, 1);
+  assert.equal(singleGateCalls[0].script, '/g/desktop-notify.js');
+  assert.equal(singleGateCalls[0].payload.hook_event_name, 'StopFailure');
+  assert.equal(singleGateCalls[0].payload.error, 'rate_limit');
+});
+
+test('onAutoRetryStart: no-op when no tmux pane', () => {
+  const ctx = makeCtx();
+  const { deps, writes, singleGateCalls } = makeDeps();
+  deps.getPaneId = () => null;
+
+  handlers.onAutoRetryStart({
+    type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 1000, errorMessage: 'x',
+  }, ctx, deps);
+
+  assert.equal(writes.length, 0);
+  assert.equal(singleGateCalls.length, 0);
+});
+
 test('handlers: gracefully no-op when sessionId missing', () => {
   const ctx = { sessionManager: { getSessionId: () => '' }, cwd: '/' };
   const { deps, writes } = makeDeps();
