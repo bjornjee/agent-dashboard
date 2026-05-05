@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.0](https://github.com/bjornjee/agent-dashboard/compare/v0.14.2...v0.15.0) (2026-05-05)
+
+
+### Features
+
+* 2-column help overlay with diagram keybindings ([#242](https://github.com/bjornjee/agent-dashboard/issues/242)) ([64b24b0](https://github.com/bjornjee/agent-dashboard/commit/64b24b08baa73e979dc54bc11861068b570ed35f))
+
+
+### Bug Fixes
+
+* deterministic agent branch detection + drop pr skill ([#244](https://github.com/bjornjee/agent-dashboard/issues/244)) ([59b7adb](https://github.com/bjornjee/agent-dashboard/commit/59b7adb58e7b47d6784738f64f693743f308f5b7))
+* gate SubagentStop self-heal on parent JSONL truth ([#245](https://github.com/bjornjee/agent-dashboard/issues/245)) ([355fefa](https://github.com/bjornjee/agent-dashboard/commit/355fefa203b70b045154c571042e35596ab2087b))
+
 ## [0.14.2](https://github.com/bjornjee/agent-dashboard/compare/v0.14.1...v0.14.2) (2026-05-05)
 
 
