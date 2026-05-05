@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -334,6 +336,25 @@ func withMockCommandRunner(t *testing.T) *mocks.MockCommandRunner {
 	cmdRunner = m
 	t.Cleanup(func() { cmdRunner = orig })
 	return m
+}
+
+// stubBranchRunner returns a fixed branch for any directory passed to
+// gitBranch, simulating "this dir resolves to <branch>". Used by tests that
+// pre-populate Agent.Branch and need ResolveAgentBranches to resolve to the
+// same value (otherwise it clears the field, since resolution failure is now
+// treated as authoritative).
+type stubBranchRunner struct{ branch string }
+
+func (r *stubBranchRunner) Output(_ context.Context, _ string, _ ...string) ([]byte, error) {
+	return []byte(r.branch + "\n"), nil
+}
+
+// withStubBranchRunner makes ResolveAgentBranches resolve every directory to
+// the given branch for the duration of the test.
+func withStubBranchRunner(t *testing.T, branch string) {
+	t.Helper()
+	restore := state.SetTestRunner(&stubBranchRunner{branch: branch})
+	t.Cleanup(restore)
 }
 
 func TestDiffEndpoint(t *testing.T) {
@@ -996,6 +1017,7 @@ func TestPRURLEndpoint(t *testing.T) {
 
 	t.Run("resolves via gh pr view when pr_url empty", func(t *testing.T) {
 		m := withMockCommandRunner(t)
+		withStubBranchRunner(t, "feat/test")
 
 		cfg := config.DefaultConfig()
 		stateDir := t.TempDir()
@@ -1090,6 +1112,7 @@ func TestPRURLEndpoint(t *testing.T) {
 
 	t.Run("falls back to compare URL when gh fails", func(t *testing.T) {
 		m := withMockCommandRunner(t)
+		withStubBranchRunner(t, "feat/test")
 
 		cfg := config.DefaultConfig()
 		stateDir := t.TempDir()
@@ -1144,6 +1167,8 @@ func TestPRURLEndpoint(t *testing.T) {
 }
 
 func TestCleanupPerformsFullPostMergeFlow(t *testing.T) {
+	withStubBranchRunner(t, "feat/test-cleanup")
+
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()
 	cfg.Profile.StateDir = stateDir

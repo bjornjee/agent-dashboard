@@ -133,32 +133,37 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 }
 
 // ResolveAgentBranches overwrites each agent's Branch with the live value
-// from git using a hierarchical resolution strategy:
-//  1. WorktreeCwd — the agent may be operating in a worktree
-//  2. Cwd — the launch directory from the state file
-//  3. paneCwds — live tmux pane working directory (fallback when hooks omit cwd)
+// from git, using the agent's static project directory:
+//  1. WorktreeCwd if set — stamped once by the hook from input.cwd and
+//     trusted as the agent's home for diff/PR/cleanup features.
+//  2. Cwd otherwise — the launch directory from the state file.
+//
+// Branch is read live (gitBranch reflects whatever's currently checked out)
+// but the directory itself is intentionally static: features that key off
+// it should not see it shifting as the agent cd's around.
 //
 // When an agent has no Cwd but a tmux pane cwd is available, Cwd is
 // backfilled so that agentLabel() and the detail header can display it.
-// Agents where all sources fail are left unchanged.
+// When resolution fails (worktree deleted, git timed out, dir doesn't
+// exist), Branch is cleared to "" so the dashboard does not display a
+// stale value.
 func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string) {
 	for key, agent := range sf.Agents {
-		// Backfill Cwd from tmux pane when the state file lacks it
+		// Backfill Cwd from tmux pane when the state file lacks it. Used by
+		// agentLabel/detail header — does not influence branch resolution.
 		if agent.Cwd == "" && agent.TmuxPaneID != "" && paneCwds != nil {
 			if pc, ok := paneCwds[agent.TmuxPaneID]; ok {
 				agent.Cwd = pc
 			}
 		}
 
+		dir := agent.WorktreeCwd
+		if dir == "" {
+			dir = agent.Cwd
+		}
 		var branch string
-		if agent.WorktreeCwd != "" {
-			branch = gitBranch(agent.WorktreeCwd)
-		}
-		if branch == "" && agent.Cwd != "" {
-			branch = gitBranch(agent.Cwd)
-		}
-		if branch == "" {
-			continue
+		if dir != "" {
+			branch = gitBranch(dir)
 		}
 		agent.Branch = branch
 		sf.Agents[key] = agent
