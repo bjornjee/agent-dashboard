@@ -99,11 +99,13 @@ if (require.main === module) {
  * @returns {{ changed: boolean, update: object|null }}
  */
 function buildUpdate({ input, existing, target, tmuxPane }) {
-  // Detect worktree directly from Claude Code's reported live cwd. This is
-  // deterministic across all hook events and all `cd` forms (relative,
-  // command-substituted, pushd, etc.) — replaces a fragile Bash-string parse.
+  // Stamp worktree_cwd the first time we observe Claude Code reporting a
+  // worktree path as input.cwd. Treated as static for the agent's lifetime —
+  // downstream features (diff viewer, PR creation, cleanup) trust this dir
+  // and shouldn't have it shifting as the agent cd's around.
   const liveCwd = input.cwd || null;
-  const worktreeCwd = (liveCwd && /\/worktrees\//.test(liveCwd)) ? liveCwd : null;
+  const worktreeCwd = (!existing.worktree_cwd && liveCwd && /\/worktrees\//.test(liveCwd))
+    ? liveCwd : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';

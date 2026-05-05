@@ -283,6 +283,34 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.worktree_cwd, '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature');
   });
 
+  it('does not overwrite an already-stamped worktree_cwd (static dir semantic)', () => {
+    // Once worktree_cwd is set it should be treated as the agent's static home
+    // for the rest of the session — diff viewer, PR creation, and cleanup all
+    // trust this dir. Even if input.cwd reports a different worktree path
+    // (e.g. agent cd'd into a different worktree), don't update.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      worktree_cwd: '/Users/bjornjee/Code/bjornjee/worktrees/skills/feature-a',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        cwd: '/Users/bjornjee/Code/bjornjee/worktrees/skills/feature-b',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, undefined,
+      'existing worktree_cwd must not be overwritten when agent visits another worktree path');
+  });
+
   it('allows transition out of "pr" state when not pinned', () => {
     // Unpinned "pr" state (e.g. from an older hook version) is overridable
     // by subsequent tool activity.
