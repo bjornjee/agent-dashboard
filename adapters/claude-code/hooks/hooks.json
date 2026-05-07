@@ -41,6 +41,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-skill-gate.js\""
+          }
+        ],
+        "description": "Block direct gh pr create — require /agent-dashboard:pr"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-write-gate.js\""
           }
         ],

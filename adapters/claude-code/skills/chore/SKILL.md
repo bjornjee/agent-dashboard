@@ -54,15 +54,17 @@ Review all changes for correctness and convention adherence. Apply all project r
 
 ---
 
-### Phase 5: Commit
+### Phase 5: Commit and Open PR
 
-Commit with a conventional commit message. Use the appropriate type:
+1. Commit with a conventional commit message. Use the appropriate type:
 
-| Type | When |
-|------|------|
-| `chore` | Dependency bumps, version bumps, tooling config |
-| `docs` | Documentation, READMEs, comments |
-| `ci` | CI/CD pipeline changes |
-| `build` | Build system, Makefile changes |
+   | Type | When |
+   |------|------|
+   | `chore` | Dependency bumps, version bumps, tooling config |
+   | `docs` | Documentation, READMEs, comments |
+   | `ci` | CI/CD pipeline changes |
+   | `build` | Build system, Makefile changes |
 
-**Gate:** Clean commit with conventional message.
+2. Open the PR by invoking **`/agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+
+**Gate:** Clean commit with conventional message. PR opened via `/agent-dashboard:pr`.

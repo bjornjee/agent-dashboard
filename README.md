@@ -21,7 +21,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Mermaid diagram viewer** — captures `mermaid` blocks from agent messages, browse per-session, render in browser via `D`
 - **Usage dashboard** — per-agent token breakdown (Claude and Codex), weekly cost in the bottom bar, rolling 7-day breakdown anchored to Monday, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
-- **Session creation** — spawn new agent sessions with z-plugin frecency-ranked path autocomplete, skill selection (feature, fix, chore, refactor, investigate, rca), and automatic detection of Claude Code's "trust this folder?" prompt during spawn
+- **Session creation** — spawn new agent sessions with z-plugin frecency-ranked path autocomplete, skill selection (feature, fix, chore, refactor, investigate, pr, rca), and automatic detection of Claude Code's "trust this folder?" prompt during spawn
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
 - **Dino runner game** — experimental Chrome-style endless runner in the left panel with jump, duck, speed ramp, and score counter (opt-in via settings)
 - **Quick reply** — send free-text responses directly to agent panes
@@ -364,6 +364,7 @@ adapters/claude-code/
 │   ├── chore/                         # non-code changes
 │   ├── refactor/                      # refactoring
 │   ├── investigate/                   # investigation
+│   ├── pr/                            # PR creation gate (cleaner + fmt + test)
 │   └── rca/                           # root cause analysis
 └── agents/                            # pre-configured agent definitions
     ├── build-error-resolver.md

@@ -173,16 +173,10 @@ Review all changes for correctness, security, and convention adherence. Apply al
 
 ### Phase 5: Deliver
 
-Before committing, run the `refactor-cleaner` agent as an automated cleanup pass — but only if needed:
+1. Commit the feature changes with a `feat:` conventional commit message.
+2. Open the PR by invoking **`/agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
-1. Check git log for a recent cleaner run: `git log --oneline -20 --grep="chore: ai-fmt"`.
-2. If no recent run is found, spawn the `refactor-cleaner` agent (`run_in_background: false`) on all changed files.
-3. Run `make test` to confirm the cleaner's changes don't break anything.
-4. If the cleaner made changes, commit them separately with `chore: ai-fmt` as the commit message.
-
-Commit the feature changes and prepare for merge.
-
-**Gate:** Clean commit history with conventional commit messages.
+**Gate:** Clean commit history with conventional commit messages. PR opened via `/agent-dashboard:pr`.
 
 ---
 
@@ -210,5 +204,5 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.
 - "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
 - "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
-- "The cleaner's diff is just style, no need for a separate commit" → squash discipline lost. Commit `chore: ai-fmt` separately as Phase 5 says.
+- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `/agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
