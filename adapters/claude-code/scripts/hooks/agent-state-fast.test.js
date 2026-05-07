@@ -65,6 +65,20 @@ describe('resolveState', () => {
     assert.equal(resolveState('PermissionRequest', 'Edit', 'plan'), 'permission');
   });
 
+  it('returns "plan" for PermissionRequest with ExitPlanMode (non-bypass plan mode)', () => {
+    // In permission_mode='plan' (not bypassPermissions), Claude Code fires
+    // PermissionRequest for ExitPlanMode. The tool-specific signal must win
+    // over the generic permission fallback so the dashboard groups the agent
+    // under PLAN, not BLOCKED.
+    assert.equal(resolveState('PermissionRequest', 'ExitPlanMode', 'plan'), 'plan');
+  });
+
+  it('returns "question" for PermissionRequest with AskUserQuestion', () => {
+    // Same race as ExitPlanMode: PermissionRequest can swallow AskUserQuestion
+    // before its PreToolUse branch runs. Tool-specific classification wins.
+    assert.equal(resolveState('PermissionRequest', 'AskUserQuestion', ''), 'question');
+  });
+
   it('returns "running" when permission_mode is bypassPermissions', () => {
     assert.equal(resolveState('PreToolUse', 'Bash', 'bypassPermissions'), 'running');
   });
