@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/bjornjee/agent-dashboard/compare/v0.16.0...v0.17.0) (2026-05-07)
+
+
+### Features
+
+* detect /agent-dashboard:pr slash command in UserPromptSubmit ([#250](https://github.com/bjornjee/agent-dashboard/issues/250)) ([851f7f7](https://github.com/bjornjee/agent-dashboard/commit/851f7f7e8bc08fe9ff5332b80c6b978d4874ede2))
+
 ## [0.16.0](https://github.com/bjornjee/agent-dashboard/compare/v0.15.0...v0.16.0) (2026-05-07)
 
 
