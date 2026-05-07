@@ -73,21 +73,13 @@ Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `t
 
 ---
 
-### Phase 5: Draft
+### Phase 5: Draft, push, and create
 
 Compose the PR using **all** commits on the branch (not just the latest):
 
 - **Title:** ≤70 chars, conventional format `<type>: <description>`. Pick the type that matches the *primary* change.
 - **Summary:** 1–3 bullets — what changed and why. The "why" matters more than the "what".
 - **Test plan:** bulleted checklist of how to verify.
-
-Show the draft to the user. Wait for approval or edits.
-
-**Gate:** User approved (or edited) the draft.
-
----
-
-### Phase 6: Push and create
 
 1. If no upstream: `git push -u origin $(git branch --show-current)`. If upstream exists but is behind: `git push`.
 2. Create the PR. **The `AGENT_DASHBOARD_PR_SKILL=1` prefix is mandatory** — without it the `pr-skill-gate` hook blocks the call:
