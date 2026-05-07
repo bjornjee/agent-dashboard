@@ -42,19 +42,21 @@ const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
  * @returns {string} "plan", "permission", "question", or "running"
  */
 function resolveState(hookEvent, toolName, _permissionMode, toolInput) {
-  if (hookEvent === 'PermissionRequest') {
-    return 'permission';
+  // Tool-specific signals are strictly more informative than the generic
+  // PermissionRequest event, so they take priority. In permission_mode='plan'
+  // (non-bypass), Claude Code fires PermissionRequest for ExitPlanMode — the
+  // generic fallback would otherwise swallow it and misclassify as BLOCKED.
+  // Covers both PermissionRequest (non-bypass) and PreToolUse (bypassPermissions).
+  if ((hookEvent === 'PermissionRequest' || hookEvent === 'PreToolUse')
+      && toolName === 'ExitPlanMode') {
+    return 'plan';
   }
-  // AskUserQuestion fires as PreToolUse, not PermissionRequest.
-  // It always blocks for user input — the agent asked a question.
-  if (hookEvent === 'PreToolUse' && toolName === 'AskUserQuestion') {
+  if ((hookEvent === 'PermissionRequest' || hookEvent === 'PreToolUse')
+      && toolName === 'AskUserQuestion') {
     return 'question';
   }
-  // ExitPlanMode blocks for plan approval. Detect it on PreToolUse directly
-  // instead of relying on PermissionRequest, which may not fire in
-  // bypassPermissions mode on newer Claude Code versions.
-  if (hookEvent === 'PreToolUse' && toolName === 'ExitPlanMode') {
-    return 'plan';
+  if (hookEvent === 'PermissionRequest') {
+    return 'permission';
   }
   // Orchestrator delegates planning to a Plan subagent. The subagent's
   // permission_mode is invisible to the parent's hooks, so detect via the
