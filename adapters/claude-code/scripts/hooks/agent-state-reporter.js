@@ -189,13 +189,16 @@ function report(input) {
   // Determine agent state based on hook event.
   // PreToolUse/PostToolUse/PermissionRequest are handled by agent-state-fast.js.
   const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+  // hasPendingTool is hoisted out of the else branch so the writeState call
+  // below can decide whether to pass guardStates.
+  let hasPendingTool = false;
   let state;
   if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart') {
     state = 'running';
   } else {
     // SubagentStop / Stop: gate the heuristic detectState() on a deterministic
     // JSONL check. A pending parent tool_use means the agent is still working.
-    const hasPendingTool = hasPendingParentToolUse(input.transcript_path);
+    hasPendingTool = hasPendingParentToolUse(input.transcript_path);
     const lastMessage = input.last_assistant_message || null;
     // Only capture the pane when detectState() will actually consume it.
     const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
@@ -219,13 +222,33 @@ function report(input) {
   });
 
   if (changed) {
-    // Pass guardStates on SubagentStop to eliminate the TOCTOU race with the
-    // async Stop hook: the application-level guard at line 158 reads stale state,
-    // but writeState re-reads from disk — the guard must run against that fresh read.
-    const writeOpts = hookEvent === 'SubagentStop' ? { guardStates: STOP_STATES } : {};
+    const writeOpts = shouldGuardWrite(hookEvent, hasPendingTool)
+      ? { guardStates: STOP_STATES }
+      : {};
     writeState(sessionId, entry, undefined, writeOpts);
   }
 }
 
+// shouldGuardWrite decides whether writeState should pass guardStates so that
+// a stale, concurrent write from this script cannot clobber a STOP_STATES
+// value (question/plan/idle_prompt/done) just written by agent-state-fast.js.
+//
+// SubagentStop: always guard. The async Stop hook reads stale state; the
+// guard runs against the fresh on-disk read inside writeState.
+//
+// Stop with hasPendingTool=true: guard. The parent JSONL has a tool_use
+// without a matching tool_result — typically AskUserQuestion or ExitPlanMode
+// blocking on user input. PreToolUse may have just written 'question' or
+// 'plan'; this Stop's resolveStopState is preserving a pre-PreToolUse stale
+// existing.state, so the write must not be allowed to overwrite STOP_STATES.
+//
+// Stop with hasPendingTool=false: do not guard. The assistant turn ended
+// cleanly; detectState's idle_prompt/done result is authoritative and must
+// be allowed to clear a lingering 'question' on disk after the user answers.
+function shouldGuardWrite(hookEvent, hasPendingTool) {
+  return hookEvent === 'SubagentStop'
+    || (hookEvent === 'Stop' && hasPendingTool);
+}
+
 // Export for testing
-module.exports = { buildReportEntry, resolveStopState };
+module.exports = { buildReportEntry, resolveStopState, shouldGuardWrite };
