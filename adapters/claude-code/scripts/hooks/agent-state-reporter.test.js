@@ -4,7 +4,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildReportEntry, resolveStopState } = require('./agent-state-reporter');
+const { buildReportEntry, resolveStopState, shouldGuardWrite } = require('./agent-state-reporter');
 const { detectState } = require('../../packages/agent-state/detect');
 
 const BASE_INPUT = {
@@ -228,6 +228,33 @@ describe('SubagentStop state handling', () => {
 
     assert.equal(entry.state, 'running', 'should stay running with active subagents');
     assert.equal(entry.subagent_count, 2);
+  });
+});
+
+describe('shouldGuardWrite (Stop race fix)', () => {
+  it('guards SubagentStop unconditionally', () => {
+    assert.equal(shouldGuardWrite('SubagentStop', false), true);
+    assert.equal(shouldGuardWrite('SubagentStop', true), true);
+  });
+
+  it('guards Stop only when parent has a pending tool_use', () => {
+    // Race window: AskUserQuestion / ExitPlanMode tool_use exists in JSONL
+    // without a tool_result. PreToolUse may have just written question/plan;
+    // Stop's stale read must not clobber it.
+    assert.equal(shouldGuardWrite('Stop', true), true);
+  });
+
+  it('does not guard Stop when no tool is pending (lets question→idle_prompt transition through)', () => {
+    // After AskUserQuestion is answered: the assistant's next turn ends with
+    // hasPendingTool=false. detectState's idle_prompt/done result must
+    // overwrite the lingering 'question' on disk; otherwise the agent is
+    // stuck in 'question' forever.
+    assert.equal(shouldGuardWrite('Stop', false), false);
+  });
+
+  it('does not guard non-stop events', () => {
+    assert.equal(shouldGuardWrite('SessionStart', true), false);
+    assert.equal(shouldGuardWrite('SubagentStart', false), false);
   });
 });
 
