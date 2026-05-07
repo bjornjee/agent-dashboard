@@ -207,6 +207,20 @@
         "description": "Blow sound on permission prompt, idle prompt, or elicitation dialog"
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-skill-detect.js\"",
+            "async": true,
+            "timeout": 3
+          }
+        ],
+        "description": "Detect /agent-dashboard:pr slash command and pin agent state to pr"
+      }
+    ],
     "StopFailure": [
       {
         "matcher": "*",
