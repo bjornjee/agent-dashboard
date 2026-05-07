@@ -45,22 +45,31 @@ Run in parallel:
 
 ### Phase 3: `make fmt`
 
-1. `make fmt`
-2. Check `git status --porcelain`. If anything changed:
-   - Run `make test` to confirm formatter didn't break anything.
-   - Commit: `git add -u && git commit -m "chore: fmt"`.
-3. If nothing changed, skip the commit.
+Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 
-**Gate:** Working tree clean (or fmt commit landed) and tests still pass.
+- **If the target exists:** run `make fmt`. Then check `git status --porcelain`. If anything changed, run `make test`, then commit with `git add -u && git commit -m "chore: fmt"`. If nothing changed, skip the commit.
+- **If no Makefile exists, or no `fmt` target:** surface this hint to the user, then proceed:
+
+  > No `make fmt` target found in this repo. Recommend adding one — even a thin wrapper around the language-native formatter (`gofmt -w .`, `ruff format`, `prettier --write`, `cargo fmt`, etc.) is enough to make this gate work and keeps formatting deterministic across contributors. Want me to add it now? (Y/n)
+
+  If the user says yes, add the target *before* opening the PR (a separate `chore: add make fmt target` commit). If no, proceed without formatting.
+
+**Gate:** Either `make fmt` ran clean, or the user has been notified the target is missing.
 
 ---
 
 ### Phase 4: `make test`
 
-1. `make test` — must pass.
-2. If it fails, **stop**. Do not push a broken branch. Fix the failure (likely on a separate `fix:` commit) and re-run.
+Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `test-fast` per the `test-gate` hook's preference order).
 
-**Gate:** Tests green.
+- **If the target exists:** run it — must pass. If it fails, **stop**. Do not push a broken branch. Fix the failure (likely a separate `fix:` commit) and re-run.
+- **If no Makefile exists, or no `test`/`test-fast` target:** surface this hint to the user, then proceed:
+
+  > No `make test` target found in this repo. Recommend adding one (e.g. `test: ; <runner>`) so the PR gate can verify changes pass before opening the PR. Want me to add it now? (Y/n)
+
+  If yes, add it (separate `chore: add make test target` commit) and run it. If no, proceed but note in the PR body that tests were not gated.
+
+**Gate:** Either tests are green, or the user has been notified the target is missing and accepted that trade-off.
 
 ---
 
