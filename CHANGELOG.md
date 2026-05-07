@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/bjornjee/agent-dashboard/compare/v0.15.0...v0.16.0) (2026-05-07)
+
+
+### Features
+
+* pi-coding-agent adapter (JS-only, no Go changes) ([#246](https://github.com/bjornjee/agent-dashboard/issues/246)) ([78905a6](https://github.com/bjornjee/agent-dashboard/commit/78905a61651748f98dea12271c0668e00f645b26))
+* revive pr skill with cleanup gate + enforcement hook ([#248](https://github.com/bjornjee/agent-dashboard/issues/248)) ([50b466f](https://github.com/bjornjee/agent-dashboard/commit/50b466f51cc3e7177de9b969d8c712d00da2571a))
+
+
+### Bug Fixes
+
+* resolve ExitPlanMode as plan, not permission, in non-bypass plan mode ([#249](https://github.com/bjornjee/agent-dashboard/issues/249)) ([0125203](https://github.com/bjornjee/agent-dashboard/commit/012520389bb2ea7afcb4f24979174fe3b07d04e9))
+
 ## [0.15.0](https://github.com/bjornjee/agent-dashboard/compare/v0.14.2...v0.15.0) (2026-05-05)
 
 
