@@ -68,6 +68,14 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     ? input.model
     : (existing.model || '');
 
+  // Effort is not exposed by Claude Code in hook stdin or JSONL. The dashboard
+  // seeds CLAUDE_CODE_EFFORT_LEVEL when it spawns an agent so this reporter
+  // captures the level on SessionStart. Subsequent events preserve whatever
+  // effort the fast hook (or this reporter) wrote earlier.
+  const effort = (hookEvent === 'SessionStart' && process.env.CLAUDE_CODE_EFFORT_LEVEL)
+    ? process.env.CLAUDE_CODE_EFFORT_LEVEL
+    : (existing.effort || '');
+
   const permissionMode = input.permission_mode || existing.permission_mode || '';
 
   let subagentCount = existing.subagent_count || 0;
@@ -94,6 +102,9 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     subagent_count: subagentCount,
     last_hook_event: hookEvent || '',
   };
+  if (effort) {
+    entry.effort = effort;
+  }
 
   const changed = existing.state !== state
     || existing.subagent_count !== subagentCount

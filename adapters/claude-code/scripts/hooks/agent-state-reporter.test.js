@@ -141,6 +141,67 @@ describe('buildReportEntry', () => {
 
     assert.equal(changed, true);
   });
+
+  it('captures CLAUDE_CODE_EFFORT_LEVEL into entry.effort on SessionStart', () => {
+    const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = 'max';
+    try {
+      const { entry } = buildReportEntry({
+        input: BASE_INPUT,
+        existing: {},
+        target: 'main:1.0',
+        tmuxPane: '%0',
+        state: 'running',
+        filesChanged: [],
+        parsed: BASE_PARSED,
+        cwd: '/tmp',
+      });
+      assert.equal(entry.effort, 'max');
+    } finally {
+      if (orig === undefined) delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+      else process.env.CLAUDE_CODE_EFFORT_LEVEL = orig;
+    }
+  });
+
+  it('preserves existing.effort on non-SessionStart events when env var unset', () => {
+    const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    try {
+      const { entry } = buildReportEntry({
+        input: { ...BASE_INPUT, hook_event_name: 'Stop' },
+        existing: { effort: 'high' },
+        target: 'main:1.0',
+        tmuxPane: '%0',
+        state: 'running',
+        filesChanged: [],
+        parsed: BASE_PARSED,
+        cwd: '/tmp',
+      });
+      assert.equal(entry.effort, 'high');
+    } finally {
+      if (orig !== undefined) process.env.CLAUDE_CODE_EFFORT_LEVEL = orig;
+    }
+  });
+
+  it('omits effort when neither env var nor existing has it', () => {
+    const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    try {
+      const { entry } = buildReportEntry({
+        input: BASE_INPUT,
+        existing: {},
+        target: 'main:1.0',
+        tmuxPane: '%0',
+        state: 'running',
+        filesChanged: [],
+        parsed: BASE_PARSED,
+        cwd: '/tmp',
+      });
+      assert.equal(entry.effort, undefined);
+    } finally {
+      if (orig !== undefined) process.env.CLAUDE_CODE_EFFORT_LEVEL = orig;
+    }
+  });
 });
 
 describe('SubagentStop state handling', () => {

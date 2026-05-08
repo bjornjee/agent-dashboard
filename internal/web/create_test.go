@@ -78,15 +78,20 @@ func postCreate(t *testing.T, ts *httptest.Server, body string) *http.Response {
 	return resp
 }
 
-// Skills that declare `effort: max` in their SKILL.md frontmatter are not
+// Skills that declare `effort: <level>` in their SKILL.md frontmatter are not
 // consistently honored by Claude Code once permission_mode flips on
-// EnterPlanMode. Pass `--effort max` at the CLI to pin session-level effort
-// through plan-mode transitions for skills that opt in.
-func TestBuildAgentCommand_EffortMaxSkillsGetFlag(t *testing.T) {
+// EnterPlanMode. The dashboard pins effort at spawn via two channels:
+//   - --effort <level> CLI flag (CC reads it directly)
+//   - CLAUDE_CODE_EFFORT_LEVEL=<level> env-var prefix (so the SessionStart
+//     hook can persist the level to the agent state file for display)
+//
+// Baseline for feature/fix/refactor is "high" — the dynamic dispatcher in
+// agent-state-fast.js bumps to "max" while permission_mode='plan'.
+func TestBuildAgentCommand_EffortHighSkillsGetFlagAndEnv(t *testing.T) {
 	for _, skill := range []string{"feature", "fix", "refactor"} {
 		t.Run(skill, func(t *testing.T) {
 			got := buildAgentCommand("claude", skill, "")
-			want := "claude --effort max '/" + skill + "'"
+			want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/" + skill + "'"
 			if got != want {
 				t.Errorf("buildAgentCommand(claude, %q, \"\") = %q, want %q", skill, got, want)
 			}
@@ -94,7 +99,7 @@ func TestBuildAgentCommand_EffortMaxSkillsGetFlag(t *testing.T) {
 	}
 }
 
-func TestBuildAgentCommand_NonOptedSkillsOmitFlag(t *testing.T) {
+func TestBuildAgentCommand_NonOptedSkillsOmitFlagAndEnv(t *testing.T) {
 	for _, skill := range []string{"chore", "investigate", "rca", "pr"} {
 		t.Run(skill, func(t *testing.T) {
 			got := buildAgentCommand("claude", skill, "")
@@ -124,7 +129,7 @@ func TestBuildAgentCommand_EmptySkillWithMessage(t *testing.T) {
 
 func TestBuildAgentCommand_FeatureWithMessage(t *testing.T) {
 	got := buildAgentCommand("claude", "feature", "add login")
-	want := "claude --effort max '/feature add login'"
+	want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/feature add login'"
 	if got != want {
 		t.Errorf("buildAgentCommand(claude, feature, add login) = %q, want %q", got, want)
 	}

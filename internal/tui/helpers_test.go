@@ -139,6 +139,47 @@ func TestAgentBadges_NoModelIndicator(t *testing.T) {
 	}
 }
 
+func TestAgentBadges_EffortIncluded(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	agent := domain.Agent{
+		PermissionMode: "bypassPermissions",
+		Effort:         "max",
+		CurrentTool:    "Bash",
+	}
+	badges := agentBadges(agent)
+	if !strings.Contains(badges, "max") {
+		t.Errorf("agentBadges should contain effort token 'max', got %q", badges)
+	}
+	if !strings.Contains(badges, "bypassPermissions") {
+		t.Errorf("agentBadges should still contain permission_mode, got %q", badges)
+	}
+	if !strings.Contains(badges, "Bash") {
+		t.Errorf("agentBadges should still contain current_tool, got %q", badges)
+	}
+	// Order: permission_mode → effort → current_tool
+	permIdx := strings.Index(badges, "bypassPermissions")
+	effIdx := strings.Index(badges, "max")
+	toolIdx := strings.Index(badges, "Bash")
+	if !(permIdx < effIdx && effIdx < toolIdx) {
+		t.Errorf("expected order permission_mode → effort → current_tool, got %q", badges)
+	}
+}
+
+func TestAgentBadges_EffortOmittedWhenEmpty(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	agent := domain.Agent{
+		PermissionMode: "bypassPermissions",
+		CurrentTool:    "Bash",
+	}
+	badges := agentBadges(agent)
+	// Without an Effort field set, none of the levels should appear as a token.
+	for _, level := range []string{" max ", " high ", " low ", " medium ", " xhigh "} {
+		if strings.Contains(badges, level) {
+			t.Errorf("agentBadges should omit effort when Agent.Effort is empty, got %q (matched %q)", badges, level)
+		}
+	}
+}
+
 func TestFindWindowForRepo_MatchesWorktrees(t *testing.T) {
 	agents := []domain.Agent{
 		{

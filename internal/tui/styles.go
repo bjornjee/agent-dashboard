@@ -64,6 +64,7 @@ var (
 	prColor         = themeMauve
 	mergedColor     = themeTeal
 	planColor       = themeMauve
+	effortColor     = themePink
 	textInputColor  = themeYellow
 
 	helpStyle      = lipgloss.NewStyle().Foreground(themeOverlay1)

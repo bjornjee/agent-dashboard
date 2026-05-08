@@ -15,10 +15,28 @@
 'use strict';
 
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
+
+// dispatchEffortKeys types `/effort <level>\r` into the agent's tmux pane.
+// Claude Code processes /effort as a slash command (supportsNonInteractive
+// flag set in the bundled command definition), so this is the documented
+// way to mutate session-level effort mid-conversation. Fire-and-forget;
+// any failure (tmux missing, pane gone, slash command unavailable) is
+// silently ignored — the displayed effort may briefly drift from CC's
+// actual effortValue, accepted limitation.
+function dispatchEffortKeys(tmuxPane, level) {
+  if (!tmuxPane || !level) return;
+  try {
+    spawnSync('tmux', ['send-keys', '-t', tmuxPane, `/effort ${level}`, 'Enter'], {
+      timeout: 500,
+      stdio: 'ignore',
+    });
+  } catch { /* fire-and-forget */ }
+}
 
 // States that PostToolUse must not overwrite. "plan" is included because once
 // ExitPlanMode flips state to "plan" (plan ready for review), a late
@@ -100,6 +118,23 @@ if (require.main === module) {
  * @param {string} params.tmuxPane - TMUX_PANE env value
  * @returns {{ changed: boolean, update: object|null }}
  */
+// effortTransition returns the new effort level if permission_mode is moving
+// into or out of 'plan'. Returns null when no transition (or when dynamic
+// switching is disabled via AGENT_DASHBOARD_DYNAMIC_EFFORT=0|off|false, or
+// when CC omitted permission_mode from the payload — common on PostToolUse
+// for some events; we don't act on absent data).
+//
+// Rule: max during planning, high otherwise. Dispatch to CC happens in
+// fastUpdate via tmux send-keys; this function only computes the value.
+function effortTransition(existingMode, newMode) {
+  const off = process.env.AGENT_DASHBOARD_DYNAMIC_EFFORT;
+  if (off === '0' || off === 'off' || off === 'false') return null;
+  if (!newMode) return null;
+  if (existingMode !== 'plan' && newMode === 'plan') return 'max';
+  if (existingMode === 'plan' && newMode !== 'plan') return 'high';
+  return null;
+}
+
 function buildUpdate({ input, existing, target, tmuxPane }) {
   // Stamp worktree_cwd the first time we observe Claude Code reporting a
   // worktree path as input.cwd. Treated as static for the agent's lifetime —
@@ -115,6 +150,12 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 
   let state = resolveState(hookEvent, toolName, permissionMode, toolInput);
 
+  // Detect plan-mode transition for dynamic effort dispatch. Computed before
+  // the PostToolUse stop-state guard because a leaving-plan transition
+  // (state=plan + permission_mode flipping to non-plan) must surface even
+  // when state itself is guarded.
+  const newEffort = effortTransition(existing.permission_mode, permissionMode);
+
   // Only consume hook_blocked on PreToolUse — the same event type that blocking
   // hooks fire on. Ignoring it on PostToolUse prevents a rapid PostToolUse from
   // a prior tool clearing the signal before the dashboard reads it.
@@ -126,8 +167,11 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   // Stop-derived states must not be overwritten by a late PostToolUse.
   // PreToolUse (next turn) is allowed through to correctly resume "running".
   if (hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state)) {
-    if (consumeBlocked) {
-      return { changed: true, update: { hook_blocked: '' } };
+    const guardedUpdate = {};
+    if (consumeBlocked) guardedUpdate.hook_blocked = '';
+    if (newEffort) guardedUpdate.effort = newEffort;
+    if (Object.keys(guardedUpdate).length > 0) {
+      return { changed: true, update: guardedUpdate };
     }
     return { changed: false, update: null };
   }
@@ -149,7 +193,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
     || consumeBlocked
     || stampDelegatedPlanId
-    || clearDelegatedPlanId;
+    || clearDelegatedPlanId
+    || !!newEffort;
 
   if (!changed && existing.state) {
     return { changed: false, update: null };
@@ -180,6 +225,10 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     update.hook_blocked = '';
   }
 
+  if (newEffort) {
+    update.effort = newEffort;
+  }
+
   return { changed: true, update };
 }
 
@@ -205,9 +254,21 @@ function fastUpdate(input) {
   if (changed && update) {
     // Pass guardStates on PostToolUse to eliminate the TOCTOU race with the
     // async Stop hook: buildUpdate's guard reads stale state, but writeState
-    // re-reads from disk — the guard must run against that fresh read.
-    const opts = input.hook_event_name === 'PostToolUse' ? { guardStates: STOP_STATES } : {};
+    // re-reads from disk — the guard must run against that fresh read. Skip
+    // the guard for partial updates that don't touch `state` (e.g. effort or
+    // hook_blocked deltas during a leaving-plan transition); those must land
+    // even when state is in STOP_STATES.
+    const opts = (input.hook_event_name === 'PostToolUse' && update.state)
+      ? { guardStates: STOP_STATES }
+      : {};
     writeState(sessionId, update, undefined, opts);
+
+    // Dispatch /effort to the agent's tmux pane on plan-mode transition.
+    // buildUpdate sets update.effort only when a transition fires, so an
+    // unchanged effort never causes a redundant slash command.
+    if (update.effort && update.effort !== (existing.effort || '')) {
+      dispatchEffortKeys(tmuxPane, update.effort);
+    }
   }
 }
 

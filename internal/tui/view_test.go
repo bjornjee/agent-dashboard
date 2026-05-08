@@ -669,3 +669,55 @@ func TestRenderRightPanel_ErrorStateShowsErrorLabel(t *testing.T) {
 		t.Errorf("error-state right panel must NOT use the generic 'Agent is waiting' label, got:\n%s", content)
 	}
 }
+
+// The right-panel header meta line surfaces session-config tokens
+// (state | model | permission_mode | effort). Effort joins the line only
+// when it is set on the Agent — same conditional rule permission_mode follows.
+func TestRenderRightPanel_EffortAppearsInMetaLineWhenSet(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+	m.agents = []domain.Agent{
+		{
+			Target: "main:1.0", Window: 1, Pane: 0, State: "running",
+			TmuxPaneID: "%5", Effort: "max",
+		},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+	m.updateRightContent()
+	content := m.renderRightPanel()
+
+	if !strings.Contains(content, "max") {
+		t.Errorf("right panel meta line should include 'max' effort token when Effort='max', got:\n%s", content)
+	}
+}
+
+func TestRenderRightPanel_EffortOmittedWhenUnset(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+	m.updateRightContent()
+	content := m.renderRightPanel()
+
+	// Without Effort set, none of the level tokens should appear as standalone
+	// segments in the meta line.
+	for _, level := range []string{" max ", " high ", " medium ", " low ", " xhigh "} {
+		if strings.Contains(content, level) {
+			t.Errorf("right panel must omit effort segment when Effort is unset, but found %q in:\n%s", level, content)
+		}
+	}
+}

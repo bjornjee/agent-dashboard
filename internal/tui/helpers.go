@@ -152,6 +152,10 @@ func agentBadges(agent domain.Agent) string {
 	if agent.PermissionMode != "" && agent.PermissionMode != "default" {
 		parts = append(parts, permissionModeStyle(agent.PermissionMode))
 	}
+	if agent.Effort != "" {
+		parts = append(parts, lipgloss.NewStyle().Foreground(effortColor).
+			Render(agent.Effort))
+	}
 	if agent.CurrentTool != "" {
 		parts = append(parts, lipgloss.NewStyle().Foreground(themeSubtext0).
 			Render(agent.CurrentTool))

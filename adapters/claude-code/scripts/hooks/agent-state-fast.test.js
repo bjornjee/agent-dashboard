@@ -918,3 +918,148 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.deepEqual(result.files_changed, ['file1.go', 'file2.go']);
   });
 });
+
+// Dynamic effort: while permission_mode='plan' the agent is in the planning
+// phase and should run at 'max'; outside plan mode it should run at 'high'.
+// buildUpdate must surface this transition by setting update.effort so the
+// hook layer can dispatch /effort via tmux send-keys to the same pane.
+describe('dynamic effort on permission_mode transitions', () => {
+  it('entering plan mode bumps effort to max', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      permission_mode: 'default',
+      effort: 'high',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.effort, 'max');
+  });
+
+  it('leaving plan mode drops effort back to high', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      permission_mode: 'plan',
+      effort: 'max',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    // PostToolUse on stop-state 'plan' returns changed=false in the existing
+    // guard, but the leaving-plan transition takes precedence — when
+    // permission_mode flips out of 'plan', the effort downgrade must be
+    // surfaced even from a guarded PostToolUse.
+    assert.equal(changed, true);
+    assert.equal(update.effort, 'high');
+  });
+
+  it('staying in plan mode does not rewrite effort', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      permission_mode: 'plan',
+      effort: 'max',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update?.effort, undefined,
+      'no transition means no effort write — existing.effort=max is preserved by merge');
+  });
+
+  it('outside plan mode without transition does not set effort', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      permission_mode: 'default',
+      effort: 'high',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    if (update !== null) {
+      assert.equal(update.effort, undefined);
+    }
+  });
+
+  it('AGENT_DASHBOARD_DYNAMIC_EFFORT=0 disables transitions', () => {
+    const orig = process.env.AGENT_DASHBOARD_DYNAMIC_EFFORT;
+    process.env.AGENT_DASHBOARD_DYNAMIC_EFFORT = '0';
+    try {
+      const existing = {
+        target: 'main:1.0',
+        state: 'running',
+        current_tool: '',
+        permission_mode: 'default',
+        effort: 'high',
+      };
+
+      const { update } = buildUpdate({
+        input: {
+          session_id: 'abc123',
+          hook_event_name: 'PreToolUse',
+          tool_name: 'Read',
+          permission_mode: 'plan',
+        },
+        existing,
+        target: 'main:1.0',
+        tmuxPane: '%0',
+      });
+
+      // permission_mode changed → buildUpdate still emits an update, but
+      // effort field is NOT bumped because dynamic switching is disabled.
+      assert.equal(update?.effort, undefined,
+        'dynamic effort should be disabled when AGENT_DASHBOARD_DYNAMIC_EFFORT=0');
+    } finally {
+      if (orig === undefined) delete process.env.AGENT_DASHBOARD_DYNAMIC_EFFORT;
+      else process.env.AGENT_DASHBOARD_DYNAMIC_EFFORT = orig;
+    }
+  });
+});

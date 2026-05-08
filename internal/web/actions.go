@@ -379,25 +379,32 @@ func buildPrompt(skill, message string) string {
 	return strings.Join(parts, " ")
 }
 
-// skillEffort maps skill names to the --effort level the dashboard should
-// pin at spawn time. Frontmatter `effort: max` in SKILL.md is parsed by
-// Claude Code on initial invocation but is not consistently re-applied
-// after EnterPlanMode flips permission_mode, so the CLI flag is the
-// reliable injection point. Skills not in this map omit the flag and
-// inherit Claude Code's default effort.
+// skillEffort maps skill names to the baseline --effort level the dashboard
+// should pin at spawn time. Frontmatter `effort:` in SKILL.md is parsed by
+// Claude Code on initial invocation but is not consistently re-applied after
+// EnterPlanMode flips permission_mode, so the CLI flag is the reliable
+// injection point. Skills not in this map omit the flag and inherit Claude
+// Code's default effort.
+//
+// Baseline is "high" — the agent-state-fast hook bumps to "max" dynamically
+// while permission_mode='plan' and back to "high" on exit, so peak planning
+// effort matches the user's explicit ask without paying max-effort costs
+// during the implementation phase.
 var skillEffort = map[string]string{
-	"feature":  "max",
-	"fix":      "max",
-	"refactor": "max",
+	"feature":  "high",
+	"fix":      "high",
+	"refactor": "high",
 }
 
 // buildAgentCommand assembles the shell command used to spawn an agent in
-// a tmux pane. It prepends `--effort <level>` when the skill opts in via
-// skillEffort, then appends the user's prompt (skill + message).
+// a tmux pane. When the skill opts into a baseline effort level via
+// skillEffort, the command is prefixed with CLAUDE_CODE_EFFORT_LEVEL=<level>
+// (so the SessionStart hook can capture the level for display) and CC's
+// --effort <level> flag (so CC pins the session-level effort).
 func buildAgentCommand(profileCmd, skill, message string) string {
 	cmd := profileCmd
 	if level := skillEffort[skill]; level != "" {
-		cmd = cmd + " --effort " + level
+		cmd = "CLAUDE_CODE_EFFORT_LEVEL=" + level + " " + cmd + " --effort " + level
 	}
 	prompt := buildPrompt(skill, message)
 	if prompt != "" {
