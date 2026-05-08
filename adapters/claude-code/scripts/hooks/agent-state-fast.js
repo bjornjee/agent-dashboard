@@ -264,8 +264,9 @@ function fastUpdate(input) {
     writeState(sessionId, update, undefined, opts);
 
     // Dispatch /effort to the agent's tmux pane on plan-mode transition.
-    // buildUpdate sets update.effort only when a transition fires, so an
-    // unchanged effort never causes a redundant slash command.
+    // Guard against the edge case where the stored effort already equals the
+    // transition target (e.g. agent re-enters plan mode without having exited
+    // cleanly) — avoids sending a no-op /effort command to the pane.
     if (update.effort && update.effort !== (existing.effort || '')) {
       dispatchEffortKeys(tmuxPane, update.effort);
     }
