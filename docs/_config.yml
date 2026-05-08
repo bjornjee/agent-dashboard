@@ -1,9 +1,23 @@
 title: agent-dashboard
-description: A tmux-integrated TUI and mobile web companion for monitoring and controlling coding agents
+description: A tmux-integrated TUI and mobile web companion for monitoring and controlling Claude Code and other coding agents.
+tagline: Multi-agent tmux dashboard for Claude Code with workflow gating and a mobile remote.
+keywords:
+  - claude-code
+  - claude-code-plugin
+  - tmux
+  - agent-dashboard
+  - ai-coding-agents
+  - bubble-tea
+  - tui
+  - codex
+  - workflow-automation
+  - llm-agents
+  - pwa
 remote_theme: just-the-docs/just-the-docs
 
 plugins:
   - jekyll-remote-theme
+  - jekyll-sitemap
 
 url: https://bjornjee.github.io
 baseurl: /agent-dashboard

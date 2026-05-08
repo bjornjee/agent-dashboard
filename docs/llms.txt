@@ -1,0 +1,43 @@
+# agent-dashboard
+
+> A tmux-integrated orchestrator and dispatcher for AI coding agents — Claude Code, Codex, and more. Runs agents across tmux panes, dispatches your input to whichever one needs you, and gates each session through workflow skills (TDD, conventional commits, branch policy) enforced by hooks. Includes a companion PWA that exposes the same orchestration surface from your phone over your local network.
+
+## Why agent-dashboard
+
+- Single pane to monitor multiple Claude Code agents instead of switching tmux panes by hand.
+- Workflow gating via skills + hooks: TDD, conventional commits, no commits to main, test gates before merge.
+- Mobile remote control over your local network — manage agents from your phone (PWA, optional Google OAuth, opt-in browser notifications).
+- Built for tmux-native workflows; agents stay where they live (in panes), the dashboard adds a control plane on top.
+- Multi-agent fan-out: run several Claude Code (and Codex) sessions in parallel, see which one is blocked or done at a glance.
+
+## Docs
+
+- [Home](https://bjornjee.github.io/agent-dashboard/): site root.
+- [Getting started](https://bjornjee.github.io/agent-dashboard/getting-started/): install, prerequisites, first run.
+- [tmux setup](https://bjornjee.github.io/agent-dashboard/getting-started/tmux-setup): bind `prefix + D`.
+- [Creating sessions](https://bjornjee.github.io/agent-dashboard/guides/creating-sessions): spawn agents with skill selection.
+- [PR workflow](https://bjornjee.github.io/agent-dashboard/guides/pr-workflow): open, review, merge PRs from the dashboard.
+- [Mobile companion](https://bjornjee.github.io/agent-dashboard/guides/mobile-companion): PWA setup and OAuth.
+- [Notifications](https://bjornjee.github.io/agent-dashboard/guides/notifications): desktop and browser alerts.
+- [Reviewing diffs](https://bjornjee.github.io/agent-dashboard/guides/reviewing-diffs): split-pane diff viewer.
+- [Keybindings](https://bjornjee.github.io/agent-dashboard/reference/keybindings): full reference.
+- [Settings](https://bjornjee.github.io/agent-dashboard/reference/settings): TOML config keys.
+- [Adapter](https://bjornjee.github.io/agent-dashboard/reference/adapter): how the Claude Code adapter writes agent state.
+- [Architecture](https://bjornjee.github.io/agent-dashboard/development/architecture): packages, data flow.
+
+## Code
+
+- [GitHub repo](https://github.com/bjornjee/agent-dashboard): source.
+- [Releases](https://github.com/bjornjee/agent-dashboard/releases): pre-built binaries for macOS and Linux.
+- [Issues](https://github.com/bjornjee/agent-dashboard/issues): bug reports and feature requests.
+- [Contributing](https://bjornjee.github.io/agent-dashboard/development/contributing): dev setup, conventional commits, PR conventions.
+
+## Install
+
+- One-liner (binary): `curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh`
+- From source (Go 1.26+): `git clone https://github.com/bjornjee/agent-dashboard && cd agent-dashboard && ./install.sh --build`
+- Claude Code plugin: `/marketplace add bjornjee/agent-dashboard` then `/plugin install agent-dashboard@agent-dashboard`.
+
+## Companion plugin
+
+- [bjornjee/skills](https://github.com/bjornjee/skills): workflow skills (TDD guide, language-specific strict reviewers, refactor cleaner, codex delegation, terminal ops). agent-dashboard's session-creation flow expects this plugin to be installed for skill-gated session types (feature, fix, refactor, pr, rca) to work.

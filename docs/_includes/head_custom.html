@@ -6,6 +6,49 @@
 <!-- Favicon -->
 <link rel="icon" href="{{ '/assets/images/favicon.svg' | relative_url }}" type="image/svg+xml">
 
+<!-- Canonical -->
+<link rel="canonical" href="{{ page.url | absolute_url }}">
+
 <!-- Open Graph -->
 <meta property="og:title" content="{{ page.title }} — agent-dashboard">
-<meta property="og:description" content="Dispatch and orchestrate Claude Code agents from terminal and phone.">
+<meta property="og:description" content="{% if page.description %}{{ page.description }}{% else %}{{ site.description }}{% endif %}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ page.url | absolute_url }}">
+<meta property="og:site_name" content="agent-dashboard">
+<meta property="og:image" content="{{ '/assets/images/og-card.png' | absolute_url }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="agent-dashboard — multi-agent tmux dashboard for Claude Code">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page.title }} — agent-dashboard">
+<meta name="twitter:description" content="{% if page.description %}{{ page.description }}{% else %}{{ site.description }}{% endif %}">
+<meta name="twitter:image" content="{{ '/assets/images/og-card.png' | absolute_url }}">
+
+<!-- JSON-LD SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "agent-dashboard",
+  "description": {{ site.description | jsonify }},
+  "url": "{{ '/' | absolute_url }}",
+  "image": "{{ '/assets/images/og-card.png' | absolute_url }}",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux",
+  "softwareVersion": "{{ site.version | default: '0.18.0' }}",
+  "license": "https://github.com/bjornjee/agent-dashboard/blob/main/LICENSE",
+  "codeRepository": "https://github.com/bjornjee/agent-dashboard",
+  "author": {
+    "@type": "Person",
+    "name": "bjornjee",
+    "url": "https://github.com/bjornjee"
+  },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>

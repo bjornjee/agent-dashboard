@@ -4,7 +4,23 @@
     "name": "bjornjee"
   },
   "metadata": {
-    "description": "Multi-agent tmux dashboard for coding agents"
+    "description": "Multi-agent tmux dashboard for coding agents",
+    "homepage": "https://bjornjee.github.io/agent-dashboard",
+    "repository": "https://github.com/bjornjee/agent-dashboard",
+    "license": "MIT",
+    "keywords": [
+      "claude-code",
+      "claude-code-plugin",
+      "tmux",
+      "agent-dashboard",
+      "ai-coding-agents",
+      "bubble-tea",
+      "tui",
+      "codex",
+      "workflow-automation",
+      "llm-agents",
+      "pwa"
+    ]
   },
   "plugins": [
     {
@@ -13,7 +29,17 @@
       "description": "Multi-agent tmux dashboard with skills, hooks, and workflow automation",
       "version": "0.18.0",
       "category": "workflow",
-      "strict": false
+      "strict": false,
+      "homepage": "https://bjornjee.github.io/agent-dashboard",
+      "license": "MIT",
+      "keywords": [
+        "claude-code",
+        "tmux",
+        "agent-dashboard",
+        "workflow-automation",
+        "tdd",
+        "codex"
+      ]
     }
   ]
 }

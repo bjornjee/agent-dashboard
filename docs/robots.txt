@@ -1,0 +1,73 @@
+# robots.txt for agent-dashboard
+# https://bjornjee.github.io/agent-dashboard/
+#
+# Policy: block AI-training crawlers, allow live-answer / search-index crawlers.
+# Generic crawlers default to allow.
+
+# --- AI training crawlers (blocked) ---
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+# --- Live-answer / search-index crawlers (allowed) ---
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+# --- Generic default ---
+
+User-agent: *
+Allow: /
+
+Sitemap: https://bjornjee.github.io/agent-dashboard/sitemap.xml

@@ -9,6 +9,30 @@ https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
 Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
 
+## Why agent-dashboard?
+
+- **One pane for many agents.** Stop alt-tabbing between tmux panes — see every agent grouped by state (blocked, running, review, PR, merged) in a single TUI, with live pane capture so you don't lose context when you switch.
+- **Workflow gates, not vibes.** Skills (feature, fix, chore, refactor, investigate, pr, rca) plus hooks (commit-lint, test-gate, no-commits-to-main, destructive-op warnings) enforce TDD and conventional commits at the harness level — agents can't merge if tests fail.
+- **Phone-first remote control.** A companion PWA on `cmd/web/` exposes the same orchestration surface over your local network: approve permissions, reply to questions, open/merge PRs, and get browser notifications when an agent needs you — all without opening your laptop.
+- **tmux-native, not tmux-replacing.** Agents stay where they live; the dashboard adds a control plane on top of `tmux capture-pane`. No new pane manager, no daemon competing with tmux.
+- **Multi-backend.** Claude Code is first-class; Codex sessions are supported via skill delegation. The adapter pattern in `adapters/claude-code/` is the seam for future agents.
+
+## FAQ
+
+**Do I need tmux?** Yes. agent-dashboard reads live pane content via `tmux capture-pane` and spawns agent sessions in tmux panes. Without tmux there are no panes to monitor.
+
+**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. Codex sessions are spawned through skill delegation. The architecture supports additional backends.
+
+**Does this require a paid Claude account?** No — it uses whatever Claude Code itself requires (Pro, Max, or API). agent-dashboard does not call the Anthropic API directly; it reads the JSONL transcripts Claude Code writes locally.
+
+**Can I use the dashboard without the mobile companion?** Yes. The TUI is the primary interface. The PWA in `cmd/web/` is optional and runs separately via `make web`.
+
+**How is this different from a generic tmux session manager?** A session manager creates and switches panes. agent-dashboard *understands* what's running in each pane — it parses Claude Code's JSONL transcripts to detect state (blocked, waiting, running, done, PR, merged), captures plans and Mermaid diagrams, tracks token usage, and integrates the GitHub PR workflow.
+
+**Is this related to Claude Code's official UI?** No. agent-dashboard is an unofficial third-party plugin. It builds on top of Claude Code's hooks system and JSONL transcripts but is not affiliated with Anthropic.
+
+**Does it work on Windows?** Native Windows is unsupported — the project targets macOS and Linux because tmux is required. WSL with tmux installed should work but is untested.
+
 ## Features
 
 ### TUI (terminal)
