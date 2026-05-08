@@ -65,8 +65,7 @@ type model struct {
 	openPRSessionID  string       // stored for deferred pin in openPRMsg handler
 	mergeSessionID   string       // stored for async merge callback
 	mergePaneID      string       // stored for async merge callback
-	mergeCwd         string       // main repo dir for cleanup after merge
-	mergeWorktreeCwd string       // worktree path, empty for non-worktree agents
+	mergeAgent       domain.Agent // full agent passed through merge → cleanup
 	mergeBranch      string       // branch name for cleanup after merge
 	TmuxReady        *atomic.Bool // shared with watcher goroutine
 	statePath        string
@@ -173,16 +172,14 @@ type model struct {
 	// Merge confirmation
 	confirmMergeSessionID string
 	confirmMergePaneID    string
-	confirmMergeDir       string
+	confirmMergeAgent     domain.Agent // full agent for downstream cleanup
 	confirmMergeBranch    string
-	confirmMergeCwd       string // main repo dir (Cwd), for worktree cleanup
 
 	// Cleanup confirmation (populated after merge succeeds)
-	cleanupSessionID   string
-	cleanupPaneID      string
-	cleanupCwd         string
-	cleanupWorktreeCwd string
-	cleanupBranch      string
+	cleanupSessionID string
+	cleanupPaneID    string
+	cleanupAgent     domain.Agent // full agent for cleanup
+	cleanupBranch    string
 
 	// Confirmation cooldown — reject confirmations arriving within 300ms of
 	// entering a confirm mode. Phantom keystrokes from escape sequences arrive
@@ -1099,13 +1096,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case mergePRMsg:
 		sessionID := m.mergeSessionID
 		paneID := m.mergePaneID
-		cwd := m.mergeCwd
-		worktreeCwd := m.mergeWorktreeCwd
+		agent := m.mergeAgent
 		branch := m.mergeBranch
 		m.mergeSessionID = ""
 		m.mergePaneID = ""
-		m.mergeCwd = ""
-		m.mergeWorktreeCwd = ""
+		m.mergeAgent = domain.Agent{}
 		m.mergeBranch = ""
 		if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Merge failed: %v", msg.err), true)
@@ -1114,8 +1109,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Enter cleanup confirmation mode
 		m.cleanupSessionID = sessionID
 		m.cleanupPaneID = paneID
-		m.cleanupCwd = cwd
-		m.cleanupWorktreeCwd = worktreeCwd
+		m.cleanupAgent = agent
 		m.cleanupBranch = branch
 		m.mode = modeConfirmCleanup
 		m.confirmEnteredAt = time.Now()

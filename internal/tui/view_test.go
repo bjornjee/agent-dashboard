@@ -381,6 +381,43 @@ func TestReplyInput_VisibleWhenAgentRunning(t *testing.T) {
 	}
 }
 
+func TestReplyInput_VisibleWhenConversationEmpty(t *testing.T) {
+	// Regression: Reply mode must always render the Reply: input line, even
+	// when m.conversation is empty (no last assistant message). The original
+	// bug was an early return inside waitingMessageContent that bailed out
+	// before appending the input.
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []domain.Agent{
+		// Done/PR agent on a feature branch with no captured conversation —
+		// mirrors the pane 4.1 scenario from the bug report.
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "pr", TmuxPaneID: "%5",
+			Branch: "feat/x", Cwd: t.TempDir()},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+	m.conversation = nil // explicitly empty
+
+	// Type some text into the textinput so we can prove it renders.
+	m.textInput.SetValue("hello world")
+	m.mode = modeReply
+
+	m.updateRightContent()
+	content := m.messageVP.View()
+
+	if !strings.Contains(content, "Reply") {
+		t.Errorf("Reply: input should render in modeReply with empty conversation; got %q", content)
+	}
+	if !strings.Contains(content, "hello world") {
+		t.Errorf("typed text should render in viewport in modeReply; got %q", content)
+	}
+}
+
 func TestStatusLine_SuccessVsError(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
 
