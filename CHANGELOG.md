@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.19.0](https://github.com/bjornjee/agent-dashboard/compare/v0.18.0...v0.19.0) (2026-05-08)
+
+
+### Features
+
+* dynamic effort + question/error UI split ([#263](https://github.com/bjornjee/agent-dashboard/issues/263)) ([8cb6763](https://github.com/bjornjee/agent-dashboard/commit/8cb6763c7fe42a89b5815d3676b0eda40300ace8))
+* optimise repo and docs for AI bot SEO ([#261](https://github.com/bjornjee/agent-dashboard/issues/261)) ([a4effca](https://github.com/bjornjee/agent-dashboard/commit/a4effcae2b0444261378698f2b927b195072bf24))
+
+
+### Bug Fixes
+
+* empty history + missing PR diff for some agents ([#264](https://github.com/bjornjee/agent-dashboard/issues/264)) ([b594c2d](https://github.com/bjornjee/agent-dashboard/commit/b594c2d20bcbae9b18629b95ff0c02f30dcb0aca))
+
 ## [0.18.0](https://github.com/bjornjee/agent-dashboard/compare/v0.17.0...v0.18.0) (2026-05-08)
 
 
