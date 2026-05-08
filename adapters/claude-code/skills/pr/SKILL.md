@@ -25,13 +25,43 @@ Run in parallel:
 3. `git branch --show-current` — current branch.
 4. `git rev-parse --abbrev-ref @{upstream} 2>/dev/null` — does it track a remote?
 5. `git log --oneline $(git merge-base HEAD "$BASE")..HEAD` — commits on this branch.
-6. `git diff --name-only "$BASE"...HEAD` — files changed vs base. Save this list — it's the input to Phase 2.
+6. `git diff --name-only "$BASE"...HEAD` — files changed vs base. Save this list — it's the input to Phase 3.
 
 **Gate:** You have the changed-file list and the base branch.
 
 ---
 
-### Phase 2: Refactor-cleaner pass on the branch diff
+### Phase 2: Clean up scratch artifacts
+
+Delete transient files left over from implementation, testing, and discovery —
+screenshots, Playwright MCP output, and tmp scratch — before the cleaner pass
+inspects the diff. **Untracked only.** Never touch tracked or staged files.
+
+1. Identify untracked artifacts. Use `git ls-files --others --exclude-standard`
+   for unignored untracked files, and `git ls-files --others --ignored
+   --exclude-standard` for ignored untracked files. Filter for these patterns:
+   - `*.png` (anywhere)
+   - `.playwright-mcp/` (directory)
+   - `*.tmp` (anywhere)
+   - `tmp/` (directory, when at repo root or inside a subproject root)
+
+2. Show the user the list of files about to be deleted (one line each). If the
+   list is empty, skip the rest of this phase.
+
+3. Delete them. For files: `rm -f <path>`. For directories: `rm -rf <path>`.
+   Run from the repo root.
+
+4. Verify with `git status --porcelain` — none of the deletions should appear,
+   because every removed path was untracked. If any tracked file shows as
+   deleted, **stop** and surface it to the user (something matched a tracked
+   path; the patterns above are wrong for this repo).
+
+**Gate:** No matching untracked artifacts remain in the worktree, and `git
+status` shows no unexpected tracked-file deletions.
+
+---
+
+### Phase 3: Refactor-cleaner pass on the branch diff
 
 1. Spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
 2. If the cleaner edited files:
@@ -43,7 +73,7 @@ Run in parallel:
 
 ---
 
-### Phase 3: `make fmt`
+### Phase 4: `make fmt`
 
 Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 
@@ -58,7 +88,7 @@ Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 
 ---
 
-### Phase 4: `make test`
+### Phase 5: `make test`
 
 Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `test-fast` per the `test-gate` hook's preference order).
 
@@ -73,7 +103,7 @@ Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `t
 
 ---
 
-### Phase 5: Draft, push, and create
+### Phase 6: Draft, push, and create
 
 Compose the PR using **all** commits on the branch (not just the latest):
 
