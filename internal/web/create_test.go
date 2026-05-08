@@ -78,6 +78,58 @@ func postCreate(t *testing.T, ts *httptest.Server, body string) *http.Response {
 	return resp
 }
 
+// Skills that declare `effort: max` in their SKILL.md frontmatter are not
+// consistently honored by Claude Code once permission_mode flips on
+// EnterPlanMode. Pass `--effort max` at the CLI to pin session-level effort
+// through plan-mode transitions for skills that opt in.
+func TestBuildAgentCommand_EffortMaxSkillsGetFlag(t *testing.T) {
+	for _, skill := range []string{"feature", "fix", "refactor"} {
+		t.Run(skill, func(t *testing.T) {
+			got := buildAgentCommand("claude", skill, "")
+			want := "claude --effort max '/" + skill + "'"
+			if got != want {
+				t.Errorf("buildAgentCommand(claude, %q, \"\") = %q, want %q", skill, got, want)
+			}
+		})
+	}
+}
+
+func TestBuildAgentCommand_NonOptedSkillsOmitFlag(t *testing.T) {
+	for _, skill := range []string{"chore", "investigate", "rca", "pr"} {
+		t.Run(skill, func(t *testing.T) {
+			got := buildAgentCommand("claude", skill, "")
+			want := "claude '/" + skill + "'"
+			if got != want {
+				t.Errorf("buildAgentCommand(claude, %q, \"\") = %q, want %q", skill, got, want)
+			}
+		})
+	}
+}
+
+func TestBuildAgentCommand_EmptySkillNoFlag(t *testing.T) {
+	got := buildAgentCommand("claude", "", "")
+	want := "claude"
+	if got != want {
+		t.Errorf("buildAgentCommand(claude, \"\", \"\") = %q, want %q", got, want)
+	}
+}
+
+func TestBuildAgentCommand_EmptySkillWithMessage(t *testing.T) {
+	got := buildAgentCommand("claude", "", "do the thing")
+	want := "claude 'do the thing'"
+	if got != want {
+		t.Errorf("buildAgentCommand(claude, \"\", \"do the thing\") = %q, want %q", got, want)
+	}
+}
+
+func TestBuildAgentCommand_FeatureWithMessage(t *testing.T) {
+	got := buildAgentCommand("claude", "feature", "add login")
+	want := "claude --effort max '/feature add login'"
+	if got != want {
+		t.Errorf("buildAgentCommand(claude, feature, add login) = %q, want %q", got, want)
+	}
+}
+
 func TestCreateNewWindow(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)

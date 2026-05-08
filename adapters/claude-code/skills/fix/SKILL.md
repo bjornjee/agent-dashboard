@@ -118,7 +118,7 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 ### Phase 5: Fix (GREEN)
 
-**Effort note:** This skill runs at `max` reasoning effort throughout. To save tokens during implementation, run `/effort high` before continuing — `effort: max` resumes on the next invocation.
+**Effort note:** When launched via the agent-dashboard's New Agent flow, this skill spawns with `--effort max` on the CLI, which Claude Code pins at the session level. When invoked as a slash command inside an existing claude session, the frontmatter `effort: max` is parsed at skill load time but is not consistently re-applied after `EnterPlanMode` flips `permission_mode` — run `/effort max` immediately after entering plan mode if you want max-effort planning. Run `/effort high` (or lower) before implementation to drop reasoning depth and save tokens.
 
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the diagnosis (Phase 4) and failing test (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 

@@ -624,3 +624,48 @@ func TestView_MouseModeCellMotion_InConfirmMode(t *testing.T) {
 		t.Errorf("expected MouseModeCellMotion in confirm mode, got %v", v.MouseMode)
 	}
 }
+
+// rightPanelForState builds a right-panel render with a single agent in the
+// given state. Used by the WAITING-label tests below.
+func rightPanelForState(t *testing.T, state string) string {
+	t.Helper()
+	t.Setenv("NO_COLOR", "1")
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: state, TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+	m.updateRightContent()
+	return m.renderRightPanel()
+}
+
+// WAITING priority group lumps state="question" and state="error" together.
+// The row-level message label must distinguish the two — mirroring the
+// BLOCKED group's plan-vs-permission split — so users see at a glance whether
+// the agent is asking something (action: reply) or has hit an error (action:
+// investigate).
+func TestRenderRightPanel_QuestionStateShowsAskingLabel(t *testing.T) {
+	content := rightPanelForState(t, "question")
+	if !strings.Contains(content, "asking a question") {
+		t.Errorf("question-state right panel should contain 'asking a question' label, got:\n%s", content)
+	}
+	if strings.Contains(content, "Agent is waiting") {
+		t.Errorf("question-state right panel must NOT use the generic 'Agent is waiting' label, got:\n%s", content)
+	}
+}
+
+func TestRenderRightPanel_ErrorStateShowsErrorLabel(t *testing.T) {
+	content := rightPanelForState(t, "error")
+	if !strings.Contains(content, "hit an error") {
+		t.Errorf("error-state right panel should contain 'hit an error' label, got:\n%s", content)
+	}
+	if strings.Contains(content, "Agent is waiting") {
+		t.Errorf("error-state right panel must NOT use the generic 'Agent is waiting' label, got:\n%s", content)
+	}
+}

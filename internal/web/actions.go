@@ -313,11 +313,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Build the shell command — passed directly to new-window/split-window
 	// as the pane's initial process to avoid tmux send-keys buffer limits.
-	cmd := s.cfg.Profile.Command
-	prompt := buildPrompt(req.Skill, req.Message)
-	if prompt != "" {
-		cmd = cmd + " " + shellQuote(prompt)
-	}
+	cmd := buildAgentCommand(s.cfg.Profile.Command, req.Skill, req.Message)
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
@@ -381,6 +377,33 @@ func buildPrompt(skill, message string) string {
 		parts = append(parts, message)
 	}
 	return strings.Join(parts, " ")
+}
+
+// skillEffort maps skill names to the --effort level the dashboard should
+// pin at spawn time. Frontmatter `effort: max` in SKILL.md is parsed by
+// Claude Code on initial invocation but is not consistently re-applied
+// after EnterPlanMode flips permission_mode, so the CLI flag is the
+// reliable injection point. Skills not in this map omit the flag and
+// inherit Claude Code's default effort.
+var skillEffort = map[string]string{
+	"feature":  "max",
+	"fix":      "max",
+	"refactor": "max",
+}
+
+// buildAgentCommand assembles the shell command used to spawn an agent in
+// a tmux pane. It prepends `--effort <level>` when the skill opts in via
+// skillEffort, then appends the user's prompt (skill + message).
+func buildAgentCommand(profileCmd, skill, message string) string {
+	cmd := profileCmd
+	if level := skillEffort[skill]; level != "" {
+		cmd = cmd + " --effort " + level
+	}
+	prompt := buildPrompt(skill, message)
+	if prompt != "" {
+		cmd = cmd + " " + shellQuote(prompt)
+	}
+	return cmd
 }
 
 func shellQuote(s string) string {
