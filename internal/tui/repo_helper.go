@@ -14,4 +14,3 @@ import (
 func resolveAgentTopology(ctx context.Context, a domain.Agent) (repo.Topology, error) {
 	return repo.Resolve(ctx, gitRunner, a.Cwd, a.WorktreeCwd)
 }
-
