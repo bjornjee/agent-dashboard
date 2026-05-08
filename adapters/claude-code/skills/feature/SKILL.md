@@ -4,6 +4,7 @@ description: Start a new feature in an isolated git worktree with TDD workflow
 when_to_use: when the user says "start a feature", "new feature", invokes "/agent-dashboard:feature", or describes work that needs an isolated branch + worktree + TDD loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use /chore, /fix, /investigate instead).
 version: 1.0.0
 disable-model-invocation: true
+effort: max
 ---
 
 Start a new feature in an isolated git worktree.
@@ -145,6 +146,8 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 - If present: verify dependencies are installed (e.g. `node_modules/` exists, `pip list` succeeds, `go env GOPATH` works) and data symlinks resolve correctly.
 - If `.env-setup-failed` exists: surface the error and halt.
 - If neither file exists: the background agent is still running — wait for it to finish before proceeding.
+
+**Effort note:** This skill runs at `max` reasoning effort throughout. To save tokens during implementation, run `/effort high` before continuing — `effort: max` resumes on the next invocation.
 
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
