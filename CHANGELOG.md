@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.0](https://github.com/bjornjee/agent-dashboard/compare/v0.17.0...v0.18.0) (2026-05-08)
+
+
+### Features
+
+* add scratch-artifact cleanup phase to PR skill ([#255](https://github.com/bjornjee/agent-dashboard/issues/255)) ([a5c5d6c](https://github.com/bjornjee/agent-dashboard/commit/a5c5d6c9d180f29f3f4a733a224f7f8799a58a20))
+* derive git topology per agent instead of trusting agent.Cwd ([#257](https://github.com/bjornjee/agent-dashboard/issues/257)) ([d4803f4](https://github.com/bjornjee/agent-dashboard/commit/d4803f40411f5ff1f91b0b2cac5382769cd58d35))
+* set max reasoning effort on feature/fix/refactor skills ([#256](https://github.com/bjornjee/agent-dashboard/issues/256)) ([eb8f8c3](https://github.com/bjornjee/agent-dashboard/commit/eb8f8c3d89e660cf57bbc6ae95a7e136c1cdb169))
+
+
+### Bug Fixes
+
+* bump Go toolchain to 1.26.3 to resolve GO-2026-4971 ([#258](https://github.com/bjornjee/agent-dashboard/issues/258)) ([bee759b](https://github.com/bjornjee/agent-dashboard/commit/bee759b8f188a70e3736054434c9044de26e1431))
+* stop Stop-hook race from clobbering AskUserQuestion question state ([#253](https://github.com/bjornjee/agent-dashboard/issues/253)) ([6ea2957](https://github.com/bjornjee/agent-dashboard/commit/6ea29571a1240f57486c50143268857cb5acae98))
+
 ## [0.17.0](https://github.com/bjornjee/agent-dashboard/compare/v0.16.0...v0.17.0) (2026-05-07)
 
 
