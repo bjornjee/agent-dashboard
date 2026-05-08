@@ -117,9 +117,11 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(s.cfg.Profile.ProjectsDir, slug)
-	entries := conversation.ReadConversation(projDir, agent.SessionID, 100)
+	if agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, []struct{}{})
+		return
+	}
+	entries := conversation.ReadConversation(agent.ProjDir, agent.SessionID, 100)
 	if entries == nil {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return
@@ -134,9 +136,11 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(s.cfg.Profile.ProjectsDir, slug)
-	jsonlPath := filepath.Join(projDir, agent.SessionID+".jsonl")
+	if agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, []struct{}{})
+		return
+	}
+	jsonlPath := filepath.Join(agent.ProjDir, agent.SessionID+".jsonl")
 	entries := conversation.ReadActivityLog(jsonlPath, 500)
 	if entries == nil {
 		writeJSON(w, http.StatusOK, []struct{}{})
@@ -303,17 +307,19 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(s.cfg.Profile.ProjectsDir, slug)
+	if agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"content": ""})
+		return
+	}
 	// Prefer the delegated-Plan-subagent pointer if set; the plan is persisted
 	// only inside the parent JSONL as a tool_result.
 	if agent.DelegatedPlanToolUseID != "" {
-		if content := conversation.ReadDelegatedPlanContent(projDir, agent.SessionID, agent.DelegatedPlanToolUseID); content != "" {
+		if content := conversation.ReadDelegatedPlanContent(agent.ProjDir, agent.SessionID, agent.DelegatedPlanToolUseID); content != "" {
 			writeJSON(w, http.StatusOK, map[string]string{"content": content})
 			return
 		}
 	}
-	planSlug := conversation.ReadPlanSlug(projDir, agent.SessionID)
+	planSlug := conversation.ReadPlanSlug(agent.ProjDir, agent.SessionID)
 	if planSlug == "" {
 		writeJSON(w, http.StatusOK, map[string]string{"content": ""})
 		return
@@ -329,9 +335,11 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(s.cfg.Profile.ProjectsDir, slug)
-	u := usage.ReadUsage(projDir, agent.SessionID)
+	if agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, domain.Usage{})
+		return
+	}
+	u := usage.ReadUsage(agent.ProjDir, agent.SessionID)
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -462,9 +470,11 @@ func (s *Server) handleSubagents(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(s.cfg.Profile.ProjectsDir, slug)
-	subs := conversation.FindSubagents(projDir, agent.SessionID)
+	if agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, []struct{}{})
+		return
+	}
+	subs := conversation.FindSubagents(agent.ProjDir, agent.SessionID)
 	if subs == nil {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return

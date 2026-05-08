@@ -57,6 +57,13 @@ type Agent struct {
 	// delegated Plan subagent. Set by agent-state-fast.js on PreToolUse Agent+Plan;
 	// cleared when state transitions out of "plan".
 	DelegatedPlanToolUseID string `json:"delegated_plan_tool_use_id,omitempty"`
+
+	// ProjDir is the resolved ~/.claude/projects/<slug> directory that
+	// contains <SessionID>.jsonl. Populated each load by
+	// state.ResolveAgentProjDir; never persisted (slug can drift if the
+	// agent's launch cwd disagrees with its first-hook cwd, so consumers
+	// must read it fresh). Empty when the JSONL can't be located.
+	ProjDir string `json:"-"`
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.

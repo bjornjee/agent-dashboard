@@ -81,7 +81,7 @@ func main() {
 	// m.TmuxReady is an atomic.Bool updated by deferredStartup once the
 	// real TmuxIsAvailable() check completes; the watcher reads it on
 	// each event to decide whether to call tmux for target resolution.
-	watcher, err := tui.WatchStateDir(stateDir, p, m.TmuxReady)
+	watcher, err := tui.WatchStateDir(stateDir, cfg.Profile.ProjectsDir, cfg.Profile.SessionsDir, p, m.TmuxReady)
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)

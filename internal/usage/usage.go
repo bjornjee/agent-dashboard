@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/bjornjee/agent-dashboard/internal/conversation"
-	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
 // pricingTable maps model family keywords to pricing.
@@ -93,26 +93,17 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 }
 
 // ReadAllUsage reads usage for all agents and returns per-agent + total.
-func ReadAllUsage(agents []domain.Agent, projectsDir, sessionsDir string) (map[string]domain.Usage, domain.Usage) {
+// Each agent must have its ProjDir + SessionID stamped (via state.ResolveAgentProjDir);
+// agents without either are skipped.
+func ReadAllUsage(agents []domain.Agent) (map[string]domain.Usage, domain.Usage) {
 	perAgent := make(map[string]domain.Usage)
 	var total domain.Usage
 
 	for _, agent := range agents {
-		if agent.Cwd == "" {
+		if agent.ProjDir == "" || agent.SessionID == "" {
 			continue
 		}
-		slug := conversation.ProjectSlug(agent.Cwd)
-		projDir := filepath.Join(projectsDir, slug)
-
-		sessionID := agent.SessionID
-		if sessionID == "" {
-			sessionID = conversation.FindSessionIDIn(sessionsDir, agent.Cwd)
-		}
-		if sessionID == "" {
-			continue
-		}
-
-		u := ReadUsage(projDir, sessionID)
+		u := ReadUsage(agent.ProjDir, agent.SessionID)
 		perAgent[agent.Target] = u
 		total.InputTokens += u.InputTokens
 		total.OutputTokens += u.OutputTokens

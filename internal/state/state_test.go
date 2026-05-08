@@ -804,18 +804,20 @@ func TestSortedAgents_PRAndMergedGroups(t *testing.T) {
 	}
 }
 
-// planTestSetup creates a temp directory structure that ApplyIdleOverrides can resolve.
-// Returns (projectsDir, cwd) where cwd is the agent's working directory and
-// projectsDir contains the JSONL at the path ApplyIdleOverrides expects.
-func planTestSetup(t *testing.T, sessionID, jsonl string) (string, string) {
+// planTestSetup creates a temp directory structure that ApplyIdleOverrides can
+// resolve. Writes the JSONL at projectsDir/<slug-of-cwd>/<sessionID>.jsonl and
+// returns the resolved projDir (what ResolveAgentProjDir would stamp) along
+// with the agent's cwd. Tests should set Agent.ProjDir = projDir on the
+// fixture; ApplyIdleOverrides reads ProjDir directly.
+func planTestSetup(t *testing.T, sessionID, jsonl string) (projDir, cwd string) {
 	t.Helper()
 	dir := t.TempDir()
-	cwd := "/test/myproject"
+	cwd = "/test/myproject"
 	slug := conversation.ProjectSlug(cwd)
-	projDir := filepath.Join(dir, slug)
+	projDir = filepath.Join(dir, slug)
 	os.MkdirAll(projDir, 0755)
 	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
-	return dir, cwd
+	return projDir, cwd
 }
 
 func TestApplyIdleOverrides_OverridesIdlePrompt(t *testing.T) {
@@ -824,15 +826,15 @@ func TestApplyIdleOverrides_OverridesIdlePrompt(t *testing.T) {
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted for review"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan', got %q", sf.Agents[sessionID].State)
@@ -847,15 +849,15 @@ func TestApplyIdleOverrides_SkipsRunningAgents(t *testing.T) {
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]},"timestamp":"2026-03-28T10:00:00Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"file.txt"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "running", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "running", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "running" {
 		t.Errorf("expected state 'running' unchanged (running agents should be skipped), got %q", sf.Agents[sessionID].State)
@@ -866,15 +868,15 @@ func TestApplyIdleOverrides_NoOverrideWithoutPlan(t *testing.T) {
 	sessionID := "sess-idle"
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-03-28T10:00:00Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "idle_prompt" {
 		t.Errorf("expected state 'idle_prompt' unchanged, got %q", sf.Agents[sessionID].State)
@@ -886,15 +888,15 @@ func TestApplyIdleOverrides_QuestionOverride(t *testing.T) {
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Option A"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "question" {
 		t.Errorf("expected state 'question', got %q", sf.Agents[sessionID].State)
@@ -909,15 +911,15 @@ func TestApplyIdleOverrides_PlanTakesPriorityOverQuestion(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:02Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:03Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected 'plan' to take priority over 'question', got %q", sf.Agents[sessionID].State)
@@ -931,15 +933,15 @@ func TestApplyIdleOverrides_OverridesPermissionWithPendingPlan(t *testing.T) {
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:00Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Plan submitted for review"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "permission", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "permission", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan' (permission agent with pending ExitPlanMode), got %q", sf.Agents[sessionID].State)
@@ -951,15 +953,15 @@ func TestApplyIdleOverrides_LeavesPermissionAloneWhenNoPlan(t *testing.T) {
 	// Real permission prompt — no ExitPlanMode in JSONL.
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Write","input":{"path":"foo.txt"}}]},"timestamp":"2026-03-28T10:00:00Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "permission", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "permission", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "permission" {
 		t.Errorf("expected state 'permission' unchanged (real permission, no plan), got %q", sf.Agents[sessionID].State)
@@ -976,15 +978,15 @@ func TestApplyIdleOverrides_QuestionAfterPlanWins(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"AskUserQuestion","input":{"question":"Before I update the plan, what framework do you prefer?"}}]},"timestamp":"2026-03-28T10:00:02Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Waiting for user response"}]},"timestamp":"2026-03-28T10:00:03Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "question" {
 		t.Errorf("expected 'question' (AskUserQuestion after ExitPlanMode), got %q", sf.Agents[sessionID].State)
@@ -1000,17 +1002,188 @@ func TestApplyIdleOverrides_PlanAfterUnansweredQuestionWins(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"ExitPlanMode","input":{}}]},"timestamp":"2026-03-28T10:00:02Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":"Plan submitted"}]},"timestamp":"2026-03-28T10:00:03Z"}
 `
-	projectsDir, cwd := planTestSetup(t, sessionID, jsonl)
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd},
+			sessionID: {SessionID: sessionID, State: "idle_prompt", Cwd: cwd, ProjDir: projDir},
 		},
 	}
 
-	ApplyIdleOverrides(&sf, projectsDir)
+	ApplyIdleOverrides(&sf)
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected 'plan' (ExitPlanMode after AskUserQuestion), got %q", sf.Agents[sessionID].State)
+	}
+}
+
+// projDirTestSetup creates projectsDir/<slug>/<sid>.jsonl for ResolveAgentProjDir
+// tests. Returns the projectsDir.
+func projDirTestSetup(t *testing.T, slugCwd, sessionID string) string {
+	t.Helper()
+	dir := t.TempDir()
+	slug := conversation.ProjectSlug(slugCwd)
+	if err := os.MkdirAll(filepath.Join(dir, slug), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, slug, sessionID+".jsonl"), []byte(""), 0o644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+	return dir
+}
+
+// mockTopologySource sets up a runner expectation: rev-parse calls for
+// `seed` resolve to the given source/worktree pair.
+func mockTopologySource(m *mocks.MockBranchRunner, seed, worktree, source string) {
+	m.On("Output", mock.Anything, "git", "-C", seed, "rev-parse", "--show-toplevel").
+		Return([]byte(worktree+"\n"), nil).Maybe()
+	m.On("Output", mock.Anything, "git", "-C", seed, "rev-parse", "--path-format=absolute", "--git-common-dir").
+		Return([]byte(filepath.Join(source, ".git")+"\n"), nil).Maybe()
+	m.On("Output", mock.Anything, "git", "-C", seed, "rev-parse", "--show-superproject-working-tree").
+		Return([]byte("\n"), nil).Maybe()
+}
+
+func TestResolveAgentProjDir_AgentCwdSlugMatches(t *testing.T) {
+	// Pane 4.2 shape: agent.Cwd matches the JSONL location's slug.
+	sessionID := "sess-aligned"
+	projectsDir := projDirTestSetup(t, "/repo", sessionID)
+	wantProjDir := filepath.Join(projectsDir, conversation.ProjectSlug("/repo"))
+
+	m := withMockBranchRunner(t)
+	mockTopologySource(m, "/repo", "/repo", "/repo")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, Cwd: "/repo"},
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+
+	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
+		t.Errorf("ProjDir = %q, want %q", got, wantProjDir)
+	}
+}
+
+func TestResolveAgentProjDir_FallsThroughToTopologySource(t *testing.T) {
+	// Pane 4.1 shape: agent.Cwd is the worktree path; JSONL is at the
+	// source-repo slug. Only top.Source produces a hit.
+	sessionID := "sess-mismatch"
+	projectsDir := projDirTestSetup(t, "/repo", sessionID)
+	wantProjDir := filepath.Join(projectsDir, conversation.ProjectSlug("/repo"))
+
+	m := withMockBranchRunner(t)
+	mockTopologySource(m, "/wt/feat", "/wt/feat", "/repo")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, Cwd: "/wt/feat", WorktreeCwd: "/wt/feat"},
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+
+	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
+		t.Errorf("ProjDir = %q, want %q (should fall through to top.Source)", got, wantProjDir)
+	}
+}
+
+func TestResolveAgentProjDir_NoJSONL_LeavesProjDirEmpty(t *testing.T) {
+	sessionID := "sess-no-jsonl"
+	projectsDir := t.TempDir() // no JSONL written
+
+	m := withMockBranchRunner(t)
+	mockTopologySource(m, "/repo", "/repo", "/repo")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, Cwd: "/repo"},
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+
+	if got := sf.Agents[sessionID].ProjDir; got != "" {
+		t.Errorf("ProjDir = %q, want empty", got)
+	}
+}
+
+func TestResolveAgentProjDir_EmptySessionID_BackfilledByLocate(t *testing.T) {
+	// Empty SessionID + Cwd whose session metadata exists — Locate finds
+	// the SessionID, and ResolveAgentProjDir then resolves ProjDir.
+	sessionID := "sess-discovered"
+	projectsDir := projDirTestSetup(t, "/repo", sessionID)
+	wantProjDir := filepath.Join(projectsDir, conversation.ProjectSlug("/repo"))
+
+	sessionsDir := t.TempDir()
+	sessFile := map[string]any{
+		"sessionId": sessionID,
+		"cwd":       "/repo",
+		"startedAt": int64(1000),
+	}
+	data, _ := json.Marshal(sessFile)
+	os.WriteFile(filepath.Join(sessionsDir, "1.json"), data, 0o644)
+
+	m := withMockBranchRunner(t)
+	mockTopologySource(m, "/repo", "/repo", "/repo")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"agent-1": {Cwd: "/repo"}, // no SessionID
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+
+	got := sf.Agents["agent-1"]
+	if got.SessionID != sessionID {
+		t.Errorf("SessionID = %q, want %q (Locate should backfill)", got.SessionID, sessionID)
+	}
+	if got.ProjDir != wantProjDir {
+		t.Errorf("ProjDir = %q, want %q", got.ProjDir, wantProjDir)
+	}
+}
+
+func TestResolveAgentProjDir_NoSessionIDAndLocateFails_LeavesEmpty(t *testing.T) {
+	projectsDir := projDirTestSetup(t, "/repo", "sess-1")
+
+	m := withMockBranchRunner(t)
+	mockTopologySource(m, "/repo", "/repo", "/repo")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"agent-1": {Cwd: "/repo"}, // no SessionID, no sessions metadata either
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+
+	if got := sf.Agents["agent-1"]; got.SessionID != "" || got.ProjDir != "" {
+		t.Errorf("expected empty SessionID + ProjDir, got %+v", got)
+	}
+}
+
+func TestResolveAgentProjDir_GitResolveFails_StillTriesAgentCwd(t *testing.T) {
+	// repo.Resolve fails (path not in any git repo), but the agent's stamped
+	// Cwd still matches the JSONL slug, so PickProjDir succeeds without
+	// topology candidates.
+	sessionID := "sess-no-git"
+	projectsDir := projDirTestSetup(t, "/notagit", sessionID)
+	wantProjDir := filepath.Join(projectsDir, conversation.ProjectSlug("/notagit"))
+
+	m := withMockBranchRunner(t)
+	m.On("Output", mock.Anything, "git", "-C", "/notagit", "rev-parse", "--show-toplevel").
+		Return(nil, fmt.Errorf("not a git repo")).Maybe()
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, Cwd: "/notagit"},
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+
+	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
+		t.Errorf("ProjDir = %q, want %q (Cwd candidate should match even if topology fails)", got, wantProjDir)
 	}
 }

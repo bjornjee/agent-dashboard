@@ -161,8 +161,9 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 		state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
 		state.ResolveAgentBranches(&sf, tmux.TmuxListPaneCwds())
 	}
+	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
 	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf, s.cfg.Profile.ProjectsDir)
+	state.ApplyIdleOverrides(&sf)
 	agent, ok := sf.Agents[id]
 	return agent, ok
 }

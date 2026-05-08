@@ -592,7 +592,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selfPaneID = msg.selfPaneID
 		m.TmuxReady.Store(msg.tmuxAvailable)
 		cmds := []tea.Cmd{
-			loadState(m.statePath, m.tmuxAvailable),
+			loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable),
 			m.captureSelected(),
 		}
 		if m.db != nil {
@@ -613,7 +613,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateUpdatedMsg:
-		state.ApplyIdleOverrides(&msg.state, m.cfg.Profile.ProjectsDir)
+		state.ApplyIdleOverrides(&msg.state)
 		prevTarget, prevSubID := m.selectedIdentity()
 		// Track previous diagram counts to detect increases.
 		prevDiagramCounts := make(map[string]int, len(m.agents))
@@ -716,7 +716,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateLeftContent()
 		m.updateRightContent()
-		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir), m.loadPlan(), m.loadDiagrams()}
+		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan(), m.loadDiagrams()}
 		cmds = append(cmds, m.loadAllSubagents()...)
 		return m, tea.Batch(cmds...)
 
@@ -834,13 +834,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.loadDiagrams())
 		}
 		if m.tickCount%10 == 0 {
-			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir))
+			cmds = append(cmds, pruneDead(m.statePath), loadUsage(m.agents))
 		}
 		if poll := m.cfg.Settings.Usage.RateLimitPollSeconds; poll > 0 && m.tickCount%poll == 0 {
 			cmds = append(cmds, loadRateLimit())
 		}
 		if m.tickCount%30 == 0 {
-			cmds = append(cmds, loadState(m.statePath, m.tmuxAvailable))
+			cmds = append(cmds, loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable))
 			cmds = append(cmds, loadCodexUsage(m.codexSessionsDir))
 		}
 		return m, tea.Batch(cmds...)
@@ -1004,7 +1004,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.updateRightContent()
-		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), selectPane(msg.target))
+		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), selectPane(msg.target))
 
 	case spawningCaptureMsg:
 		if msg.target != m.spawningTarget || m.trustDetected || !containsTrustPrompt(msg.lines) {
@@ -1022,11 +1022,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.setStatus("Pane closed", false)
 		}
-		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), pruneDead(m.statePath))
+		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), pruneDead(m.statePath))
 
 	case pruneDeadMsg:
 		if msg.removed > 0 {
-			return m, loadState(m.statePath, m.tmuxAvailable)
+			return m, loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable)
 		}
 		return m, nil
 
@@ -1132,7 +1132,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = diagrams.CleanupSession(m.cfg.Profile.StateDir, m.cleanupSessionID)
 		}
 		m.setStatus("Cleaned up", false)
-		return m, tea.Batch(loadState(m.statePath, m.tmuxAvailable), pruneDead(m.statePath))
+		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), pruneDead(m.statePath))
 
 	case rawKeySentMsg:
 		if msg.err != nil {

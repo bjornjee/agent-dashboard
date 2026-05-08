@@ -1445,3 +1445,182 @@ func TestLocate_MissingDir(t *testing.T) {
 		t.Errorf("Locate = %q, want empty for missing dir", got)
 	}
 }
+
+// writeJSONLAt creates an empty <sessionID>.jsonl under projectsDir/<slug>/
+// for PickProjDir tests. Returns the absolute directory path.
+func writeJSONLAt(t *testing.T, projectsDir, cwd, sessionID string) string {
+	t.Helper()
+	slug := ProjectSlug(cwd)
+	dir := filepath.Join(projectsDir, slug)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+	return dir
+}
+
+func TestPickProjDir_AgentCwdMatches(t *testing.T) {
+	projectsDir := t.TempDir()
+	want := writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	got := PickProjDir(projectsDir, "sess-1", "/repo", "/wt/feat", "/repo")
+	if got != want {
+		t.Errorf("PickProjDir = %q, want %q (first candidate hit)", got, want)
+	}
+}
+
+func TestPickProjDir_FallsThroughToLaterCandidate(t *testing.T) {
+	projectsDir := t.TempDir()
+	want := writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	// Pane 4.1 shape: agent.Cwd is the worktree path (no JSONL there);
+	// only the source repo slug has the JSONL.
+	got := PickProjDir(projectsDir, "sess-1", "/wt/feat", "/wt/feat", "/wt/feat", "/repo")
+	if got != want {
+		t.Errorf("PickProjDir = %q, want %q (fell through to source candidate)", got, want)
+	}
+}
+
+func TestPickProjDir_NoCandidateMatches_ReturnsEmpty(t *testing.T) {
+	projectsDir := t.TempDir()
+	writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	got := PickProjDir(projectsDir, "sess-1", "/elsewhere", "/wt/feat")
+	if got != "" {
+		t.Errorf("PickProjDir = %q, want empty (no candidate matches)", got)
+	}
+}
+
+func TestPickProjDir_DedupesEqualSlugs(t *testing.T) {
+	projectsDir := t.TempDir()
+	want := writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	// Multiple candidates resolving to the same slug — first hit wins,
+	// duplicate slugs after that aren't restatted (regression: a non-linked
+	// repo where Worktree == Source would produce two stat calls).
+	got := PickProjDir(projectsDir, "sess-1", "/repo", "/repo/", "/repo")
+	if got != want {
+		t.Errorf("PickProjDir = %q, want %q", got, want)
+	}
+}
+
+func TestPickProjDir_EmptyCandidatesSkipped(t *testing.T) {
+	projectsDir := t.TempDir()
+	want := writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	got := PickProjDir(projectsDir, "sess-1", "", "/repo", "")
+	if got != want {
+		t.Errorf("PickProjDir = %q, want %q (empties should be skipped)", got, want)
+	}
+}
+
+func TestPickProjDir_NoCandidates(t *testing.T) {
+	projectsDir := t.TempDir()
+	writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	got := PickProjDir(projectsDir, "sess-1")
+	if got != "" {
+		t.Errorf("PickProjDir = %q, want empty (no candidates)", got)
+	}
+}
+
+func TestPickProjDir_EmptySessionID(t *testing.T) {
+	projectsDir := t.TempDir()
+	writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	// Empty SessionID can't match any <sid>.jsonl file.
+	got := PickProjDir(projectsDir, "", "/repo")
+	if got != "" {
+		t.Errorf("PickProjDir = %q, want empty (no SessionID)", got)
+	}
+}
+
+// writeJSONLLines creates projectsDir/<slug>/<sessionID>.jsonl containing
+// one JSON line per element in lines. Used by LastGitBranch tests.
+func writeJSONLLines(t *testing.T, projectsDir, cwd, sessionID string, lines []string) string {
+	t.Helper()
+	slug := ProjectSlug(cwd)
+	dir := filepath.Join(projectsDir, slug)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, sessionID+".jsonl")
+	body := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+	return dir
+}
+
+func TestLastGitBranch_ReturnsMostRecent(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		`{"type":"user","gitBranch":"main"}`,
+		`{"type":"assistant","gitBranch":"main"}`,
+		`{"type":"user","gitBranch":"feat/x"}`,
+		`{"type":"assistant","gitBranch":"feat/x"}`,
+	})
+
+	got := LastGitBranch(dir, "sess-1")
+	if got != "feat/x" {
+		t.Errorf("LastGitBranch = %q, want feat/x (most recent)", got)
+	}
+}
+
+func TestLastGitBranch_MissingFile_ReturnsEmpty(t *testing.T) {
+	got := LastGitBranch("/nonexistent-projdir-xyz", "sess-1")
+	if got != "" {
+		t.Errorf("LastGitBranch = %q, want empty for missing file", got)
+	}
+}
+
+func TestLastGitBranch_NoGitBranchField(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		`{"type":"user"}`,
+		`{"type":"assistant"}`,
+	})
+
+	got := LastGitBranch(dir, "sess-1")
+	if got != "" {
+		t.Errorf("LastGitBranch = %q, want empty when no gitBranch fields", got)
+	}
+}
+
+func TestLastGitBranch_SkipsEmptyValues(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		`{"type":"user","gitBranch":"feat/x"}`,
+		`{"type":"assistant","gitBranch":""}`,
+		`{"type":"user","gitBranch":""}`,
+	})
+
+	got := LastGitBranch(dir, "sess-1")
+	if got != "feat/x" {
+		t.Errorf("LastGitBranch = %q, want feat/x (empty values should be skipped, last non-empty wins)", got)
+	}
+}
+
+func TestLastGitBranch_EmptySessionID(t *testing.T) {
+	got := LastGitBranch(t.TempDir(), "")
+	if got != "" {
+		t.Errorf("LastGitBranch = %q, want empty for missing sessionID", got)
+	}
+}
+
+func TestLastGitBranch_MalformedLineSkipped(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		`{"type":"user","gitBranch":"feat/x"}`,
+		`not-json`,
+		`{"type":"assistant","gitBranch":"feat/x"}`,
+	})
+
+	got := LastGitBranch(dir, "sess-1")
+	if got != "feat/x" {
+		t.Errorf("LastGitBranch = %q, want feat/x (malformed line should be skipped)", got)
+	}
+}

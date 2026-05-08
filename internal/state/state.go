@@ -13,6 +13,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/repo"
 )
 
 // BranchRunner abstracts git command execution so tests can swap in a mock.
@@ -181,6 +182,35 @@ func gitBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// ResolveAgentProjDir stamps each agent's ProjDir — the absolute path of
+// the ~/.claude/projects/<slug> directory containing <SessionID>.jsonl —
+// using `repo.Resolve` to get topology candidates, then asking the
+// conversation layer which slug actually contains the JSONL.
+//
+// Single source of truth for the ProjectSlug → JSONL translation.
+// Consumers downstream read `agent.ProjDir` directly.
+//
+// Also backfills `agent.SessionID` via `conversation.Locate` when the
+// hook hasn't yet stamped one — preserving d4803f4's empty-SessionID
+// recovery behaviour without requiring callers to know about it.
+func ResolveAgentProjDir(sf *domain.StateFile, projectsDir, sessionsDir string) {
+	for key, agent := range sf.Agents {
+		if agent.SessionID == "" {
+			agent.SessionID = conversation.Locate(sessionsDir, agent.Cwd, agent.WorktreeCwd)
+		}
+		if agent.SessionID == "" {
+			sf.Agents[key] = agent
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		top, _ := repo.Resolve(ctx, branchRunner, agent.Cwd, agent.WorktreeCwd)
+		cancel()
+		agent.ProjDir = conversation.PickProjDir(projectsDir, agent.SessionID,
+			agent.Cwd, agent.WorktreeCwd, top.Worktree, top.Source)
+		sf.Agents[key] = agent
+	}
+}
+
 // idleStates are the agent states where a pinned_state override may be applied.
 // Active states (running, permission, error, plan) pass through unchanged so
 // the dashboard reflects live work.
@@ -208,21 +238,15 @@ func ApplyPinnedStates(sf *domain.StateFile) {
 // classified as "permission" by hooks. Running agents are skipped — the
 // PostToolUse hook's stop-state guard prevents the race that used to leave
 // agents stuck at "running" when actually idle.
-func ApplyIdleOverrides(sf *domain.StateFile, projectsDir string) {
+func ApplyIdleOverrides(sf *domain.StateFile) {
 	for key, agent := range sf.Agents {
 		if agent.State != "idle_prompt" && agent.State != "permission" {
 			continue
 		}
-		cwd := agent.Cwd
-		if cwd == "" {
+		if agent.ProjDir == "" || agent.SessionID == "" {
 			continue
 		}
-		projDir := filepath.Join(projectsDir, conversation.ProjectSlug(cwd))
-		sessionID := agent.SessionID
-		if sessionID == "" {
-			continue
-		}
-		if override := conversation.LastPendingBlockingTool(projDir, sessionID); override != "" {
+		if override := conversation.LastPendingBlockingTool(agent.ProjDir, agent.SessionID); override != "" {
 			agent.State = override
 			sf.Agents[key] = agent
 		}

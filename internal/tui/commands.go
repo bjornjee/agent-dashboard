@@ -133,14 +133,11 @@ func (m model) loadConversation() tea.Cmd {
 	if agent == nil || m.selectedSubagent() != nil {
 		return nil // don't load conversation for subagent nodes
 	}
-	if agent.Cwd == "" {
+	projDir := agent.ProjDir
+	sessionID := agent.SessionID
+	if projDir == "" || sessionID == "" {
 		return nil
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
-	sessionID := agent.SessionID
-	sessionsDir := m.cfg.Profile.SessionsDir
-	agentCopy := *agent
 
 	// Capture offset state for incremental reading
 	sessionKey := projDir + ":" + sessionID
@@ -153,24 +150,11 @@ func (m model) loadConversation() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		if sessionID == "" {
-			// Resolve topology so we can probe Locate against the worktree
-			// root and source repo root as well as the launch cwd. This
-			// covers agents launched from a subdirectory of a worktree
-			// where Claude's session JSON recorded a different path.
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			top, _ := resolveAgentTopology(ctx, agentCopy)
-			sessionID = conversation.Locate(sessionsDir, sessionCandidates(agentCopy, top)...)
-		}
-		if sessionID == "" {
-			return conversationMsg{entries: nil}
-		}
 		entries, newOffset := conversation.ReadConversationIncremental(projDir, sessionID, 50, prevEntries, prevOffset)
 		return conversationMsg{
 			entries:    entries,
 			fileOffset: newOffset,
-			sessionKey: projDir + ":" + sessionID,
+			sessionKey: sessionKey,
 		}
 	}
 }
@@ -237,26 +221,14 @@ func parseNameStatus(out string) []string {
 func (m model) loadSubagentActivity() tea.Cmd {
 	agent := m.selectedAgent()
 	sub := m.selectedSubagent()
-	if agent == nil || sub == nil || agent.Cwd == "" {
+	if agent == nil || sub == nil || agent.ProjDir == "" || agent.SessionID == "" {
 		return nil
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
+	projDir := agent.ProjDir
 	sessionID := agent.SessionID
-	agentCopy := *agent
 	agentID := sub.AgentID
-	sessionsDir := m.cfg.Profile.SessionsDir
 
 	return func() tea.Msg {
-		if sessionID == "" {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			top, _ := resolveAgentTopology(ctx, agentCopy)
-			sessionID = conversation.Locate(sessionsDir, sessionCandidates(agentCopy, top)...)
-		}
-		if sessionID == "" {
-			return activityMsg{entries: nil}
-		}
 		jsonlPath := conversation.SubagentJSONLPath(projDir, sessionID, agentID)
 		entries := conversation.ReadActivityLog(jsonlPath, 500)
 		return activityMsg{entries: entries}
@@ -265,28 +237,14 @@ func (m model) loadSubagentActivity() tea.Cmd {
 
 // loadAllSubagents loads subagent info for all agents.
 func (m model) loadAllSubagents() []tea.Cmd {
-	projectsDir := m.cfg.Profile.ProjectsDir
-	sessionsDir := m.cfg.Profile.SessionsDir
 	var cmds []tea.Cmd
 	for _, agent := range m.agents {
-		if agent.Cwd == "" {
+		if agent.ProjDir == "" || agent.SessionID == "" {
 			continue
 		}
 		a := agent // copy for closure
 		cmds = append(cmds, func() tea.Msg {
-			sid := a.SessionID
-			if sid == "" {
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				defer cancel()
-				top, _ := resolveAgentTopology(ctx, a)
-				sid = conversation.Locate(sessionsDir, sessionCandidates(a, top)...)
-			}
-			if sid == "" {
-				return subagentsMsg{parentTarget: a.Target, agents: nil}
-			}
-			slug := conversation.ProjectSlug(a.Cwd)
-			projDir := filepath.Join(projectsDir, slug)
-			subs := conversation.FindSubagents(projDir, sid)
+			subs := conversation.FindSubagents(a.ProjDir, a.SessionID)
 			return subagentsMsg{parentTarget: a.Target, agents: subs}
 		})
 	}
@@ -401,11 +359,11 @@ func pinAgentStateCmd(stateDir, sessionID, pinnedState string) tea.Cmd {
 	}
 }
 
-func loadUsage(agents []domain.Agent, projectsDir, sessionsDir string) tea.Cmd {
+func loadUsage(agents []domain.Agent) tea.Cmd {
 	agentsCopy := make([]domain.Agent, len(agents))
 	copy(agentsCopy, agents)
 	return func() tea.Msg {
-		perAgent, total := usage.ReadAllUsage(agentsCopy, projectsDir, sessionsDir)
+		perAgent, total := usage.ReadAllUsage(agentsCopy)
 		return usageMsg{perAgent: perAgent, total: total}
 	}
 }
@@ -456,7 +414,7 @@ func loadCodexDBUsage(database *db.DB) tea.Cmd {
 	}
 }
 
-func loadState(path string, tmuxAvailable bool) tea.Cmd {
+func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool) tea.Cmd {
 	return func() tea.Msg {
 		sf := state.ReadState(path)
 		var paneCwds map[string]string
@@ -465,6 +423,7 @@ func loadState(path string, tmuxAvailable bool) tea.Cmd {
 			paneCwds = tmux.TmuxListPaneCwds()
 		}
 		state.ResolveAgentBranches(&sf, paneCwds)
+		state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
 		state.ApplyPinnedStates(&sf)
 		return stateUpdatedMsg{state: sf}
 	}
@@ -629,27 +588,15 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 
 func (m model) loadPlan() tea.Cmd {
 	agent := m.selectedAgent()
-	if agent == nil || agent.Cwd == "" {
+	if agent == nil || agent.ProjDir == "" || agent.SessionID == "" {
 		return nil
 	}
-	slug := conversation.ProjectSlug(agent.Cwd)
-	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
+	projDir := agent.ProjDir
 	sessionID := agent.SessionID
-	agentCopy := *agent
 	plansDir := m.cfg.Profile.PlansDir
-	sessionsDir := m.cfg.Profile.SessionsDir
 	delegatedToolUseID := agent.DelegatedPlanToolUseID
 
 	return func() tea.Msg {
-		if sessionID == "" {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			top, _ := resolveAgentTopology(ctx, agentCopy)
-			sessionID = conversation.Locate(sessionsDir, sessionCandidates(agentCopy, top)...)
-		}
-		if sessionID == "" {
-			return planMsg{content: ""}
-		}
 		// Prefer the delegated-Plan-subagent pointer if set; the plan is
 		// persisted only inside the parent JSONL as a tool_result.
 		if delegatedToolUseID != "" {
@@ -1009,7 +956,7 @@ func sendRawKey(paneID, key, label string) tea.Cmd {
 	}
 }
 
-func WatchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotify.Watcher, error) {
+func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -1055,6 +1002,7 @@ func WatchStateDir(dir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotif
 							pc = tmux.TmuxListPaneCwds()
 						}
 						state.ResolveAgentBranches(&sf, pc)
+						state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
 						state.ApplyPinnedStates(&sf)
 						p.Send(stateUpdatedMsg{state: sf})
 					})
