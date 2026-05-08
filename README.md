@@ -402,7 +402,3 @@ adapters/claude-code/
 | [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) | Pure Go SQLite |
 | [fsnotify](https://github.com/fsnotify/fsnotify) | File system watcher |
 | [oauth2](https://pkg.go.dev/golang.org/x/oauth2) | Google OAuth for mobile web companion |
-
-## Works Best With
-
-This dashboard pairs well with the [everything-claude-code](https://github.com/affaan-m/everything-claude-code) plugin for a complete agent workflow experience.
