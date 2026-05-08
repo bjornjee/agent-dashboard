@@ -182,11 +182,21 @@ func (m model) loadFilesChanged() tea.Cmd {
 		return nil
 	}
 	target := agent.Target
+	projDir := agent.ProjDir
+	sessionID := agent.SessionID
 	return func() tea.Msg {
-		base := findMergeBase(dir)
+		ref := "HEAD"
+		if b := conversation.LastGitBranch(projDir, sessionID); b != "" && branchExists(dir, b) {
+			ref = b
+		}
+		base := findMergeBase(dir, ref)
+		diffArg := base
+		if ref != "HEAD" {
+			diffArg = base + ".." + ref
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		out, err := gitRunner.Output(ctx, "git", "-C", dir, "diff", "--name-status", base)
+		out, err := gitRunner.Output(ctx, "git", "-C", dir, "diff", "--name-status", diffArg)
 		if err != nil {
 			return filesChangedMsg{target: target}
 		}

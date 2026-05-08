@@ -1048,7 +1048,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Loading diff..."
 			m.statusIsError = false
 			m.statusMsgTick = -1 // pinned until async result
-			return m, loadDiffCmd(agent.EffectiveDir())
+			return m, loadDiffCmd(*agent)
 		}
 	case "g":
 		if agent := m.selectedAgent(); agent != nil && m.selectedSubagent() == nil && agent.EffectiveDir() != "" && agent.Branch != "" {

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -560,5 +561,126 @@ func TestLoadDiff_IncludesUntrackedFiles(t *testing.T) {
 		if !found[want] {
 			t.Errorf("expected diff to include %s", want)
 		}
+	}
+}
+
+// writeJSONLForBranch creates a minimal projDir layout with a JSONL whose
+// last gitBranch field is `branch`. Used by branch-divergence tests.
+func writeJSONLForBranch(t *testing.T, projDir, sessionID, branch string) {
+	t.Helper()
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	body := fmt.Sprintf(`{"type":"user","gitBranch":%q}`+"\n", branch)
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+}
+
+func TestLoadDiff_BranchDivergence_UsesWorkBranch(t *testing.T) {
+	// Pane 5.1 shape: HEAD is on `main`, but the agent's last recorded
+	// gitBranch was `chore/feat`. Diff should compare base..chore/feat,
+	// not against working tree HEAD (which is empty).
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	dir := t.TempDir() // real path so writeJSONLForBranch works under it
+	projDir := filepath.Join(dir, "projdir")
+	sessionID := "sess-1"
+	workBranch := "chore/feat"
+	writeJSONLForBranch(t, projDir, sessionID, workBranch)
+
+	// branchExists check: chore/feat resolves to a commit
+	m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--verify", workBranch+"^{commit}").
+		Return([]byte("def456\n"), nil)
+
+	// findMergeBase against chore/feat returns base commit
+	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", workBranch, "origin/main").
+		Return([]byte("abc123\n"), nil)
+
+	// git diff base..chore/feat — non-empty, the agent's commits
+	commitDiff := "diff --git a/r.md b/r.md\n" +
+		"--- a/r.md\n+++ b/r.md\n@@ -1 +1 @@\n-old\n+new\n"
+	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123.."+workBranch).
+		Return([]byte(commitDiff), nil)
+
+	// loadDiff still gathers untracked from working tree (empty here)
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte(""), nil)
+
+	ctx := context.Background()
+	files, err := loadDiffWithRef(ctx, dir, workBranch, projDir, sessionID)
+	if err != nil {
+		t.Fatalf("loadDiffWithRef failed: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file in diff, got %d", len(files))
+	}
+}
+
+func TestLoadDiff_BranchMissingLocally_FallsBackToHEAD(t *testing.T) {
+	// WorkBranch from JSONL doesn't exist locally (e.g. branch deleted).
+	// Should fall back to current behaviour: git diff base (working tree).
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "projdir")
+	sessionID := "sess-2"
+	missingBranch := "deleted/feat"
+	writeJSONLForBranch(t, projDir, sessionID, missingBranch)
+
+	// branchExists: deleted/feat doesn't resolve
+	m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--verify", missingBranch+"^{commit}").
+		Return(nil, fmt.Errorf("unknown revision"))
+
+	// Falls back to HEAD path: findMergeBase HEAD origin/main
+	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", "HEAD", "origin/main").
+		Return([]byte("abc123\n"), nil)
+
+	// git diff base (no .. ref) against working tree
+	m.On("Object", mock.Anything).Maybe()
+	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123").
+		Return([]byte(""), nil)
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte(""), nil)
+
+	ctx := context.Background()
+	_, err := loadDiffWithRef(ctx, dir, missingBranch, projDir, sessionID)
+	if err != nil {
+		t.Fatalf("loadDiffWithRef failed: %v", err)
+	}
+	// Pass means the HEAD-fallback path was taken (only HEAD-path mocks exist).
+}
+
+func TestLoadDiff_NoWorkBranch_PreservesCurrentBehaviour(t *testing.T) {
+	// Empty WorkBranch → current loadDiff behaviour (git diff base).
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "projdir")
+	// no JSONL written → LastGitBranch returns ""
+
+	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", "HEAD", "origin/main").
+		Return([]byte("abc123\n"), nil)
+	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123").
+		Return([]byte(""), nil)
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte(""), nil)
+
+	ctx := context.Background()
+	_, err := loadDiffWithRef(ctx, dir, "", projDir, "sess-missing")
+	if err != nil {
+		t.Fatalf("loadDiffWithRef failed: %v", err)
 	}
 }
