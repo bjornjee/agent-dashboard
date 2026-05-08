@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/repo"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -137,8 +139,8 @@ func (m model) loadConversation() tea.Cmd {
 	slug := conversation.ProjectSlug(agent.Cwd)
 	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
 	sessionID := agent.SessionID
-	cwd := agent.Cwd
 	sessionsDir := m.cfg.Profile.SessionsDir
+	agentCopy := *agent
 
 	// Capture offset state for incremental reading
 	sessionKey := projDir + ":" + sessionID
@@ -152,7 +154,14 @@ func (m model) loadConversation() tea.Cmd {
 
 	return func() tea.Msg {
 		if sessionID == "" {
-			sessionID = conversation.FindSessionIDIn(sessionsDir, cwd)
+			// Resolve topology so we can probe Locate against the worktree
+			// root and source repo root as well as the launch cwd. This
+			// covers agents launched from a subdirectory of a worktree
+			// where Claude's session JSON recorded a different path.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			top, _ := resolveAgentTopology(ctx, agentCopy)
+			sessionID = conversation.Locate(sessionsDir, sessionCandidates(agentCopy, top)...)
 		}
 		if sessionID == "" {
 			return conversationMsg{entries: nil}
@@ -175,6 +184,10 @@ func (m model) loadSelectionData() tea.Cmd {
 }
 
 // loadFilesChanged computes changed files for the selected agent via git.
+//
+// `git -C <dir>` from any path inside a working tree resolves to that
+// working tree, so EffectiveDir (Cwd or WorktreeCwd) is sufficient even
+// when Cwd is a subdirectory. We don't need topology resolution here.
 func (m model) loadFilesChanged() tea.Cmd {
 	agent := m.selectedAgent()
 	if agent == nil {
@@ -230,13 +243,16 @@ func (m model) loadSubagentActivity() tea.Cmd {
 	slug := conversation.ProjectSlug(agent.Cwd)
 	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
 	sessionID := agent.SessionID
-	cwd := agent.Cwd
+	agentCopy := *agent
 	agentID := sub.AgentID
 	sessionsDir := m.cfg.Profile.SessionsDir
 
 	return func() tea.Msg {
 		if sessionID == "" {
-			sessionID = conversation.FindSessionIDIn(sessionsDir, cwd)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			top, _ := resolveAgentTopology(ctx, agentCopy)
+			sessionID = conversation.Locate(sessionsDir, sessionCandidates(agentCopy, top)...)
 		}
 		if sessionID == "" {
 			return activityMsg{entries: nil}
@@ -260,7 +276,10 @@ func (m model) loadAllSubagents() []tea.Cmd {
 		cmds = append(cmds, func() tea.Msg {
 			sid := a.SessionID
 			if sid == "" {
-				sid = conversation.FindSessionIDIn(sessionsDir, a.Cwd)
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				top, _ := resolveAgentTopology(ctx, a)
+				sid = conversation.Locate(sessionsDir, sessionCandidates(a, top)...)
 			}
 			if sid == "" {
 				return subagentsMsg{parentTarget: a.Target, agents: nil}
@@ -616,14 +635,17 @@ func (m model) loadPlan() tea.Cmd {
 	slug := conversation.ProjectSlug(agent.Cwd)
 	projDir := filepath.Join(m.cfg.Profile.ProjectsDir, slug)
 	sessionID := agent.SessionID
-	cwd := agent.Cwd
+	agentCopy := *agent
 	plansDir := m.cfg.Profile.PlansDir
 	sessionsDir := m.cfg.Profile.SessionsDir
 	delegatedToolUseID := agent.DelegatedPlanToolUseID
 
 	return func() tea.Msg {
 		if sessionID == "" {
-			sessionID = conversation.FindSessionIDIn(sessionsDir, cwd)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			top, _ := resolveAgentTopology(ctx, agentCopy)
+			sessionID = conversation.Locate(sessionsDir, sessionCandidates(agentCopy, top)...)
 		}
 		if sessionID == "" {
 			return planMsg{content: ""}
@@ -854,68 +876,124 @@ func mergePR(dir, branch string) tea.Cmd {
 	}
 }
 
-// postMergeCleanup runs deterministic cleanup steps after a PR has been merged:
-// kill the agent pane, remove worktree (if applicable), checkout default branch, pull,
-// delete feature branch, and remove the agent state file.
-func postMergeCleanup(paneID, sessionID, stateDir, cwd, worktreeCwd, branch string) tea.Cmd {
+// postMergeCleanup runs deterministic cleanup after a PR is merged.
+//
+// Architecture: the function takes the full domain.Agent and resolves the git
+// topology (worktree root, source repo root) at function entry. Every git
+// operation runs against the *correct* directory for its semantics:
+//
+//   - `worktree remove` (only when in a linked worktree): runs from Source.
+//   - `checkout main` / `pull origin main`: runs from Source.
+//   - `branch -d`: runs from Source.
+//
+// Hardening:
+//
+//   - Refuses cleanly when the agent worked inside a git submodule.
+//   - Pre-flights that the agent's branch actually exists in Source (guards
+//     against stale WorktreeCwd hints that would otherwise destroy the wrong
+//     repo).
+//   - Skips checkout/pull when Source has uncommitted changes (non-fatal).
+func postMergeCleanup(agent domain.Agent, stateDir string) tea.Cmd {
 	return func() tea.Msg {
-		// Validate paths before any destructive operations.
-		if cwd == "" || !filepath.IsAbs(cwd) {
-			return postMergeCleanupMsg{err: fmt.Errorf("invalid cwd: %q", cwd), progress: "validate"}
-		}
-		if worktreeCwd != "" {
-			if !filepath.IsAbs(worktreeCwd) {
-				return postMergeCleanupMsg{err: fmt.Errorf("invalid worktree path: %q", worktreeCwd), progress: "validate"}
-			}
-		}
-
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		defaultBranch := gitDefaultBranch(cwd)
+		// Resolve topology once. Cwd is primary; WorktreeCwd is a bootstrap
+		// fallback for agents whose Cwd has since been removed.
+		top, err := resolveAgentTopology(ctx, agent)
+		if err != nil {
+			if errors.Is(err, repo.ErrInsideSubmodule) {
+				return postMergeCleanupMsg{
+					err:      errors.New("cleanup refused: agent worked inside a git submodule"),
+					progress: "validate",
+				}
+			}
+			return postMergeCleanupMsg{
+				err:      fmt.Errorf("resolve topology: %w", err),
+				progress: "validate",
+			}
+		}
 
-		// 1. Kill tmux pane (ignore already-dead)
-		if target := tmux.ResolveTarget(paneID); target != "" {
+		// Branch-existence pre-flight: stale state pointing into the wrong
+		// repo would otherwise pass topology resolution silently and cause
+		// destructive damage.
+		if agent.Branch != "" {
+			_, vErr := gitRunner.Output(ctx, "git", "-C", top.Source, "rev-parse",
+				"--verify", "refs/heads/"+agent.Branch)
+			if vErr != nil {
+				return postMergeCleanupMsg{
+					err: fmt.Errorf("branch %q not found in %s — agent state may be stale",
+						agent.Branch, top.Source),
+					progress: "validate",
+				}
+			}
+		}
+
+		defaultBranch := gitDefaultBranch(top.Source)
+
+		// 1. Kill tmux pane (ignore already-dead).
+		if target := tmux.ResolveTarget(agent.TmuxPaneID); target != "" {
 			_ = tmux.TmuxKillPane(target)
 		}
 
-		// 2. Remove worktree if applicable
-		if worktreeCwd != "" {
-			out, err := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "worktree", "remove", "--force", worktreeCwd)
-			if err != nil {
-				// If git worktree remove failed, try removing the directory directly as fallback.
-				if rmErr := os.RemoveAll(worktreeCwd); rmErr != nil {
+		// 2. Worktree remove only when the agent ran in a linked worktree.
+		// When the agent ran directly in the source repo (Linked == false),
+		// `git worktree remove` would refuse to remove the main working tree.
+		if top.Linked {
+			out, wtErr := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", top.Source,
+				"worktree", "remove", "--force", top.Worktree)
+			if wtErr != nil {
+				// Fallback: directory-level removal if git refused (e.g. dirty worktree).
+				if rmErr := os.RemoveAll(top.Worktree); rmErr != nil {
 					detail := strings.TrimSpace(string(out))
-					return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "worktree remove"}
+					return postMergeCleanupMsg{
+						err: fmt.Errorf("%s: %w", detail, wtErr), progress: "worktree remove"}
 				}
 			}
-
-			out, err = gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "worktree", "prune")
-			if err != nil {
+			out, pErr := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", top.Source,
+				"worktree", "prune")
+			if pErr != nil {
 				detail := strings.TrimSpace(string(out))
-				return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "worktree prune"}
+				return postMergeCleanupMsg{
+					err: fmt.Errorf("%s: %w", detail, pErr), progress: "worktree prune"}
 			}
 		}
 
-		// 3. Checkout default branch
-		out, err := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "checkout", defaultBranch)
-		if err != nil {
-			detail := strings.TrimSpace(string(out))
-			return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "checkout " + defaultBranch}
+		// 3. Source-repo branch refresh, gated on a clean tree. A dirty source
+		// is a user-state concern, not a cleanup failure — surface as no-op.
+		dirtyErr := gitRunner.RunDir(ctx, "", "git", "-C", top.Source, "diff-index",
+			"--quiet", "HEAD")
+		sourceClean := dirtyErr == nil
+		if sourceClean {
+			out, coErr := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", top.Source,
+				"checkout", defaultBranch)
+			if coErr != nil {
+				// "is already used by worktree" is a defensive net — should not fire
+				// in the new design but tolerated rather than failing cleanup.
+				detail := strings.TrimSpace(string(out))
+				if !strings.Contains(detail, "is already used by worktree") {
+					return postMergeCleanupMsg{
+						err:      fmt.Errorf("%s: %w", detail, coErr),
+						progress: "checkout " + defaultBranch,
+					}
+				}
+			}
+			out, plErr := gitRunner.CombinedOutputDir(ctx, "", "git", "-C", top.Source,
+				"pull", "origin", defaultBranch)
+			if plErr != nil {
+				detail := strings.TrimSpace(string(out))
+				return postMergeCleanupMsg{
+					err:      fmt.Errorf("%s: %w", detail, plErr),
+					progress: "pull origin " + defaultBranch,
+				}
+			}
 		}
 
-		// 4. Pull default branch
-		out, err = gitRunner.CombinedOutputDir(ctx, "", "git", "-C", cwd, "pull", "origin", defaultBranch)
-		if err != nil {
-			detail := strings.TrimSpace(string(out))
-			return postMergeCleanupMsg{err: fmt.Errorf("%s: %w", detail, err), progress: "pull origin " + defaultBranch}
-		}
+		// 4. Delete local branch (ignore errors — GitHub may have already deleted it).
+		_ = gitRunner.RunDir(ctx, "", "git", "-C", top.Source, "branch", "-d", agent.Branch)
 
-		// 5. Delete local branch (ignore errors — GitHub may have already deleted it)
-		_ = gitRunner.RunDir(ctx, "", "git", "-C", cwd, "branch", "-d", branch)
-
-		// 6. Remove agent state file
-		_ = state.RemoveAgent(stateDir, sessionID)
+		// 5. Remove agent state file.
+		_ = state.RemoveAgent(stateDir, agent.SessionID)
 
 		return postMergeCleanupMsg{}
 	}

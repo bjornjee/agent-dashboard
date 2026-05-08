@@ -1357,3 +1357,91 @@ func TestHasPendingQuestion_PlanDoesNotTrigger(t *testing.T) {
 		t.Error("expected false -- ExitPlanMode is not a question")
 	}
 }
+
+// writeSessionFile creates a single session JSON in dir for the Locate tests.
+func writeSessionFile(t *testing.T, dir, sessionID, cwd string, startedAt int64) {
+	t.Helper()
+	data := fmt.Sprintf(`{"pid":%d,"sessionId":%q,"cwd":%q,"startedAt":%d}`,
+		1000+startedAt, sessionID, cwd, startedAt)
+	if err := os.WriteFile(filepath.Join(dir, sessionID+".json"), []byte(data), 0644); err != nil {
+		t.Fatalf("write session file: %v", err)
+	}
+}
+
+func TestLocate_SingleCandidateExactMatch(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-1", "/repo/feat", 100)
+
+	got := Locate(dir, "/repo/feat")
+	if got != "sess-1" {
+		t.Errorf("Locate = %q, want sess-1", got)
+	}
+}
+
+func TestLocate_NoMatch(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-1", "/repo/feat", 100)
+
+	got := Locate(dir, "/some/other")
+	if got != "" {
+		t.Errorf("Locate = %q, want empty", got)
+	}
+}
+
+func TestLocate_MultiCandidateOneMatches(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-1", "/repo/feat", 100)
+
+	got := Locate(dir, "/wt/sub", "/repo/feat", "/repo")
+	if got != "sess-1" {
+		t.Errorf("Locate = %q, want sess-1 (matched on second candidate)", got)
+	}
+}
+
+func TestLocate_TrailingSlashCleaned(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-1", "/repo/feat", 100)
+
+	got := Locate(dir, "/repo/feat/")
+	if got != "sess-1" {
+		t.Errorf("Locate = %q, want sess-1 (trailing slash should normalize via filepath.Clean)", got)
+	}
+}
+
+func TestLocate_MostRecentWinsAcrossCandidates(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-old", "/repo", 100)
+	writeSessionFile(t, dir, "sess-new", "/repo", 200)
+
+	got := Locate(dir, "/repo")
+	if got != "sess-new" {
+		t.Errorf("Locate = %q, want sess-new (most recent)", got)
+	}
+}
+
+func TestLocate_EmptyCandidatesFiltered(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-1", "/repo/feat", 100)
+
+	got := Locate(dir, "", "/repo/feat", "")
+	if got != "sess-1" {
+		t.Errorf("Locate = %q, want sess-1 (empties should be skipped)", got)
+	}
+}
+
+func TestLocate_NoCandidates(t *testing.T) {
+	dir := t.TempDir()
+	writeSessionFile(t, dir, "sess-1", "/repo/feat", 100)
+
+	got := Locate(dir)
+	if got != "" {
+		t.Errorf("Locate = %q, want empty (no candidates means no match)", got)
+	}
+}
+
+func TestLocate_MissingDir(t *testing.T) {
+	got := Locate("/nonexistent-sessions-dir-xyz", "/repo/feat")
+	if got != "" {
+		t.Errorf("Locate = %q, want empty for missing dir", got)
+	}
+}

@@ -1747,8 +1747,10 @@ func TestMergePRMsg_Success_PinsAndCleanup(t *testing.T) {
 	m.tmuxAvailable = true
 	m.mergeSessionID = "sess1"
 	m.mergePaneID = "%5"
-	m.mergeCwd = "/code/app"
-	m.mergeWorktreeCwd = "/worktrees/app/feat-x"
+	m.mergeAgent = domain.Agent{
+		Cwd:         "/code/app",
+		WorktreeCwd: "/worktrees/app/feat-x",
+	}
 	m.mergeBranch = "feat/test"
 
 	result, cmd := m.Update(mergePRMsg{})
@@ -1766,11 +1768,11 @@ func TestMergePRMsg_Success_PinsAndCleanup(t *testing.T) {
 	if updated.cleanupSessionID != "sess1" {
 		t.Errorf("expected cleanupSessionID='sess1', got %q", updated.cleanupSessionID)
 	}
-	if updated.cleanupCwd != "/code/app" {
-		t.Errorf("expected cleanupCwd='/code/app', got %q", updated.cleanupCwd)
+	if updated.cleanupAgent.Cwd != "/code/app" {
+		t.Errorf("expected cleanupAgent.Cwd='/code/app', got %q", updated.cleanupAgent.Cwd)
 	}
-	if updated.cleanupWorktreeCwd != "/worktrees/app/feat-x" {
-		t.Errorf("expected cleanupWorktreeCwd, got %q", updated.cleanupWorktreeCwd)
+	if updated.cleanupAgent.WorktreeCwd != "/worktrees/app/feat-x" {
+		t.Errorf("expected cleanupAgent.WorktreeCwd, got %q", updated.cleanupAgent.WorktreeCwd)
 	}
 	if updated.cleanupBranch != "feat/test" {
 		t.Errorf("expected cleanupBranch='feat/test', got %q", updated.cleanupBranch)
@@ -1803,18 +1805,17 @@ func TestMergePRMsg_Error_ClearsAllMergeFields(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
 	m.mergeSessionID = "sess1"
 	m.mergePaneID = "%5"
-	m.mergeCwd = "/code/app"
-	m.mergeWorktreeCwd = "/worktrees/app/feat-x"
+	m.mergeAgent = domain.Agent{
+		Cwd:         "/code/app",
+		WorktreeCwd: "/worktrees/app/feat-x",
+	}
 	m.mergeBranch = "feat/test"
 
 	result, _ := m.Update(mergePRMsg{err: fmt.Errorf("conflict")})
 	updated := result.(model)
 
-	if updated.mergeCwd != "" {
-		t.Error("mergeCwd should be cleared after error")
-	}
-	if updated.mergeWorktreeCwd != "" {
-		t.Error("mergeWorktreeCwd should be cleared after error")
+	if updated.mergeAgent.Cwd != "" {
+		t.Error("mergeAgent should be cleared after error")
 	}
 	if updated.mergeBranch != "" {
 		t.Error("mergeBranch should be cleared after error")

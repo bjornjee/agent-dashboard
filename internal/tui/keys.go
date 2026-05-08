@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
 
@@ -528,34 +529,28 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "y":
 			sessionID := m.confirmMergeSessionID
 			paneID := m.confirmMergePaneID
-			dir := m.confirmMergeDir
+			agent := m.confirmMergeAgent
 			branch := m.confirmMergeBranch
-			cwd := m.confirmMergeCwd
 			m.confirmMergeSessionID = ""
 			m.confirmMergePaneID = ""
-			m.confirmMergeDir = ""
+			m.confirmMergeAgent = domain.Agent{}
 			m.confirmMergeBranch = ""
-			m.confirmMergeCwd = ""
 			m.mode = modeNormal
 			if m.ghAvailable {
 				m.mergeSessionID = sessionID
 				m.mergePaneID = paneID
-				m.mergeCwd = cwd
+				m.mergeAgent = agent
 				m.mergeBranch = branch
-				if cwd != dir {
-					m.mergeWorktreeCwd = dir
-				}
 				m.setStatus("Merging PR...", false)
-				return m, mergePR(dir, branch)
+				return m, mergePR(agent.EffectiveDir(), branch)
 			}
 			m.setStatus("Marked as merged", false)
 			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
 		case "n", "esc":
 			m.confirmMergeSessionID = ""
 			m.confirmMergePaneID = ""
-			m.confirmMergeDir = ""
+			m.confirmMergeAgent = domain.Agent{}
 			m.confirmMergeBranch = ""
-			m.confirmMergeCwd = ""
 			m.mode = modeNormal
 			m.clearStatus()
 			return m, nil
@@ -568,23 +563,24 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "y":
 			sessionID := m.cleanupSessionID
-			paneID := m.cleanupPaneID
-			cwd := m.cleanupCwd
-			worktreeCwd := m.cleanupWorktreeCwd
+			agent := m.cleanupAgent
 			branch := m.cleanupBranch
+			// Synthesize the cleanup-bound agent: branch from PR flow takes
+			// precedence; pane and session IDs reflect the merge target.
+			agent.Branch = branch
+			agent.SessionID = sessionID
+			agent.TmuxPaneID = m.cleanupPaneID
 			m.cleanupSessionID = ""
 			m.cleanupPaneID = ""
-			m.cleanupCwd = ""
-			m.cleanupWorktreeCwd = ""
+			m.cleanupAgent = domain.Agent{}
 			m.cleanupBranch = ""
 			m.mode = modeNormal
 			m.setStatus("Cleaning up...", false)
-			return m, postMergeCleanup(paneID, sessionID, m.statePath, cwd, worktreeCwd, branch)
+			return m, postMergeCleanup(agent, m.statePath)
 		case "n", "esc":
 			m.cleanupSessionID = ""
 			m.cleanupPaneID = ""
-			m.cleanupCwd = ""
-			m.cleanupWorktreeCwd = ""
+			m.cleanupAgent = domain.Agent{}
 			m.cleanupBranch = ""
 			m.mode = modeNormal
 			m.setStatus("PR merged", false)
@@ -1076,9 +1072,8 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmEnteredAt = time.Now()
 			m.confirmMergeSessionID = agent.SessionID
 			m.confirmMergePaneID = agent.TmuxPaneID
-			m.confirmMergeDir = agent.EffectiveDir()
+			m.confirmMergeAgent = *agent
 			m.confirmMergeBranch = agent.Branch
-			m.confirmMergeCwd = agent.Cwd
 			m.statusMsg = fmt.Sprintf("Merge %s? (y/n)", agent.Branch)
 			m.statusMsgTick = -1 // pinned
 			return m, nil

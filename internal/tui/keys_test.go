@@ -802,7 +802,7 @@ func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
 	m.confirmEnteredAt = pastConfirmTime
 	m.confirmMergeSessionID = "sess1"
 	m.confirmMergePaneID = "%5"
-	m.confirmMergeDir = t.TempDir()
+	m.confirmMergeAgent = domain.Agent{Cwd: t.TempDir()}
 	m.confirmMergeBranch = "feat/test"
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
@@ -898,8 +898,9 @@ func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
 	}
 }
 
-func TestMKey_ConfirmMerge_Y_StoresMergeCwdFields(t *testing.T) {
-	// Confirming merge should propagate Cwd, branch, and worktreeCwd fields.
+func TestMKey_ConfirmMerge_Y_PropagatesAgent(t *testing.T) {
+	// Confirming merge should propagate the full agent (incl. Cwd and
+	// WorktreeCwd) into mergeAgent for the cleanup pipeline.
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.ghAvailable = true
@@ -907,43 +908,26 @@ func TestMKey_ConfirmMerge_Y_StoresMergeCwdFields(t *testing.T) {
 	m.confirmEnteredAt = pastConfirmTime
 	m.confirmMergeSessionID = "sess1"
 	m.confirmMergePaneID = "%5"
-	m.confirmMergeDir = "/worktrees/app/feat-x" // EffectiveDir (worktree)
+	m.confirmMergeAgent = domain.Agent{
+		Cwd:         "/code/app",
+		WorktreeCwd: "/worktrees/app/feat-x",
+	}
 	m.confirmMergeBranch = "feat/test"
-	m.confirmMergeCwd = "/code/app" // main repo Cwd
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	updated := result.(model)
-	if updated.mergeCwd != "/code/app" {
-		t.Errorf("expected mergeCwd='/code/app', got %q", updated.mergeCwd)
+	if updated.mergeAgent.Cwd != "/code/app" {
+		t.Errorf("expected mergeAgent.Cwd='/code/app', got %q", updated.mergeAgent.Cwd)
 	}
-	if updated.mergeWorktreeCwd != "/worktrees/app/feat-x" {
-		t.Errorf("expected mergeWorktreeCwd='/worktrees/app/feat-x', got %q", updated.mergeWorktreeCwd)
+	if updated.mergeAgent.WorktreeCwd != "/worktrees/app/feat-x" {
+		t.Errorf("expected mergeAgent.WorktreeCwd='/worktrees/app/feat-x', got %q",
+			updated.mergeAgent.WorktreeCwd)
 	}
 	if updated.mergeBranch != "feat/test" {
 		t.Errorf("expected mergeBranch='feat/test', got %q", updated.mergeBranch)
 	}
-	if updated.confirmMergeCwd != "" {
-		t.Error("expected confirmMergeCwd to be cleared after confirm")
-	}
-}
-
-func TestMKey_ConfirmMerge_Y_NonWorktree_NoWorktreeCwd(t *testing.T) {
-	// When Cwd == EffectiveDir, mergeWorktreeCwd should be empty.
-	m := NewModel(testConfig(t.TempDir()), nil)
-	m.tmuxAvailable = true
-	m.ghAvailable = true
-	m.mode = modeConfirmMerge
-	m.confirmEnteredAt = pastConfirmTime
-	m.confirmMergeSessionID = "sess1"
-	m.confirmMergePaneID = "%5"
-	m.confirmMergeDir = "/code/app" // same as Cwd
-	m.confirmMergeBranch = "feat/test"
-	m.confirmMergeCwd = "/code/app"
-
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	updated := result.(model)
-	if updated.mergeWorktreeCwd != "" {
-		t.Errorf("expected empty mergeWorktreeCwd for non-worktree, got %q", updated.mergeWorktreeCwd)
+	if updated.confirmMergeAgent.Cwd != "" {
+		t.Error("expected confirmMergeAgent to be cleared after confirm")
 	}
 }
 
@@ -953,8 +937,10 @@ func TestConfirmCleanup_Y_FiresCleanup(t *testing.T) {
 	m.confirmEnteredAt = pastConfirmTime
 	m.cleanupSessionID = "sess1"
 	m.cleanupPaneID = "%5"
-	m.cleanupCwd = "/code/app"
-	m.cleanupWorktreeCwd = "/worktrees/app/feat-x"
+	m.cleanupAgent = domain.Agent{
+		Cwd:         "/code/app",
+		WorktreeCwd: "/worktrees/app/feat-x",
+	}
 	m.cleanupBranch = "feat/test"
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
@@ -979,7 +965,7 @@ func TestConfirmCleanup_Esc_Cancels(t *testing.T) {
 	m.confirmEnteredAt = pastConfirmTime
 	m.cleanupSessionID = "sess1"
 	m.cleanupPaneID = "%5"
-	m.cleanupCwd = "/code/app"
+	m.cleanupAgent = domain.Agent{Cwd: "/code/app"}
 	m.cleanupBranch = "feat/test"
 
 	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -1286,7 +1272,7 @@ func TestConfirmCooldown_AcceptsAfterCooldown(t *testing.T) {
 	m.ghAvailable = true
 	m.confirmMergeSessionID = "sess1"
 	m.confirmMergePaneID = "%5"
-	m.confirmMergeDir = t.TempDir()
+	m.confirmMergeAgent = domain.Agent{Cwd: t.TempDir()}
 	m.confirmMergeBranch = "feat/test"
 
 	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})

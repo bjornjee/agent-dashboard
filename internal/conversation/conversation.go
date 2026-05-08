@@ -1188,9 +1188,26 @@ type sessionFile struct {
 	StartedAt int64  `json:"startedAt"`
 }
 
-// FindSessionIDIn finds the most recent session ID for a given cwd
-// by scanning sessionsDir/*.json.
-func FindSessionIDIn(sessionsDir, cwd string) string {
+// Locate returns the most recent Claude session whose recorded cwd matches
+// any of the candidate paths exactly (after filepath.Clean of each side).
+// Empty candidate strings are skipped. Returns "" when nothing matches.
+//
+// The candidate list is the looseness boundary: callers compose explicit
+// alternatives (e.g. agent.Cwd, worktree root, source root). Match is exact
+// — no symlink resolution, no prefix walking — so behaviour is predictable
+// regardless of how Claude recorded its launch path.
+func Locate(sessionsDir string, candidates ...string) string {
+	cleaned := make(map[string]struct{}, len(candidates))
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		cleaned[filepath.Clean(c)] = struct{}{}
+	}
+	if len(cleaned) == 0 {
+		return ""
+	}
+
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
 		return ""
@@ -1209,9 +1226,21 @@ func FindSessionIDIn(sessionsDir, cwd string) string {
 		if json.Unmarshal(data, &sf) != nil {
 			continue
 		}
-		if sf.Cwd == cwd && sf.StartedAt > best.StartedAt {
+		if _, ok := cleaned[filepath.Clean(sf.Cwd)]; !ok {
+			continue
+		}
+		if sf.StartedAt > best.StartedAt {
 			best = sf
 		}
 	}
 	return best.SessionID
+}
+
+// FindSessionIDIn is a thin compatibility shim over Locate for callers that
+// only have a single cwd. Prefer Locate with a richer candidate set when
+// you have one available (e.g. via repo.Resolve).
+//
+// Deprecated: use Locate.
+func FindSessionIDIn(sessionsDir, cwd string) string {
+	return Locate(sessionsDir, cwd)
 }

@@ -507,11 +507,21 @@ func (m *model) historyContent() string {
 	return m.renderedHistory
 }
 
+// waitingMessageContent renders the body of the "Agent is waiting" viewport.
+//
+// The function previously had a load-bearing early return: when no last
+// assistant message existed in the conversation, it returned just the
+// "Waiting for agent message..." placeholder and never appended the
+// `Reply:` input — making typed characters invisible whenever the
+// conversation was empty (Done/PR agents with no captured Claude session).
+//
+// Invariant: the view never silently swallows user input. In modeReply
+// the `Reply:` line is always appended, regardless of whether the
+// conversation has a prior assistant entry.
 func (m model) waitingMessageContent() string {
 	var lines []string
 	w := m.rightWidth - 4
 
-	// Always show last assistant message from conversation
 	var lastAssistant *domain.ConversationEntry
 	for i := len(m.conversation) - 1; i >= 0; i-- {
 		if m.conversation[i].Role == "assistant" && !m.conversation[i].IsNotification {
@@ -519,12 +529,15 @@ func (m model) waitingMessageContent() string {
 			break
 		}
 	}
-	if lastAssistant == nil {
+
+	if lastAssistant != nil {
+		for _, wl := range wrapText(lastAssistant.Content, w) {
+			lines = append(lines, "  "+wl)
+		}
+	} else if m.mode == modeReply {
+		lines = append(lines, helpStyle.Render("  (no prior agent message)"))
+	} else {
 		return helpStyle.Render("  Waiting for agent message...")
-	}
-	wrapped := wrapText(lastAssistant.Content, w)
-	for _, wl := range wrapped {
-		lines = append(lines, "  "+wl)
 	}
 
 	lines = append(lines, "")
