@@ -53,6 +53,17 @@ In any Claude Code session, run:
 
 Then restart Claude Code sessions for hooks and skills to take effect.
 
+### Recommended companion plugins
+
+`agent-dashboard` works best when paired with [`bjornjee/skills`](https://github.com/bjornjee/skills) — a plugin of workflow skills (TDD guide, language-specific strict reviewers, refactor cleaner, codex delegation, terminal ops) that the dashboard's session-creation flow expects:
+
+```
+/marketplace add bjornjee/skills
+/plugin install skills@bjornjee-skills
+```
+
+Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not function as intended.
+
 ## Step 3: Launch
 
 ```bash
