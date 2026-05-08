@@ -243,11 +243,10 @@ func TestMarketplaceHasAIMetadata(t *testing.T) {
 	raw := readFile(t, filepath.Join(repoRoot(t), ".claude-plugin", "marketplace.json"))
 	var doc struct {
 		Metadata struct {
-			Description string   `json:"description"`
-			Homepage    string   `json:"homepage"`
-			Repository  string   `json:"repository"`
-			License     string   `json:"license"`
-			Keywords    []string `json:"keywords"`
+			Homepage   string   `json:"homepage"`
+			Repository string   `json:"repository"`
+			License    string   `json:"license"`
+			Keywords   []string `json:"keywords"`
 		} `json:"metadata"`
 	}
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
