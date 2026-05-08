@@ -2,6 +2,7 @@
 name: refactor
 description: Safely restructure code in an isolated git worktree with test-preserved, incremental transformations
 disable-model-invocation: true
+effort: max
 ---
 
 Safely refactor code while preserving all existing behavior.
@@ -88,6 +89,8 @@ Start two tracks in parallel:
 ---
 
 ### Phase 4: Transform
+
+**Effort note:** This skill runs at `max` reasoning effort throughout. To save tokens during implementation, run `/effort high` before continuing — `effort: max` resumes on the next invocation.
 
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the refactor touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the scope (Phase 2) and baseline (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
