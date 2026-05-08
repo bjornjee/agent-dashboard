@@ -25,7 +25,7 @@ Run in parallel:
 3. `git branch --show-current` — current branch.
 4. `git rev-parse --abbrev-ref @{upstream} 2>/dev/null` — does it track a remote?
 5. `git log --oneline $(git merge-base HEAD "$BASE")..HEAD` — commits on this branch.
-6. `git diff --name-only "$BASE"...HEAD` — files changed vs base. Save this list — it's the input to Phase 2.
+6. `git diff --name-only "$BASE"...HEAD` — files changed vs base. Save this list — it's the input to Phase 3.
 
 **Gate:** You have the changed-file list and the base branch.
 
