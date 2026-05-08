@@ -1329,12 +1329,3 @@ func Locate(sessionsDir string, candidates ...string) string {
 	}
 	return best.SessionID
 }
-
-// FindSessionIDIn is a thin compatibility shim over Locate for callers that
-// only have a single cwd. Prefer Locate with a richer candidate set when
-// you have one available (e.g. via repo.Resolve).
-//
-// Deprecated: use Locate.
-func FindSessionIDIn(sessionsDir, cwd string) string {
-	return Locate(sessionsDir, cwd)
-}
