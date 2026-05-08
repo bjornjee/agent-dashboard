@@ -115,7 +115,7 @@ Then restart Claude Code sessions for hooks and skills to take effect.
 /plugin install skills@bjornjee-skills
 ```
 
-The dashboard works without it, but skill-gated session types (feature, fix, refactor, pr, rca) assume these skills are available.
+Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not function as intended.
 
 ## Uninstall
 
