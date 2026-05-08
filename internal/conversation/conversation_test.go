@@ -1624,3 +1624,53 @@ func TestLastGitBranch_MalformedLineSkipped(t *testing.T) {
 		t.Errorf("LastGitBranch = %q, want feat/x (malformed line should be skipped)", got)
 	}
 }
+
+func TestFindProjDirByScan_HappyPath(t *testing.T) {
+	projectsDir := t.TempDir()
+	want := writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	got := FindProjDirByScan(projectsDir, "sess-1")
+	if got != want {
+		t.Errorf("FindProjDirByScan = %q, want %q", got, want)
+	}
+}
+
+func TestFindProjDirByScan_FindsDeepInDir(t *testing.T) {
+	// JSONL stored under one of many sibling slugs; scan finds it.
+	projectsDir := t.TempDir()
+	writeJSONLAt(t, projectsDir, "/repo-A", "sess-other")
+	writeJSONLAt(t, projectsDir, "/repo-B", "sess-other-2")
+	want := writeJSONLAt(t, projectsDir, "/repo-target", "sess-1")
+
+	got := FindProjDirByScan(projectsDir, "sess-1")
+	if got != want {
+		t.Errorf("FindProjDirByScan = %q, want %q", got, want)
+	}
+}
+
+func TestFindProjDirByScan_NoMatch(t *testing.T) {
+	projectsDir := t.TempDir()
+	writeJSONLAt(t, projectsDir, "/repo", "sess-other")
+
+	got := FindProjDirByScan(projectsDir, "sess-1")
+	if got != "" {
+		t.Errorf("FindProjDirByScan = %q, want empty", got)
+	}
+}
+
+func TestFindProjDirByScan_EmptySessionID(t *testing.T) {
+	projectsDir := t.TempDir()
+	writeJSONLAt(t, projectsDir, "/repo", "sess-1")
+
+	got := FindProjDirByScan(projectsDir, "")
+	if got != "" {
+		t.Errorf("FindProjDirByScan = %q, want empty for missing sessionID", got)
+	}
+}
+
+func TestFindProjDirByScan_MissingDir(t *testing.T) {
+	got := FindProjDirByScan("/nonexistent-dir-xyz", "sess-1")
+	if got != "" {
+		t.Errorf("FindProjDirByScan = %q, want empty for missing dir", got)
+	}
+}

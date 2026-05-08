@@ -207,6 +207,12 @@ func ResolveAgentProjDir(sf *domain.StateFile, projectsDir, sessionsDir string) 
 		cancel()
 		agent.ProjDir = conversation.PickProjDir(projectsDir, agent.SessionID,
 			agent.Cwd, agent.WorktreeCwd, top.Worktree, top.Source)
+		if agent.ProjDir == "" {
+			// No candidate matched (typical when the agent's worktree has been
+			// deleted, so repo.Resolve returns empty topology). Fall back to a
+			// scan of projectsDir as last resort — the JSONL is still there.
+			agent.ProjDir = conversation.FindProjDirByScan(projectsDir, agent.SessionID)
+		}
 		sf.Agents[key] = agent
 	}
 }

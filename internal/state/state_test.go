@@ -1187,3 +1187,33 @@ func TestResolveAgentProjDir_GitResolveFails_StillTriesAgentCwd(t *testing.T) {
 		t.Errorf("ProjDir = %q, want %q (Cwd candidate should match even if topology fails)", got, wantProjDir)
 	}
 }
+
+func TestResolveAgentProjDir_DeletedWorktree_FallsBackToScan(t *testing.T) {
+	// Reproducer from pane 4.1 (post-merge):
+	//   - agent.Cwd = /wt/feat (worktree path) — directory has been deleted
+	//   - JSONL still on disk at the source-repo slug
+	//   - repo.Resolve fails because /wt/feat doesn't exist
+	//   - Topology candidates are empty; agent.Cwd's slug doesn't match
+	//
+	// Without the FindProjDirByScan fallback, ProjDir would resolve to "".
+	// The JSONL is reachable; we should find it.
+	sessionID := "sess-deleted-wt"
+	projectsDir := projDirTestSetup(t, "/repo", sessionID) // JSONL at source slug
+	wantProjDir := filepath.Join(projectsDir, conversation.ProjectSlug("/repo"))
+
+	m := withMockBranchRunner(t)
+	m.On("Output", mock.Anything, "git", "-C", "/wt/feat", "rev-parse", "--show-toplevel").
+		Return(nil, fmt.Errorf("not a git repo")).Maybe()
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, Cwd: "/wt/feat", WorktreeCwd: "/wt/feat"},
+		},
+	}
+
+	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+
+	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
+		t.Errorf("ProjDir = %q, want %q (scan fallback should locate the JSONL)", got, wantProjDir)
+	}
+}

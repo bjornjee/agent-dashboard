@@ -63,6 +63,32 @@ func LastGitBranch(projDir, sessionID string) string {
 	return last
 }
 
+// FindProjDirByScan walks every subdirectory of projectsDir looking for one
+// that contains <sessionID>.jsonl. Last-resort fallback for when no candidate
+// path could produce the right slug — typically because the agent's worktree
+// has been deleted, so repo.Resolve returns no topology candidates. Cost is
+// one ReadDir + one Stat per project subdir (tens of subdirs in practice).
+func FindProjDirByScan(projectsDir, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		return ""
+	}
+	target := sessionID + ".jsonl"
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(projectsDir, e.Name(), target)
+		if _, err := os.Stat(path); err == nil {
+			return filepath.Join(projectsDir, e.Name())
+		}
+	}
+	return ""
+}
+
 // PickProjDir tries each non-empty candidate path's ProjectSlug and returns
 // the first projectsDir/<slug> directory that contains <sessionID>.jsonl.
 // Returns "" if no candidate matches.
