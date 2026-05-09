@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/bjornjee/agent-dashboard/compare/v0.19.0...v0.20.0) (2026-05-09)
+
+
+### Features
+
+* configurable plan/default effort levels via settings.toml ([#269](https://github.com/bjornjee/agent-dashboard/issues/269)) ([2552b87](https://github.com/bjornjee/agent-dashboard/commit/2552b876a5e67b8c744a92acaf92736b209b7df9))
+
+
+### Bug Fixes
+
+* capture effort from settings.json when env var unset on SessionStart ([#265](https://github.com/bjornjee/agent-dashboard/issues/265)) ([8dfe4bd](https://github.com/bjornjee/agent-dashboard/commit/8dfe4bda3c65c8819eb90d85401902cf0a740f25))
+* skip /effort dispatch while user is composing input ([#268](https://github.com/bjornjee/agent-dashboard/issues/268)) ([bd23f5e](https://github.com/bjornjee/agent-dashboard/commit/bd23f5e3cf8372d4112d9f7c77b7d2e55672042d))
+* split TUI WAITING group header into QUESTION and ERROR ([#267](https://github.com/bjornjee/agent-dashboard/issues/267)) ([acaea6f](https://github.com/bjornjee/agent-dashboard/commit/acaea6fa646f03996f97fca2b2cff4066dbdeb00))
+
 ## [0.19.0](https://github.com/bjornjee/agent-dashboard/compare/v0.18.0...v0.19.0) (2026-05-08)
 
 
