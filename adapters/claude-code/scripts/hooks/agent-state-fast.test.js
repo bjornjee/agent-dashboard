@@ -924,31 +924,6 @@ describe('fast hook state updates (per-agent files)', () => {
 // buildUpdate must surface this transition by setting update.effort so the
 // hook layer can dispatch /effort via tmux send-keys to the same pane.
 describe('dynamic effort on permission_mode transitions', () => {
-  it('entering plan mode bumps effort to max', () => {
-    const existing = {
-      target: 'main:1.0',
-      state: 'running',
-      current_tool: '',
-      permission_mode: 'default',
-      effort: 'high',
-    };
-
-    const { changed, update } = buildUpdate({
-      input: {
-        session_id: 'abc123',
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Read',
-        permission_mode: 'plan',
-      },
-      existing,
-      target: 'main:1.0',
-      tmuxPane: '%0',
-    });
-
-    assert.equal(changed, true);
-    assert.equal(update.effort, 'max');
-  });
-
   it('leaving plan mode drops effort back to high', () => {
     const existing = {
       target: 'main:1.0',
@@ -1148,6 +1123,7 @@ describe('effort dispatch gate (no inject while user is composing)', () => {
       tmuxPane: '%0',
     });
 
+    assert.equal(result.changed, true);
     assert.equal(result.update.effort, 'max');
     assert.equal(result.dispatchEffort, true,
       'dispatch is safe while agent is actively running tools');
