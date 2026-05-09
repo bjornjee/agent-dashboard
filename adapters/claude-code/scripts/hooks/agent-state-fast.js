@@ -156,6 +156,16 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   // when state itself is guarded.
   const newEffort = effortTransition(existing.permission_mode, permissionMode);
 
+  // Gate the keystroke dispatch (not the state-file write). When the agent is
+  // in a STOP_STATE the user is composing input in some CC UI (plan-review
+  // textarea, AskUserQuestion answer, idle prompt), so `tmux send-keys
+  // '/effort <level>\r'` would land inside their text. The state-file effort
+  // still updates so the dashboard badge stays accurate; CC's session-level
+  // effort just won't auto-sync — the user can run `/effort <level>` manually.
+  const dispatchEffort = !!newEffort
+    && newEffort !== (existing.effort || '')
+    && !STOP_STATES.has(existing.state);
+
   // Only consume hook_blocked on PreToolUse — the same event type that blocking
   // hooks fire on. Ignoring it on PostToolUse prevents a rapid PostToolUse from
   // a prior tool clearing the signal before the dashboard reads it.
@@ -171,9 +181,9 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     if (consumeBlocked) guardedUpdate.hook_blocked = '';
     if (newEffort) guardedUpdate.effort = newEffort;
     if (Object.keys(guardedUpdate).length > 0) {
-      return { changed: true, update: guardedUpdate };
+      return { changed: true, update: guardedUpdate, dispatchEffort };
     }
-    return { changed: false, update: null };
+    return { changed: false, update: null, dispatchEffort: false };
   }
 
   const currentTool = hookEvent === 'PostToolUse' ? '' : toolName;
@@ -197,7 +207,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || !!newEffort;
 
   if (!changed && existing.state) {
-    return { changed: false, update: null };
+    return { changed: false, update: null, dispatchEffort: false };
   }
 
   const update = {
@@ -229,7 +239,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     update.effort = newEffort;
   }
 
-  return { changed: true, update };
+  return { changed: true, update, dispatchEffort };
 }
 
 function fastUpdate(input) {
@@ -250,7 +260,7 @@ function fastUpdate(input) {
     if (/\bgh\s+pr\s+(create|merge)\b/.test(cmd)) return;
   }
 
-  const { changed, update } = buildUpdate({ input, existing, target, tmuxPane });
+  const { changed, update, dispatchEffort } = buildUpdate({ input, existing, target, tmuxPane });
   if (changed && update) {
     // Pass guardStates on PostToolUse to eliminate the TOCTOU race with the
     // async Stop hook: buildUpdate's guard reads stale state, but writeState
@@ -263,11 +273,10 @@ function fastUpdate(input) {
       : {};
     writeState(sessionId, update, undefined, opts);
 
-    // Dispatch /effort to the agent's tmux pane on plan-mode transition.
-    // Guard against the edge case where the stored effort already equals the
-    // transition target (e.g. agent re-enters plan mode without having exited
-    // cleanly) — avoids sending a no-op /effort command to the pane.
-    if (update.effort && update.effort !== (existing.effort || '')) {
+    // dispatchEffort is set by buildUpdate only when (a) effort actually
+    // changes and (b) the agent is not in a state where the user is composing
+    // input — see the gate in buildUpdate for why.
+    if (dispatchEffort) {
       dispatchEffortKeys(tmuxPane, update.effort);
     }
   }
