@@ -249,15 +249,9 @@ func (m model) agentListContentWithLine() (string, int) {
 				if len(states) == 1 {
 					switch {
 					case states["question"]:
-						hdr = struct {
-							label string
-							color color.Color
-						}{"QUESTION", questionColor}
+						hdr.label, hdr.color = "QUESTION", questionColor
 					case states["error"]:
-						hdr = struct {
-							label string
-							color color.Color
-						}{"ERROR", errorColor}
+						hdr.label, hdr.color = "ERROR", errorColor
 					}
 				}
 			}
