@@ -24,6 +24,10 @@ func DefaultSettings() domain.Settings {
 		Usage: domain.UsageSettings{
 			RateLimitPollSeconds: 60,
 		},
+		Effort: domain.EffortSettings{
+			Plan:    "max",
+			Default: "high",
+		},
 	}
 }
 

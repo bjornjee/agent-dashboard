@@ -211,6 +211,16 @@ type UsageSettings struct {
 	RateLimitPollSeconds int `toml:"rate_limit_poll_seconds"` // how often to fetch rate limits (default 60)
 }
 
+// EffortSettings controls the thinking-effort levels the dashboard pins
+// at agent spawn time and dispatches on plan-mode transitions. Both the
+// Go side (buildAgentCommand for the --effort flag) and the JS hook
+// (agent-state-fast for /effort tmux dispatch) read these values so spawn
+// baseline and plan-exit baseline stay consistent.
+type EffortSettings struct {
+	Plan    string `toml:"plan"`    // dispatched on permission_mode='plan' entry
+	Default string `toml:"default"` // pinned at spawn and restored on plan exit
+}
+
 // Settings holds all user-facing configuration loaded from settings.toml.
 type Settings struct {
 	Banner        BannerSettings       `toml:"banner"`
@@ -218,6 +228,7 @@ type Settings struct {
 	Debug         DebugSettings        `toml:"debug"`
 	Experimental  ExperimentalSettings `toml:"experimental"`
 	Usage         UsageSettings        `toml:"usage"`
+	Effort        EffortSettings       `toml:"effort"`
 }
 
 // TmuxWindowInfo holds a tmux window's index and name.

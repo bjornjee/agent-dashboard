@@ -29,6 +29,49 @@ func TestDefaultSettings(t *testing.T) {
 	if s.Usage.RateLimitPollSeconds != 60 {
 		t.Errorf("Usage.RateLimitPollSeconds should default to 60, got %d", s.Usage.RateLimitPollSeconds)
 	}
+	if s.Effort.Plan != "max" {
+		t.Errorf("Effort.Plan should default to \"max\", got %q", s.Effort.Plan)
+	}
+	if s.Effort.Default != "high" {
+		t.Errorf("Effort.Default should default to \"high\", got %q", s.Effort.Default)
+	}
+}
+
+func TestLoadSettings_EffortCustom(t *testing.T) {
+	dir := t.TempDir()
+	content := `[effort]
+plan    = "high"
+default = "medium"
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadSettings(dir)
+	if s.Effort.Plan != "high" {
+		t.Errorf("Effort.Plan = %q, want \"high\"", s.Effort.Plan)
+	}
+	if s.Effort.Default != "medium" {
+		t.Errorf("Effort.Default = %q, want \"medium\"", s.Effort.Default)
+	}
+}
+
+func TestLoadSettings_EffortPartial(t *testing.T) {
+	dir := t.TempDir()
+	content := `[effort]
+plan = "low"
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadSettings(dir)
+	if s.Effort.Plan != "low" {
+		t.Errorf("Effort.Plan = %q, want \"low\"", s.Effort.Plan)
+	}
+	if s.Effort.Default != "high" {
+		t.Errorf("Effort.Default = %q, want \"high\" (omitted key should fall back to default)", s.Effort.Default)
+	}
 }
 
 func TestLoadSettings_MissingFile(t *testing.T) {

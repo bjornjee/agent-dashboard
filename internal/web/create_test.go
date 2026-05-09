@@ -85,15 +85,16 @@ func postCreate(t *testing.T, ts *httptest.Server, body string) *http.Response {
 //   - CLAUDE_CODE_EFFORT_LEVEL=<level> env-var prefix (so the SessionStart
 //     hook can persist the level to the agent state file for display)
 //
-// Baseline for feature/fix/refactor is "high" — the dynamic dispatcher in
-// agent-state-fast.js bumps to "max" while permission_mode='plan'.
-func TestBuildAgentCommand_EffortHighSkillsGetFlagAndEnv(t *testing.T) {
+// The baseline level is now sourced from settings.toml's [effort] default
+// (defaults to "high"). The dynamic dispatcher in agent-state-fast.js
+// independently swaps to settings.toml's [effort] plan during plan mode.
+func TestBuildAgentCommand_EffortOptedSkillsGetFlagAndEnv(t *testing.T) {
 	for _, skill := range []string{"feature", "fix", "refactor"} {
 		t.Run(skill, func(t *testing.T) {
-			got := buildAgentCommand("claude", skill, "")
+			got := buildAgentCommand("claude", skill, "", "high")
 			want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/" + skill + "'"
 			if got != want {
-				t.Errorf("buildAgentCommand(claude, %q, \"\") = %q, want %q", skill, got, want)
+				t.Errorf("buildAgentCommand(claude, %q, \"\", \"high\") = %q, want %q", skill, got, want)
 			}
 		})
 	}
@@ -102,36 +103,58 @@ func TestBuildAgentCommand_EffortHighSkillsGetFlagAndEnv(t *testing.T) {
 func TestBuildAgentCommand_NonOptedSkillsOmitFlagAndEnv(t *testing.T) {
 	for _, skill := range []string{"chore", "investigate", "rca", "pr"} {
 		t.Run(skill, func(t *testing.T) {
-			got := buildAgentCommand("claude", skill, "")
+			got := buildAgentCommand("claude", skill, "", "high")
 			want := "claude '/" + skill + "'"
 			if got != want {
-				t.Errorf("buildAgentCommand(claude, %q, \"\") = %q, want %q", skill, got, want)
+				t.Errorf("buildAgentCommand(claude, %q, \"\", \"high\") = %q, want %q", skill, got, want)
 			}
 		})
 	}
 }
 
 func TestBuildAgentCommand_EmptySkillNoFlag(t *testing.T) {
-	got := buildAgentCommand("claude", "", "")
+	got := buildAgentCommand("claude", "", "", "high")
 	want := "claude"
 	if got != want {
-		t.Errorf("buildAgentCommand(claude, \"\", \"\") = %q, want %q", got, want)
+		t.Errorf("buildAgentCommand(claude, \"\", \"\", \"high\") = %q, want %q", got, want)
 	}
 }
 
 func TestBuildAgentCommand_EmptySkillWithMessage(t *testing.T) {
-	got := buildAgentCommand("claude", "", "do the thing")
+	got := buildAgentCommand("claude", "", "do the thing", "high")
 	want := "claude 'do the thing'"
 	if got != want {
-		t.Errorf("buildAgentCommand(claude, \"\", \"do the thing\") = %q, want %q", got, want)
+		t.Errorf("buildAgentCommand(claude, \"\", \"do the thing\", \"high\") = %q, want %q", got, want)
 	}
 }
 
 func TestBuildAgentCommand_FeatureWithMessage(t *testing.T) {
-	got := buildAgentCommand("claude", "feature", "add login")
+	got := buildAgentCommand("claude", "feature", "add login", "high")
 	want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/feature add login'"
 	if got != want {
-		t.Errorf("buildAgentCommand(claude, feature, add login) = %q, want %q", got, want)
+		t.Errorf("buildAgentCommand(claude, feature, add login, \"high\") = %q, want %q", got, want)
+	}
+}
+
+// Custom defaultEffort flows through to the spawn command for opted-in skills
+// — verifies settings.toml's [effort] default key replaces the previously
+// hard-coded "high" baseline.
+func TestBuildAgentCommand_CustomDefaultEffort(t *testing.T) {
+	got := buildAgentCommand("claude", "feature", "", "medium")
+	want := "CLAUDE_CODE_EFFORT_LEVEL=medium claude --effort medium '/feature'"
+	if got != want {
+		t.Errorf("buildAgentCommand(claude, feature, \"\", \"medium\") = %q, want %q", got, want)
+	}
+}
+
+// Empty defaultEffort omits the --effort flag entirely, even for opted-in
+// skills — supports a future "disable spawn-time pin" mode without forcing
+// callers to maintain a parallel skip list.
+func TestBuildAgentCommand_EmptyDefaultEffortOmitsFlag(t *testing.T) {
+	got := buildAgentCommand("claude", "feature", "", "")
+	want := "claude '/feature'"
+	if got != want {
+		t.Errorf("buildAgentCommand(claude, feature, \"\", \"\") = %q, want %q", got, want)
 	}
 }
 

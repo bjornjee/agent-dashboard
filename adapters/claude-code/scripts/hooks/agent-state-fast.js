@@ -20,6 +20,7 @@ const { spawnSync } = require('child_process');
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const { readEffortConfig } = require('./effort-config');
 
 // dispatchEffortKeys types `/effort <level>\r` into the agent's tmux pane.
 // Claude Code processes /effort as a slash command (supportsNonInteractive
@@ -124,14 +125,16 @@ if (require.main === module) {
 // when CC omitted permission_mode from the payload — common on PostToolUse
 // for some events; we don't act on absent data).
 //
-// Rule: max during planning, high otherwise. Dispatch to CC happens in
+// Levels come from settings.toml's [effort] section (plan/default keys),
+// defaulting to max/high when the file or keys are absent — same defaults
+// the Go side applies in DefaultSettings(). Dispatch to CC happens in
 // fastUpdate via tmux send-keys; this function only computes the value.
 function effortTransition(existingMode, newMode) {
   const off = process.env.AGENT_DASHBOARD_DYNAMIC_EFFORT;
   if (off === '0' || off === 'off' || off === 'false') return null;
   if (!newMode) return null;
-  if (existingMode !== 'plan' && newMode === 'plan') return 'max';
-  if (existingMode === 'plan' && newMode !== 'plan') return 'high';
+  if (existingMode !== 'plan' && newMode === 'plan') return readEffortConfig().plan;
+  if (existingMode === 'plan' && newMode !== 'plan') return readEffortConfig().default;
   return null;
 }
 

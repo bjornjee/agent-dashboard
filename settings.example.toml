@@ -20,3 +20,12 @@ dino_game     = false  # enable Chrome-style dino runner game (Shift+G)
 
 [usage]
 rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic API (0 = disable)
+
+[effort]
+# Thinking-effort levels the dashboard pins on agents launched from the
+# New Agent flow. The agent-state-fast hook swaps to `plan` when the agent
+# enters plan mode (EnterPlanMode) and restores `default` on exit. Both
+# values flow into the same /effort slash command Claude Code accepts;
+# valid levels are minimal | low | medium | high | max.
+plan    = "max"   # level used while permission_mode='plan'
+default = "high"  # level pinned at spawn and restored on plan exit

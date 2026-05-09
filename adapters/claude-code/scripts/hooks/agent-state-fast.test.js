@@ -1063,3 +1063,80 @@ describe('dynamic effort on permission_mode transitions', () => {
     }
   });
 });
+
+// User-configurable plan/default levels live in ~/.agent-dashboard/settings.toml
+// under [effort]. The dispatcher in buildUpdate must read those values so a
+// user who sets `plan = "high"` and `default = "medium"` gets those levels —
+// not the previously hard-coded "max"/"high" — on every plan-mode transition.
+describe('dynamic effort reads levels from settings.toml', () => {
+  let tmpDashboardDir;
+  let originalDashboardDir;
+
+  beforeEach(() => {
+    tmpDashboardDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fast-hook-effort-cfg-'));
+    originalDashboardDir = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = tmpDashboardDir;
+  });
+
+  afterEach(() => {
+    if (originalDashboardDir === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+    else process.env.AGENT_DASHBOARD_DIR = originalDashboardDir;
+    fs.rmSync(tmpDashboardDir, { recursive: true, force: true });
+  });
+
+  it('entering plan mode dispatches the [effort].plan value from settings.toml', () => {
+    fs.writeFileSync(path.join(tmpDashboardDir, 'settings.toml'),
+      '[effort]\nplan = "high"\ndefault = "medium"\n');
+
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      permission_mode: 'default',
+      effort: 'medium',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.effort, 'high',
+      'plan-mode entry must use [effort].plan from settings.toml, not the hard-coded "max"');
+  });
+
+  it('leaving plan mode dispatches the [effort].default value from settings.toml', () => {
+    fs.writeFileSync(path.join(tmpDashboardDir, 'settings.toml'),
+      '[effort]\nplan = "high"\ndefault = "medium"\n');
+
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      permission_mode: 'plan',
+      effort: 'high',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.effort, 'medium',
+      'plan-mode exit must use [effort].default from settings.toml, not the hard-coded "high"');
+  });
+});
