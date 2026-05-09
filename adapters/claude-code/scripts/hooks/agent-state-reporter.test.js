@@ -163,6 +163,70 @@ describe('buildReportEntry', () => {
     }
   });
 
+  it('falls back to settingsEffort on SessionStart when env var unset', () => {
+    const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    try {
+      const { entry } = buildReportEntry({
+        input: BASE_INPUT,
+        existing: {},
+        target: 'main:1.0',
+        tmuxPane: '%0',
+        state: 'running',
+        filesChanged: [],
+        parsed: BASE_PARSED,
+        cwd: '/tmp',
+        settingsEffort: 'medium',
+      });
+      assert.equal(entry.effort, 'medium');
+    } finally {
+      if (orig !== undefined) process.env.CLAUDE_CODE_EFFORT_LEVEL = orig;
+    }
+  });
+
+  it('prefers env var over settingsEffort on SessionStart', () => {
+    const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = 'max';
+    try {
+      const { entry } = buildReportEntry({
+        input: BASE_INPUT,
+        existing: {},
+        target: 'main:1.0',
+        tmuxPane: '%0',
+        state: 'running',
+        filesChanged: [],
+        parsed: BASE_PARSED,
+        cwd: '/tmp',
+        settingsEffort: 'medium',
+      });
+      assert.equal(entry.effort, 'max');
+    } finally {
+      if (orig === undefined) delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+      else process.env.CLAUDE_CODE_EFFORT_LEVEL = orig;
+    }
+  });
+
+  it('ignores settingsEffort on non-SessionStart events', () => {
+    const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    try {
+      const { entry } = buildReportEntry({
+        input: { ...BASE_INPUT, hook_event_name: 'Stop' },
+        existing: {},
+        target: 'main:1.0',
+        tmuxPane: '%0',
+        state: 'running',
+        filesChanged: [],
+        parsed: BASE_PARSED,
+        cwd: '/tmp',
+        settingsEffort: 'medium',
+      });
+      assert.equal(entry.effort, undefined);
+    } finally {
+      if (orig !== undefined) process.env.CLAUDE_CODE_EFFORT_LEVEL = orig;
+    }
+  });
+
   it('preserves existing.effort on non-SessionStart events when env var unset', () => {
     const orig = process.env.CLAUDE_CODE_EFFORT_LEVEL;
     delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
