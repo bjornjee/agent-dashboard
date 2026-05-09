@@ -924,6 +924,21 @@ describe('fast hook state updates (per-agent files)', () => {
 // buildUpdate must surface this transition by setting update.effort so the
 // hook layer can dispatch /effort via tmux send-keys to the same pane.
 describe('dynamic effort on permission_mode transitions', () => {
+  // Isolate from the real ~/.agent-dashboard/settings.toml so a user's
+  // custom [effort] values don't make these default-asserting tests flaky.
+  let tmpEffortDir;
+  let origEffortDir;
+  beforeEach(() => {
+    tmpEffortDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fast-hook-effort-default-'));
+    origEffortDir = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = tmpEffortDir;
+  });
+  afterEach(() => {
+    if (origEffortDir === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+    else process.env.AGENT_DASHBOARD_DIR = origEffortDir;
+    fs.rmSync(tmpEffortDir, { recursive: true, force: true });
+  });
+
   it('entering plan mode bumps effort to max', () => {
     const existing = {
       target: 'main:1.0',
