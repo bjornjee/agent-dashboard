@@ -721,3 +721,71 @@ func TestRenderRightPanel_EffortOmittedWhenUnset(t *testing.T) {
 		}
 	}
 }
+
+// listForStates builds a left-panel render with one agent per supplied state.
+// All agents land in the same priority group when their states share priority,
+// so this is the minimal fixture for verifying group-header label specialization.
+func listForStates(t *testing.T, states ...string) string {
+	t.Helper()
+	t.Setenv("NO_COLOR", "1")
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.width = 120
+	m.height = 40
+	m.leftWidth = 60
+	m.startupDone = true
+	m.resizeViewports()
+	agents := make([]domain.Agent, 0, len(states))
+	for i, s := range states {
+		agents = append(agents, domain.Agent{
+			Target:     "main:1." + string(rune('0'+i)),
+			Window:     1,
+			Pane:       i,
+			State:      s,
+			TmuxPaneID: "%" + string(rune('0'+i)),
+		})
+	}
+	m.agents = agents
+	m.buildTree()
+	return m.agentListContent()
+}
+
+// WAITING priority group lumps state="question" and state="error" together.
+// The group-header label must specialize when the group is homogeneous —
+// QUESTION (yellow) for question-only, ERROR (red) for error-only — mirroring
+// the existing BLOCKED → PLAN override at view.go's group-header renderer.
+// Mixed groups fall back to the default WAITING label.
+func TestAgentListGroup_QuestionOnlyShowsQuestionHeader(t *testing.T) {
+	content := listForStates(t, "question")
+	if !strings.Contains(content, "QUESTION") {
+		t.Errorf("question-only WAITING group should show 'QUESTION' header, got:\n%s", content)
+	}
+	if strings.Contains(content, "WAITING") {
+		t.Errorf("question-only WAITING group must NOT show generic 'WAITING' header, got:\n%s", content)
+	}
+}
+
+func TestAgentListGroup_ErrorOnlyShowsErrorHeader(t *testing.T) {
+	content := listForStates(t, "error")
+	if !strings.Contains(content, "ERROR") {
+		t.Errorf("error-only WAITING group should show 'ERROR' header, got:\n%s", content)
+	}
+	if strings.Contains(content, "WAITING") {
+		t.Errorf("error-only WAITING group must NOT show generic 'WAITING' header, got:\n%s", content)
+	}
+}
+
+func TestAgentListGroup_MixedQuestionErrorShowsWaitingHeader(t *testing.T) {
+	content := listForStates(t, "question", "error")
+	if !strings.Contains(content, "WAITING") {
+		t.Errorf("mixed question+error WAITING group should fall back to 'WAITING' header, got:\n%s", content)
+	}
+	// Mixed group must NOT pick one of the specialized labels — that would
+	// silently misrepresent the other state.
+	if strings.Contains(content, "QUESTION") {
+		t.Errorf("mixed group must NOT show 'QUESTION' header, got:\n%s", content)
+	}
+	if strings.Contains(content, "ERROR") {
+		t.Errorf("mixed group must NOT show 'ERROR' header, got:\n%s", content)
+	}
+}

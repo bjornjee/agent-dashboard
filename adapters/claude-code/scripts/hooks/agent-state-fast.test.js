@@ -1155,3 +1155,133 @@ describe('dynamic effort reads levels from settings.toml', () => {
       'plan-mode exit must use [effort].default from settings.toml, not the hard-coded "high"');
   });
 });
+
+// Dispatch gate: keystroke injection (`tmux send-keys '/effort <level>\r'`)
+// must not fire when the user is composing input (plan-review reply,
+// AskUserQuestion answer, etc.) — the keystrokes would land in the user's
+// text. State-file effort updates still happen so the dashboard badge stays
+// accurate; only the in-pane dispatch is suppressed.
+describe('effort dispatch gate (no inject while user is composing)', () => {
+  // Isolate from the real ~/.agent-dashboard/settings.toml so a user's
+  // custom [effort] values don't make these default-asserting tests flaky.
+  let tmpEffortDir;
+  let origEffortDir;
+  beforeEach(() => {
+    tmpEffortDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fast-hook-effort-gate-'));
+    origEffortDir = process.env.AGENT_DASHBOARD_DIR;
+    process.env.AGENT_DASHBOARD_DIR = tmpEffortDir;
+  });
+  afterEach(() => {
+    if (origEffortDir === undefined) delete process.env.AGENT_DASHBOARD_DIR;
+    else process.env.AGENT_DASHBOARD_DIR = origEffortDir;
+    fs.rmSync(tmpEffortDir, { recursive: true, force: true });
+  });
+
+  it('does not flag dispatch when existing state is plan (regression: replying to plan)', () => {
+    // Reproduces the reported bug: user is in the plan-review UI typing a
+    // reply when an effort transition is detected (e.g. permission_mode
+    // briefly drifted to 'default' during reply processing). Today the hook
+    // dispatches `/effort max` into the pane, which lands in the reply text.
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      permission_mode: 'default', // drifted out of plan despite state='plan'
+      effort: 'high',
+    };
+
+    const result = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    // State-file effort is still tracked so the dashboard badge updates.
+    assert.equal(result.update.effort, 'max');
+    // But the keystroke dispatch is suppressed — user is composing in the
+    // plan-review UI.
+    assert.equal(result.dispatchEffort, false);
+  });
+
+  it('does not flag dispatch when existing state is question', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'question',
+      current_tool: '',
+      permission_mode: 'plan',
+      effort: 'max',
+    };
+
+    const result = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(result.dispatchEffort, false,
+      'must not inject /effort while user is typing an AskUserQuestion answer');
+  });
+
+  it('flags dispatch on a normal entering-plan transition (state=running)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      permission_mode: 'default',
+      effort: 'high',
+    };
+
+    const result = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(result.changed, true);
+    assert.equal(result.update.effort, 'max');
+    assert.equal(result.dispatchEffort, true,
+      'dispatch is safe while agent is actively running tools');
+  });
+
+  it('does not flag dispatch when effort already matches target (no-op)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      permission_mode: 'default',
+      effort: 'max', // already at target
+    };
+
+    const result = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(result.dispatchEffort, false);
+  });
+});

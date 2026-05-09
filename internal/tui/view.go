@@ -234,6 +234,28 @@ func (m model) agentListContentWithLine() (string, int) {
 				}
 			}
 
+			// WAITING priority group (2) lumps state=question and state=error.
+			// Specialize the header when the group is homogeneous so the user
+			// can tell at a glance whether the action is "reply to a question"
+			// (yellow) or "investigate an error" (red). Mixed groups keep the
+			// default WAITING label to avoid silently hiding the other state.
+			if group == 2 {
+				states := map[string]bool{}
+				for _, n := range m.treeNodes {
+					if n.AgentIdx >= 0 && n.AgentIdx < len(m.agents) && agentGroup(m.agents[n.AgentIdx]) == group {
+						states[m.agents[n.AgentIdx].State] = true
+					}
+				}
+				if len(states) == 1 {
+					switch {
+					case states["question"]:
+						hdr.label, hdr.color = "QUESTION", questionColor
+					case states["error"]:
+						hdr.label, hdr.color = "ERROR", errorColor
+					}
+				}
+			}
+
 			// Count agents in this group
 			groupCount := 0
 			for _, n := range m.treeNodes {
