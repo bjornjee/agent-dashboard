@@ -30,3 +30,16 @@ The GitHub CLI (`gh`) must be installed and authenticated for PR features to wor
 ## From mobile
 
 The mobile companion supports the full PR workflow — create, review, merge, and close — from the agent detail view.
+
+## Invoking via `/agent-dashboard:pr`
+
+Typing `/agent-dashboard:pr` inside a Claude Code session is intercepted by the `UserPromptSubmit` hook and routed to the `pr` skill. This is the same path the dashboard takes when you press `g` to open a new PR — useful when you want to drive PR creation from inside the agent's pane rather than the dashboard.
+
+## Cleanup gate
+
+The `pr` skill runs a cleanup phase before pushing:
+
+- A scratch-artifact sweep removes throwaway files the agent left in the worktree (notes, fixtures, ad-hoc scripts) before they can land in the diff.
+- A `test-gate` enforcement hook blocks `gh pr create` / `gh pr merge` if `make test` does not pass — agents cannot ship a red branch.
+
+Both gates fire automatically; no extra keypresses required.

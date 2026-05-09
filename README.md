@@ -21,7 +21,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 
 **Do I need tmux?** Yes. agent-dashboard reads live pane content via `tmux capture-pane` and spawns agent sessions in tmux panes. Without tmux there are no panes to monitor.
 
-**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. Codex sessions are spawned through skill delegation. The architecture supports additional backends.
+**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. A second adapter for [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) lives in `adapters/pi/` (install with `make install-pi-adapter`). Codex sessions are spawned through skill delegation. The architecture supports additional backends.
 
 **Does this require a paid Claude account?** No — it uses whatever Claude Code itself requires (Pro, Max, or API). agent-dashboard does not call the Anthropic API directly; it reads the JSONL transcripts Claude Code writes locally.
 
@@ -85,6 +85,8 @@ A companion PWA (`cmd/web/`) for dispatching and managing agents from your phone
 | `merged` | MERGED | 6 | Pull request merged |
 
 **Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active states (`running`, `permission`) display through normally so the dashboard reflects live work.
+
+**Group headers:** when a priority-1 or priority-2 group is homogeneous, the TUI renders a more specific label — `PLAN` (yellow) or `PERMISSION` instead of `BLOCKED`, and `QUESTION` (yellow) or `ERROR` (red) instead of `WAITING`. Mixed groups keep the generic header. Sort order is unchanged.
 
 </details>
 
@@ -248,7 +250,13 @@ dino_game = false     # show Chrome-style dino runner game in the left panel (de
 
 [usage]
 rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic API (default: 60, 0 = disable)
+
+[effort]
+plan    = "max"   # thinking-effort level pinned while permission_mode='plan' (default: max)
+default = "high"  # thinking-effort level pinned at spawn and restored on plan exit (default: high)
 ```
+
+The `[effort]` levels feed the `/effort` slash command Claude Code accepts (`minimal | low | medium | high | max`). The `agent-state-fast` hook swaps in `plan` when the agent enters plan mode (`EnterPlanMode`) and restores `default` on exit. The `feature`, `fix`, and `refactor` skills additionally pin `--effort max` at launch regardless of `default`.
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
@@ -261,6 +269,8 @@ rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic AP
 | `experimental` | `ascii_pet` | `false` | Show animated ASCII pet in the left panel |
 | `experimental` | `dino_game` | `false` | Show Chrome-style dino runner game in the left panel (Shift+G to toggle) |
 | `usage` | `rate_limit_poll_seconds` | `60` | How often (in seconds) to fetch rate-limit data from the Anthropic OAuth API. Set to `0` to disable. |
+| `effort` | `plan` | `"max"` | Thinking-effort level pinned while the agent is in plan mode. One of `minimal`, `low`, `medium`, `high`, `max`. |
+| `effort` | `default` | `"high"` | Thinking-effort level pinned at spawn and restored when the agent exits plan mode. Same value set as `plan`. |
 
 ## Environment Variables
 

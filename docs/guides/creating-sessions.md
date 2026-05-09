@@ -33,6 +33,16 @@ After choosing a directory, select a skill that determines the agent's workflow:
 
 Each skill loads a specialized prompt that guides the agent through the appropriate workflow — including branching strategy, testing requirements, and delivery steps.
 
+## Effort levels
+
+The dashboard pins a Claude Code thinking-effort level on every spawned session and switches it dynamically as the agent works:
+
+- The `feature`, `fix`, and `refactor` skills launch with `--effort max` regardless of your defaults — these workflows benefit most from deep reasoning.
+- For all other skills, the dashboard pins the value of `effort.default` (default: `high`).
+- When the agent enters plan mode (`EnterPlanMode`), the `agent-state-fast` adapter hook swaps in `effort.plan` (default: `max`) for the duration of planning, then restores `default` on plan exit.
+
+Override the defaults in [`settings.toml`](../reference/settings/) under the `[effort]` section. Valid levels: `minimal`, `low`, `medium`, `high`, `max`.
+
 ## What happens next
 
 The dashboard:
