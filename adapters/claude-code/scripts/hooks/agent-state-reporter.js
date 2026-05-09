@@ -21,6 +21,24 @@ const { hasPendingParentToolUse } = require(path.join(pluginRoot, 'packages', 'a
 const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
+// readSettingsEffort returns the persisted effortLevel from
+// ~/.claude/settings.json. Claude Code writes this when the user passes
+// --effort <level> at startup or runs /effort <level> mid-session, so it is
+// the most reliable cross-session source of the user's chosen effort. Used
+// only on SessionStart as a fallback when CLAUDE_CODE_EFFORT_LEVEL is unset
+// (i.e. when the agent was launched any way other than the dashboard's New
+// Agent flow). Returns '' on any error so the caller can chain fallbacks.
+function readSettingsEffort() {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    const level = data.effortLevel;
+    return (typeof level === 'string' && level) ? level : '';
+  } catch {
+    return '';
+  }
+}
+
 function findSessionId() {
   const sessDir = path.join(os.homedir(), '.claude', 'sessions');
   // Walk up PID tree: hook → (possible sh) → claude
@@ -56,7 +74,7 @@ function findSessionId() {
  * @param {string} params.cwd - working directory
  * @returns {{ changed: boolean, entry: object }}
  */
-function buildReportEntry({ input, existing, target, tmuxPane, state, filesChanged, parsed, cwd }) {
+function buildReportEntry({ input, existing, target, tmuxPane, state, filesChanged, parsed, cwd, settingsEffort }) {
   const hookEvent = input.hook_event_name;
   const lastMessage = input.last_assistant_message || null;
 
@@ -68,12 +86,14 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     ? input.model
     : (existing.model || '');
 
-  // Effort is not exposed by Claude Code in hook stdin or JSONL. The dashboard
-  // seeds CLAUDE_CODE_EFFORT_LEVEL when it spawns an agent so this reporter
-  // captures the level on SessionStart. Subsequent events preserve whatever
-  // effort the fast hook (or this reporter) wrote earlier.
-  const effort = (hookEvent === 'SessionStart' && process.env.CLAUDE_CODE_EFFORT_LEVEL)
-    ? process.env.CLAUDE_CODE_EFFORT_LEVEL
+  // Effort is not exposed by Claude Code in hook stdin or JSONL, so SessionStart
+  // resolves it via three fallbacks: CLAUDE_CODE_EFFORT_LEVEL (seeded by the
+  // dashboard's New Agent flow), then ~/.claude/settings.json's effortLevel
+  // (passed in as settingsEffort — Claude Code persists --effort and /effort
+  // there), then any prior effort already on disk. Subsequent events preserve
+  // whatever the fast hook (or this reporter) wrote earlier.
+  const effort = (hookEvent === 'SessionStart')
+    ? (process.env.CLAUDE_CODE_EFFORT_LEVEL || settingsEffort || existing.effort || '')
     : (existing.effort || '');
 
   const permissionMode = input.permission_mode || existing.permission_mode || '';
@@ -228,8 +248,15 @@ function report(input) {
   const effectiveCwd = existing.worktree_cwd || cwd;
   const filesChanged = getChangedFiles(effectiveCwd);
 
+  // Read settings.json only when SessionStart needs the fallback — every other
+  // event preserves existing.effort, so disk reads on every PostToolUse would
+  // be wasted I/O on a hook with a 5s budget.
+  const settingsEffort = (hookEvent === 'SessionStart' && !process.env.CLAUDE_CODE_EFFORT_LEVEL)
+    ? readSettingsEffort()
+    : '';
+
   const { changed, entry } = buildReportEntry({
-    input, existing, target, tmuxPane, state, filesChanged, parsed, cwd,
+    input, existing, target, tmuxPane, state, filesChanged, parsed, cwd, settingsEffort,
   });
 
   if (changed) {
