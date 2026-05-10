@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -564,55 +563,29 @@ func TestLoadDiff_IncludesUntrackedFiles(t *testing.T) {
 	}
 }
 
-// writeJSONLForBranch creates a minimal projDir layout with a JSONL whose
-// last gitBranch field is `branch`. Used by branch-divergence tests.
-func writeJSONLForBranch(t *testing.T, projDir, sessionID, branch string) {
-	t.Helper()
-	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	body := fmt.Sprintf(`{"type":"user","gitBranch":%q}`+"\n", branch)
-	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(body), 0o644); err != nil {
-		t.Fatalf("write jsonl: %v", err)
-	}
-}
-
-func TestLoadDiff_BranchDivergence_UsesWorkBranch(t *testing.T) {
-	// Pane 5.1 shape: HEAD is on `main`, but the agent's last recorded
-	// gitBranch was `chore/feat`. Diff should compare base..chore/feat,
-	// not against working tree HEAD (which is empty).
+func TestLoadDiffWithRef_BranchPath_DiffsBaseToRef(t *testing.T) {
+	// ref = feature branch → git diff base..ref (committed work).
 	m := mocks.NewMockGitRunner(t)
 	orig := gitRunner
 	gitRunner = m
 	t.Cleanup(func() { gitRunner = orig })
 
-	dir := t.TempDir() // real path so writeJSONLForBranch works under it
-	projDir := filepath.Join(dir, "projdir")
-	sessionID := "sess-1"
-	workBranch := "chore/feat"
-	writeJSONLForBranch(t, projDir, sessionID, workBranch)
+	dir := "/fake/project"
+	ref := "chore/feat"
 
-	// branchExists check: chore/feat resolves to a commit
-	m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--verify", workBranch+"^{commit}").
-		Return([]byte("def456\n"), nil)
-
-	// findMergeBase against chore/feat returns base commit
-	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", workBranch, "origin/main").
+	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", ref, "origin/main").
 		Return([]byte("abc123\n"), nil)
 
-	// git diff base..chore/feat — non-empty, the agent's commits
 	commitDiff := "diff --git a/r.md b/r.md\n" +
 		"--- a/r.md\n+++ b/r.md\n@@ -1 +1 @@\n-old\n+new\n"
-	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123.."+workBranch).
+	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123.."+ref).
 		Return([]byte(commitDiff), nil)
 
-	// loadDiff still gathers untracked from working tree (empty here)
 	m.On("Output", mock.Anything, "git", "-C", dir,
 		"ls-files", "--others", "--exclude-standard").
 		Return([]byte(""), nil)
 
-	ctx := context.Background()
-	files, err := loadDiffWithRef(ctx, dir, workBranch, projDir, sessionID)
+	files, err := loadDiffWithRef(context.Background(), dir, ref)
 	if err != nil {
 		t.Fatalf("loadDiffWithRef failed: %v", err)
 	}
@@ -621,66 +594,115 @@ func TestLoadDiff_BranchDivergence_UsesWorkBranch(t *testing.T) {
 	}
 }
 
-func TestLoadDiff_BranchMissingLocally_FallsBackToHEAD(t *testing.T) {
-	// WorkBranch from JSONL doesn't exist locally (e.g. branch deleted).
-	// Should fall back to current behaviour: git diff base (working tree).
+func TestLoadDiffWithRef_HEAD_DiffsWorkingTreeAgainstBase(t *testing.T) {
+	// ref = "HEAD" → git diff base (working tree, includes uncommitted).
 	m := mocks.NewMockGitRunner(t)
 	orig := gitRunner
 	gitRunner = m
 	t.Cleanup(func() { gitRunner = orig })
 
-	dir := t.TempDir()
-	projDir := filepath.Join(dir, "projdir")
-	sessionID := "sess-2"
-	missingBranch := "deleted/feat"
-	writeJSONLForBranch(t, projDir, sessionID, missingBranch)
+	dir := "/fake/project"
 
-	// branchExists: deleted/feat doesn't resolve
-	m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--verify", missingBranch+"^{commit}").
-		Return(nil, fmt.Errorf("unknown revision"))
-
-	// Falls back to HEAD path: findMergeBase HEAD origin/main
 	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", "HEAD", "origin/main").
 		Return([]byte("abc123\n"), nil)
-
-	// git diff base (no .. ref) against working tree
-	m.On("Object", mock.Anything).Maybe()
 	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123").
 		Return([]byte(""), nil)
 	m.On("Output", mock.Anything, "git", "-C", dir,
 		"ls-files", "--others", "--exclude-standard").
 		Return([]byte(""), nil)
 
-	ctx := context.Background()
-	_, err := loadDiffWithRef(ctx, dir, missingBranch, projDir, sessionID)
-	if err != nil {
+	if _, err := loadDiffWithRef(context.Background(), dir, "HEAD"); err != nil {
 		t.Fatalf("loadDiffWithRef failed: %v", err)
 	}
-	// Pass means the HEAD-fallback path was taken (only HEAD-path mocks exist).
 }
 
-func TestLoadDiff_NoWorkBranch_PreservesCurrentBehaviour(t *testing.T) {
-	// Empty WorkBranch → current loadDiff behaviour (git diff base).
+// resolveDiffRef matrix
+//
+// Primary signal: head (agent.Branch from state.ResolveAgentBranches).
+// Fallback: recorded (JSONL gitBranch via conversation.LastGitBranch) —
+//          covers b594c2d's pane 5.1 case where HEAD has switched off
+//          the agent's branch.
+
+func TestResolveDiffRef_HeadIsRealFeatureBranch(t *testing.T) {
+	// Pane 4.1 fix: head non-default → primary path, no branchExists call needed.
+	if got := resolveDiffRef("feat/auto-statement-fetch", "main", "/fake"); got != "feat/auto-statement-fetch" {
+		t.Fatalf("expected feat/auto-statement-fetch, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadAndRecordedAgree(t *testing.T) {
+	if got := resolveDiffRef("feat/z", "feat/z", "/fake"); got != "feat/z" {
+		t.Fatalf("expected feat/z, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadIsLocalDefault_FallsBackToRecorded(t *testing.T) {
+	// Pane 5.1 case preserved: HEAD is the local default, recorded is the
+	// real working branch — fall back to recorded.
 	m := mocks.NewMockGitRunner(t)
 	orig := gitRunner
 	gitRunner = m
 	t.Cleanup(func() { gitRunner = orig })
 
-	dir := t.TempDir()
-	projDir := filepath.Join(dir, "projdir")
-	// no JSONL written → LastGitBranch returns ""
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "chore/feat^{commit}").
+		Return([]byte("abc\n"), nil)
 
-	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", "HEAD", "origin/main").
-		Return([]byte("abc123\n"), nil)
-	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123").
-		Return([]byte(""), nil)
-	m.On("Output", mock.Anything, "git", "-C", dir,
-		"ls-files", "--others", "--exclude-standard").
-		Return([]byte(""), nil)
+	if got := resolveDiffRef("main", "chore/feat", "/fake"); got != "chore/feat" {
+		t.Fatalf("expected chore/feat, got %q", got)
+	}
+}
 
-	ctx := context.Background()
-	_, err := loadDiffWithRef(ctx, dir, "", projDir, "sess-missing")
-	if err != nil {
-		t.Fatalf("loadDiffWithRef failed: %v", err)
+func TestResolveDiffRef_HeadIsLocalDefault_RecordedDeleted_DegradesToHead(t *testing.T) {
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "feat/y^{commit}").
+		Return(nil, fmt.Errorf("unknown revision"))
+
+	if got := resolveDiffRef("main", "feat/y", "/fake"); got != "main" {
+		t.Fatalf("expected main, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadIsMaster_FallsBackToRecorded(t *testing.T) {
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "feat/x^{commit}").
+		Return([]byte("abc\n"), nil)
+
+	if got := resolveDiffRef("master", "feat/x", "/fake"); got != "feat/x" {
+		t.Fatalf("expected feat/x, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_DetachedHead_FallsBackToRecorded(t *testing.T) {
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "feat/x^{commit}").
+		Return([]byte("abc\n"), nil)
+
+	// gitBranch returns the literal "HEAD" when the worktree is detached.
+	if got := resolveDiffRef("HEAD", "feat/x", "/fake"); got != "feat/x" {
+		t.Fatalf("expected feat/x, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_NoSignals(t *testing.T) {
+	if got := resolveDiffRef("", "", "/fake"); got != "HEAD" {
+		t.Fatalf("expected HEAD, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_OnlyHead_NonDefault(t *testing.T) {
+	if got := resolveDiffRef("feat/x", "", "/fake"); got != "feat/x" {
+		t.Fatalf("expected feat/x, got %q", got)
 	}
 }

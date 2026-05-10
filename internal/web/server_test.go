@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
+	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/mocks"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -410,6 +411,188 @@ func TestDiffEndpoint(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&dr)
 	if dr.Raw != "" {
 		t.Errorf("expected empty diff, got %q", dr.Raw)
+	}
+	if dr.Status != "empty" {
+		t.Errorf("expected status=empty for clean worktree, got %q", dr.Status)
+	}
+}
+
+// resolveDiffRef matrix mirror of the TUI tests, exercising the web-side copy.
+
+func TestResolveDiffRef_HeadIsRealFeatureBranch(t *testing.T) {
+	if got := resolveDiffRef("feat/auto-statement-fetch", "main", "/fake"); got != "feat/auto-statement-fetch" {
+		t.Fatalf("expected feat/auto-statement-fetch, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadAndRecordedAgree(t *testing.T) {
+	if got := resolveDiffRef("feat/z", "feat/z", "/fake"); got != "feat/z" {
+		t.Fatalf("expected feat/z, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadIsLocalDefault_FallsBackToRecorded(t *testing.T) {
+	m := withMockCommandRunner(t)
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "chore/feat^{commit}").
+		Return([]byte("abc\n"), nil)
+
+	if got := resolveDiffRef("main", "chore/feat", "/fake"); got != "chore/feat" {
+		t.Fatalf("expected chore/feat, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadIsLocalDefault_RecordedDeleted_DegradesToHead(t *testing.T) {
+	m := withMockCommandRunner(t)
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "feat/y^{commit}").
+		Return(nil, fmt.Errorf("unknown revision"))
+
+	if got := resolveDiffRef("main", "feat/y", "/fake"); got != "main" {
+		t.Fatalf("expected main, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_HeadIsMaster_FallsBackToRecorded(t *testing.T) {
+	m := withMockCommandRunner(t)
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "feat/x^{commit}").
+		Return([]byte("abc\n"), nil)
+
+	if got := resolveDiffRef("master", "feat/x", "/fake"); got != "feat/x" {
+		t.Fatalf("expected feat/x, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_DetachedHead_FallsBackToRecorded(t *testing.T) {
+	m := withMockCommandRunner(t)
+	m.On("Output", mock.Anything, "git", "-C", "/fake", "rev-parse", "--verify", "feat/x^{commit}").
+		Return([]byte("abc\n"), nil)
+
+	if got := resolveDiffRef("HEAD", "feat/x", "/fake"); got != "feat/x" {
+		t.Fatalf("expected feat/x, got %q", got)
+	}
+}
+
+func TestResolveDiffRef_NoSignals(t *testing.T) {
+	if got := resolveDiffRef("", "", "/fake"); got != "HEAD" {
+		t.Fatalf("expected HEAD, got %q", got)
+	}
+}
+
+func TestDiffEndpoint_StaleDefaultRecordedBranch_UsesAgentBranch(t *testing.T) {
+	// Pane 4.1 live bug repro: agent.Branch="feat/x", JSONL recorded "main".
+	// handleDiff must diff base..feat/x, not main..main.
+	m := withMockCommandRunner(t)
+	// state.ResolveAgentBranches recomputes Branch on every state load via
+	// branchRunner; pin it to the agent's actual checked-out branch so the
+	// JSON-loaded Branch survives lookupAgent.
+	withStubBranchRunner(t, "feat/auto-statement-fetch")
+
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = t.TempDir()
+	cfg.Profile.SessionsDir = t.TempDir()
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	agentDir := t.TempDir()
+	agent := domain.Agent{
+		SessionID: "stale-1",
+		State:     "running",
+		Cwd:       agentDir,
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, "stale-1.json"), data, 0600)
+
+	// JSONL with stale recorded branch. PickProjDir uses agent.Cwd's slug.
+	projSlug := conversation.ProjectSlug(agentDir)
+	projDir := filepath.Join(cfg.Profile.ProjectsDir, projSlug)
+	os.MkdirAll(projDir, 0700)
+	os.WriteFile(filepath.Join(projDir, "stale-1.jsonl"),
+		[]byte(`{"type":"user","gitBranch":"main"}`+"\n"), 0600)
+
+	// resolveDiffRef path: head="feat/auto-statement-fetch" is non-default,
+	// so we go straight to the head — no branchExists call.
+	// findMergeBase(feat/auto-statement-fetch, origin/main) returns base.
+	m.On("Output", mock.Anything, "git", "-C", agentDir, "merge-base",
+		"feat/auto-statement-fetch", "origin/main").
+		Return([]byte("base123\n"), nil)
+
+	// git diff base..feat/auto-statement-fetch — non-empty, the agent's commits.
+	branchDiff := "diff --git a/r.md b/r.md\n" +
+		"--- a/r.md\n+++ b/r.md\n@@ -1 +1 @@\n-old\n+new\n"
+	m.On("Output", mock.Anything, "git", "-C", agentDir, "diff",
+		"base123..feat/auto-statement-fetch", "--no-color").
+		Return([]byte(branchDiff), nil)
+
+	m.On("Output", mock.Anything, "git", "-C", agentDir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte(""), nil)
+	m.On("Output", mock.Anything, "git", "-C", agentDir,
+		"ls-files", "--others", "--ignored", "--exclude-standard", "--directory").
+		Return([]byte(""), nil)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/stale-1/diff")
+	if err != nil {
+		t.Fatalf("GET diff: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var dr diffResponse
+	json.NewDecoder(resp.Body).Decode(&dr)
+	if dr.Raw == "" {
+		t.Fatalf("expected non-empty diff (the agent's commits), got empty — stale-default bug not fixed")
+	}
+	if !strings.Contains(dr.Raw, "r.md") {
+		t.Fatalf("expected diff to mention r.md, got %q", dr.Raw)
+	}
+	if dr.Status != "ok" {
+		t.Errorf("expected status=ok, got %q", dr.Status)
+	}
+}
+
+func TestDiffEndpoint_StatusError_OnGitDiffFailure(t *testing.T) {
+	m := withMockCommandRunner(t)
+
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	agentDir := t.TempDir()
+	agent := domain.Agent{SessionID: "err-1", State: "running", Cwd: agentDir}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, "err-1.json"), data, 0600)
+
+	for _, base := range []string{"origin/main", "origin/master", "main", "master"} {
+		m.On("Output", mock.Anything, "git", "-C", agentDir, "merge-base", "HEAD", base).
+			Return(nil, fmt.Errorf("not a git repo"))
+	}
+	m.On("Output", mock.Anything, "git", "-C", agentDir, "diff", "HEAD", "--no-color").
+		Return(nil, fmt.Errorf("git diff failed"))
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/err-1/diff")
+	if err != nil {
+		t.Fatalf("GET diff: %v", err)
+	}
+	defer resp.Body.Close()
+	var dr diffResponse
+	json.NewDecoder(resp.Body).Decode(&dr)
+	if dr.Status != "error" {
+		t.Errorf("expected status=error, got %q", dr.Status)
 	}
 }
 

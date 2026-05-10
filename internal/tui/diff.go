@@ -44,24 +44,51 @@ func branchExists(dir, name string) bool {
 	return err == nil
 }
 
-// loadDiffWithRef runs git diff against the merge-base of `workBranch` and
-// origin/main, falling back to working-tree diff against HEAD's merge-base
-// when workBranch is empty or doesn't exist locally. Always appends untracked
-// files from the working tree so new files appear in the diff viewer.
+// isLocalDefault reports whether name is the conventional default branch.
+// Used by resolveDiffRef to recognise a stale-default head value.
+func isLocalDefault(name string) bool {
+	return name == "main" || name == "master"
+}
+
+// resolveDiffRef picks the git ref to diff against base. It combines two
+// signals already produced elsewhere in the dashboard:
 //
-// projDir + sessionID are accepted but unused at present; reserved for
-// callers that already plumb them and may want to lazy-resolve workBranch.
-func loadDiffWithRef(ctx context.Context, dir, workBranch, projDir, sessionID string) ([]*gitdiff.File, error) {
-	_, _ = projDir, sessionID
-	ref := "HEAD"
-	if workBranch != "" && branchExists(dir, workBranch) {
-		ref = workBranch
+//   - headBranch: the worktree's actual checked-out branch, resolved once
+//     by state.ResolveAgentBranches and cached on agent.Branch.
+//   - recordedBranch: the most recent gitBranch field in the agent's JSONL
+//     (conversation.LastGitBranch). Useful only when HEAD is misleading.
+//
+// Priority is HEAD-first. Recorded is consulted only when HEAD is the local
+// default (b594c2d's pane 5.1 case: HEAD switched off the agent's branch)
+// or the worktree is detached. Returns "HEAD" when neither yields a usable
+// ref so callers fall back to working-tree-vs-base behaviour.
+func resolveDiffRef(headBranch, recordedBranch, dir string) string {
+	if headBranch != "" && headBranch != "HEAD" && !isLocalDefault(headBranch) {
+		return headBranch
+	}
+	if recordedBranch != "" && branchExists(dir, recordedBranch) {
+		return recordedBranch
+	}
+	if headBranch != "" && headBranch != "HEAD" {
+		return headBranch
+	}
+	return "HEAD"
+}
+
+// loadDiffWithRef runs git diff against the merge-base of `ref` and
+// origin/main. Always appends untracked files from the working tree so
+// new files appear in the diff viewer.
+//
+// HEAD path: diff working tree against base (includes uncommitted changes).
+// Branch path: diff base..ref (commits the agent landed on its branch,
+// even if working tree has since switched off it).
+//
+// Callers should pre-resolve ref via resolveDiffRef.
+func loadDiffWithRef(ctx context.Context, dir, ref string) ([]*gitdiff.File, error) {
+	if ref == "" {
+		ref = "HEAD"
 	}
 	base := findMergeBase(dir, ref)
-
-	// HEAD path: diff working tree against base (includes uncommitted changes).
-	// Branch path: diff base..ref (commits the agent landed on its branch,
-	// even if working tree has since switched off it).
 	diffTarget := base
 	if ref != "HEAD" {
 		diffTarget = base + ".." + ref
@@ -96,18 +123,20 @@ func loadDiffWithRef(ctx context.Context, dir, workBranch, projDir, sessionID st
 
 // loadDiff is the HEAD-only convenience wrapper kept for test compatibility.
 func loadDiff(ctx context.Context, dir string) ([]*gitdiff.File, error) {
-	return loadDiffWithRef(ctx, dir, "", "", "")
+	return loadDiffWithRef(ctx, dir, "HEAD")
 }
 
 func loadDiffCmd(agent domain.Agent) tea.Cmd {
 	dir := agent.EffectiveDir()
+	headBranch := agent.Branch
 	projDir := agent.ProjDir
 	sessionID := agent.SessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		workBranch := conversation.LastGitBranch(projDir, sessionID)
-		files, err := loadDiffWithRef(ctx, dir, workBranch, projDir, sessionID)
+		recorded := conversation.LastGitBranch(projDir, sessionID)
+		ref := resolveDiffRef(headBranch, recorded, dir)
+		files, err := loadDiffWithRef(ctx, dir, ref)
 		return diffMsg{files: files, err: err}
 	}
 }

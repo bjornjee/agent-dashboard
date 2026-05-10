@@ -523,7 +523,17 @@ async function loadTabContent(tab, agentId) {
       const data = await get('/api/agents/' + agentId + '/diff');
       if (signal.aborted) return;
       if (!data || !data.raw) {
-        container.innerHTML = UI.emptyState(ICONS.fileDiff, 'No diff available', 'Changes will appear here once the agent modifies files');
+        const status = data && data.status;
+        let title = 'No diff available';
+        let subtitle = 'Changes will appear here once the agent modifies files';
+        if (status === 'empty') {
+          title = 'No changes yet';
+          subtitle = 'The agent hasn’t modified files in this worktree.';
+        } else if (status === 'error') {
+          title = 'Unable to load diff';
+          subtitle = 'git reported an error reading this worktree.';
+        }
+        container.innerHTML = UI.emptyState(ICONS.fileDiff, title, subtitle);
         return;
       }
 

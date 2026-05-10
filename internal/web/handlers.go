@@ -150,9 +150,17 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 // diffResponse holds the structured diff output.
+//
+// Status disambiguates the empty-Files case so the frontend can render
+// "no changes yet" distinctly from "diff failed":
+//
+//   - "ok"    raw is non-empty.
+//   - "empty" git succeeded but the worktree has no diff against base.
+//   - "error" git diff returned an error (or the agent has no dir).
 type diffResponse struct {
-	Raw   string     `json:"raw"`
-	Files []diffFile `json:"files"`
+	Raw    string     `json:"raw"`
+	Files  []diffFile `json:"files"`
+	Status string     `json:"status"`
 }
 
 type diffFile struct {
@@ -186,6 +194,32 @@ func branchExists(dir, name string) bool {
 	return err == nil
 }
 
+// isLocalDefault reports whether name is the conventional default branch.
+// Used by resolveDiffRef to recognise a stale-default head value.
+func isLocalDefault(name string) bool {
+	return name == "main" || name == "master"
+}
+
+// resolveDiffRef picks the git ref to diff against base. See the TUI copy
+// in internal/tui/diff.go for the rationale; this mirrors that logic so
+// the web endpoint and TUI converge on the same answer.
+//
+// Priority: agent.Branch (worktree's actual checked-out branch) first;
+// JSONL recorded gitBranch only as fallback when HEAD is the local
+// default (b594c2d's pane 5.1 case) or the worktree is detached.
+func resolveDiffRef(headBranch, recordedBranch, dir string) string {
+	if headBranch != "" && headBranch != "HEAD" && !isLocalDefault(headBranch) {
+		return headBranch
+	}
+	if recordedBranch != "" && branchExists(dir, recordedBranch) {
+		return recordedBranch
+	}
+	if headBranch != "" && headBranch != "HEAD" {
+		return headBranch
+	}
+	return "HEAD"
+}
+
 // handleDiff returns the git diff for an agent's working directory.
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
@@ -195,14 +229,12 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := agent.EffectiveDir()
 	if dir == "" {
-		writeJSON(w, http.StatusOK, diffResponse{})
+		writeJSON(w, http.StatusOK, diffResponse{Status: "error"})
 		return
 	}
 
-	ref := "HEAD"
-	if b := conversation.LastGitBranch(agent.ProjDir, agent.SessionID); b != "" && branchExists(dir, b) {
-		ref = b
-	}
+	recorded := conversation.LastGitBranch(agent.ProjDir, agent.SessionID)
+	ref := resolveDiffRef(agent.Branch, recorded, dir)
 	base := findMergeBase(dir, ref)
 	diffArg := base
 	if ref != "HEAD" {
@@ -212,7 +244,7 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out, err := cmdRunner.Output(ctx, "git", "-C", dir, "diff", diffArg, "--no-color")
 	if err != nil {
-		writeJSON(w, http.StatusOK, diffResponse{})
+		writeJSON(w, http.StatusOK, diffResponse{Status: "error"})
 		return
 	}
 
@@ -310,9 +342,14 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	// Use filtered output
 	filteredRaw := strings.Join(filteredLines, "\n")
 
+	status := "ok"
+	if strings.TrimSpace(filteredRaw) == "" {
+		status = "empty"
+	}
 	writeJSON(w, http.StatusOK, diffResponse{
-		Raw:   filteredRaw,
-		Files: files,
+		Raw:    filteredRaw,
+		Files:  files,
+		Status: status,
 	})
 }
 
