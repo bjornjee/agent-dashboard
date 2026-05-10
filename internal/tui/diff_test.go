@@ -537,9 +537,9 @@ func TestLoadDiff_IncludesUntrackedFiles(t *testing.T) {
 		Return([]byte(untrackedDiff2), nil)
 
 	ctx := context.Background()
-	files, err := loadDiff(ctx, dir)
+	files, err := loadDiffWithRef(ctx, dir, "HEAD")
 	if err != nil {
-		t.Fatalf("loadDiff failed: %v", err)
+		t.Fatalf("loadDiffWithRef failed: %v", err)
 	}
 
 	// Should have 3 files: 1 tracked change + 2 untracked new files

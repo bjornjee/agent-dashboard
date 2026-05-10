@@ -171,7 +171,7 @@ type diffFile struct {
 }
 
 // findMergeBase returns the merge-base commit between `ref` and main/master,
-// or `ref` as a fallback. Pass "HEAD" for the legacy behaviour.
+// or `ref` as a fallback.
 func findMergeBase(dir, ref string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

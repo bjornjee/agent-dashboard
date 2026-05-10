@@ -19,7 +19,7 @@ type diffMsg struct {
 }
 
 // findMergeBase returns the merge-base commit between `ref` and main/master,
-// or `ref` as a fallback. Pass "HEAD" for the legacy behaviour.
+// or `ref` as a fallback.
 // Prefers origin/ refs to avoid stale local branch refs.
 func findMergeBase(dir, ref string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -76,8 +76,9 @@ func resolveDiffRef(headBranch, recordedBranch, dir string) string {
 }
 
 // loadDiffWithRef runs git diff against the merge-base of `ref` and
-// origin/main. Always appends untracked files from the working tree so
-// new files appear in the diff viewer.
+// origin/main (falling back through origin/master, main, master). Always
+// appends untracked files from the working tree so new files appear in the
+// diff viewer.
 //
 // HEAD path: diff working tree against base (includes uncommitted changes).
 // Branch path: diff base..ref (commits the agent landed on its branch,
@@ -119,11 +120,6 @@ func loadDiffWithRef(ctx context.Context, dir, ref string) ([]*gitdiff.File, err
 
 	files, _, err := gitdiff.Parse(bytes.NewReader(out))
 	return files, err
-}
-
-// loadDiff is the HEAD-only convenience wrapper kept for test compatibility.
-func loadDiff(ctx context.Context, dir string) ([]*gitdiff.File, error) {
-	return loadDiffWithRef(ctx, dir, "HEAD")
 }
 
 func loadDiffCmd(agent domain.Agent) tea.Cmd {
