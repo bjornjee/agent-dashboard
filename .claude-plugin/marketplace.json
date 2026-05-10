@@ -27,7 +27,7 @@
       "name": "agent-dashboard",
       "source": "./adapters/claude-code/",
       "description": "Multi-agent tmux dashboard with skills, hooks, and workflow automation",
-      "version": "0.20.0",
+      "version": "0.20.1",
       "category": "workflow",
       "strict": false,
       "homepage": "https://bjornjee.github.io/agent-dashboard",

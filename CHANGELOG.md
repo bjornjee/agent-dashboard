@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/bjornjee/agent-dashboard/compare/v0.20.0...v0.20.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* resolve diff ref from agent.Branch with JSONL as fallback ([#272](https://github.com/bjornjee/agent-dashboard/issues/272)) ([1477250](https://github.com/bjornjee/agent-dashboard/commit/14772504ee26ce53fc2bdf8c1e1b1a709dd4c1c9))
+
 ## [0.20.0](https://github.com/bjornjee/agent-dashboard/compare/v0.19.0...v0.20.0) (2026-05-09)
 
 
