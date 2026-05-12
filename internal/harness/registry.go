@@ -4,6 +4,7 @@
 package harness
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
@@ -11,18 +12,30 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/harness/pi"
 )
 
-// Resolve constructs a Harness by name. Unknown names fall back to claude —
-// the dashboard always boots with *some* harness, and unrecognized values
-// from settings.toml or request bodies do not crash the spawn flow.
-func Resolve(name string, profile domain.AgentProfile) domain.Harness {
+// ErrUnknownHarness is returned by Resolve when name doesn't match a known
+// harness. Callers decide how to react — DefaultConfig falls back to claude
+// with a log line, while web handlers return HTTP 400.
+type ErrUnknownHarness struct{ Name string }
+
+func (e ErrUnknownHarness) Error() string {
+	return fmt.Sprintf("unknown harness %q (known: claude, pi)", e.Name)
+}
+
+// Resolve constructs a Harness by name. Returns ErrUnknownHarness for any
+// name the registry doesn't recognize; the empty string resolves to claude
+// (the documented default for unset settings.toml fields and request bodies
+// that omit the harness override).
+func Resolve(name string, profile domain.AgentProfile) (domain.Harness, error) {
 	switch name {
+	case "claude", "":
+		return claude.New(profile), nil
 	case "pi":
 		return pi.New(pi.Config{
 			Command:     "pi",
 			SessionsDir: filepath.Join(profile.HomeDir, ".pi", "agent", "sessions"),
 			ConfigDir:   filepath.Join(profile.HomeDir, ".pi"),
-		})
+		}), nil
 	default:
-		return claude.New(profile)
+		return nil, ErrUnknownHarness{Name: name}
 	}
 }

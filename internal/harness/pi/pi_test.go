@@ -30,19 +30,25 @@ func TestPi_SpawnCommand(t *testing.T) {
 			"openai codex routing",
 			"feature", "",
 			domain.SpawnOpts{Provider: "openai", Model: "openai-codex/gpt-5.5"},
-			"pi --provider openai --model openai-codex/gpt-5.5 '/feature'",
+			"pi --provider 'openai' --model 'openai-codex/gpt-5.5' '/feature'",
 		},
 		{
 			"provider only (no model)",
 			"", "explore the repo",
 			domain.SpawnOpts{Provider: "anthropic"},
-			"pi --provider anthropic 'explore the repo'",
+			"pi --provider 'anthropic' 'explore the repo'",
 		},
 		{
 			"model only (no provider)",
 			"", "",
 			domain.SpawnOpts{Model: "openai-codex/gpt-5.5"},
-			"pi --model openai-codex/gpt-5.5",
+			"pi --model 'openai-codex/gpt-5.5'",
+		},
+		{
+			"provider with space gets quoted safely",
+			"", "",
+			domain.SpawnOpts{Provider: "open ai", Model: "model with space"},
+			"pi --provider 'open ai' --model 'model with space'",
 		},
 		{
 			"default effort ignored — pi-mono issue #4249",

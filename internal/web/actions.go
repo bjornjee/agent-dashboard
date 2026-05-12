@@ -319,10 +319,16 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the harness for this spawn — request override takes precedence
 	// over the configured default. Pi-specific Provider/Model are sourced
-	// from settings; claude ignores them.
+	// from settings; claude ignores them. Unknown harness names are HTTP 400
+	// (not silently coerced to claude — see harness.Resolve docs).
 	activeHarness := s.cfg.Harness
 	if req.Harness != "" && req.Harness != activeHarness.Name() {
-		activeHarness = harness.Resolve(req.Harness, s.cfg.Profile)
+		h, hErr := harness.Resolve(req.Harness, s.cfg.Profile)
+		if hErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": hErr.Error()})
+			return
+		}
+		activeHarness = h
 	}
 	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, domain.SpawnOpts{
 		DefaultEffort: s.cfg.Settings.Effort.Default,

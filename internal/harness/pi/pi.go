@@ -50,11 +50,14 @@ func (p *Pi) ConfigDir() string { return p.cfg.ConfigDir }
 // DefaultEffort is currently ignored (see package doc).
 func (p *Pi) SpawnCommand(skill, message string, opts domain.SpawnOpts) string {
 	cmd := p.cfg.Command
+	// Provider/Model come from settings.toml (user-controlled) — quote them
+	// so a value with a space or metacharacter doesn't shatter the tmux
+	// command line. The pi binary trims surrounding quotes itself.
 	if opts.Provider != "" {
-		cmd += " --provider " + opts.Provider
+		cmd += " --provider " + shellQuote(opts.Provider)
 	}
 	if opts.Model != "" {
-		cmd += " --model " + opts.Model
+		cmd += " --model " + shellQuote(opts.Model)
 	}
 	prompt := buildPrompt(skill, message)
 	if prompt != "" {
