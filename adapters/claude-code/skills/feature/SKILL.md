@@ -264,6 +264,5 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
 - "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `/agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
-- "It's 5 paragraphs of work, but phase headings are overkill for docs" → use the format from Phase 2 step 3 anyway. Even when continuing inline, it keeps the diff readable and `/implement` reachable if you change your mind.
 - "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason (context). Don't second-guess.
 - "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `/implement` and resume can't find the plan without it.

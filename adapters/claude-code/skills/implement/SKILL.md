@@ -44,7 +44,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier, deps, and model preference.
 
-2. **Halt if no `## Phases` block.** The user opted into `/implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format (see `/feature` Phase 2 step 3), or return to `/feature` for inline TDD." Halt.
+2. **Halt if no `## Phases` block.** The user opted into `/implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `/feature`, or return to `/feature` for inline TDD." Halt.
 
 3. **Pick the next pending phase** (`- [ ]`) in checklist order. If all phases are `[x]`, skip to Phase 3.
 
@@ -109,7 +109,7 @@ Report back with:
 
 ### Phase 3: Review
 
-Review all changes for correctness, security, and convention adherence. Apply project rules in your context.
+Review all changes for correctness, security, and convention adherence. Apply all project rules and conventions that are in your context.
 
 Review the **full branch diff** (`git diff $(git merge-base HEAD main)..HEAD`), not just the last phase — subagents see only their phase, so cross-phase coherence is the orchestrator's responsibility.
 
@@ -126,8 +126,6 @@ Implementation complete. All phases marked done. Open the PR with:
 
     /agent-dashboard:pr
 ```
-
-Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** User has been pointed at `/agent-dashboard:pr`.
 
