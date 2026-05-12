@@ -11,9 +11,8 @@
 package pi
 
 import (
-	"strings"
-
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness/spawnutil"
 )
 
 // Config is the static configuration the dashboard hands to the pi harness
@@ -54,29 +53,14 @@ func (p *Pi) SpawnCommand(skill, message string, opts domain.SpawnOpts) string {
 	// so a value with a space or metacharacter doesn't shatter the tmux
 	// command line. The pi binary trims surrounding quotes itself.
 	if opts.Provider != "" {
-		cmd += " --provider " + shellQuote(opts.Provider)
+		cmd += " --provider " + spawnutil.ShellQuote(opts.Provider)
 	}
 	if opts.Model != "" {
-		cmd += " --model " + shellQuote(opts.Model)
+		cmd += " --model " + spawnutil.ShellQuote(opts.Model)
 	}
-	prompt := buildPrompt(skill, message)
+	prompt := spawnutil.BuildPrompt(skill, message)
 	if prompt != "" {
-		cmd += " " + shellQuote(prompt)
+		cmd += " " + spawnutil.ShellQuote(prompt)
 	}
 	return cmd
-}
-
-func buildPrompt(skill, message string) string {
-	var parts []string
-	if skill != "" {
-		parts = append(parts, "/"+skill)
-	}
-	if message != "" {
-		parts = append(parts, message)
-	}
-	return strings.Join(parts, " ")
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
