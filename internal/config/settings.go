@@ -28,6 +28,9 @@ func DefaultSettings() domain.Settings {
 			Plan:    "high",
 			Default: "high",
 		},
+		Harness: domain.HarnessSettings{
+			Default: "claude",
+		},
 	}
 }
 

@@ -314,8 +314,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Build the shell command — passed directly to new-window/split-window
 	// as the pane's initial process to avoid tmux send-keys buffer limits.
+	// Pi-specific Provider/Model are sourced from settings; claude ignores them.
 	cmd := s.cfg.Harness.SpawnCommand(req.Skill, req.Message, domain.SpawnOpts{
 		DefaultEffort: s.cfg.Settings.Effort.Default,
+		Provider:      s.cfg.Settings.Harness.Pi.Provider,
+		Model:         s.cfg.Settings.Harness.Pi.Model,
 	})
 
 	// Look for an existing window with agents in the same repo.

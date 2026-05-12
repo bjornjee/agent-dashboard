@@ -158,6 +158,66 @@ func TestLoadSettings_UsagePollInterval(t *testing.T) {
 	}
 }
 
+func TestDefaultSettings_Harness(t *testing.T) {
+	s := DefaultSettings()
+	if s.Harness.Default != "claude" {
+		t.Errorf("Harness.Default = %q, want \"claude\"", s.Harness.Default)
+	}
+	if s.Harness.Pi.Provider != "" {
+		t.Errorf("Harness.Pi.Provider = %q, want \"\"", s.Harness.Pi.Provider)
+	}
+	if s.Harness.Pi.Model != "" {
+		t.Errorf("Harness.Pi.Model = %q, want \"\"", s.Harness.Pi.Model)
+	}
+}
+
+func TestLoadSettings_HarnessPi(t *testing.T) {
+	dir := t.TempDir()
+	content := `[harness]
+default = "pi"
+
+[harness.pi]
+provider = "openai"
+model    = "openai-codex/gpt-5.5"
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadSettings(dir)
+	if s.Harness.Default != "pi" {
+		t.Errorf("Harness.Default = %q, want \"pi\"", s.Harness.Default)
+	}
+	if s.Harness.Pi.Provider != "openai" {
+		t.Errorf("Harness.Pi.Provider = %q, want \"openai\"", s.Harness.Pi.Provider)
+	}
+	if s.Harness.Pi.Model != "openai-codex/gpt-5.5" {
+		t.Errorf("Harness.Pi.Model = %q, want \"openai-codex/gpt-5.5\"", s.Harness.Pi.Model)
+	}
+}
+
+func TestLoadSettings_HarnessPartial(t *testing.T) {
+	dir := t.TempDir()
+	// Only [harness.pi].provider — default harness key omitted, model omitted.
+	content := `[harness.pi]
+provider = "anthropic"
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := LoadSettings(dir)
+	if s.Harness.Default != "claude" {
+		t.Errorf("Harness.Default = %q, want \"claude\" (omitted key falls back)", s.Harness.Default)
+	}
+	if s.Harness.Pi.Provider != "anthropic" {
+		t.Errorf("Harness.Pi.Provider = %q, want \"anthropic\"", s.Harness.Pi.Provider)
+	}
+	if s.Harness.Pi.Model != "" {
+		t.Errorf("Harness.Pi.Model = %q, want \"\"", s.Harness.Pi.Model)
+	}
+}
+
 func TestLoadSettings_InvalidTOML(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("{{invalid"), 0644); err != nil {

@@ -222,6 +222,22 @@ type EffortSettings struct {
 	Default string `toml:"default"` // pinned at spawn and restored on plan exit
 }
 
+// PiHarnessSettings carries pi-mono-specific spawn knobs. Provider and Model
+// flow into the harness's SpawnCommand as --provider/--model flags. Either
+// being empty inherits pi-mono's own resolution chain (auth.json > env var).
+type PiHarnessSettings struct {
+	Provider string `toml:"provider"` // "" | "openai" | "anthropic" | ...
+	Model    string `toml:"model"`    // e.g. "openai-codex/gpt-5.5"
+}
+
+// HarnessSettings selects which coding-agent harness backs new agents.
+// Default names the harness used when the New Agent flow doesn't override.
+// Per-harness subtables hold knobs that only apply to that harness.
+type HarnessSettings struct {
+	Default string            `toml:"default"` // "claude" | "pi"
+	Pi      PiHarnessSettings `toml:"pi"`
+}
+
 // Settings holds all user-facing configuration loaded from settings.toml.
 type Settings struct {
 	Banner        BannerSettings       `toml:"banner"`
@@ -230,6 +246,7 @@ type Settings struct {
 	Experimental  ExperimentalSettings `toml:"experimental"`
 	Usage         UsageSettings        `toml:"usage"`
 	Effort        EffortSettings       `toml:"effort"`
+	Harness       HarnessSettings      `toml:"harness"`
 }
 
 // TmuxWindowInfo holds a tmux window's index and name.

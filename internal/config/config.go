@@ -8,17 +8,37 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/harness/claude"
+	"github.com/bjornjee/agent-dashboard/internal/harness/pi"
 )
 
 // DefaultConfig returns a fully populated config with auto-detected values.
+// The active Harness is selected from settings.toml's [harness] default — a
+// user who sets default = "pi" gets the pi-mono harness with their
+// [harness.pi] provider+model preferences applied at spawn time.
 func DefaultConfig() domain.Config {
 	profile := defaultClaudeProfile()
+	settings := LoadSettings(profile.StateDir)
 	return domain.Config{
 		Profile:  profile,
-		Harness:  claude.New(profile),
+		Harness:  resolveHarness(settings.Harness.Default, profile),
 		Username: detectUsername(),
 		Editor:   detectEditor(),
-		Settings: LoadSettings(profile.StateDir),
+		Settings: settings,
+	}
+}
+
+// resolveHarness picks a Harness implementation by name. Unknown names fall
+// back to claude — the dashboard always boots with *some* harness.
+func resolveHarness(name string, profile domain.AgentProfile) domain.Harness {
+	switch name {
+	case "pi":
+		return pi.New(pi.Config{
+			Command:     "pi",
+			SessionsDir: filepath.Join(profile.HomeDir, ".pi", "agent", "sessions"),
+			ConfigDir:   filepath.Join(profile.HomeDir, ".pi"),
+		})
+	default:
+		return claude.New(profile)
 	}
 }
 
