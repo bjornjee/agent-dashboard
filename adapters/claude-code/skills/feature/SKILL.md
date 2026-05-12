@@ -127,7 +127,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    No drafting the plan in assistant text until `EnterPlanMode` has been called and `permission_mode='plan'` is active.
    </HARD-GATE>
 
-   **Phase format for multi-phase plans.** When the feature has ≥3 distinguishable work units, structure the plan body with a `## Phases` checklist + matching `### Phase X:` headings. This enables the dispatch handoff probe in step 4 and lets `/implement` parse the plan if the user opts in.
+   **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. Step 4 reads this format to offer the dispatch probe; `/implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
 
    ```markdown
    ## Phases
@@ -150,7 +150,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
    - `model:` defaults to `sonnet`. Use `opus` for phases with hairy architectural decisions; `haiku` for mechanical phases.
    - `- [ ]` = pending. `- [x]` = done. `/implement` flips these as it dispatches.
-   - Plans with **<3 phases** should NOT use this format — inline paragraphs are fine. The dispatch probe won't fire below the threshold.
+   - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
 
 4. **Submit via `ExitPlanMode`. Wait for user approval.** Pass the full plan markdown to the plan file (per CC's plan-mode workflow) and call `ExitPlanMode`. This renders the plan in CC's native plan-review UI for accept/reject.
 
@@ -161,25 +161,25 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    - Don't write the test file "to save time".
    - Don't ask "should I proceed?" in assistant text — the plan-mode UI's accept action is the approval.
 
-   **Post-approval actions** (run immediately after the user accepts the plan, before Phase 3):
+   **Post-approval actions** (immediately after the user accepts the plan, before Phase 3):
 
-   1. **Write the plan-path sentinel** (always). The approved plan markdown lives at the path CC told you in the plan-mode system prompt (typically `~/.claude/plans/<slug>.md`). Record it so a later `/implement` invocation can find it:
+   1. **Write the plan-path sentinel** (always). CC's plan-mode system prompt told you where the approved plan markdown lives (typically `~/.claude/plans/<slug>.md`). Record that path so `/implement` can find it:
       ```bash
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
-   2. **Detect phase count.** Read the plan and count `- [ ]` / `- [x]` lines under the `## Phases` heading (introduced by the convention in step 3). If there is no `## Phases` block, or the count is `< 3`, **skip step 3** and proceed to Phase 3 (inline TDD).
+   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 (inline TDD).
 
-   3. **Probe for dispatch handoff** (only if phase count ≥ 3). Call `AskUserQuestion` exactly once:
+   3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `AskUserQuestion` exactly once:
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to /implement for context isolation?"`
       - Header: `"Dispatch"`
-      - Options (in this order):
-        - `"Continue inline (Recommended for ≤4 phases)"` — description: "Stay in this session. Run RED→GREEN→REFACTOR for each phase in order."
-        - `"Hand off to /implement"` — description: "Exit /feature. Invoke /agent-dashboard:implement in a fresh session for max context isolation. Each phase will be dispatched to its own subagent."
+      - Options (recommended first):
+        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run RED → GREEN → REFACTOR per phase in order.
+        - `"Hand off to /implement"` — Exit /feature. The user invokes `/agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
 
-      On `"Continue inline"`: proceed to Phase 3 (inline TDD) as today. The `## Phases` structure becomes documentation; inline TDD ignores the index.
+      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
 
-      On `"Hand off to /implement"`: print the handoff message below and **exit cleanly**. Do not start Phase 3.
+      **If `Hand off to /implement`:** print the message below and exit cleanly. Do not start Phase 3.
 
       ```
       Plan saved to <plan-path>.
@@ -188,10 +188,10 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
           /agent-dashboard:implement
 
-      Recommended: open a fresh terminal session for maximum context isolation.
+      (Recommended: open a fresh terminal session for max context isolation.)
       ```
 
-**Gate:** User has approved the approach via the plan-review UI. The submitted plan contains no open decisions. `.feature-plan-path` is written. Either Phase 3 begins (inline) or the skill has exited cleanly with the handoff message (dispatch).
+**Gate:** Plan approved with no open decisions. `.feature-plan-path` written. Either Phase 3 begins (inline) or the skill exited with the handoff message (dispatch).
 
 ---
 
@@ -264,6 +264,6 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
 - "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `/agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
-- "Plan has 5+ paragraphs of work but I didn't use `### Phase X:` headings" → restructure into the phase format from Phase 2 step 3, even if you're going to continue inline. It makes the diff readable and unlocks `/implement` if you change your mind.
-- "User picked 'hand off to /implement' but I started Phase 3 anyway" → exit cleanly. Don't second-guess the user's choice; they explicitly opted out of inline TDD.
-- "I forgot to write `.feature-plan-path` after plan approval" → write it now before doing anything else. `/implement` (and resume) depend on it.
+- "It's 5 paragraphs of work, but phase headings are overkill for docs" → use the format from Phase 2 step 3 anyway. Even when continuing inline, it keeps the diff readable and `/implement` reachable if you change your mind.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason (context). Don't second-guess.
+- "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `/implement` and resume can't find the plan without it.
