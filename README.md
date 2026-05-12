@@ -15,13 +15,15 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **Workflow gates, not vibes.** Skills (feature, fix, chore, refactor, investigate, pr, rca) plus hooks (commit-lint, test-gate, no-commits-to-main, destructive-op warnings) enforce TDD and conventional commits at the harness level — agents can't merge if tests fail.
 - **Phone-first remote control.** A companion PWA on `cmd/web/` exposes the same orchestration surface over your local network: approve permissions, reply to questions, open/merge PRs, and get browser notifications when an agent needs you — all without opening your laptop.
 - **tmux-native, not tmux-replacing.** Agents stay where they live; the dashboard adds a control plane on top of `tmux capture-pane`. No new pane manager, no daemon competing with tmux.
-- **Multi-backend.** Claude Code is first-class; Codex sessions are supported via skill delegation. The adapter pattern in `adapters/claude-code/` is the seam for future agents.
+- **Multi-backend.** Claude Code is first-class; pi-mono is a second-class harness (including OpenAI / codex `gpt-5.x` models via pi-mono's unified LLM API); Codex CLI is supported via skill delegation. The harness picker in `settings.toml` (`[harness] default`) selects the active backend; per-spawn override is exposed in the New Agent form.
 
 ## FAQ
 
 **Do I need tmux?** Yes. agent-dashboard reads live pane content via `tmux capture-pane` and spawns agent sessions in tmux panes. Without tmux there are no panes to monitor.
 
-**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. A second adapter for [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) lives in `adapters/pi/` (install with `make install-pi-adapter`). Codex sessions are spawned through skill delegation. The architecture supports additional backends.
+**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. A second adapter for [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) lives in `adapters/pi/` (install with `make install-pi-adapter`); pi-mono's unified LLM API also lets you run OpenAI / codex `gpt-5.x` models inside the dashboard. Codex CLI itself is spawned through skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
+
+**How do I use codex / gpt-5.x models?** Set `[harness] default = "pi"` and `[harness.pi] provider = "openai" model = "openai-codex/gpt-5.5"` in `~/.agent-dashboard/settings.toml`, configure your OpenAI key in `~/.pi/auth.json`, and restart the dashboard. The New Agent form's Harness dropdown also lets you override per-spawn. See [adapters/pi/README.md](adapters/pi/README.md#codex--gpt-5x-models) for the full walkthrough.
 
 **Does this require a paid Claude account?** No — it uses whatever Claude Code itself requires (Pro, Max, or API). agent-dashboard does not call the Anthropic API directly; it reads the JSONL transcripts Claude Code writes locally.
 

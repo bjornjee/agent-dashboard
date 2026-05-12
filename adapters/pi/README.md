@@ -52,6 +52,38 @@ These have no pi equivalent today and are intentionally out of scope:
 - **Subagent tracking** — pi has no spawn/stop subagent pair (only `session_before_fork`); subagent counts can't replicate
 - **Conversation panel rendering for pi** — the dashboard's JSONL parser is currently Claude-schema-only; pi tiles will show state/tools/notifications but the conversation viewer will be empty until a follow-up PR adds a pi parser
 
+## Codex / gpt-5.x models
+
+Pi-mono ships a unified LLM API with a first-class OpenAI provider (since v0.74.0), so you can run `gpt-5.5-codex` and other gpt-5.x models inside the dashboard without leaving the harness.
+
+**Setup:**
+
+1. Install pi-mono v0.74.0+ and the adapter:
+   ```sh
+   make install-pi-adapter
+   ```
+2. Drop an OpenAI key into `~/.pi/auth.json` (pi-mono's standard auth store):
+   ```json
+   { "openai": { "apiKey": "sk-..." } }
+   ```
+   See pi-mono's [providers docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md) for the canonical schema.
+3. Tell the dashboard to use pi by default in `~/.agent-dashboard/settings.toml`:
+   ```toml
+   [harness]
+   default = "pi"
+
+   [harness.pi]
+   provider = "openai"
+   model    = "openai-codex/gpt-5.5"
+   ```
+4. Restart the dashboard. The New Agent flow now spawns `pi --provider openai --model openai-codex/gpt-5.5`.
+
+**Per-spawn override:** the New Agent form's Harness dropdown lets you pick `claude` or `pi` for a single agent without touching settings. Provider/Model are still sourced from the `[harness.pi]` subtable in settings.toml.
+
+**Known limits (pi-mono upstream):**
+- `minimal` and `off` thinking levels are broken for gpt-5.5 ([pi-mono#4249](https://github.com/badlogic/pi-mono/issues/4249)). The dashboard does not pass thinking flags to pi yet — defers to pi-mono's default.
+- Pi-mono session log → dashboard cost rollup is not wired yet (deferred to a follow-up PR). Cost tracking via SQLite (`internal/db/db.go`) still works for Claude Code; pi-mono usage will land once a session-log fixture is captured.
+
 ## Test
 
 ```sh
