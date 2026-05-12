@@ -1,8 +1,9 @@
 package claude
 
 import (
+	"strings"
+
 	"github.com/bjornjee/agent-dashboard/internal/domain"
-	"github.com/bjornjee/agent-dashboard/internal/harness/spawnutil"
 )
 
 // Claude is the agent-dashboard harness adapter for Claude Code.
@@ -39,9 +40,9 @@ func (c *Claude) SpawnCommand(skill, message string, opts domain.SpawnOpts) stri
 	if _, opted := effortOptedSkills[skill]; opted && opts.DefaultEffort != "" {
 		cmd = "CLAUDE_CODE_EFFORT_LEVEL=" + opts.DefaultEffort + " " + cmd + " --effort " + opts.DefaultEffort
 	}
-	prompt := spawnutil.BuildPrompt(skill, message)
+	prompt := buildPrompt(skill, message)
 	if prompt != "" {
-		cmd = cmd + " " + spawnutil.ShellQuote(prompt)
+		cmd = cmd + " " + shellQuote(prompt)
 	}
 	return cmd
 }
@@ -53,4 +54,19 @@ var effortOptedSkills = map[string]struct{}{
 	"feature":  {},
 	"fix":      {},
 	"refactor": {},
+}
+
+func buildPrompt(skill, message string) string {
+	var parts []string
+	if skill != "" {
+		parts = append(parts, "/"+skill)
+	}
+	if message != "" {
+		parts = append(parts, message)
+	}
+	return strings.Join(parts, " ")
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
