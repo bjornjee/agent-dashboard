@@ -42,7 +42,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent, verify tests, flip the checkbox. Resume is implicit — phases marked `[x]` are skipped.
 
-1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier, deps, and model preference.
+1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier and deps.
 
 2. **Halt if no `## Phases` block.** The user opted into `/implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `/feature`, or return to `/feature` for inline TDD." Halt.
 
@@ -52,12 +52,11 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
-6. **Dispatch the subagent** (foreground, sequential — never overlap phases):
+6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Do not set `model`; the dashboard controls model selection at session level:
    ```
    Agent({
      description: "Phase X dispatch",
      subagent_type: "general-purpose",
-     model: <phase's model field, default "sonnet">,
      prompt: <subagent prompt template, see below>,
    })
    ```

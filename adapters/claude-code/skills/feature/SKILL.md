@@ -132,9 +132,9 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    ```markdown
    ## Phases
 
-   - [ ] **Phase A: <short name>** — files: <globs>, deps: -, model: sonnet
-   - [ ] **Phase B: <short name>** — files: <globs>, deps: A, model: sonnet
-   - [ ] **Phase C: <short name>** — files: <globs>, deps: B, model: opus
+   - [ ] **Phase A: <short name>** — files: <globs>, deps: -
+   - [ ] **Phase B: <short name>** — files: <globs>, deps: A
+   - [ ] **Phase C: <short name>** — files: <globs>, deps: B
 
    ### Phase A: <short name>
 
@@ -148,7 +148,6 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    Rules:
    - The `## Phases` block is the dispatch index. Phase names MUST match between checklist and `### Phase X:` headings (case-sensitive).
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
-   - `model:` defaults to `sonnet`. Use `opus` for phases with hairy architectural decisions; `haiku` for mechanical phases.
    - `- [ ]` = pending. `- [x]` = done. `/implement` flips these as it dispatches.
    - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
 
