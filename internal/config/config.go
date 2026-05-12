@@ -7,8 +7,7 @@ import (
 	"strings"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
-	"github.com/bjornjee/agent-dashboard/internal/harness/claude"
-	"github.com/bjornjee/agent-dashboard/internal/harness/pi"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 )
 
 // DefaultConfig returns a fully populated config with auto-detected values.
@@ -20,25 +19,10 @@ func DefaultConfig() domain.Config {
 	settings := LoadSettings(profile.StateDir)
 	return domain.Config{
 		Profile:  profile,
-		Harness:  resolveHarness(settings.Harness.Default, profile),
+		Harness:  harness.Resolve(settings.Harness.Default, profile),
 		Username: detectUsername(),
 		Editor:   detectEditor(),
 		Settings: settings,
-	}
-}
-
-// resolveHarness picks a Harness implementation by name. Unknown names fall
-// back to claude — the dashboard always boots with *some* harness.
-func resolveHarness(name string, profile domain.AgentProfile) domain.Harness {
-	switch name {
-	case "pi":
-		return pi.New(pi.Config{
-			Command:     "pi",
-			SessionsDir: filepath.Join(profile.HomeDir, ".pi", "agent", "sessions"),
-			ConfigDir:   filepath.Join(profile.HomeDir, ".pi"),
-		})
-	default:
-		return claude.New(profile)
 	}
 }
 

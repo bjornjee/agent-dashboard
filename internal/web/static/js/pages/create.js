@@ -19,6 +19,15 @@ export function renderCreate(app, agents) {
         <div class="form-hint" id="folder-hint"></div>
       </div>
       <div class="form-group">
+        <label class="form-label">Harness</label>
+        <select id="create-harness" class="action-input" style="width:100%">
+          <option value="">Default (settings.toml)</option>
+          <option value="claude">claude</option>
+          <option value="pi">pi (supports openai/codex models)</option>
+        </select>
+        <div class="form-hint">Pi reads provider+model from <code>[harness.pi]</code> in settings.toml.</div>
+      </div>
+      <div class="form-group">
         <label class="form-label">Skill</label>
         <select id="create-skill" class="action-input" style="width:100%">
           <option value="">Default</option>

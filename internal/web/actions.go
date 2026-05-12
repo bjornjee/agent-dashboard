@@ -14,6 +14,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -268,6 +269,10 @@ type createRequest struct {
 	Folder  string `json:"folder"`
 	Skill   string `json:"skill"`
 	Message string `json:"message"`
+	// Harness overrides the [harness] default in settings.toml for this
+	// spawn only. Empty string falls back to the configured default.
+	// Valid: "claude" | "pi" (unknown values fall back to claude).
+	Harness string `json:"harness"`
 }
 
 // handleCreate spawns a new agent session in a tmux pane.
@@ -312,10 +317,14 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	repoName := repowin.SanitizeWindowName(rawRepo)
 
-	// Build the shell command — passed directly to new-window/split-window
-	// as the pane's initial process to avoid tmux send-keys buffer limits.
-	// Pi-specific Provider/Model are sourced from settings; claude ignores them.
-	cmd := s.cfg.Harness.SpawnCommand(req.Skill, req.Message, domain.SpawnOpts{
+	// Resolve the harness for this spawn — request override takes precedence
+	// over the configured default. Pi-specific Provider/Model are sourced
+	// from settings; claude ignores them.
+	activeHarness := s.cfg.Harness
+	if req.Harness != "" && req.Harness != activeHarness.Name() {
+		activeHarness = harness.Resolve(req.Harness, s.cfg.Profile)
+	}
+	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, domain.SpawnOpts{
 		DefaultEffort: s.cfg.Settings.Effort.Default,
 		Provider:      s.cfg.Settings.Harness.Pi.Provider,
 		Model:         s.cfg.Settings.Harness.Pi.Model,
