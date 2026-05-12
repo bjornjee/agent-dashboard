@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness/claude"
 )
 
 // DefaultConfig returns a fully populated config with auto-detected values.
@@ -14,6 +15,7 @@ func DefaultConfig() domain.Config {
 	profile := defaultClaudeProfile()
 	return domain.Config{
 		Profile:  profile,
+		Harness:  claude.New(profile),
 		Username: detectUsername(),
 		Editor:   detectEditor(),
 		Settings: LoadSettings(profile.StateDir),

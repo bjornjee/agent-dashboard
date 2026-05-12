@@ -177,6 +177,7 @@ type AgentProfile struct {
 // Config holds all dashboard configuration.
 type Config struct {
 	Profile  AgentProfile
+	Harness  Harness  // Active coding-agent harness (claude, pi, ...)
 	Username string   // Greeting name
 	Editor   string   // Editor command
 	Settings Settings // User-facing settings from settings.toml

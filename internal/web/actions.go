@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -313,7 +314,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Build the shell command — passed directly to new-window/split-window
 	// as the pane's initial process to avoid tmux send-keys buffer limits.
-	cmd := buildAgentCommand(s.cfg.Profile.Command, req.Skill, req.Message, s.cfg.Settings.Effort.Default)
+	cmd := s.cfg.Harness.SpawnCommand(req.Skill, req.Message, domain.SpawnOpts{
+		DefaultEffort: s.cfg.Settings.Effort.Default,
+	})
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
@@ -366,54 +369,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
-}
-
-func buildPrompt(skill, message string) string {
-	var parts []string
-	if skill != "" {
-		parts = append(parts, "/"+skill)
-	}
-	if message != "" {
-		parts = append(parts, message)
-	}
-	return strings.Join(parts, " ")
-}
-
-// effortOptedSkills lists the skills that opt into a spawn-time effort pin.
-// Frontmatter `effort:` in SKILL.md is parsed by Claude Code on initial
-// invocation but is not consistently re-applied after EnterPlanMode flips
-// permission_mode, so the CLI flag is the reliable injection point. Skills
-// not in this set omit the flag and inherit Claude Code's default effort.
-//
-// The level itself comes from settings.toml [effort] default — the
-// agent-state-fast hook independently swaps to [effort] plan during
-// permission_mode='plan' and restores [effort] default on exit, so a
-// single config source drives both spawn baseline and plan-mode dispatch.
-var effortOptedSkills = map[string]struct{}{
-	"feature":  {},
-	"fix":      {},
-	"refactor": {},
-}
-
-// buildAgentCommand assembles the shell command used to spawn an agent in
-// a tmux pane. When the skill is in effortOptedSkills and defaultEffort is
-// non-empty, the command is prefixed with CLAUDE_CODE_EFFORT_LEVEL=<level>
-// (so the SessionStart hook can capture the level for display) and CC's
-// --effort <level> flag (so CC pins the session-level effort).
-func buildAgentCommand(profileCmd, skill, message, defaultEffort string) string {
-	cmd := profileCmd
-	if _, opted := effortOptedSkills[skill]; opted && defaultEffort != "" {
-		cmd = "CLAUDE_CODE_EFFORT_LEVEL=" + defaultEffort + " " + cmd + " --effort " + defaultEffort
-	}
-	prompt := buildPrompt(skill, message)
-	if prompt != "" {
-		cmd = cmd + " " + shellQuote(prompt)
-	}
-	return cmd
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // firstTmuxSession returns the name of the first available tmux session.
