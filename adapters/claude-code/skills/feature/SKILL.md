@@ -163,19 +163,6 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
    **Post-approval actions** (immediately after the user accepts the plan, before Phase 3):
 
-   After approval, two locations relate the worktree to the approved plan:
-
-   ```
-   <worktree-root>/                  (e.g. ../worktrees/<app>/<name>/)
-   ├── .feature-plan-path            single line — absolute path to the plan below
-   ├── .env-setup-done               written by Phase 2's background agent
-   └── <project files>
-
-   ~/.claude/plans/
-   └── <slug>.md                     CC's plan-mode writes the approved plan here
-                                     contains the `## Phases` checklist /implement parses
-   ```
-
    1. **Write the plan-path sentinel** (always). CC's plan-mode system prompt told you where the approved plan markdown lives (typically `~/.claude/plans/<slug>.md`). Record that path so `/implement` can find it:
       ```bash
       echo "<absolute-plan-path>" > .feature-plan-path
