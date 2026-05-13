@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.21.0](https://github.com/bjornjee/agent-dashboard/compare/v0.20.1...v0.21.0) (2026-05-13)
+
+
+### Features
+
+* add /implement skill with reactive phase dispatch from /feature ([#274](https://github.com/bjornjee/agent-dashboard/issues/274)) ([7347327](https://github.com/bjornjee/agent-dashboard/commit/7347327316f4c5b745aaab1a37024dcde5c7a3be))
+* codex / gpt-5.x models via pi-mono harness ([#275](https://github.com/bjornjee/agent-dashboard/issues/275)) ([5009777](https://github.com/bjornjee/agent-dashboard/commit/500977712d697d91b6f1914d010e688e8f129a6a))
+
+
+### Bug Fixes
+
+* never silently skip gh pr merge; add deps status view (s) ([#277](https://github.com/bjornjee/agent-dashboard/issues/277)) ([ee11ba4](https://github.com/bjornjee/agent-dashboard/commit/ee11ba49889e15f03b7a7189b83f4acebb54e9ac))
+* stronger merged-state detection in pr-detect hook ([#278](https://github.com/bjornjee/agent-dashboard/issues/278)) ([4fec7e0](https://github.com/bjornjee/agent-dashboard/commit/4fec7e029fb52444fa6c9376a109c4d818367fe8))
+
 ## [0.20.1](https://github.com/bjornjee/agent-dashboard/compare/v0.20.0...v0.20.1) (2026-05-10)
 
 
