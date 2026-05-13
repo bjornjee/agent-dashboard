@@ -208,6 +208,7 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 | `p` | Toggle plan view |
 | `D` | Toggle diagrams panel (when diagrams present) |
 | `u` | Toggle usage dashboard |
+| `s` | Dependency status page (gh, tmux, git, codex) |
 | `G` (Shift+G) | Toggle dino runner game (when enabled) |
 | `h` | Show help overlay with all keybindings |
 | `J/K` | Line scroll (plan/diff views) |
