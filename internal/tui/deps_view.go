@@ -92,19 +92,19 @@ func renderDepsView(deps []depStatus, width, _ int) string {
 	var rows []string
 	okCount := 0
 	for _, d := range deps {
+		rowStyle := bad
+		mark := "✗"
 		if d.ok {
-			rows = append(rows, fmt.Sprintf("   %s  %s  %s",
-				okStyle.Render("✓"),
-				okStyle.Render(fmt.Sprintf("%-6s", d.name)),
-				dim.Render(d.purpose),
-			))
+			rowStyle = okStyle
+			mark = "✓"
 			okCount++
-		} else {
-			rows = append(rows, fmt.Sprintf("   %s  %s  %s",
-				bad.Render("✗"),
-				bad.Render(fmt.Sprintf("%-6s", d.name)),
-				dim.Render(d.purpose),
-			))
+		}
+		rows = append(rows, fmt.Sprintf("   %s  %s  %s",
+			rowStyle.Render(mark),
+			rowStyle.Render(fmt.Sprintf("%-6s", d.name)),
+			dim.Render(d.purpose),
+		))
+		if !d.ok {
 			rows = append(rows, fmt.Sprintf("            %s %s",
 				dim.Render("→"),
 				hintStyle.Render(d.hint),

@@ -24,7 +24,7 @@ Once a PR is open, press `g` to view the diff in the split-pane viewer. See [Rev
 
 Press `m` to merge the PR via `gh pr merge`. The dashboard re-checks `gh auth status` synchronously at confirm time, then runs `gh pr merge --squash` and sends a cleanup message to the agent afterward.
 
-If `gh` is missing or not authenticated when you confirm, the merge is cancelled — the dashboard shows `Cannot merge: gh CLI not available — run 'gh auth login' or install gh` and the agent's state is left untouched. Press `s` to open the [dependency status page](../../reference/keybindings/) for a full view of which tools are available.
+If `gh` is missing or not authenticated when you confirm, the merge is cancelled — the dashboard shows `Cannot merge: gh CLI not available — run 'gh auth login' or install gh` and the agent's state is left untouched. Press `s` to open the [dependency status page](../reference/keybindings/) for a full view of which tools are available.
 
 {: .note }
 The `g` key (open / create PR) uses the browser as a fallback when `gh` is missing. Only the `m` (merge) flow requires `gh` to be present and authed — it has no safe browser-equivalent.
