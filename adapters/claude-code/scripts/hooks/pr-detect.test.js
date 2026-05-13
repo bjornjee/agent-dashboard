@@ -65,6 +65,61 @@ describe('detectPR', () => {
     assert.equal(result.action, 'created');
     assert.equal(result.prUrl, 'https://github.com/a/b/pull/99');
   });
+
+  it('does not match gh pr merge inside a grep argument', () => {
+    assert.equal(detectPR('grep "gh pr merge" .', 'src/file.go:42'), null);
+  });
+
+  it('does not match gh pr merge inside an rg argument', () => {
+    assert.equal(detectPR('rg "gh pr merge"', 'src/file.go:42'), null);
+  });
+
+  it('does not match gh pr merge inside an echo argument', () => {
+    assert.equal(detectPR('echo "todo: gh pr merge later"', 'todo: gh pr merge later'), null);
+  });
+
+  it('does not match gh pr merge inside a piped grep', () => {
+    assert.equal(detectPR('cat file.md | grep "gh pr merge"', 'line containing gh pr merge'), null);
+  });
+
+  it('does not match gh pr create inside a grep argument', () => {
+    assert.equal(detectPR('grep "gh pr create" .', 'src/file.go:42'), null);
+  });
+
+  it('detects gh pr merge after && segment', () => {
+    const result = detectPR(
+      'cd /tmp && gh pr merge 42 --squash',
+      'Merged pull request #42\n'
+    );
+    assert.equal(result.action, 'merged');
+  });
+
+  it('skips gh pr merge --help', () => {
+    assert.equal(
+      detectPR('gh pr merge --help', 'Merge a pull request on GitHub\n\nUSAGE\n  gh pr merge ...'),
+      null
+    );
+  });
+
+  it('skips gh pr merge -h', () => {
+    assert.equal(detectPR('gh pr merge -h', 'help text'), null);
+  });
+
+  it('treats gh pr merge --auto as created (PR queued, not merged)', () => {
+    const result = detectPR(
+      'gh pr merge 42 --auto --squash',
+      '✓ Pull request #42 will be automatically merged via squash when all requirements are met\n'
+    );
+    assert.deepEqual(result, { action: 'created', prUrl: null });
+  });
+
+  it('treats gh pr merge --auto with URL in command as created with prUrl', () => {
+    const result = detectPR(
+      'gh pr merge https://github.com/u/r/pull/42 --auto',
+      ''
+    );
+    assert.deepEqual(result, { action: 'created', prUrl: 'https://github.com/u/r/pull/42' });
+  });
 });
 
 describe('buildPRUpdate', () => {
