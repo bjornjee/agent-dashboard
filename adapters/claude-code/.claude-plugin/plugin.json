@@ -1,6 +1,6 @@
 {
   "name": "agent-dashboard",
-  "version": "0.20.1",
+  "version": "0.21.0",
   "description": "Multi-agent tmux dashboard with skills, hooks, and workflow automation",
   "author": {
     "name": "bjornjee"
