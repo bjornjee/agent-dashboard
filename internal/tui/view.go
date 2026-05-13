@@ -975,6 +975,12 @@ func (m model) View() tea.View {
 		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, overlay, helpBar))
 	}
 
+	if m.mode == modeDepsStatus {
+		body := renderDepsView(m.deps, m.width, m.height)
+		helpBar := m.renderHelpBar()
+		return makeView(lipgloss.JoinVertical(lipgloss.Left, banner, body, helpBar))
+	}
+
 	var left, right string
 	if m.diffVisible {
 		left = m.renderDiffFilePanel()
@@ -1635,6 +1641,7 @@ func buildHelpSections(ghAvailable bool) []helpSection {
 		{Title: "View Controls", Entries: []helpEntry{
 			{"p", "Toggle plan view"},
 			{"u", "Toggle usage view"},
+			{"s", "Show deps status"},
 			{"d", "View diff"},
 			{"D", "Toggle diagram view"},
 			{"g", "Open PR in browser"},

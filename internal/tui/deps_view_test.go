@@ -1,0 +1,206 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/stretchr/testify/mock"
+)
+
+func setMockGitRunner(t *testing.T) *mocks.MockGitRunner {
+	t.Helper()
+	gr := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = gr
+	t.Cleanup(func() { gitRunner = orig })
+	return gr
+}
+
+func mockAllDepsOK(gr *mocks.MockGitRunner) {
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+	gr.On("SilentRun", mock.Anything, "tmux", "-V").Return(nil)
+	gr.On("SilentRun", mock.Anything, "git", "--version").Return(nil)
+	gr.On("SilentRun", mock.Anything, "codex", "--version").Return(nil)
+}
+
+func findDep(deps []depStatus, name string) *depStatus {
+	for i := range deps {
+		if deps[i].name == name {
+			return &deps[i]
+		}
+	}
+	return nil
+}
+
+func TestCheckDeps_AllAvailable(t *testing.T) {
+	gr := setMockGitRunner(t)
+	mockAllDepsOK(gr)
+
+	deps := checkDeps()
+	if len(deps) != 4 {
+		t.Fatalf("expected 4 deps (gh, tmux, git, codex), got %d", len(deps))
+	}
+	for _, d := range deps {
+		if !d.ok {
+			t.Errorf("expected %s ok=true, got false (hint=%q)", d.name, d.hint)
+		}
+	}
+}
+
+func TestCheckDeps_GHMissing(t *testing.T) {
+	gr := setMockGitRunner(t)
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(fmt.Errorf("not found"))
+	gr.On("SilentRun", mock.Anything, "tmux", "-V").Return(nil)
+	gr.On("SilentRun", mock.Anything, "git", "--version").Return(nil)
+	gr.On("SilentRun", mock.Anything, "codex", "--version").Return(nil)
+
+	deps := checkDeps()
+	gh := findDep(deps, "gh")
+	if gh == nil {
+		t.Fatal("missing gh dep entry")
+	}
+	if gh.ok {
+		t.Error("expected gh.ok=false")
+	}
+	if gh.hint == "" {
+		t.Error("expected non-empty hint for missing gh")
+	}
+	if tm := findDep(deps, "tmux"); tm == nil || !tm.ok {
+		t.Errorf("expected tmux ok=true")
+	}
+}
+
+func TestCheckDeps_TmuxMissing(t *testing.T) {
+	gr := setMockGitRunner(t)
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+	gr.On("SilentRun", mock.Anything, "tmux", "-V").Return(fmt.Errorf("not found"))
+	gr.On("SilentRun", mock.Anything, "git", "--version").Return(nil)
+	gr.On("SilentRun", mock.Anything, "codex", "--version").Return(nil)
+
+	deps := checkDeps()
+	tm := findDep(deps, "tmux")
+	if tm == nil || tm.ok || tm.hint == "" {
+		t.Errorf("expected tmux ok=false with hint, got %+v", tm)
+	}
+}
+
+func TestCheckDeps_GitMissing(t *testing.T) {
+	gr := setMockGitRunner(t)
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+	gr.On("SilentRun", mock.Anything, "tmux", "-V").Return(nil)
+	gr.On("SilentRun", mock.Anything, "git", "--version").Return(fmt.Errorf("not found"))
+	gr.On("SilentRun", mock.Anything, "codex", "--version").Return(nil)
+
+	deps := checkDeps()
+	g := findDep(deps, "git")
+	if g == nil || g.ok || g.hint == "" {
+		t.Errorf("expected git ok=false with hint, got %+v", g)
+	}
+}
+
+func TestCheckDeps_CodexMissing(t *testing.T) {
+	gr := setMockGitRunner(t)
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+	gr.On("SilentRun", mock.Anything, "tmux", "-V").Return(nil)
+	gr.On("SilentRun", mock.Anything, "git", "--version").Return(nil)
+	gr.On("SilentRun", mock.Anything, "codex", "--version").Return(fmt.Errorf("not found"))
+
+	deps := checkDeps()
+	c := findDep(deps, "codex")
+	if c == nil || c.ok || c.hint == "" {
+		t.Errorf("expected codex ok=false with hint, got %+v", c)
+	}
+}
+
+func TestRenderDepsView_AllOK(t *testing.T) {
+	deps := []depStatus{
+		{name: "gh", ok: true},
+		{name: "tmux", ok: true},
+		{name: "git", ok: true},
+		{name: "codex", ok: true},
+	}
+	out := renderDepsView(deps, 80, 24)
+	for _, name := range []string{"gh", "tmux", "git", "codex"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("render missing dep name %q", name)
+		}
+	}
+}
+
+func TestRenderDepsView_WithMissing(t *testing.T) {
+	deps := []depStatus{
+		{name: "gh", ok: false, hint: "run 'gh auth login'"},
+		{name: "tmux", ok: true},
+		{name: "git", ok: true},
+		{name: "codex", ok: true},
+	}
+	out := renderDepsView(deps, 80, 24)
+	if !strings.Contains(out, "run 'gh auth login'") {
+		t.Errorf("expected hint to appear in render, got:\n%s", out)
+	}
+}
+
+func TestSKey_OpensDepsView(t *testing.T) {
+	gr := setMockGitRunner(t)
+	mockAllDepsOK(gr)
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.mode = modeNormal
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 's', Text: "s"})
+	updated := result.(model)
+	if updated.mode != modeDepsStatus {
+		t.Errorf("expected modeDepsStatus, got %d", updated.mode)
+	}
+	if len(updated.deps) != 4 {
+		t.Errorf("expected 4 deps cached on model, got %d", len(updated.deps))
+	}
+}
+
+func TestDepsView_EscReturnsToNormal(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeDepsStatus
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after esc, got %d", updated.mode)
+	}
+}
+
+func TestDepsView_QReturnsToNormal(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeDepsStatus
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal after q, got %d", updated.mode)
+	}
+}
+
+func TestDepsView_RRefreshes(t *testing.T) {
+	gr := setMockGitRunner(t)
+	mockAllDepsOK(gr)
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeDepsStatus
+	// Pre-load stale deps so we can confirm refresh replaced them
+	m.deps = []depStatus{{name: "stale", ok: false}}
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	updated := result.(model)
+	if updated.mode != modeDepsStatus {
+		t.Errorf("expected to stay in modeDepsStatus, got %d", updated.mode)
+	}
+	if len(updated.deps) != 4 {
+		t.Errorf("expected 4 deps after refresh, got %d", len(updated.deps))
+	}
+	if findDep(updated.deps, "stale") != nil {
+		t.Error("stale deps should be replaced by checkDeps()")
+	}
+}

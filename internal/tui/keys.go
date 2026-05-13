@@ -647,6 +647,19 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Deps status mode: r refreshes, esc/q exits
+	if m.mode == modeDepsStatus {
+		switch key {
+		case "esc", "q":
+			m.mode = modeNormal
+		case "r":
+			m.deps = checkDeps()
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Usage mode: scroll content, dismiss with u/esc
 	if m.mode == modeUsage {
 		switch key {
@@ -1095,6 +1108,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.messageVP.GotoTop()
 			m.updateRightContent()
 		}
+		return m, nil
+	case "s":
+		m.deps = checkDeps()
+		m.mode = modeDepsStatus
 		return m, nil
 	case "a":
 		if !m.tmuxAvailable {
