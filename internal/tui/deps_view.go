@@ -13,24 +13,26 @@ import (
 
 // depStatus is one row in the deps view.
 type depStatus struct {
-	name string
-	ok   bool
-	hint string // shown when !ok; empty when ok
+	name    string
+	purpose string // what the dashboard uses this for
+	ok      bool
+	hint    string // remediation, shown when !ok
 }
 
-// depProbes is the canonical list of deps the dashboard surfaces. Each entry
-// pairs a name with the command we run to detect availability, plus a hint
-// shown when that command exits non-zero. All probes go through gitRunner
-// so tests can swap a mock.
-var depProbes = []struct {
-	name string
-	args []string
-	hint string
-}{
-	{"gh", []string{"gh", "auth", "status"}, "run 'gh auth login' or install gh (brew install gh)"},
-	{"tmux", []string{"tmux", "-V"}, "install tmux (brew install tmux)"},
-	{"git", []string{"git", "--version"}, "install git"},
-	{"codex", []string{"codex", "--version"}, "install codex CLI (https://github.com/openai/codex)"},
+type depProbe struct {
+	name    string
+	args    []string
+	purpose string
+	hint    string
+}
+
+// depProbes is the canonical list of deps the dashboard surfaces. All probes
+// go through gitRunner so tests can swap a mock.
+var depProbes = []depProbe{
+	{"gh", []string{"gh", "auth", "status"}, "PR create, merge, auth", "run 'gh auth login' or install gh (brew install gh)"},
+	{"tmux", []string{"tmux", "-V"}, "Agent pane control & jumps", "install tmux (brew install tmux)"},
+	{"git", []string{"git", "--version"}, "Repository state & diffs", "install git"},
+	{"codex", []string{"codex", "--version"}, "Codex delegation", "install codex CLI (https://github.com/openai/codex)"},
 }
 
 // checkDeps probes each known dependency in parallel (3s per probe).
@@ -41,16 +43,12 @@ func checkDeps() []depStatus {
 	var wg sync.WaitGroup
 	for i, p := range depProbes {
 		wg.Add(1)
-		go func(idx int, probe struct {
-			name string
-			args []string
-			hint string
-		}) {
+		go func(idx int, probe depProbe) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			err := gitRunner.SilentRun(ctx, probe.args[0], probe.args[1:]...)
-			ds := depStatus{name: probe.name}
+			ds := depStatus{name: probe.name, purpose: probe.purpose}
 			if err == nil {
 				ds.ok = true
 			} else {
@@ -74,14 +72,17 @@ func checkDepsCmd() tea.Cmd {
 
 // renderDepsView returns the full-screen content for modeDepsStatus.
 func renderDepsView(deps []depStatus, width, _ int) string {
-	title := lipgloss.NewStyle().Foreground(themeSapphire).Bold(true).Render("Dependencies")
+	title := lipgloss.NewStyle().Foreground(themeSapphire).Bold(true).Render("Dependency Status")
+	subtitle := lipgloss.NewStyle().Foreground(themeSubtext0).Render(
+		"External tools the dashboard relies on. Missing tools disable specific features.")
 	okStyle := lipgloss.NewStyle().Foreground(themeGreen)
 	bad := lipgloss.NewStyle().Foreground(themeRed)
 	dim := lipgloss.NewStyle().Foreground(themeOverlay1)
+	hintStyle := lipgloss.NewStyle().Foreground(themePeach)
 
 	if len(deps) == 0 {
 		body := dim.Render("Checking dependencies…")
-		out := lipgloss.JoinVertical(lipgloss.Left, title, "", body)
+		out := lipgloss.JoinVertical(lipgloss.Left, title, subtitle, "", "  "+body)
 		if width > 0 {
 			return lipgloss.NewStyle().Width(width).Render(out)
 		}
@@ -89,23 +90,47 @@ func renderDepsView(deps []depStatus, width, _ int) string {
 	}
 
 	var rows []string
+	okCount := 0
 	for _, d := range deps {
-		var mark, name, detail string
 		if d.ok {
-			mark = okStyle.Render("✓")
-			name = okStyle.Render(d.name)
-			detail = dim.Render("OK")
+			rows = append(rows, fmt.Sprintf("   %s  %s  %s",
+				okStyle.Render("✓"),
+				okStyle.Render(fmt.Sprintf("%-6s", d.name)),
+				dim.Render(d.purpose),
+			))
+			okCount++
 		} else {
-			mark = bad.Render("✗")
-			name = bad.Render(d.name)
-			detail = d.hint
+			rows = append(rows, fmt.Sprintf("   %s  %s  %s",
+				bad.Render("✗"),
+				bad.Render(fmt.Sprintf("%-6s", d.name)),
+				dim.Render(d.purpose),
+			))
+			rows = append(rows, fmt.Sprintf("            %s %s",
+				dim.Render("→"),
+				hintStyle.Render(d.hint),
+			))
 		}
-		rows = append(rows, fmt.Sprintf("  %s %-7s %s", mark, name, detail))
 	}
 
-	footer := dim.Render("r refresh · esc / q close")
+	var summary string
+	if okCount == len(deps) {
+		summary = okStyle.Render(fmt.Sprintf("All %d of %d dependencies available.", okCount, len(deps)))
+	} else {
+		summary = bad.Render(fmt.Sprintf("%d of %d dependencies available.", okCount, len(deps)))
+	}
+
+	footer := dim.Render("  r refresh · esc / q close")
 	body := strings.Join(rows, "\n")
-	out := lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", footer)
+	out := lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		subtitle,
+		"",
+		body,
+		"",
+		"  "+summary,
+		"",
+		footer,
+	)
 	if width > 0 {
 		return lipgloss.NewStyle().Width(width).Render(out)
 	}

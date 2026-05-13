@@ -1641,7 +1641,7 @@ func buildHelpSections(ghAvailable bool) []helpSection {
 		{Title: "View Controls", Entries: []helpEntry{
 			{"p", "Toggle plan view"},
 			{"u", "Toggle usage view"},
-			{"s", "Show deps status"},
+			{"s", "Dependency status (gh/tmux/git/codex)"},
 			{"d", "View diff"},
 			{"D", "Toggle diagram view"},
 			{"g", "Open PR in browser"},

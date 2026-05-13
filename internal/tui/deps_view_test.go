@@ -47,6 +47,9 @@ func TestCheckDeps_AllAvailable(t *testing.T) {
 		if !d.ok {
 			t.Errorf("expected %s ok=true, got false (hint=%q)", d.name, d.hint)
 		}
+		if d.purpose == "" {
+			t.Errorf("expected %s to have a non-empty purpose", d.name)
+		}
 	}
 }
 
@@ -117,10 +120,10 @@ func TestCheckDeps_CodexMissing(t *testing.T) {
 
 func TestRenderDepsView_AllOK(t *testing.T) {
 	deps := []depStatus{
-		{name: "gh", ok: true},
-		{name: "tmux", ok: true},
-		{name: "git", ok: true},
-		{name: "codex", ok: true},
+		{name: "gh", purpose: "PR create, merge, auth", ok: true},
+		{name: "tmux", purpose: "Pane control", ok: true},
+		{name: "git", purpose: "Repository state", ok: true},
+		{name: "codex", purpose: "Codex delegation", ok: true},
 	}
 	out := renderDepsView(deps, 80, 24)
 	for _, name := range []string{"gh", "tmux", "git", "codex"} {
@@ -128,18 +131,30 @@ func TestRenderDepsView_AllOK(t *testing.T) {
 			t.Errorf("render missing dep name %q", name)
 		}
 	}
+	if !strings.Contains(out, "PR create") {
+		t.Errorf("expected purpose to appear in render, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Dependency Status") {
+		t.Errorf("expected descriptive title 'Dependency Status', got:\n%s", out)
+	}
+	if !strings.Contains(out, "4 of 4") && !strings.Contains(out, "All 4") {
+		t.Errorf("expected an availability summary in render, got:\n%s", out)
+	}
 }
 
 func TestRenderDepsView_WithMissing(t *testing.T) {
 	deps := []depStatus{
-		{name: "gh", ok: false, hint: "run 'gh auth login'"},
-		{name: "tmux", ok: true},
-		{name: "git", ok: true},
-		{name: "codex", ok: true},
+		{name: "gh", purpose: "PR create, merge, auth", ok: false, hint: "run 'gh auth login'"},
+		{name: "tmux", purpose: "Pane control", ok: true},
+		{name: "git", purpose: "Repository state", ok: true},
+		{name: "codex", purpose: "Codex delegation", ok: true},
 	}
 	out := renderDepsView(deps, 80, 24)
 	if !strings.Contains(out, "run 'gh auth login'") {
 		t.Errorf("expected hint to appear in render, got:\n%s", out)
+	}
+	if !strings.Contains(out, "3 of 4") {
+		t.Errorf("expected '3 of 4' summary in render, got:\n%s", out)
 	}
 }
 
