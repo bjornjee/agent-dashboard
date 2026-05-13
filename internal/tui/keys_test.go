@@ -10,7 +10,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
-	"github.com/bjornjee/agent-dashboard/internal/mocks"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -797,10 +796,7 @@ func TestMKey_WithGH_EntersConfirmMode(t *testing.T) {
 
 func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
 	// Confirming with 'y' in modeConfirmMerge should execute the merge.
-	gr := mocks.NewMockGitRunner(t)
-	orig := gitRunner
-	gitRunner = gr
-	t.Cleanup(func() { gitRunner = orig })
+	gr := setMockGitRunner(t)
 	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
 
 	m := NewModel(testConfig(t.TempDir()), nil)
@@ -853,10 +849,7 @@ func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
 func TestMKey_NoGH_ConfirmCancels(t *testing.T) {
 	// When gh is unavailable at confirm time, 'y' must cancel without
 	// merging or pinning, surfacing an actionable error.
-	gr := mocks.NewMockGitRunner(t)
-	orig := gitRunner
-	gitRunner = gr
-	t.Cleanup(func() { gitRunner = orig })
+	gr := setMockGitRunner(t)
 	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(fmt.Errorf("gh not found"))
 
 	m := NewModel(testConfig(t.TempDir()), nil)
@@ -892,10 +885,7 @@ func TestMKey_NoGH_ConfirmCancels(t *testing.T) {
 func TestMKey_StaleGHAvailable_RechecksAtConfirm(t *testing.T) {
 	// Startup said gh was available, but it's actually gone now.
 	// The re-check at confirm time must catch this and refuse to merge.
-	gr := mocks.NewMockGitRunner(t)
-	orig := gitRunner
-	gitRunner = gr
-	t.Cleanup(func() { gitRunner = orig })
+	gr := setMockGitRunner(t)
 	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(fmt.Errorf("gh not found"))
 
 	m := NewModel(testConfig(t.TempDir()), nil)
@@ -925,10 +915,7 @@ func TestMKey_StaleGHAvailable_RechecksAtConfirm(t *testing.T) {
 func TestMKey_NoGHAtStartup_NowAvailable_Merges(t *testing.T) {
 	// Startup said gh was unavailable, but the user installed/authed it since.
 	// Re-check should pick this up and proceed with the merge.
-	gr := mocks.NewMockGitRunner(t)
-	orig := gitRunner
-	gitRunner = gr
-	t.Cleanup(func() { gitRunner = orig })
+	gr := setMockGitRunner(t)
 	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
 
 	m := NewModel(testConfig(t.TempDir()), nil)
@@ -961,10 +948,7 @@ func TestMKey_NoGHAtStartup_NowAvailable_Merges(t *testing.T) {
 func TestMKey_ConfirmMerge_Y_PropagatesAgent(t *testing.T) {
 	// Confirming merge should propagate the full agent (incl. Cwd and
 	// WorktreeCwd) into mergeAgent for the cleanup pipeline.
-	gr := mocks.NewMockGitRunner(t)
-	orig := gitRunner
-	gitRunner = gr
-	t.Cleanup(func() { gitRunner = orig })
+	gr := setMockGitRunner(t)
 	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
 
 	m := NewModel(testConfig(t.TempDir()), nil)
