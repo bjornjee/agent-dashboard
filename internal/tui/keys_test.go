@@ -10,6 +10,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/stretchr/testify/mock"
 )
 
 // pastConfirmTime returns a time far enough in the past to bypass the cooldown.
@@ -795,6 +797,12 @@ func TestMKey_WithGH_EntersConfirmMode(t *testing.T) {
 
 func TestMKey_ConfirmMerge_Y_ExecutesMerge(t *testing.T) {
 	// Confirming with 'y' in modeConfirmMerge should execute the merge.
+	gr := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = gr
+	t.Cleanup(func() { gitRunner = orig })
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.ghAvailable = true
@@ -842,65 +850,123 @@ func TestMKey_ConfirmMerge_Esc_Cancels(t *testing.T) {
 	}
 }
 
-func TestMKey_NoGH_ConfirmThenPin(t *testing.T) {
-	// When gh is not available, pressing "m" should enter confirm mode.
-	// Confirming with 'y' should pin to "merged".
-	tmpDir := t.TempDir()
-	agentsDir := filepath.Join(tmpDir, "agents")
-	os.MkdirAll(agentsDir, 0755)
-	os.WriteFile(filepath.Join(agentsDir, "sess1.json"), []byte(`{"state":"pr","pinned_state":"pr"}`), 0644)
+func TestMKey_NoGH_ConfirmCancels(t *testing.T) {
+	// When gh is unavailable at confirm time, 'y' must cancel without
+	// merging or pinning, surfacing an actionable error.
+	gr := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = gr
+	t.Cleanup(func() { gitRunner = orig })
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(fmt.Errorf("gh not found"))
 
-	m := NewModel(testConfig(tmpDir), nil)
-	m.statePath = tmpDir
+	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.ghAvailable = false
-	m.agents = []domain.Agent{
-		{Target: "main:1.0", Window: 1, Pane: 0, State: "pr",
-			SessionID: "sess1", TmuxPaneID: "%5", Cwd: t.TempDir(), Branch: "feat/test"},
-	}
-	m.buildTree()
-	m.selected = 1 // index 0 is group header
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeAgent = domain.Agent{Cwd: t.TempDir()}
+	m.confirmMergeBranch = "feat/test"
 
-	// Step 1: press 'm' — should enter confirm mode
-	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if cmd != nil {
-		t.Fatal("expected nil cmd from 'm' (confirm mode)")
-	}
-	m = result.(model)
-	if m.mode != modeConfirmMerge {
-		t.Fatalf("expected modeConfirmMerge, got %d", m.mode)
-	}
-
-	// Step 2: confirm with 'y' — should pin to merged
-	m.confirmEnteredAt = pastConfirmTime // bypass cooldown for test
-	result, cmd = m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
-	if cmd == nil {
-		t.Fatal("expected cmd after confirming merge")
+		t.Fatal("expected nil cmd from 'y' when gh unavailable — must not merge or pin")
 	}
 
 	updated := result.(model)
-	if !strings.Contains(updated.statusMsg, "Marked as merged") {
-		t.Errorf("expected status to contain 'Marked as merged', got %q", updated.statusMsg)
+	if updated.mode != modeNormal {
+		t.Errorf("expected modeNormal, got %d", updated.mode)
+	}
+	if !strings.Contains(updated.statusMsg, "Cannot merge: gh CLI not available") {
+		t.Errorf("expected actionable error in status, got %q", updated.statusMsg)
+	}
+	if !updated.statusIsError {
+		t.Error("expected statusIsError=true")
+	}
+	if updated.confirmMergeSessionID != "" {
+		t.Error("expected confirmMergeSessionID cleared")
+	}
+}
+
+func TestMKey_StaleGHAvailable_RechecksAtConfirm(t *testing.T) {
+	// Startup said gh was available, but it's actually gone now.
+	// The re-check at confirm time must catch this and refuse to merge.
+	gr := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = gr
+	t.Cleanup(func() { gitRunner = orig })
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(fmt.Errorf("gh not found"))
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.ghAvailable = true // stale: was true at startup
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeAgent = domain.Agent{Cwd: t.TempDir()}
+	m.confirmMergeBranch = "feat/test"
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if cmd != nil {
+		t.Fatal("expected nil cmd — stale ghAvailable must not bypass re-check")
 	}
 
-	// The returned cmd should be pinAgentStateCmd
-	pinMsg := cmd()
-	if _, ok := pinMsg.(pinStateMsg); !ok {
-		t.Errorf("expected pinStateMsg from cmd, got %T", pinMsg)
+	updated := result.(model)
+	if updated.ghAvailable {
+		t.Error("expected ghAvailable updated to false after fresh re-check")
+	}
+	if !strings.Contains(updated.statusMsg, "Cannot merge: gh CLI not available") {
+		t.Errorf("expected actionable error in status, got %q", updated.statusMsg)
+	}
+}
+
+func TestMKey_NoGHAtStartup_NowAvailable_Merges(t *testing.T) {
+	// Startup said gh was unavailable, but the user installed/authed it since.
+	// Re-check should pick this up and proceed with the merge.
+	gr := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = gr
+	t.Cleanup(func() { gitRunner = orig })
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.ghAvailable = false // stale: was false at startup
+	m.mode = modeConfirmMerge
+	m.confirmEnteredAt = pastConfirmTime
+	m.confirmMergeSessionID = "sess1"
+	m.confirmMergePaneID = "%5"
+	m.confirmMergeAgent = domain.Agent{Cwd: t.TempDir()}
+	m.confirmMergeBranch = "feat/test"
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if cmd == nil {
+		t.Fatal("expected merge cmd after re-check finds gh available")
 	}
 
-	// No-GH path should NOT enter cleanup confirm mode
-	if updated.mode == modeConfirmCleanup {
-		t.Error("no-GH path should not enter modeConfirmCleanup")
+	updated := result.(model)
+	if !updated.ghAvailable {
+		t.Error("expected ghAvailable updated to true after fresh re-check")
 	}
-	if updated.cleanupSessionID != "" {
-		t.Error("cleanupSessionID should be empty in no-GH path")
+	if !strings.Contains(updated.statusMsg, "Merging") {
+		t.Errorf("expected status to contain 'Merging', got %q", updated.statusMsg)
+	}
+	if updated.mergeSessionID != "sess1" {
+		t.Errorf("expected mergeSessionID='sess1', got %q", updated.mergeSessionID)
 	}
 }
 
 func TestMKey_ConfirmMerge_Y_PropagatesAgent(t *testing.T) {
 	// Confirming merge should propagate the full agent (incl. Cwd and
 	// WorktreeCwd) into mergeAgent for the cleanup pipeline.
+	gr := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = gr
+	t.Cleanup(func() { gitRunner = orig })
+	gr.On("SilentRun", mock.Anything, "gh", "auth", "status").Return(nil)
+
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
 	m.ghAvailable = true

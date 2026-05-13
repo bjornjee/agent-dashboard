@@ -536,16 +536,21 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmMergeAgent = domain.Agent{}
 			m.confirmMergeBranch = ""
 			m.mode = modeNormal
-			if m.ghAvailable {
-				m.mergeSessionID = sessionID
-				m.mergePaneID = paneID
-				m.mergeAgent = agent
-				m.mergeBranch = branch
-				m.setStatus("Merging PR...", false)
-				return m, mergePR(agent.EffectiveDir(), branch)
+			// Re-check gh at confirm time; startup state can be stale and a
+			// silent pin-only fallback would hide unmerged work behind a
+			// misleading "merged" dashboard state.
+			if !ghIsAvailable() {
+				m.ghAvailable = false
+				m.setStatus("Cannot merge: gh CLI not available — run 'gh auth login' or install gh", true)
+				return m, nil
 			}
-			m.setStatus("Marked as merged", false)
-			return m, pinAgentStateCmd(m.statePath, sessionID, "merged")
+			m.ghAvailable = true
+			m.mergeSessionID = sessionID
+			m.mergePaneID = paneID
+			m.mergeAgent = agent
+			m.mergeBranch = branch
+			m.setStatus("Merging PR...", false)
+			return m, mergePR(agent.EffectiveDir(), branch)
 		case "n", "esc":
 			m.confirmMergeSessionID = ""
 			m.confirmMergePaneID = ""
