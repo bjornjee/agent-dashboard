@@ -24,6 +24,14 @@ const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages',
 // GitHub PR URL pattern: https://github.com/<owner>/<repo>/pull/<number>
 const PR_URL_RE = /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
 
+// gh pr {create,merge} must be at the start of a command segment, allowing
+// env-var prefixes (e.g. AGENT_DASHBOARD_PR_SKILL=1 gh pr create ...). PostToolUse
+// only fires on Bash exit 0, so the remaining gap is the phrase appearing as
+// an argument to grep/rg/echo etc. — segment-anchoring kills those.
+const ENV_PREFIX = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*`;
+const CREATE_CMD = new RegExp(`(?:^|;|&&|\\n)\\s*${ENV_PREFIX}gh\\s+pr\\s+create\\b`);
+const MERGE_CMD = new RegExp(`(?:^|;|&&|\\n)\\s*${ENV_PREFIX}gh\\s+pr\\s+merge\\b`);
+
 /**
  * Detect PR action from a Bash command and its output.
  * Returns { action, prUrl } or null if no PR activity detected.
@@ -35,16 +43,18 @@ const PR_URL_RE = /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
 function detectPR(command, output) {
   if (!command || typeof command !== 'string') return null;
 
-  // gh pr create → look for PR URL in output
-  if (/\bgh\s+pr\s+create\b/.test(command)) {
+  if (CREATE_CMD.test(command)) {
     const match = (output || '').match(PR_URL_RE);
     return { action: 'created', prUrl: match ? match[0] : null };
   }
 
-  // gh pr merge → extract PR URL from command args or output
-  if (/\bgh\s+pr\s+merge\b/.test(command)) {
+  if (MERGE_CMD.test(command)) {
+    // --help exits 0 but doesn't merge; --auto queues the merge but the PR is
+    // still OPEN, so treat it as 'created' (pin "pr"), not 'merged'.
+    if (/\s(?:-h|--help)\b/.test(command)) return null;
     const match = (command + ' ' + (output || '')).match(PR_URL_RE);
-    return { action: 'merged', prUrl: match ? match[0] : null };
+    const action = /\s--auto\b/.test(command) ? 'created' : 'merged';
+    return { action, prUrl: match ? match[0] : null };
   }
 
   return null;
