@@ -50,7 +50,7 @@ const modeResetCooldown = 100 * time.Millisecond
 // These are "destructive" keys that trigger actions; navigation keys are
 // intentionally excluded so scrolling works immediately after mouse events.
 var phantomGuardedKeys = map[string]bool{
-	"x": true, "enter": true, "r": true, "m": true,
+	"x": true, "enter": true, "r": true, "m": true, "s": true,
 	"y": true, "n": true,
 	"1": true, "2": true, "3": true, "4": true, "5": true,
 	"6": true, "7": true, "8": true, "9": true,
@@ -652,8 +652,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "esc", "q":
 			m.mode = modeNormal
+			return m, nil
 		case "r":
-			m.deps = checkDeps()
+			// Async probe — Update must not block on subprocess calls.
+			return m, checkDepsCmd()
 		case "ctrl+c":
 			return m, tea.Quit
 		}
@@ -1110,9 +1112,9 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "s":
-		m.deps = checkDeps()
+		m.deps = nil
 		m.mode = modeDepsStatus
-		return m, nil
+		return m, checkDepsCmd()
 	case "a":
 		if !m.tmuxAvailable {
 			m.setStatus("Cannot create session: tmux not detected", true)

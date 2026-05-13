@@ -151,13 +151,40 @@ func TestSKey_OpensDepsView(t *testing.T) {
 	m.tmuxAvailable = true
 	m.mode = modeNormal
 
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 's', Text: "s"})
+	// Press s — should enter modeDepsStatus and return a probe cmd
+	// (async so the TUI goroutine doesn't block on up to 4×3s subprocess calls).
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 's', Text: "s"})
 	updated := result.(model)
 	if updated.mode != modeDepsStatus {
 		t.Errorf("expected modeDepsStatus, got %d", updated.mode)
 	}
-	if len(updated.deps) != 4 {
-		t.Errorf("expected 4 deps cached on model, got %d", len(updated.deps))
+	if cmd == nil {
+		t.Fatal("expected probe cmd from 's' key")
+	}
+
+	// Executing the cmd runs the probes and yields a depsReadyMsg.
+	msg := cmd()
+	ready, ok := msg.(depsReadyMsg)
+	if !ok {
+		t.Fatalf("expected depsReadyMsg, got %T", msg)
+	}
+	if len(ready.deps) != 4 {
+		t.Errorf("expected 4 deps in msg, got %d", len(ready.deps))
+	}
+}
+
+func TestDepsReadyMsg_PopulatesModelDeps(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.mode = modeDepsStatus
+
+	msg := depsReadyMsg{deps: []depStatus{{name: "gh", ok: true}, {name: "tmux", ok: false, hint: "install"}}}
+	result, _ := m.Update(msg)
+	updated := result.(model)
+	if len(updated.deps) != 2 {
+		t.Fatalf("expected 2 deps populated, got %d", len(updated.deps))
+	}
+	if updated.deps[0].name != "gh" || !updated.deps[0].ok {
+		t.Errorf("expected gh ok=true at index 0, got %+v", updated.deps[0])
 	}
 }
 
@@ -189,18 +216,27 @@ func TestDepsView_RRefreshes(t *testing.T) {
 
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.mode = modeDepsStatus
-	// Pre-load stale deps so we can confirm refresh replaced them
 	m.deps = []depStatus{{name: "stale", ok: false}}
 
-	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	updated := result.(model)
 	if updated.mode != modeDepsStatus {
 		t.Errorf("expected to stay in modeDepsStatus, got %d", updated.mode)
 	}
-	if len(updated.deps) != 4 {
-		t.Errorf("expected 4 deps after refresh, got %d", len(updated.deps))
+	if cmd == nil {
+		t.Fatal("expected refresh cmd from 'r'")
 	}
-	if findDep(updated.deps, "stale") != nil {
-		t.Error("stale deps should be replaced by checkDeps()")
+
+	// Executing the cmd dispatches a depsReadyMsg with fresh probe results.
+	msg := cmd()
+	ready, ok := msg.(depsReadyMsg)
+	if !ok {
+		t.Fatalf("expected depsReadyMsg, got %T", msg)
+	}
+	if len(ready.deps) != 4 {
+		t.Errorf("expected 4 deps in refresh msg, got %d", len(ready.deps))
+	}
+	if findDep(ready.deps, "stale") != nil {
+		t.Error("stale deps must not appear in fresh probe results")
 	}
 }

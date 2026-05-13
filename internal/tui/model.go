@@ -1094,6 +1094,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ghAvailable = msg.available
 		return m, nil
 
+	case depsReadyMsg:
+		m.deps = msg.deps
+		return m, nil
+
 	case mergePRMsg:
 		sessionID := m.mergeSessionID
 		paneID := m.mergePaneID

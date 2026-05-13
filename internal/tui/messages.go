@@ -58,6 +58,7 @@ type postMergeCleanupMsg struct {
 	progress string // last step name, for error reporting
 }
 type ghAvailableMsg struct{ available bool }
+type depsReadyMsg struct{ deps []depStatus }
 type startupMsg struct {
 	tmuxAvailable bool
 	selfPaneID    string

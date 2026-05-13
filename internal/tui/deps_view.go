@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -31,22 +33,43 @@ var depProbes = []struct {
 	{"codex", []string{"codex", "--version"}, "install codex CLI (https://github.com/openai/codex)"},
 }
 
-// checkDeps probes each known dependency synchronously, 3s per probe.
+// checkDeps probes each known dependency in parallel (3s per probe).
+// Bounds the worst case to ~3s instead of ~12s sequential. Order in the
+// returned slice matches depProbes for stable rendering.
 func checkDeps() []depStatus {
-	out := make([]depStatus, 0, len(depProbes))
-	for _, p := range depProbes {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		err := gitRunner.SilentRun(ctx, p.args[0], p.args[1:]...)
-		cancel()
-		ds := depStatus{name: p.name}
-		if err == nil {
-			ds.ok = true
-		} else {
-			ds.hint = p.hint
-		}
-		out = append(out, ds)
+	out := make([]depStatus, len(depProbes))
+	var wg sync.WaitGroup
+	for i, p := range depProbes {
+		wg.Add(1)
+		go func(idx int, probe struct {
+			name string
+			args []string
+			hint string
+		}) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			err := gitRunner.SilentRun(ctx, probe.args[0], probe.args[1:]...)
+			ds := depStatus{name: probe.name}
+			if err == nil {
+				ds.ok = true
+			} else {
+				ds.hint = probe.hint
+			}
+			out[idx] = ds
+		}(i, p)
 	}
+	wg.Wait()
 	return out
+}
+
+// checkDepsCmd runs checkDeps in a goroutine and dispatches a depsReadyMsg.
+// Use this in handleKey so the TUI Update loop is not blocked on subprocess
+// calls.
+func checkDepsCmd() tea.Cmd {
+	return func() tea.Msg {
+		return depsReadyMsg{deps: checkDeps()}
+	}
 }
 
 // renderDepsView returns the full-screen content for modeDepsStatus.
@@ -55,6 +78,15 @@ func renderDepsView(deps []depStatus, width, _ int) string {
 	okStyle := lipgloss.NewStyle().Foreground(themeGreen)
 	bad := lipgloss.NewStyle().Foreground(themeRed)
 	dim := lipgloss.NewStyle().Foreground(themeOverlay1)
+
+	if len(deps) == 0 {
+		body := dim.Render("Checking dependencies…")
+		out := lipgloss.JoinVertical(lipgloss.Left, title, "", body)
+		if width > 0 {
+			return lipgloss.NewStyle().Width(width).Render(out)
+		}
+		return out
+	}
 
 	var rows []string
 	for _, d := range deps {
