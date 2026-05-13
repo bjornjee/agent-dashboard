@@ -12,7 +12,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 ## Why agent-dashboard?
 
 - **One pane for many agents.** Stop alt-tabbing between tmux panes — see every agent grouped by state (blocked, running, review, PR, merged) in a single TUI, with live pane capture so you don't lose context when you switch.
-- **Workflow gates, not vibes.** Skills (feature, fix, chore, refactor, investigate, pr, rca) plus hooks (commit-lint, test-gate, no-commits-to-main, destructive-op warnings) enforce TDD and conventional commits at the harness level — agents can't merge if tests fail.
+- **Workflow gates, not vibes.** Skills (feature, fix, chore, refactor, investigate, implement, pr, rca) plus hooks (commit-lint, test-gate, no-commits-to-main, destructive-op warnings) enforce TDD and conventional commits at the harness level — agents can't merge if tests fail.
 - **Phone-first remote control.** A companion PWA on `cmd/web/` exposes the same orchestration surface over your local network: approve permissions, reply to questions, open/merge PRs, and get browser notifications when an agent needs you — all without opening your laptop.
 - **tmux-native, not tmux-replacing.** Agents stay where they live; the dashboard adds a control plane on top of `tmux capture-pane`. No new pane manager, no daemon competing with tmux.
 - **Multi-backend.** Claude Code is first-class; pi-mono is a second-class harness (including OpenAI / codex `gpt-5.x` models via pi-mono's unified LLM API); Codex CLI is supported via skill delegation. The harness picker in `settings.toml` (`[harness] default`) selects the active backend; per-spawn override is exposed in the New Agent form.
@@ -47,11 +47,12 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **Plan viewer** — glamour-rendered markdown plans with syntax highlighting
 - **Mermaid diagram viewer** — captures `mermaid` blocks from agent messages, browse per-session, render in browser via `D`
 - **Usage dashboard** — per-agent token breakdown (Claude and Codex), weekly cost in the bottom bar, rolling 7-day breakdown anchored to Monday, cumulative totals persisted to SQLite, live rate-limit bars (auto-discovered from Claude OAuth credentials)
-- **Session creation** — spawn new agent sessions with z-plugin frecency-ranked path autocomplete, skill selection (feature, fix, chore, refactor, investigate, pr, rca), and automatic detection of Claude Code's "trust this folder?" prompt during spawn
+- **Session creation** — spawn new agent sessions with z-plugin frecency-ranked path autocomplete, skill selection (feature, fix, chore, refactor, investigate, implement, pr, rca), and automatic detection of Claude Code's "trust this folder?" prompt during spawn
 - **ASCII pet** — experimental animated red panda companion in the left panel (opt-in via settings)
 - **Dino runner game** — experimental Chrome-style endless runner in the left panel with jump, duck, speed ramp, and score counter (opt-in via settings)
 - **Quick reply** — send free-text responses directly to agent panes
-- **GitHub PR workflow** — open existing PR diff, create new PR, or merge via `gh` CLI (falls back to browser)
+- **GitHub PR workflow** — open existing PR diff, create new PR (browser fallback when `gh` is missing), or merge via `gh pr merge` (re-checks gh availability at confirm; cancels with an actionable error if `gh` is unavailable, never silently marks an unmerged PR as merged)
+- **Dependency status page (`s`)** — full-screen check of gh / tmux / git / codex with per-tool purpose and install hints; press `r` to re-probe, `esc`/`q` to close
 - **Status feedback** — colour-coded success/error messages in the help bar for user actions
 - **Help overlay** — full-screen keybinding reference grouped by context
 - **Daily quote** — fetched from API Ninjas with fallback to embedded quotes

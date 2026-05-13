@@ -35,9 +35,18 @@ rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic AP
 [effort]
 plan    = "high"  # thinking-effort level pinned while permission_mode='plan'
 default = "high"  # thinking-effort level pinned at spawn and restored on plan exit
+
+[harness]
+default = "claude"  # active coding-agent harness: "claude" or "pi"
+
+[harness.pi]
+provider = ""       # e.g. "openai" — passed as pi --provider
+model    = ""       # e.g. "openai-codex/gpt-5.5" — passed as pi --model
 ```
 
 The `[effort]` levels feed the `/effort` slash command Claude Code accepts (`low | medium | high | xhigh | max`). The `agent-state-fast` adapter hook swaps in `plan` when the agent enters plan mode (`EnterPlanMode`) and restores `default` on exit. The `feature`, `fix`, and `refactor` skills additionally declare `effort: max` in their frontmatter, which Claude Code pins for the skill's lifetime when the skill is invoked as a slash command inside an existing session.
+
+The `[harness]` section selects which coding-agent binary backs newly-spawned sessions. `"claude"` uses Claude Code (default; reads `~/.claude`). `"pi"` uses [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) (reads `~/.pi`) and unlocks OpenAI / codex `gpt-5.x` models via pi-mono's unified LLM API — see [`adapters/pi/README.md`](https://github.com/bjornjee/agent-dashboard/blob/main/adapters/pi/README.md#codex--gpt-5x-models). The `[harness.pi]` `provider` and `model` flow into `pi --provider <p> --model <m>`; either empty inherits pi-mono's auth resolution chain. Per-spawn override is exposed in the New Agent form's Harness dropdown.
 
 ## Settings table
 
@@ -54,6 +63,9 @@ The `[effort]` levels feed the `/effort` slash command Claude Code accepts (`low
 | `usage` | `rate_limit_poll_seconds` | `60` | How often (in seconds) to fetch rate-limit data from the Anthropic OAuth API. Set to `0` to disable. |
 | `effort` | `plan` | `"high"` | Thinking-effort level pinned while the agent is in plan mode. One of `low`, `medium`, `high`, `xhigh`, `max`. |
 | `effort` | `default` | `"high"` | Thinking-effort level pinned at spawn and restored when the agent exits plan mode. Same value set as `plan`. |
+| `harness` | `default` | `"claude"` | Active coding-agent harness. `"claude"` runs Claude Code; `"pi"` runs pi-mono (unlocks OpenAI / codex `gpt-5.x` models). |
+| `harness.pi` | `provider` | `""` | Provider passed to `pi --provider`. Leave empty to inherit pi-mono's auth resolution chain. Example: `"openai"`. |
+| `harness.pi` | `model` | `""` | Model passed to `pi --model`. Leave empty to inherit pi-mono's default. Example: `"openai-codex/gpt-5.5"`. |
 
 ## Environment variables
 

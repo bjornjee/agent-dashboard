@@ -62,7 +62,7 @@ Then restart Claude Code sessions for hooks and skills to take effect.
 /plugin install skills@bjornjee-skills
 ```
 
-Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not function as intended.
+Without it, skill-gated session types (feature, fix, chore, refactor, investigate, implement, pr, rca) will not function as intended.
 
 ## Step 3: Launch
 
