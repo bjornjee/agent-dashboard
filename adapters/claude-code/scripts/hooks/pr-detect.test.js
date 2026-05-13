@@ -86,6 +86,31 @@ describe('detectPR', () => {
     assert.equal(detectPR('grep "gh pr create" .', 'src/file.go:42'), null);
   });
 
+  it('detects gh pr create with env-var prefix (dashboard PR skill)', () => {
+    const result = detectPR(
+      'AGENT_DASHBOARD_PR_SKILL=1 gh pr create --title "feat: foo"',
+      'https://github.com/u/r/pull/7'
+    );
+    assert.equal(result.action, 'created');
+    assert.equal(result.prUrl, 'https://github.com/u/r/pull/7');
+  });
+
+  it('detects gh pr merge with env-var prefix', () => {
+    const result = detectPR(
+      'GH_TOKEN=xxx gh pr merge 42 --squash',
+      'Merged pull request #42'
+    );
+    assert.equal(result.action, 'merged');
+  });
+
+  it('detects gh pr create after && with env-var prefix', () => {
+    const result = detectPR(
+      'cd /tmp && AGENT_DASHBOARD_PR_SKILL=1 gh pr create --title x',
+      'https://github.com/a/b/pull/1'
+    );
+    assert.equal(result.action, 'created');
+  });
+
   it('detects gh pr merge after && segment', () => {
     const result = detectPR(
       'cd /tmp && gh pr merge 42 --squash',

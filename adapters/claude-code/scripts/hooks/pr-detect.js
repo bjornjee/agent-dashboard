@@ -24,11 +24,13 @@ const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages',
 // GitHub PR URL pattern: https://github.com/<owner>/<repo>/pull/<number>
 const PR_URL_RE = /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
 
-// gh pr {create,merge} must be at the start of a command segment. PostToolUse
+// gh pr {create,merge} must be at the start of a command segment, allowing
+// env-var prefixes (e.g. AGENT_DASHBOARD_PR_SKILL=1 gh pr create ...). PostToolUse
 // only fires on Bash exit 0, so the remaining gap is the phrase appearing as
 // an argument to grep/rg/echo etc. — segment-anchoring kills those.
-const CREATE_CMD = /(?:^|;|&&|\n)\s*gh\s+pr\s+create\b/;
-const MERGE_CMD = /(?:^|;|&&|\n)\s*gh\s+pr\s+merge\b/;
+const ENV_PREFIX = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*`;
+const CREATE_CMD = new RegExp(`(?:^|;|&&|\\n)\\s*${ENV_PREFIX}gh\\s+pr\\s+create\\b`);
+const MERGE_CMD = new RegExp(`(?:^|;|&&|\\n)\\s*${ENV_PREFIX}gh\\s+pr\\s+merge\\b`);
 
 /**
  * Detect PR action from a Bash command and its output.
