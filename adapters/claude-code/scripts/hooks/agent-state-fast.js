@@ -144,23 +144,16 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   // features (diff viewer, PR creation, cleanup) trust this dir and shouldn't
   // have it shifting as the agent cd's around.
   //
-  // Priority model: only the MAIN agent can write worktree_cwd. A subagent's
-  // hook fires with input.cwd under `.claude/worktrees/agent-<id>/` (Claude
-  // Code's per-subagent isolation dir), which is not a user worktree. Subagent
-  // observations are dropped here so they cannot poison the stamp.
-  //
-  // Among main-agent observations, first-stamp-wins — UNLESS the existing
-  // stamp is a subagent path (e.g. legacy poisoning from before this fix),
-  // in which case a main-agent observation heals it by overwriting.
+  // Only the MAIN agent can write worktree_cwd. A subagent's hook fires with
+  // input.cwd under `.claude/worktrees/agent-<id>/` (Claude Code's per-subagent
+  // isolation dir), which is not a user worktree — drop those observations so
+  // they cannot poison the stamp. Among main-agent observations,
+  // first-stamp-wins.
   const liveCwd = input.cwd || null;
-  const isSubagentPath = liveCwd && /\/\.claude\/worktrees\//.test(liveCwd);
   const isMainWorktree = liveCwd
     && /\/worktrees\//.test(liveCwd)
-    && !isSubagentPath;
-  const existingIsSubagentPath = existing.worktree_cwd
-    && /\/\.claude\/worktrees\//.test(existing.worktree_cwd);
-  const canStamp = isMainWorktree && (!existing.worktree_cwd || existingIsSubagentPath);
-  const worktreeCwd = canStamp ? liveCwd : null;
+    && !/\/\.claude\/worktrees\//.test(liveCwd);
+  const worktreeCwd = (!existing.worktree_cwd && isMainWorktree) ? liveCwd : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
