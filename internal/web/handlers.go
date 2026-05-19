@@ -117,11 +117,16 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.ProjDir == "" || agent.SessionID == "" {
+	if agent.SessionID == "" {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return
 	}
-	entries := conversation.ReadConversation(agent.ProjDir, agent.SessionID, 100)
+	// Route by agent.Harness — codex agents come from
+	// ~/.codex/sessions/YYYY/MM/DD/rollout-*-<sid>.jsonl, claude from
+	// projDir/<sid>.jsonl (the legacy default).
+	entries := conversation.Read(agent, conversation.Roots{
+		CodexSessionsRoot: s.codexSessionsRootDir,
+	}, 100)
 	if entries == nil {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return

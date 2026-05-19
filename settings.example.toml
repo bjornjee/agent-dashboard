@@ -35,6 +35,8 @@ default = "high"  # level pinned at spawn and restored on plan exit
 #   "claude" — Claude Code (default; uses ~/.claude config)
 #   "pi"     — pi-mono coding agent (uses ~/.pi config; supports OpenAI/codex
 #              models via unified LLM API)
+#   "codex"  — OpenAI codex CLI (uses ~/.codex config; install hooks via
+#              `codex plugin marketplace add github.com/bjornjee/agent-dashboard`)
 default = "claude"
 
 [harness.pi]
@@ -45,3 +47,18 @@ default = "claude"
 # https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md
 provider = ""   # e.g. "openai"
 model    = ""   # e.g. "openai-codex/gpt-5.5"
+
+[harness.codex]
+# Codex CLI spawn knobs — only consulted when [harness] default = "codex".
+# Each field maps to a codex CLI flag; empty fields inherit codex's own
+# resolution chain (~/.codex/config.toml > defaults).
+#   model                    → --model <m>            (e.g. "gpt-5.5")
+#   approval                 → -a <policy>            (never|untrusted|on-request)
+#   sandbox                  → -s <mode>              (danger-full-access|workspace-write|...)
+#   default_reasoning_effort → -c model_reasoning_effort=<level> for opted-in skills
+#                              (effort levels: minimal|low|medium|high; Claude's
+#                              "max" is clamped to codex's "high")
+model                    = ""
+approval                 = ""
+sandbox                  = ""
+default_reasoning_effort = ""

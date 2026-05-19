@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -33,6 +35,12 @@ type Server struct {
 	auth *authHandler
 	hub  *sseHub
 
+	// Cached codex sessions root ($CODEX_HOME/sessions or
+	// ~/.codex/sessions). Resolved once at construction so request
+	// handlers don't re-read env on every conversation fetch and tests
+	// get a stable value for the Server's lifetime.
+	codexSessionsRootDir string
+
 	// Rate-limit cache (60s TTL to avoid per-request API calls)
 	rlMu        sync.Mutex
 	rlCache     *domain.RateLimit
@@ -42,15 +50,26 @@ type Server struct {
 // NewServer creates a new web dashboard server.
 func NewServer(cfg domain.Config, database *db.DB, opts ServerOptions) *Server {
 	s := &Server{
-		cfg:  cfg,
-		db:   database,
-		opts: opts,
-		hub:  newSSEHub(),
+		cfg:                  cfg,
+		db:                   database,
+		opts:                 opts,
+		hub:                  newSSEHub(),
+		codexSessionsRootDir: resolveCodexSessionsRoot(cfg.Profile.HomeDir),
 	}
 	if opts.GoogleClientID != "" {
 		s.auth = newAuthHandler(opts)
 	}
 	return s
+}
+
+// resolveCodexSessionsRoot returns $CODEX_HOME/sessions if set, else
+// homeDir/.codex/sessions. Pure function so handlers and tests can rely
+// on a stable value for the lifetime of the Server.
+func resolveCodexSessionsRoot(homeDir string) string {
+	if env := os.Getenv("CODEX_HOME"); env != "" {
+		return filepath.Join(env, "sessions")
+	}
+	return filepath.Join(homeDir, ".codex", "sessions")
 }
 
 // Handler returns the HTTP handler with all routes registered.

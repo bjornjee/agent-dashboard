@@ -16,6 +16,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
+	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
@@ -318,9 +319,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	repoName := repowin.SanitizeWindowName(rawRepo)
 
 	// Resolve the harness for this spawn — request override takes precedence
-	// over the configured default. Pi-specific Provider/Model are sourced
-	// from settings; claude ignores them. Unknown harness names are HTTP 400
-	// (not silently coerced to claude — see harness.Resolve docs).
+	// over the configured default. Per-harness settings (Pi.Provider/Model,
+	// Codex.Model/Approval/Sandbox/effort) flow into SpawnOpts based on the
+	// active harness; other harnesses ignore the unused fields. Unknown
+	// harness names are HTTP 400 (not silently coerced to claude — see
+	// harness.Resolve docs).
 	activeHarness := s.cfg.Harness
 	if req.Harness != "" && req.Harness != activeHarness.Name() {
 		h, hErr := harness.Resolve(req.Harness, s.cfg.Profile)
@@ -330,11 +333,18 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		activeHarness = h
 	}
-	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, domain.SpawnOpts{
-		DefaultEffort: s.cfg.Settings.Effort.Default,
-		Provider:      s.cfg.Settings.Harness.Pi.Provider,
-		Model:         s.cfg.Settings.Harness.Pi.Model,
-	})
+	// Block Claude-only skills on codex sessions — codex CLI 0.130.0 has
+	// no EnterPlanMode/ExitPlanMode/AskUserQuestion/Agent tools (evidence
+	// E13). Allowing the spawn would let codex boot and then crash on the
+	// first plan-mode call; a 400 here lets the user pick a different
+	// harness or run codex with an empty skill (free prompt) instead.
+	if activeHarness.Name() == "codex" && skills.RequiresClaude(req.Skill) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "skill '" + req.Skill + "' requires Claude-only tools (EnterPlanMode/AskUserQuestion/Agent). Start a Claude session for this skill, or run codex with an empty skill (free prompt).",
+		})
+		return
+	}
+	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOptsFor(activeHarness.Name(), s.cfg.Settings))
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
@@ -387,6 +397,38 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
+}
+
+// spawnOptsFor builds the SpawnOpts payload for the given harness name from
+// user settings. Each harness consumes a disjoint subset:
+//   - claude: DefaultEffort
+//   - pi:     Provider, Model
+//   - codex:  DefaultEffort, Model, Approval, Sandbox
+//
+// Unused fields stay zero-valued (and are ignored by the receiving harness).
+// Per-harness routing here keeps the spawn flag surface honest as new
+// harnesses are added; the alternative (pass everything everywhere) leaks
+// pi's `Provider` and codex's `Approval` into every harness's contract.
+func spawnOptsFor(harnessName string, settings domain.Settings) domain.SpawnOpts {
+	switch harnessName {
+	case "pi":
+		return domain.SpawnOpts{
+			Provider: settings.Harness.Pi.Provider,
+			Model:    settings.Harness.Pi.Model,
+		}
+	case "codex":
+		// Codex effort comes from its own settings field rather than
+		// settings.Effort.Default — codex levels (minimal/low/medium/high)
+		// share names with Claude but the resolution chain differs.
+		return domain.SpawnOpts{
+			DefaultEffort: settings.Harness.Codex.DefaultReasoningEffort,
+			Model:         settings.Harness.Codex.Model,
+			Approval:      settings.Harness.Codex.Approval,
+			Sandbox:       settings.Harness.Codex.Sandbox,
+		}
+	default:
+		return domain.SpawnOpts{DefaultEffort: settings.Effort.Default}
+	}
 }
 
 // firstTmuxSession returns the name of the first available tmux session.

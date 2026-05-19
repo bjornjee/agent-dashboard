@@ -3,13 +3,14 @@
  * Fast state sync hook for agent dashboard.
  *
  * Registered for PreToolUse, PostToolUse, and PermissionRequest.
- * Updates only: state, permission_mode, current_tool, last_hook_event, worktree_cwd.
+ * Updates only: state, permission_mode, current_tool, last_hook_event, worktree_cwd, harness.
  * Skips: git branch, git diff, tmux capture, session_id lookup, model, preview.
  *
  * Uses per-agent files keyed by session_id — no locking needed.
  *
- * Stdin: JSON from Claude Code hook system
- * Env: TMUX_PANE, CLAUDE_PLUGIN_ROOT
+ * Stdin: JSON from Claude Code or codex hook system (1:1 payload schemas
+ * per codex-rs/hooks/schema/generated/*.json).
+ * Env: TMUX_PANE, CLAUDE_PLUGIN_ROOT (claude + codex), PLUGIN_ROOT (codex only).
  */
 
 'use strict';
@@ -43,6 +44,23 @@ function dispatchEffortKeys(tmuxPane, level) {
 // ExitPlanMode flips state to "plan" (plan ready for review), a late
 // PostToolUse from a prior tool must not clobber it before the user approves.
 const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+
+/**
+ * Detect which coding-agent harness invoked us. Codex CLI 0.130.0 sets
+ * PLUGIN_ROOT in addition to CLAUDE_PLUGIN_ROOT (codex-rs/hooks/src/engine/
+ * discovery.rs — the "OOTB compat" env block); Claude Code only sets the
+ * latter. Hook stdin payload model (input.model) is a fallback discriminator
+ * since codex emits gpt-* models and Claude emits claude-*.
+ *
+ * @param {object} input - parsed hook stdin
+ * @returns {string} "codex" | "claude"
+ */
+function detectHarness(input) {
+  if (process.env.PLUGIN_ROOT) return 'codex';
+  const model = String((input && input.model) || '').toLowerCase();
+  if (model.startsWith('gpt-')) return 'codex';
+  return 'claude';
+}
 
 /**
  * Determine the agent state from the hook event.
@@ -208,6 +226,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     && !!input.tool_use_id;
   const clearDelegatedPlanId = state !== 'plan' && !!existing.delegated_plan_tool_use_id;
 
+  const harness = detectHarness(input);
+
   const changed = existing.state !== state
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
@@ -215,7 +235,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
-    || !!newEffort;
+    || !!newEffort
+    || (existing.harness || '') !== harness;
 
   if (!changed && existing.state) {
     return { changed: false, update: null, dispatchEffort: false };
@@ -229,6 +250,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     current_tool: currentTool,
     permission_mode: permissionMode || existing.permission_mode || '',
     last_hook_event: hookEvent || '',
+    harness,
   };
 
   if (worktreeCwd) {
@@ -294,4 +316,4 @@ function fastUpdate(input) {
 }
 
 // Export for testing
-module.exports = { resolveState, buildUpdate };
+module.exports = { resolveState, buildUpdate, detectHarness };

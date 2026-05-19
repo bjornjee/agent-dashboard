@@ -17,6 +17,7 @@ const os = require('os');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
+const { detectHarness } = require('./agent-state-fast');
 const { hasPendingParentToolUse } = require(path.join(pluginRoot, 'packages', 'agent-state', 'pending-tools'));
 const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
@@ -105,6 +106,13 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     subagentCount = Math.max(0, subagentCount - 1);
   }
 
+  // Stamp harness on every lifecycle event so codex agents are routed to
+  // the codex conversation parser from SessionStart onward (rather than
+  // waiting for the first PreToolUse from agent-state-fast.js — pure-chat
+  // codex sessions would never stamp it that way and the conversation
+  // panel would silently render nothing).
+  const harness = detectHarness(input);
+
   const entry = {
     target,
     tmux_pane_id: tmuxPane,
@@ -121,6 +129,7 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     permission_mode: permissionMode,
     subagent_count: subagentCount,
     last_hook_event: hookEvent || '',
+    harness,
   };
   if (effort) {
     entry.effort = effort;
@@ -130,7 +139,8 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
     || existing.subagent_count !== subagentCount
     || existing.last_message_preview !== preview
     || existing.permission_mode !== permissionMode
-    || (existing.files_changed || []).join() !== filesChanged.join();
+    || (existing.files_changed || []).join() !== filesChanged.join()
+    || (existing.harness || '') !== harness;
 
   return { changed: changed || !existing.state, entry };
 }

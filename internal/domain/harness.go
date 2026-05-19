@@ -28,10 +28,16 @@ type Harness interface {
 }
 
 // SpawnOpts carries the per-invocation knobs a harness may consult.
-// Fields that don't apply to a given harness are ignored — Provider and
-// Model only affect pi-mono today; DefaultEffort only affects claude-code.
+// Fields that don't apply to a given harness are ignored.
 type SpawnOpts struct {
-	DefaultEffort string // e.g. "high" | "medium" | "" (omit flag)
-	Provider      string // pi-mono only: "" (default) | "openai" | "anthropic" | ...
-	Model         string // pi-mono only: e.g. "openai-codex/gpt-5.5"
+	DefaultEffort string // claude + codex
+	Provider      string // pi-mono only: "" | "openai" | "anthropic" | ...
+	Model         string // pi-mono + codex: e.g. "openai-codex/gpt-5.5", "gpt-5.5"
+	Approval      string // codex only: "never" | "untrusted" | "on-request"
+	Sandbox       string // codex only: "danger-full-access" | "workspace-write" | ...
+
+	// ResumeSessionID, when non-empty, switches codex's spawn to
+	// `codex resume <sid>` and drops other per-session flags (codex
+	// persists them with the session). Ignored by claude/pi.
+	ResumeSessionID string
 }

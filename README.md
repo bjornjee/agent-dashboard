@@ -146,6 +146,22 @@ Then restart Claude Code sessions for hooks and skills to take effect.
 
 Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not function as intended.
 
+### Codex CLI support
+
+The plugin is also installable into the OpenAI [`codex` CLI](https://developers.openai.com/codex/) (0.130+). Codex auto-discovers the plugin manifest at `.claude-plugin/plugin.json` (per codex's `DISCOVERABLE_PLUGIN_MANIFEST_PATHS` in `codex-rs/utils/plugins/src/plugin_namespace.rs`) and registers our hooks as managed hooks alongside any you've configured manually.
+
+```
+codex plugin marketplace add bjornjee/agent-dashboard
+```
+
+Codex will prompt to trust the plugin's hooks on first run; once approved, the dashboard sees codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
+
+Caveats specific to codex:
+
+- **Skills require Claude.** `/feature`, `/fix`, `/refactor`, `/implement`, `/investigate`, `/chore`, `/rca`, and `/pr` all rely on Claude-only tools (EnterPlanMode, AskUserQuestion, Agent). The dashboard returns a 400 if you try to spawn these against a codex session. Use a Claude session for skill-gated workflows; use codex sessions for free-prompt work.
+- **Plan mode is signaled, not gated.** Codex's `/plan` slash command flips the hook payload's `permission_mode` to `"plan"`. The dashboard captures this as a field but doesn't flip state to `plan` — codex has no `ExitPlanMode` equivalent, so there's no discrete "plan ready" review moment.
+- **No subagent tree for codex.** Codex doesn't have a `Task`/`Agent` tool, so the subagent tree panel stays empty for codex sessions.
+
 ## Uninstall
 
 ### Step 1: Remove the plugin

@@ -340,6 +340,104 @@ func TestCreate_HarnessOverridePi(t *testing.T) {
 	}
 }
 
+// TestCreate_HarnessOverrideCodex proves the per-request Harness="codex"
+// override flows settings.Harness.Codex.* into the spawn-command builder.
+// Mirrors the pi override test above; locks the codex flag surface so a
+// drift in CodexHarnessSettings or web wiring shows up here.
+//
+// Uses an empty skill to bypass the Claude-only skill guard — the
+// effort flag still drops because effort-opted skills (feature/fix/refactor)
+// are all Claude-only by definition. We assert --model, -a, -s here;
+// effort coverage lives in the codex harness unit test.
+func TestCreate_HarnessOverrideCodex(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+
+	folder := t.TempDir()
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+
+	mutate := func(c *domain.Config) {
+		c.Settings.Harness.Codex.Model = "gpt-5.5"
+		c.Settings.Harness.Codex.Approval = "on-request"
+		c.Settings.Harness.Codex.Sandbox = "workspace-write"
+		c.Settings.Harness.Codex.DefaultReasoningEffort = "high"
+	}
+	ts, _ := createTestServerWithCfg(t, mutate, existingAgent)
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
+	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","message":"hi"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	want := "codex --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' 'hi'"
+	if capturedCmd != want {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
+	}
+}
+
+// TestCreate_CodexBlocksClaudeOnlySkill blocks /feature against codex
+// because codex CLI 0.130.0 has no EnterPlanMode/ExitPlanMode/AskUserQuestion/
+// Agent tools (evidence E13). Spawning would let the session start and
+// then crash on the first plan-mode call — better to return a clear
+// error at request time. Mirrors the harness-unknown 400 path so the
+// user gets one consistent error surface for "this combination won't work".
+func TestCreate_CodexBlocksClaudeOnlySkill(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	// Only TmuxIsAvailable runs before the 400; no readAgentState needed.
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+
+	folder := t.TempDir()
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+	ts, _ := createTestServer(t, existingAgent)
+
+	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"feature","message":"hi"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// Empty skill is allowed for codex — free-prompt spawn doesn't touch
+// EnterPlanMode/AskUserQuestion. Regression guard against over-eager
+// blocking.
+func TestCreate_CodexAllowsEmptySkill(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+
+	folder := t.TempDir()
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+	ts, _ := createTestServer(t, existingAgent)
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		mock.Anything,
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
+	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","message":"just chat"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 (empty skill is OK for codex), got %d", resp.StatusCode)
+	}
+}
+
 // TestCreate_HarnessUnknownIs400 proves the registry error surfaces as a
 // 400 rather than silently coercing to claude (regression guard for the
 // silent-fallback anti-pattern called out by go-reviewer-strict).

@@ -60,6 +60,11 @@ describe('buildReportEntry', () => {
         last_message_preview: null,
         permission_mode: 'default',
         files_changed: [],
+        // BASE_INPUT has no PLUGIN_ROOT env and no gpt model → detectHarness
+        // returns "claude". Stamping harness counts as a change on first
+        // sight; we pre-populate existing.harness so the no-change branch
+        // is exercised cleanly.
+        harness: 'claude',
       },
       target: 'main:1.0',
       tmuxPane: '%0',
