@@ -107,18 +107,6 @@ if (require.main === module) {
   });
 }
 
-/**
- * Build the state update object from hook input and existing state.
- * Pure logic — no I/O. Returns { changed, update } where update is the
- * fields to merge, or null if nothing changed.
- *
- * @param {object} params
- * @param {object} params.input - parsed hook stdin (includes input.cwd from Claude Code)
- * @param {object} params.existing - current agent state from disk
- * @param {string} params.target - tmux target string
- * @param {string} params.tmuxPane - TMUX_PANE env value
- * @returns {{ changed: boolean, update: object|null }}
- */
 // effortTransition returns the new effort level if permission_mode is moving
 // into or out of 'plan'. Returns null when no transition (or when dynamic
 // switching is disabled via AGENT_DASHBOARD_DYNAMIC_EFFORT=0|off|false, or
@@ -138,6 +126,18 @@ function effortTransition(existingMode, newMode) {
   return null;
 }
 
+/**
+ * Build the state update object from hook input and existing state.
+ * Pure logic — no I/O. Returns { changed, update } where update is the
+ * fields to merge, or null if nothing changed.
+ *
+ * @param {object} params
+ * @param {object} params.input - parsed hook stdin (includes input.cwd from Claude Code)
+ * @param {object} params.existing - current agent state from disk
+ * @param {string} params.target - tmux target string
+ * @param {string} params.tmuxPane - TMUX_PANE env value
+ * @returns {{ changed: boolean, update: object|null }}
+ */
 function buildUpdate({ input, existing, target, tmuxPane }) {
   // Stamp worktree_cwd when the main agent observes its session running in a
   // user worktree path. Treated as static for the agent's lifetime — downstream

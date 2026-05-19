@@ -193,7 +193,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(update.cwd, undefined, 'fast hook should not set cwd');
@@ -372,7 +371,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true, 'unpinned pr state should not stick');
@@ -396,7 +394,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true, 'unpinned merged state should not stick');
@@ -422,7 +419,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, false, 'should not overwrite when pinned_state is pr');
@@ -446,7 +442,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -470,7 +465,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -498,7 +492,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(update.state, 'permission');
@@ -522,7 +515,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     // PostToolUse should NOT clear hook_blocked — it must survive until next PreToolUse
@@ -547,7 +539,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     // hook_blocked triggers permission state, which differs from pr — changed
@@ -571,7 +562,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(update.state, 'running');
@@ -594,7 +584,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, false, 'PostToolUse should not overwrite idle_prompt');
@@ -617,7 +606,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, false, 'PostToolUse should not overwrite plan');
@@ -640,7 +628,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, false, 'PostToolUse should not overwrite done');
@@ -663,7 +650,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true, 'PreToolUse should transition from idle_prompt to running');
@@ -690,7 +676,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -717,7 +702,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -744,7 +728,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, false, 'PostToolUse must not overwrite plan');
@@ -769,7 +752,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -795,7 +777,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(update.state, 'running');
@@ -823,7 +804,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, false, 'PostToolUse must not overwrite plan state');
@@ -850,7 +830,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -879,7 +858,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(changed, true);
@@ -906,7 +884,6 @@ describe('fast hook state updates (per-agent files)', () => {
       existing,
       target: 'main:1.0',
       tmuxPane: '%0',
-      worktreeCwd: null,
     });
 
     assert.equal(update.state, 'plan');
