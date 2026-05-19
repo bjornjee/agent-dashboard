@@ -143,9 +143,17 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   // worktree path as input.cwd. Treated as static for the agent's lifetime —
   // downstream features (diff viewer, PR creation, cleanup) trust this dir
   // and shouldn't have it shifting as the agent cd's around.
+  //
+  // Exclude `.claude/worktrees/` — that's Claude Code's per-subagent isolation
+  // dir (auto-created when a backgrounded subagent runs, named after the
+  // subagent's id). It is not a user-created worktree, and stamping it
+  // poisons worktree_cwd because the first-stamp-wins semantic below means
+  // the real worktree path observed later is ignored.
   const liveCwd = input.cwd || null;
-  const worktreeCwd = (!existing.worktree_cwd && liveCwd && /\/worktrees\//.test(liveCwd))
-    ? liveCwd : null;
+  const isUserWorktree = liveCwd
+    && /\/worktrees\//.test(liveCwd)
+    && !/\/\.claude\/worktrees\//.test(liveCwd);
+  const worktreeCwd = (!existing.worktree_cwd && isUserWorktree) ? liveCwd : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
