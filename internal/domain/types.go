@@ -65,6 +65,12 @@ type Agent struct {
 	// agent's launch cwd disagrees with its first-hook cwd, so consumers
 	// must read it fresh). Empty when the JSONL can't be located.
 	ProjDir string `json:"-"`
+
+	// Harness names the agent's coding-agent runtime: "claude" (default
+	// when omitted, for backward compat with pre-codex state files), "pi",
+	// or "codex". Conversation/state parsers route on this so the right
+	// JSONL schema is used per agent. Written by SessionStart hooks.
+	Harness string `json:"harness,omitempty"`
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.
@@ -230,12 +236,24 @@ type PiHarnessSettings struct {
 	Model    string `toml:"model"`    // e.g. "openai-codex/gpt-5.5"
 }
 
+// CodexHarnessSettings carries codex-CLI-specific spawn knobs. Model,
+// Approval, Sandbox, and DefaultReasoningEffort flow into SpawnCommand as
+// --model / -a / -s / -c model_reasoning_effort=... flags. Empty fields
+// inherit codex's own resolution chain (~/.codex/config.toml > defaults).
+type CodexHarnessSettings struct {
+	Model                  string `toml:"model"`                    // e.g. "gpt-5.5"
+	Approval               string `toml:"approval"`                 // "never" | "untrusted" | "on-request"
+	Sandbox                string `toml:"sandbox"`                  // "danger-full-access" | "workspace-write" | ...
+	DefaultReasoningEffort string `toml:"default_reasoning_effort"` // "minimal" | "low" | "medium" | "high"
+}
+
 // HarnessSettings selects which coding-agent harness backs new agents.
 // Default names the harness used when the New Agent flow doesn't override.
 // Per-harness subtables hold knobs that only apply to that harness.
 type HarnessSettings struct {
-	Default string            `toml:"default"` // "claude" | "pi"
-	Pi      PiHarnessSettings `toml:"pi"`
+	Default string               `toml:"default"` // "claude" | "pi" | "codex"
+	Pi      PiHarnessSettings    `toml:"pi"`
+	Codex   CodexHarnessSettings `toml:"codex"`
 }
 
 // Settings holds all user-facing configuration loaded from settings.toml.

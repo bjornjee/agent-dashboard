@@ -133,9 +133,28 @@ func (m model) loadConversation() tea.Cmd {
 	if agent == nil || m.selectedSubagent() != nil {
 		return nil // don't load conversation for subagent nodes
 	}
-	projDir := agent.ProjDir
 	sessionID := agent.SessionID
-	if projDir == "" || sessionID == "" {
+	if sessionID == "" {
+		return nil
+	}
+
+	// Codex agents have no ProjDir (codex doesn't slug projects); route
+	// through the harness-aware reader which finds the rollout file under
+	// ~/.codex/sessions/YYYY/MM/DD/. Incremental offset tracking is
+	// claude-only for now — codex re-reads the full rollout per tick
+	// (typical sizes 30–80KB, cost is negligible vs. parser allocation).
+	if agent.Harness == "codex" {
+		codexRoot := m.codexSessionsDir
+		sessionKey := "codex:" + sessionID
+		a := *agent
+		return func() tea.Msg {
+			entries := conversation.Read(a, conversation.Roots{CodexSessionsRoot: codexRoot}, 50)
+			return conversationMsg{entries: entries, fileOffset: 0, sessionKey: sessionKey}
+		}
+	}
+
+	projDir := agent.ProjDir
+	if projDir == "" {
 		return nil
 	}
 

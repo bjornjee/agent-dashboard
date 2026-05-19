@@ -37,6 +37,24 @@ func TestResolve_Pi(t *testing.T) {
 	}
 }
 
+func TestResolve_Codex(t *testing.T) {
+	h, err := harness.Resolve("codex", domain.AgentProfile{HomeDir: "/home/u"})
+	if err != nil {
+		t.Fatalf("Resolve(\"codex\") returned err: %v", err)
+	}
+	if h.Name() != "codex" {
+		t.Errorf("Resolve(\"codex\").Name() = %q, want \"codex\"", h.Name())
+	}
+	wantSessions := filepath.Join("/home/u", ".codex", "sessions")
+	if h.SessionsDir() != wantSessions {
+		t.Errorf("SessionsDir() = %q, want %q", h.SessionsDir(), wantSessions)
+	}
+	wantConfig := filepath.Join("/home/u", ".codex")
+	if h.ConfigDir() != wantConfig {
+		t.Errorf("ConfigDir() = %q, want %q", h.ConfigDir(), wantConfig)
+	}
+}
+
 func TestResolve_UnknownReturnsErrUnknownHarness(t *testing.T) {
 	h, err := harness.Resolve("not-a-real-harness", domain.AgentProfile{Command: "claude"})
 	if h != nil {

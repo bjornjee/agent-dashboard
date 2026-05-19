@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 
 // Import the module under test
-const { resolveState, buildUpdate } = require('./agent-state-fast');
+const { resolveState, buildUpdate, detectHarness } = require('./agent-state-fast');
 
 // Import shared packages
 const pluginRoot = path.resolve(__dirname, '..', '..');
@@ -101,6 +101,98 @@ describe('resolveState', () => {
       resolveState('PreToolUse', 'Agent', '', { subagent_type: 'general-purpose' }),
       'running'
     );
+  });
+
+  // Codex CLI 0.130.0 emits the same hook event names as Claude Code
+  // (codex-rs/protocol/src/protocol.rs HookEventName), so the resolver
+  // sees the same shape — but its tool names are different. Codex's
+  // canonical built-in tools are `shell`, `apply_patch`, and
+  // `update_plan`. None overlap with Claude's plan/question signals, so
+  // they must all fall through to 'running' and never produce a
+  // spurious 'plan'/'question'/'permission' classification.
+  it('codex: apply_patch tool stays "running" (not plan/question)', () => {
+    // Codex's edit tool name per codex-rs/core/src/tools/hook_names.rs
+    // (apply_patch — Write/Edit are matcher aliases). The stdin tool_name
+    // payload is always the canonical `apply_patch`.
+    assert.equal(resolveState('PreToolUse', 'apply_patch', ''), 'running');
+    assert.equal(resolveState('PostToolUse', 'apply_patch', ''), 'running');
+  });
+
+  it('codex: shell tool stays "running"', () => {
+    // Codex's shell-exec tool canonical name. The Bash matcher in
+    // hooks.json selects this via codex's matcher-alias system.
+    assert.equal(resolveState('PreToolUse', 'shell', ''), 'running');
+    assert.equal(resolveState('PostToolUse', 'shell', ''), 'running');
+  });
+
+  it('codex: update_plan TODO tool stays "running" (not plan-mode)', () => {
+    // Per codex-rs/protocol/src/plan_tool.rs docstring, update_plan is a
+    // TODO/checklist tool (analog of Claude's TodoWrite), NOT a plan-mode
+    // signal. Plan mode in codex toggles via the user's /plan slash
+    // command, surfaced as permission_mode='plan' in the hook payload.
+    assert.equal(resolveState('PreToolUse', 'update_plan', ''), 'running');
+  });
+
+  it('codex: permission_mode="plan" captured but does NOT flip state', () => {
+    // Codex's hook payload exposes permission_mode with the same enum
+    // values as Claude (codex-rs/hooks/schema/generated/
+    // post-tool-use.command.input.schema.json). For codex sessions the
+    // user toggles plan mode via /plan, so plan-mode events show
+    // permission_mode='plan' without any tool call. The dashboard
+    // captures the field but the state badge stays running — codex has
+    // no ExitPlanMode tool, so there's no discrete "plan ready" moment
+    // analogous to Claude's plan-review handoff.
+    assert.equal(resolveState('PreToolUse', 'shell', 'plan'), 'running');
+    assert.equal(resolveState('PostToolUse', 'apply_patch', 'plan'), 'running');
+  });
+
+  // Discriminator between codex and claude hook invocations. Codex CLI
+  // 0.130.0 (codex-rs/hooks/src/engine/discovery.rs) sets PLUGIN_ROOT
+  // and CLAUDE_PLUGIN_ROOT (OOTB compat); Claude Code sets only the
+  // latter. We use PLUGIN_ROOT as the primary signal and fall back to
+  // input.model prefix (gpt-* vs claude-*).
+  it('detectHarness: PLUGIN_ROOT env signals codex', () => {
+    const orig = process.env.PLUGIN_ROOT;
+    process.env.PLUGIN_ROOT = '/whatever';
+    try {
+      assert.equal(detectHarness({}), 'codex');
+      assert.equal(detectHarness({ model: 'claude-sonnet-4-5' }), 'codex', 'env wins over model');
+    } finally {
+      if (orig === undefined) delete process.env.PLUGIN_ROOT;
+      else process.env.PLUGIN_ROOT = orig;
+    }
+  });
+
+  it('detectHarness: gpt-* model is codex when env is absent', () => {
+    const orig = process.env.PLUGIN_ROOT;
+    delete process.env.PLUGIN_ROOT;
+    try {
+      assert.equal(detectHarness({ model: 'gpt-5.5' }), 'codex');
+      assert.equal(detectHarness({ model: 'GPT-5.4-codex' }), 'codex', 'case-insensitive');
+    } finally {
+      if (orig !== undefined) process.env.PLUGIN_ROOT = orig;
+    }
+  });
+
+  it('detectHarness: default is claude', () => {
+    const orig = process.env.PLUGIN_ROOT;
+    delete process.env.PLUGIN_ROOT;
+    try {
+      assert.equal(detectHarness({}), 'claude');
+      assert.equal(detectHarness({ model: 'claude-opus-4-5' }), 'claude');
+      assert.equal(detectHarness(null), 'claude');
+    } finally {
+      if (orig !== undefined) process.env.PLUGIN_ROOT = orig;
+    }
+  });
+
+  it('codex: PermissionRequest still routes to "permission"', () => {
+    // PermissionRequest is a top-level hook event in codex, fired when
+    // the user must approve a sandboxed action (e.g. workspace-write
+    // boundary crossed). Falls through the generic branch — same as
+    // Claude.
+    assert.equal(resolveState('PermissionRequest', 'shell', ''), 'permission');
+    assert.equal(resolveState('PermissionRequest', 'apply_patch', ''), 'permission');
   });
 });
 
