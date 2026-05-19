@@ -442,7 +442,15 @@ describe('resolveStopState (JSONL-gated detect)', () => {
     assert.equal(state, 'running', 'pending parent tool means parent is still working');
   });
 
-  it('SubagentStop falls through to detectState when no parent tool pending', () => {
+  it('SubagentStop never runs detectState — subagent events do not decide parent state', () => {
+    // Previously, when the last counted subagent stopped and no parent tool
+    // was pending, this branch fell through to detectState() — which uses a
+    // tmux pane heuristic and would flip the parent to idle_prompt/done/
+    // question (bucketed as REVIEW). For a parent orchestrating multiple
+    // workstreams (e.g. /fix's env-setup completing while other work is in
+    // flight) this misclassified the parent as done while it was still
+    // running. Subagent events now only move subagent_count + last_hook_event;
+    // state transitions to stop-states are owned by the parent's Stop event.
     const state = resolveStopState({
       hookEvent: 'SubagentStop',
       existing: { state: 'running', subagent_count: 1 },
@@ -450,7 +458,8 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'idle_prompt', 'no pending tool + idle pane → self-heal to idle_prompt');
+    assert.equal(state, 'running',
+      'SubagentStop must preserve existing parent state, even when count would decrement to 0');
   });
 
   it('SubagentStop preserves existing stop state regardless of pending', () => {

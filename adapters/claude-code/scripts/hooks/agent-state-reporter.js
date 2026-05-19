@@ -159,12 +159,13 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
  */
 function resolveStopState({ hookEvent, existing, hasPendingTool, lastMessage, paneBuffer }) {
   if (hookEvent === 'SubagentStop') {
-    const state = existing.state || 'running';
-    const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
-    if (state === 'running' && subagentCount <= 0 && !hasPendingTool) {
-      return detectState(lastMessage, paneBuffer);
-    }
-    return state;
+    // Subagent events never decide the main agent's state. When one of N
+    // parallel subagents stops, the parent is still actively orchestrating —
+    // running detectState() here would flip the parent into a stop-state
+    // (idle_prompt/done/question, bucketed as REVIEW in the dashboard) just
+    // because a single subagent completed. State transitions to stop-states
+    // are owned by the parent's own Stop event.
+    return existing.state || 'running';
   }
   // Stop event — only run heuristic when JSONL says no tool is in flight.
   if (hasPendingTool) {
@@ -231,12 +232,10 @@ function report(input) {
     // JSONL check. A pending parent tool_use means the agent is still working.
     hasPendingTool = hasPendingParentToolUse(input.transcript_path);
     const lastMessage = input.last_assistant_message || null;
-    // Only capture the pane when detectState() will actually consume it.
-    const subagentCount = Math.max(0, (existing.subagent_count || 0) - 1);
-    const willDetect = !hasPendingTool && (
-      hookEvent === 'Stop' ||
-      (hookEvent === 'SubagentStop' && (existing.state || 'running') === 'running' && subagentCount <= 0)
-    );
+    // detectState() runs only on Stop (SubagentStop returns existing.state),
+    // and only when no parent tool is in flight. Skip the tmux capture
+    // otherwise — it's the most expensive call in this hook.
+    const willDetect = hookEvent === 'Stop' && !hasPendingTool;
     const paneBuffer = willDetect ? capture(target, 15) : [];
     state = resolveStopState({
       hookEvent, existing, hasPendingTool, lastMessage, paneBuffer,
