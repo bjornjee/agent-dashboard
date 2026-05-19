@@ -139,21 +139,28 @@ function effortTransition(existingMode, newMode) {
 }
 
 function buildUpdate({ input, existing, target, tmuxPane }) {
-  // Stamp worktree_cwd the first time we observe Claude Code reporting a
-  // worktree path as input.cwd. Treated as static for the agent's lifetime —
-  // downstream features (diff viewer, PR creation, cleanup) trust this dir
-  // and shouldn't have it shifting as the agent cd's around.
+  // Stamp worktree_cwd when the main agent observes its session running in a
+  // user worktree path. Treated as static for the agent's lifetime — downstream
+  // features (diff viewer, PR creation, cleanup) trust this dir and shouldn't
+  // have it shifting as the agent cd's around.
   //
-  // Exclude `.claude/worktrees/` — that's Claude Code's per-subagent isolation
-  // dir (auto-created when a backgrounded subagent runs, named after the
-  // subagent's id). It is not a user-created worktree, and stamping it
-  // poisons worktree_cwd because the first-stamp-wins semantic below means
-  // the real worktree path observed later is ignored.
+  // Priority model: only the MAIN agent can write worktree_cwd. A subagent's
+  // hook fires with input.cwd under `.claude/worktrees/agent-<id>/` (Claude
+  // Code's per-subagent isolation dir), which is not a user worktree. Subagent
+  // observations are dropped here so they cannot poison the stamp.
+  //
+  // Among main-agent observations, first-stamp-wins — UNLESS the existing
+  // stamp is a subagent path (e.g. legacy poisoning from before this fix),
+  // in which case a main-agent observation heals it by overwriting.
   const liveCwd = input.cwd || null;
-  const isUserWorktree = liveCwd
+  const isSubagentPath = liveCwd && /\/\.claude\/worktrees\//.test(liveCwd);
+  const isMainWorktree = liveCwd
     && /\/worktrees\//.test(liveCwd)
-    && !/\/\.claude\/worktrees\//.test(liveCwd);
-  const worktreeCwd = (!existing.worktree_cwd && isUserWorktree) ? liveCwd : null;
+    && !isSubagentPath;
+  const existingIsSubagentPath = existing.worktree_cwd
+    && /\/\.claude\/worktrees\//.test(existing.worktree_cwd);
+  const canStamp = isMainWorktree && (!existing.worktree_cwd || existingIsSubagentPath);
+  const worktreeCwd = canStamp ? liveCwd : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';

@@ -325,6 +325,35 @@ describe('fast hook state updates (per-agent files)', () => {
       '.claude/worktrees/agent-* is a subagent isolation dir, not a user worktree');
   });
 
+  it('main-agent observation heals an already-stamped subagent path (legacy poisoning)', () => {
+    // If worktree_cwd was previously stamped from a subagent isolation path
+    // (legacy state from before the priority model), a subsequent main-agent
+    // observation in a real user worktree must overwrite it. Without healing,
+    // the bad stamp would stay sticky for the rest of the session.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      worktree_cwd: '/Users/bjornjee/Code/bjornjee/agent-dashboard/.claude/worktrees/agent-ac24a224a7d7a8690',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        cwd: '/Users/bjornjee/Code/bjornjee/worktrees/agent-dashboard/codex-parity',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.worktree_cwd, '/Users/bjornjee/Code/bjornjee/worktrees/agent-dashboard/codex-parity',
+      'main-agent observation must overwrite a subagent-path stamp');
+  });
+
   it('does not overwrite an already-stamped worktree_cwd (static dir semantic)', () => {
     // Once worktree_cwd is set it should be treated as the agent's static home
     // for the rest of the session — diff viewer, PR creation, and cleanup all
