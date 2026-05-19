@@ -29,7 +29,12 @@ type ServerOptions struct {
 
 // Server is the HTTP server for the web dashboard.
 type Server struct {
-	cfg  domain.Config
+	// cfgMu guards cfg.Settings and cfg.Harness, which the settings POST
+	// handler mutates. cfg.Profile is immutable post-construction and is
+	// read without holding the lock.
+	cfgMu sync.RWMutex
+	cfg   domain.Config
+
 	db   *db.DB
 	opts ServerOptions
 	auth *authHandler
@@ -45,6 +50,15 @@ type Server struct {
 	rlMu        sync.Mutex
 	rlCache     *domain.RateLimit
 	rlFetchedAt time.Time
+}
+
+// snapshotCfg returns a value copy of the current config under the cfg
+// read lock. Use it in handlers that read cfg.Settings or cfg.Harness so
+// they get a consistent view even when POST /api/settings runs concurrently.
+func (s *Server) snapshotCfg() domain.Config {
+	s.cfgMu.RLock()
+	defer s.cfgMu.RUnlock()
+	return s.cfg
 }
 
 // NewServer creates a new web dashboard server.
@@ -98,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/usage/ratelimit", s.requireAuth(s.handleRateLimit))
 	mux.HandleFunc("GET /api/skills", s.requireAuth(s.handleSkills))
 	mux.HandleFunc("GET /api/suggestions", s.requireAuth(s.handleSuggestions))
+	mux.HandleFunc("GET /api/settings", s.requireAuth(s.handleGetSettings))
 
 	// Action routes (require session + CSRF header)
 	mux.HandleFunc("POST /api/agents/{id}/approve", s.requireAuth(s.requireCSRF(s.handleApprove)))
@@ -108,6 +123,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/agents/{id}/merge", s.requireAuth(s.requireCSRF(s.handleMerge)))
 	mux.HandleFunc("POST /api/agents/{id}/cleanup", s.requireAuth(s.requireCSRF(s.handleCleanup)))
 	mux.HandleFunc("POST /api/agents/create", s.requireAuth(s.requireCSRF(s.handleCreate)))
+	mux.HandleFunc("POST /api/settings", s.requireAuth(s.requireCSRF(s.handleSaveSettings)))
 
 	// SSE endpoint
 	mux.HandleFunc("GET /events", s.requireAuth(s.handleSSE))

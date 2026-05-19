@@ -229,3 +229,67 @@ func TestLoadSettings_InvalidTOML(t *testing.T) {
 		t.Error("invalid TOML should return defaults (all true)")
 	}
 }
+
+func TestSaveSettings_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := DefaultSettings()
+	s.Harness.Default = "codex"
+	s.Harness.Pi.Provider = "openai"
+	s.Harness.Pi.Model = "openai-codex/gpt-5.5"
+
+	if err := SaveSettings(dir, s); err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+
+	got := LoadSettings(dir)
+	if got.Harness.Default != "codex" {
+		t.Errorf("round-trip Harness.Default = %q, want %q", got.Harness.Default, "codex")
+	}
+	if got.Harness.Pi.Provider != "openai" {
+		t.Errorf("round-trip Harness.Pi.Provider = %q, want %q", got.Harness.Pi.Provider, "openai")
+	}
+	if got.Harness.Pi.Model != "openai-codex/gpt-5.5" {
+		t.Errorf("round-trip Harness.Pi.Model = %q, want %q", got.Harness.Pi.Model, "openai-codex/gpt-5.5")
+	}
+	if got.Effort.Default != "high" {
+		t.Errorf("round-trip Effort.Default = %q, want %q (untouched defaults must survive)", got.Effort.Default, "high")
+	}
+}
+
+func TestSaveSettings_NoLeftoverTempFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveSettings(dir, DefaultSettings()); err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "settings.toml.tmp")); !os.IsNotExist(err) {
+		t.Errorf("settings.toml.tmp should not exist after successful save, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "settings.toml")); err != nil {
+		t.Errorf("settings.toml should exist after successful save: %v", err)
+	}
+}
+
+func TestSaveSettings_OverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.toml")
+	if err := os.WriteFile(path, []byte("# stale\n[harness]\ndefault = \"pi\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := DefaultSettings()
+	s.Harness.Default = "codex"
+	if err := SaveSettings(dir, s); err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+
+	got := LoadSettings(dir)
+	if got.Harness.Default != "codex" {
+		t.Errorf("after overwrite Harness.Default = %q, want %q", got.Harness.Default, "codex")
+	}
+}
+
+func TestSaveSettings_MissingDir(t *testing.T) {
+	if err := SaveSettings(filepath.Join(t.TempDir(), "does-not-exist"), DefaultSettings()); err == nil {
+		t.Error("SaveSettings against non-existent dir should error")
+	}
+}

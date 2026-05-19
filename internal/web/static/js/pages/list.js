@@ -15,7 +15,10 @@ export function renderList(app, agents) {
 
   const order = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
   let html = UI.header('Agent Dashboard', {
-    actions: [{ label: 'Usage', onclick: 'Dashboard.showUsage()' }],
+    actions: [
+      { label: 'Usage', onclick: 'Dashboard.showUsage()' },
+      { label: 'Settings', onclick: 'Dashboard.showSettings()' },
+    ],
     cta: { label: '+ New', onclick: 'Dashboard.showCreate()' },
   });
   html += '<div class="agent-list">';

@@ -3,6 +3,7 @@ import { renderList } from './js/pages/list.js';
 import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
+import { renderSettings, buildSettingsPayload } from './js/pages/settings.js';
 import { get, post, cancelNav } from './js/api.js';
 import { UI } from './js/ui.js';
 import { Theme } from './js/theme.js';
@@ -17,7 +18,7 @@ if (typeof marked !== 'undefined') {
 const app = document.getElementById('app');
 let agents = [];
 let selectedAgentId = null;
-let currentView = 'list'; // 'list' | 'detail' | 'usage' | 'create'
+let currentView = 'list'; // 'list' | 'detail' | 'usage' | 'create' | 'settings'
 let eventSource = null;
 
 function setView(view, agentId) {
@@ -54,6 +55,11 @@ function navigateTo(view, agentId, push) {
       stopConversationPoll();
       setView('create');
       renderCreate(app, agents);
+      break;
+    case 'settings':
+      stopConversationPoll();
+      setView('settings');
+      renderSettings(app);
       break;
     default:
       navigateTo('list', null, false);
@@ -114,6 +120,23 @@ window.Dashboard = {
 
   showCreate() {
     navigateTo('create', null, true);
+  },
+
+  showSettings() {
+    navigateTo('settings', null, true);
+  },
+
+  async saveSettings(evt) {
+    const payload = buildSettingsPayload();
+    await withSpinner(evt, async () => {
+      const result = await post('/api/settings', payload);
+      if (result && result.Harness) {
+        toast('Settings saved', 'success');
+        renderSettings(app);
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      }
+    });
   },
 
   selectAgent(id) {
@@ -221,6 +244,7 @@ window.Dashboard = {
     else if (currentView === 'detail' && selectedAgentId) renderDetail(app, agents, selectedAgentId, setView);
     else if (currentView === 'usage') renderUsage(app, agents);
     else if (currentView === 'create') renderCreate(app, agents);
+    else if (currentView === 'settings') renderSettings(app);
   },
 
   async openPR(id) {
@@ -313,6 +337,9 @@ async function init() {
         restored = true;
       } else if (saved.view === 'create') {
         navigateTo('create', null, false);
+        restored = true;
+      } else if (saved.view === 'settings') {
+        navigateTo('settings', null, false);
         restored = true;
       }
     }

@@ -311,10 +311,16 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// snapshotCfg pins cfg.Harness, cfg.Settings, and cfg.Profile together
+	// for the rest of this handler — a concurrent POST /api/settings could
+	// otherwise flip cfg.Harness while we're still reading the matching
+	// cfg.Settings (or cfg.Profile.Command).
+	snap := s.snapshotCfg()
+
 	// Derive repo name for the tmux window.
 	rawRepo := repowin.RepoFromCwd(folder)
 	if rawRepo == "" {
-		rawRepo = s.cfg.Profile.Command
+		rawRepo = snap.Profile.Command
 	}
 	repoName := repowin.SanitizeWindowName(rawRepo)
 
@@ -324,9 +330,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// active harness; other harnesses ignore the unused fields. Unknown
 	// harness names are HTTP 400 (not silently coerced to claude — see
 	// harness.Resolve docs).
-	activeHarness := s.cfg.Harness
+	activeHarness := snap.Harness
 	if req.Harness != "" && req.Harness != activeHarness.Name() {
-		h, hErr := harness.Resolve(req.Harness, s.cfg.Profile)
+		h, hErr := harness.Resolve(req.Harness, snap.Profile)
 		if hErr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": hErr.Error()})
 			return
@@ -344,7 +350,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOptsFor(activeHarness.Name(), s.cfg.Settings))
+	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOptsFor(activeHarness.Name(), snap.Settings))
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
