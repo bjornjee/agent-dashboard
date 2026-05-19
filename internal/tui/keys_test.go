@@ -158,9 +158,9 @@ func TestCreateFolderMode_EnterAcceptsSuggestion(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// With no skills available, folder Enter advances to message input
-	if rm.mode != modeCreateMessage {
-		t.Errorf("expected modeCreateMessage after enter, got %d", rm.mode)
+	// Folder Enter always advances to harness selection now.
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness after enter, got %d", rm.mode)
 	}
 	if rm.createFolder != "/Users/test/code/myrepo" {
 		t.Errorf("expected createFolder=/Users/test/code/myrepo, got %q", rm.createFolder)
@@ -230,8 +230,8 @@ func TestCreateFolderMode_EnterWithTextUsesSuggestionWhenVisible(t *testing.T) {
 	if rm.createFolder != "/Users/test/code/suggestion" {
 		t.Errorf("expected createFolder=/Users/test/code/suggestion, got %q", rm.createFolder)
 	}
-	if rm.mode != modeCreateMessage {
-		t.Errorf("expected modeCreateMessage, got %d", rm.mode)
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness, got %d", rm.mode)
 	}
 }
 
@@ -250,8 +250,8 @@ func TestCreateFolderMode_EnterWithTextNoSuggestionsUsesText(t *testing.T) {
 	if rm.createFolder != "/Users/test/code/typed-path" {
 		t.Errorf("expected createFolder=/Users/test/code/typed-path, got %q", rm.createFolder)
 	}
-	if rm.mode != modeCreateMessage {
-		t.Errorf("expected modeCreateMessage, got %d", rm.mode)
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness, got %d", rm.mode)
 	}
 }
 
@@ -388,11 +388,12 @@ func TestHelpOverlaySwallowsKeys(t *testing.T) {
 
 // -- Create wizard: skill selection + message input tests --
 
-func TestCreateWizard_FolderToSkill(t *testing.T) {
+func TestCreateWizard_FolderToHarness(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateFolder
 	m.skillsAvailable = true
 	m.availableSkills = []string{"(none)", "feature", "fix"}
+	m.availableHarnesses = []string{"claude", "pi", "codex"}
 	m.textInput.SetValue("/Users/test/code/myrepo")
 	m.suggestions = nil
 
@@ -400,14 +401,116 @@ func TestCreateWizard_FolderToSkill(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeCreateSkill {
-		t.Errorf("expected modeCreateSkill when skills available, got %d", rm.mode)
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness after folder Enter, got %d", rm.mode)
 	}
 	if rm.createFolder != "/Users/test/code/myrepo" {
 		t.Errorf("expected createFolder to be stashed, got %q", rm.createFolder)
 	}
-	if rm.selectedCreateSkill != 0 {
-		t.Errorf("expected selectedCreateSkill=0, got %d", rm.selectedCreateSkill)
+}
+
+func TestCreateWizard_HarnessNavigation(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateHarness
+	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.selectedCreateHarness = 0
+
+	// Down → 1 (pi)
+	msg := tea.KeyPressMsg{Code: tea.KeyDown}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+	if rm.selectedCreateHarness != 1 {
+		t.Errorf("expected selectedCreateHarness=1 after down, got %d", rm.selectedCreateHarness)
+	}
+
+	// Down → 2 (codex)
+	rm.mode = modeCreateHarness
+	msg = tea.KeyPressMsg{Code: tea.KeyDown}
+	result, _ = rm.handleKey(msg)
+	rm = result.(model)
+	if rm.selectedCreateHarness != 2 {
+		t.Errorf("expected selectedCreateHarness=2 after second down, got %d", rm.selectedCreateHarness)
+	}
+
+	// Down past end stays at 2 (no wrap)
+	rm.mode = modeCreateHarness
+	msg = tea.KeyPressMsg{Code: tea.KeyDown}
+	result, _ = rm.handleKey(msg)
+	rm = result.(model)
+	if rm.selectedCreateHarness != 2 {
+		t.Errorf("expected selectedCreateHarness=2 (clamped), got %d", rm.selectedCreateHarness)
+	}
+
+	// Up → 1
+	rm.mode = modeCreateHarness
+	msg = tea.KeyPressMsg{Code: tea.KeyUp}
+	result, _ = rm.handleKey(msg)
+	rm = result.(model)
+	if rm.selectedCreateHarness != 1 {
+		t.Errorf("expected selectedCreateHarness=1 after up, got %d", rm.selectedCreateHarness)
+	}
+}
+
+func TestCreateWizard_HarnessClaudeToSkill(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateHarness
+	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.selectedCreateHarness = 0 // claude
+	m.createFolder = "/Users/test/repo"
+	m.skillsAvailable = true
+	m.availableSkills = []string{"(none)", "feature"}
+
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeCreateSkill {
+		t.Errorf("expected modeCreateSkill when claude+skills, got %d", rm.mode)
+	}
+	if rm.createHarness != "claude" {
+		t.Errorf("expected createHarness=claude, got %q", rm.createHarness)
+	}
+}
+
+func TestCreateWizard_HarnessCodexSkipsToMessage(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateHarness
+	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.selectedCreateHarness = 2 // codex
+	m.createFolder = "/Users/test/repo"
+	m.skillsAvailable = true
+	m.availableSkills = []string{"(none)", "feature"}
+
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeCreateMessage {
+		t.Errorf("expected modeCreateMessage when non-claude harness, got %d", rm.mode)
+	}
+	if rm.createHarness != "codex" {
+		t.Errorf("expected createHarness=codex, got %q", rm.createHarness)
+	}
+	if rm.createSkillName != "" {
+		t.Errorf("expected createSkillName empty for non-claude harness, got %q", rm.createSkillName)
+	}
+}
+
+func TestCreateWizard_EscFromHarnessGoesBackToFolder(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateHarness
+	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.createFolder = "/Users/test/repo"
+
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	if rm.mode != modeCreateFolder {
+		t.Errorf("expected modeCreateFolder after esc from harness, got %d", rm.mode)
+	}
+	if rm.textInput.Value() != "/Users/test/repo" {
+		t.Errorf("expected textInput restored to folder, got %q", rm.textInput.Value())
 	}
 }
 
@@ -480,22 +583,19 @@ func TestCreateWizard_SkillNoneToMessage(t *testing.T) {
 	}
 }
 
-func TestCreateWizard_EscFromSkillGoesBackToFolder(t *testing.T) {
+func TestCreateWizard_EscFromSkillGoesBackToHarness(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateSkill
 	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
 	m.selectedCreateSkill = 2
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeCreateFolder {
-		t.Errorf("expected modeCreateFolder after esc from skill, got %d", rm.mode)
-	}
-	// Folder should be preserved in the text input
-	if rm.textInput.Value() != "/Users/test/repo" {
-		t.Errorf("expected textInput to show previous folder, got %q", rm.textInput.Value())
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness after esc from skill, got %d", rm.mode)
 	}
 	if rm.selectedCreateSkill != 0 {
 		t.Errorf("expected selectedCreateSkill reset, got %d", rm.selectedCreateSkill)
@@ -524,6 +624,7 @@ func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateMessage
 	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
 	m.createSkillName = "feature"
 	m.skillsAvailable = true
 	m.availableSkills = []string{"(none)", "feature", "fix"}
@@ -533,7 +634,7 @@ func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// Should go back to skill selection since skills are available
+	// Claude + skills available — esc lands on skill selection.
 	if rm.mode != modeCreateSkill {
 		t.Errorf("expected modeCreateSkill after esc from message, got %d", rm.mode)
 	}
@@ -542,10 +643,11 @@ func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	}
 }
 
-func TestCreateWizard_EscFromMessageGoesToFolderWhenNoSkills(t *testing.T) {
+func TestCreateWizard_EscFromMessageGoesToHarnessWhenNoSkills(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateMessage
 	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
 	m.skillsAvailable = false
 	m.textInput.SetValue("some message")
 
@@ -553,12 +655,28 @@ func TestCreateWizard_EscFromMessageGoesToFolderWhenNoSkills(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// No skills — should go back to folder selection
-	if rm.mode != modeCreateFolder {
-		t.Errorf("expected modeCreateFolder after esc (no skills), got %d", rm.mode)
+	// No skills — esc unwinds one step to harness, not all the way to folder.
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness after esc (no skills), got %d", rm.mode)
 	}
-	if rm.textInput.Value() != "/Users/test/repo" {
-		t.Errorf("expected textInput to show previous folder, got %q", rm.textInput.Value())
+}
+
+func TestCreateWizard_EscFromMessageGoesToHarnessForNonClaude(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateMessage
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "codex" // codex skipped the skill step
+	m.skillsAvailable = true
+	m.availableSkills = []string{"(none)", "feature"}
+	m.textInput.SetValue("hi")
+
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
+	result, _ := m.handleKey(msg)
+	rm := result.(model)
+
+	// Codex skipped skill mode, so esc should also skip back over it.
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness after esc (non-claude), got %d", rm.mode)
 	}
 }
 
@@ -626,41 +744,6 @@ func TestCreateWizard_MessageEmptyLaunch(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("expected command even with empty message (launches agent without prompt)")
-	}
-}
-
-func TestShellQuote(t *testing.T) {
-	tests := []struct {
-		input, want string
-	}{
-		{"hello world", "'hello world'"},
-		{"what does this do>", "'what does this do>'"},
-		{"it's a test", "'it'\\''s a test'"},
-		{"foo|bar&baz", "'foo|bar&baz'"},
-		{"", "''"},
-	}
-	for _, tt := range tests {
-		got := shellQuote(tt.input)
-		if got != tt.want {
-			t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
-func TestBuildPrompt(t *testing.T) {
-	tests := []struct {
-		skill, message, want string
-	}{
-		{"feature", "add login", "/feature add login"},
-		{"fix", "", "/fix"},
-		{"", "do something", "do something"},
-		{"", "", ""},
-	}
-	for _, tt := range tests {
-		got := buildPrompt(tt.skill, tt.message)
-		if got != tt.want {
-			t.Errorf("buildPrompt(%q, %q) = %q, want %q", tt.skill, tt.message, got, tt.want)
-		}
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/repo"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -528,38 +529,24 @@ func validateFolder(path string) (string, error) {
 	return absFolder, nil
 }
 
-// buildPrompt constructs the initial agent prompt from skill and message.
-// Returns "" if both are empty.
-func buildPrompt(skill, message string) string {
-	switch {
-	case skill != "" && message != "":
-		return "/" + skill + " " + message
-	case skill != "":
-		return "/" + skill
-	case message != "":
-		return message
-	default:
-		return ""
-	}
-}
-
-// shellQuote wraps s in single quotes for safe shell interpolation.
-// Any embedded single quotes are escaped as '\” (end quote, escaped quote, start quote).
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
-}
-
-// createSession creates a new agent session in a tmux pane (no initial prompt).
-func createSession(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile) tea.Cmd {
-	return createSessionWithPrompt(folder, agents, selfPaneID, profile, "", "")
-}
-
-// createSessionWithPrompt creates a new agent session with an optional skill and message.
-func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, skill, message string) tea.Cmd {
+// createSessionWithPrompt creates a new agent session with an optional skill,
+// message, and harness override. The wizard picks the harness; per-harness
+// settings (Pi.Provider/Model, Codex.Model/Approval/Sandbox/effort) flow
+// through harness.SpawnOptsFor exactly like the web spawn path does.
+func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings, harnessName, skill, message string) tea.Cmd {
 	return func() tea.Msg {
 		absFolder, err := validateFolder(folder)
 		if err != nil {
 			return createSessionMsg{err: err}
+		}
+
+		// Resolve the harness for this spawn through the shared registry
+		// so the TUI and the web honor the same SpawnCommand contract.
+		// Empty harnessName routes to claude via Resolve (same as the
+		// boot-time default).
+		h, hErr := harness.Resolve(harnessName, profile)
+		if hErr != nil {
+			return createSessionMsg{err: hErr}
 		}
 
 		selfTarget := tmux.ResolveTarget(selfPaneID)
@@ -582,13 +569,10 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			}
 		}
 
-		// Build the shell command to run in the new pane.
-		// Passing it directly to new-window/split-window makes it the
-		// pane's initial process, avoiding tmux send-keys buffer limits.
-		cmd := profile.Command
-		if prompt := buildPrompt(skill, message); prompt != "" {
-			cmd = profile.Command + " " + shellQuote(prompt)
-		}
+		// Build the spawn command via the harness so per-harness flags
+		// (claude --effort, pi --provider/--model, codex --model/-a/-s)
+		// are added consistently across UIs.
+		cmd := h.SpawnCommand(skill, message, harness.SpawnOptsFor(h.Name(), settings))
 
 		if found {
 			// Check pane limit; if the window no longer exists (stale agent

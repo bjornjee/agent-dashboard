@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
-	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
@@ -350,7 +349,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOptsFor(activeHarness.Name(), snap.Settings))
+	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, harness.SpawnOptsFor(activeHarness.Name(), snap.Settings))
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
@@ -403,38 +402,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
-}
-
-// spawnOptsFor builds the SpawnOpts payload for the given harness name from
-// user settings. Each harness consumes a disjoint subset:
-//   - claude: DefaultEffort
-//   - pi:     Provider, Model
-//   - codex:  DefaultEffort, Model, Approval, Sandbox
-//
-// Unused fields stay zero-valued (and are ignored by the receiving harness).
-// Per-harness routing here keeps the spawn flag surface honest as new
-// harnesses are added; the alternative (pass everything everywhere) leaks
-// pi's `Provider` and codex's `Approval` into every harness's contract.
-func spawnOptsFor(harnessName string, settings domain.Settings) domain.SpawnOpts {
-	switch harnessName {
-	case "pi":
-		return domain.SpawnOpts{
-			Provider: settings.Harness.Pi.Provider,
-			Model:    settings.Harness.Pi.Model,
-		}
-	case "codex":
-		// Codex effort comes from its own settings field rather than
-		// settings.Effort.Default — codex levels (minimal/low/medium/high)
-		// share names with Claude but the resolution chain differs.
-		return domain.SpawnOpts{
-			DefaultEffort: settings.Harness.Codex.DefaultReasoningEffort,
-			Model:         settings.Harness.Codex.Model,
-			Approval:      settings.Harness.Codex.Approval,
-			Sandbox:       settings.Harness.Codex.Sandbox,
-		}
-	default:
-		return domain.SpawnOpts{DefaultEffort: settings.Effort.Default}
-	}
 }
 
 // firstTmuxSession returns the name of the first available tmux session.

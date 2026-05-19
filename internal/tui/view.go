@@ -43,7 +43,7 @@ func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - m.bannerHeight() // matches resizeViewports
-	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") || (m.diagramsVisible && len(m.diagrams) > 0) {
+	if m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") || (m.diagramsVisible && len(m.diagrams) > 0) {
 		fullHeight := panelHeight - defaultHeaderLines - 1 // -1 for section label
 		if fullHeight < minMessageHeight {
 			fullHeight = minMessageHeight
@@ -82,13 +82,40 @@ func (m *model) updateRightContent() {
 		return
 	}
 
+	// Create harness selection mode
+	if m.mode == modeCreateHarness {
+		var lines []string
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Folder: "+m.createFolder))
+		lines = append(lines, "")
+		lines = append(lines, "  "+boldStyle.Render("Select harness:"))
+		lines = append(lines, "")
+		for i, h := range m.availableHarnesses {
+			prefix := "  "
+			if i == m.selectedCreateHarness {
+				lines = append(lines, prefix+selectedStyle.Render(" "+h+" "))
+			} else {
+				lines = append(lines, prefix+helpStyle.Render(" "+h))
+			}
+		}
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc back │ ^C cancel"))
+		m.filesVP.SetContent("")
+		m.historyVP.SetContent("")
+		m.messageVP.SetContent(strings.Join(lines, "\n"))
+		return
+	}
+
 	// Create skill selection mode
 	if m.mode == modeCreateSkill {
 		var lines []string
 		lines = append(lines, "")
 		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
 		lines = append(lines, "")
-		lines = append(lines, "  "+helpStyle.Render("Folder: "+m.createFolder))
+		lines = append(lines, "  "+helpStyle.Render("Folder:  "+m.createFolder))
+		lines = append(lines, "  "+helpStyle.Render("Harness: "+m.createHarness))
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Select skill:"))
 		lines = append(lines, "")
@@ -114,9 +141,10 @@ func (m *model) updateRightContent() {
 		lines = append(lines, "")
 		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
 		lines = append(lines, "")
-		lines = append(lines, "  "+helpStyle.Render("Folder: "+m.createFolder))
+		lines = append(lines, "  "+helpStyle.Render("Folder:  "+m.createFolder))
+		lines = append(lines, "  "+helpStyle.Render("Harness: "+m.createHarness))
 		if m.createSkillName != "" {
-			lines = append(lines, "  "+helpStyle.Render("Skill:  /"+m.createSkillName))
+			lines = append(lines, "  "+helpStyle.Render("Skill:   /"+m.createSkillName))
 		}
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Message:"))
@@ -952,7 +980,7 @@ func (m model) View() tea.View {
 		v := tea.NewView(content)
 		v.AltScreen = true
 		switch m.mode {
-		case modeReply, modeCreateFolder, modeCreateSkill, modeCreateMessage:
+		case modeReply, modeCreateFolder, modeCreateHarness, modeCreateSkill, modeCreateMessage:
 			v.MouseMode = tea.MouseModeNone
 		default:
 			v.MouseMode = tea.MouseModeCellMotion

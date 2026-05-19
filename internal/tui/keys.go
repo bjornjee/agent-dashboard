@@ -246,23 +246,12 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 			m.createFolder = folder
 
-			if m.skillsAvailable {
-				// Advance to skill selection
-				m.mode = modeCreateSkill
-				m.selectedCreateSkill = 0
-				m.textInput.Reset()
-				m.updateRightContent()
-				return m, nil
-			}
-
-			// Skip skill, advance to message input
-			m.createSkillName = ""
-			m.mode = modeCreateMessage
+			// Always advance to harness selection — the picker pre-selects
+			// the configured default so a single Enter accepts the default.
+			m.mode = modeCreateHarness
 			m.textInput.Reset()
-			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
-			focusCmd := m.textInput.Focus()
 			m.updateRightContent()
-			return m, focusCmd
+			return m, nil
 		case "esc":
 			m.mode = modeNormal
 			m.textInput.Reset()
@@ -302,6 +291,69 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Create harness selection mode — sits between folder and skill.
+	// Pre-populated with the configured default; user may pick any
+	// registered harness for this one spawn.
+	if m.mode == modeCreateHarness {
+		switch key {
+		case "enter":
+			if m.selectedCreateHarness >= 0 && m.selectedCreateHarness < len(m.availableHarnesses) {
+				m.createHarness = m.availableHarnesses[m.selectedCreateHarness]
+			} else {
+				m.createHarness = "claude"
+			}
+			// Only the claude harness has the slash-command surface that
+			// dashboard skills target — for pi/codex, jump straight to
+			// the message step.
+			if m.skillsAvailable && m.createHarness == "claude" {
+				m.mode = modeCreateSkill
+				m.selectedCreateSkill = 0
+				m.textInput.Reset()
+				m.updateRightContent()
+				return m, nil
+			}
+			m.createSkillName = ""
+			m.mode = modeCreateMessage
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
+			focusCmd := m.textInput.Focus()
+			m.updateRightContent()
+			return m, focusCmd
+		case "esc":
+			// Back to folder selection — restore the prior folder so the
+			// user can edit it without retyping.
+			m.mode = modeCreateFolder
+			m.textInput.SetValue(m.createFolder)
+			m.textInput.CursorEnd()
+			focusCmd := m.textInput.Focus()
+			m.suggestions = zsuggest.FilterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
+			m.selectedSugg = 0
+			m.updateRightContent()
+			return m, focusCmd
+		case "ctrl+c":
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.createHarness = ""
+			m.updateRightContent()
+			return m, nil
+		case "down":
+			if m.selectedCreateHarness < len(m.availableHarnesses)-1 {
+				m.selectedCreateHarness++
+				m.updateRightContent()
+			}
+			return m, nil
+		case "up":
+			if m.selectedCreateHarness > 0 {
+				m.selectedCreateHarness--
+				m.updateRightContent()
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Create skill selection mode
 	if m.mode == modeCreateSkill {
 		switch key {
@@ -317,21 +369,18 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			return m, focusCmd
 		case "esc":
-			// Back to folder selection
-			m.mode = modeCreateFolder
+			// Back to harness selection — the wizard inserts harness
+			// between folder and skill, so esc unwinds one step.
+			m.mode = modeCreateHarness
 			m.selectedCreateSkill = 0
-			m.textInput.SetValue(m.createFolder)
-			m.textInput.CursorEnd()
-			focusCmd := m.textInput.Focus()
-			m.suggestions = zsuggest.FilterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
-			m.selectedSugg = 0
 			m.updateRightContent()
-			return m, focusCmd
+			return m, nil
 		case "ctrl+c":
 			m.mode = modeNormal
 			m.textInput.Reset()
 			m.textInput.Placeholder = "Type reply..."
 			m.createFolder = ""
+			m.createHarness = ""
 			m.selectedCreateSkill = 0
 			m.updateRightContent()
 			return m, nil
@@ -371,33 +420,33 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.statusMsgTick = -1 // don't auto-clear
 			m.spawningFolder = folder
 			m.spawningTick = m.tickCount
+			harnessName := m.createHarness
+			settings := m.cfg.Settings
+			// Reset harness state too — message is the final step.
+			m.createHarness = ""
 			return m, tea.Batch(
-				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, skill, message),
+				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, settings, harnessName, skill, message),
 				m.spawningSpinner.Tick,
 			)
 		case "esc":
-			// Back to skill selection (if available) or folder selection
+			// Back one step: skill if the chosen harness was claude AND
+			// skills exist; otherwise back to the harness picker.
 			m.textInput.Reset()
-			if m.skillsAvailable {
+			if m.skillsAvailable && m.createHarness == "claude" {
 				m.mode = modeCreateSkill
 				m.createSkillName = ""
 				m.updateRightContent()
 				return m, nil
 			}
-			// No skills — back to folder selection
-			m.mode = modeCreateFolder
-			m.textInput.SetValue(m.createFolder)
-			m.textInput.CursorEnd()
-			focusCmd := m.textInput.Focus()
-			m.suggestions = zsuggest.FilterZSuggestions(m.createFolder, m.zEntries, m.pathExists)
-			m.selectedSugg = 0
+			m.mode = modeCreateHarness
 			m.updateRightContent()
-			return m, focusCmd
+			return m, nil
 		case "ctrl+c":
 			m.mode = modeNormal
 			m.textInput.Reset()
 			m.textInput.Placeholder = "Type reply..."
 			m.createFolder = ""
+			m.createHarness = ""
 			m.createSkillName = ""
 			m.selectedCreateSkill = 0
 			m.updateRightContent()
