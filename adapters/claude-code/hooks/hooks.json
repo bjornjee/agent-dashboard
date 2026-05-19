@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js",
             "async": true,
             "timeout": 5
           }
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/warn-destructive.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/warn-destructive.js"
           }
         ],
         "description": "Block destructive shell commands (rm -rf, git reset --hard, DROP TABLE, etc.)"
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/block-main-commit.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/block-main-commit.js"
           }
         ],
         "description": "Block git commit on main/master — require a feature branch"
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-skill-gate.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-skill-gate.js"
           }
         ],
         "description": "Block direct gh pr create — require /agent-dashboard:pr"
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-write-gate.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-write-gate.js"
           }
         ],
         "description": "Block codex-companion task without --write (prevents read-only sandbox)"
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js",
             "async": true,
             "timeout": 3
           }
@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-delegation-gate.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/codex-delegation-gate.js"
           }
         ],
         "description": "Nudge Codex delegation after plan approval (worktree + codex available)"
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/commit-lint.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/commit-lint.js"
           }
         ],
         "description": "Validate conventional commit message format on git commit"
@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/test-gate.js\""
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/test-gate.js"
           }
         ],
         "description": "Block git commit unless make test passes (set SKIP_TEST_GATE=1 to bypass)"
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-detect.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-detect.js",
             "async": true,
             "timeout": 3
           }
@@ -117,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js",
             "async": true,
             "timeout": 3
           }
@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-fast.js",
             "async": true,
             "timeout": 3
           }
@@ -145,7 +145,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js",
             "async": true,
             "timeout": 5
           }
@@ -159,7 +159,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js",
             "async": true,
             "timeout": 5
           }
@@ -173,7 +173,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agent-state-reporter.js",
             "async": true,
             "timeout": 5
           }
@@ -185,7 +185,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/mermaid-extractor.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/mermaid-extractor.js",
             "async": true,
             "timeout": 10
           }
@@ -199,7 +199,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/desktop-notify.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/desktop-notify.js",
             "async": true,
             "timeout": 10
           }
@@ -213,7 +213,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-skill-detect.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pr-skill-detect.js",
             "async": true,
             "timeout": 3
           }
@@ -227,7 +227,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/desktop-notify.js\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/desktop-notify.js",
             "async": true,
             "timeout": 10
           }
