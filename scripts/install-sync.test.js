@@ -235,5 +235,4 @@ describe('install.sh --sync-adapters (integration)', () => {
       'AGENT_DASHBOARD_ASSUME_YES must overwrite a user-modified hooks.json'
     );
   });
-
 });
