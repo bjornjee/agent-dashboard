@@ -6,7 +6,7 @@ nav_order: 2
 
 # Settings
 
-The dashboard is configured via a TOML file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). The installer creates this from the example file. Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
+The dashboard is configured via a TOML file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). From a repo checkout, the installer copies this from `settings.example.toml` when the destination file does not already exist. Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
 
 ---
 

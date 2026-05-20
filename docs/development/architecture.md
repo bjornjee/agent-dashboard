@@ -21,7 +21,7 @@ agent-dashboard/
 ├── LICENSE
 ├── SECURITY.md
 ├── release-please-config.json
-├── install.sh                         # installer (accepts adapter name)
+├── install.sh                         # binary installer plus copy-if-missing Codex hook install
 ├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
 ├── settings.example.toml              # default settings (copied by installer)
 ├── go.mod / go.sum
@@ -31,6 +31,7 @@ agent-dashboard/
 │   └── populate-quotes/main.go        # bulk quote fetcher for SQLite cache
 ├── internal/                          # core packages (see below)
 ├── adapters/claude-code/              # Claude Code plugin (see Adapter reference)
+├── adapters/codex/hooks/              # Codex global hook bundle copied by install.sh
 └── schema/
     └── agent-state.schema.json        # JSON Schema for agent state files
 ```

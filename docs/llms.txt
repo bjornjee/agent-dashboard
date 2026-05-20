@@ -37,6 +37,7 @@
 - One-liner (binary): `curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh`
 - From source (Go 1.26+): `git clone https://github.com/bjornjee/agent-dashboard && cd agent-dashboard && ./install.sh --build`
 - Claude Code plugin: `/marketplace add bjornjee/agent-dashboard` then `/plugin install agent-dashboard@agent-dashboard`.
+- Codex CLI hooks: installed by `install.sh` with copy-if-missing actions. The runtime is copied to `~/.codex/hooks/agent-dashboard`; `~/.codex/hooks.json` is copied only when absent. Existing Codex hook configs are left untouched.
 
 ## Companion plugin
 

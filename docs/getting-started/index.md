@@ -17,9 +17,10 @@ Get agent-dashboard running in five minutes.
 |:-----------|:---------|:--------|
 | [tmux](https://github.com/tmux/tmux) | Yes | Agent pane management and live capture |
 | [Claude Code](https://claude.com/claude-code) | Yes | The agents this dashboard monitors |
-| [Node.js 18+](https://nodejs.org/) | Yes | Claude Code adapter hooks |
+| [Node.js 18+](https://nodejs.org/) | Yes | Claude Code and Codex adapter hooks |
 | [git](https://git-scm.com/) | Yes | Diff viewer, branch detection |
 | [GitHub CLI (`gh`)](https://cli.github.com/) | No | Detects existing PRs so `g` opens the diff page instead of creating a new PR |
+| [Codex CLI](https://developers.openai.com/codex/) 0.130+ | No | Show Codex sessions in the dashboard |
 | [z (zsh plugin)](https://github.com/agkozak/zsh-z) | No | Frecency-ranked directory suggestions when creating sessions |
 
 ## Step 1: Install the binary
@@ -30,7 +31,7 @@ Download the pre-built binary from the latest [GitHub Release](https://github.co
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. No Go toolchain required.
+The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. It also copies Codex dashboard hooks to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` when that file does not already exist. No Go toolchain required.
 
 ### Build from source
 
@@ -64,13 +65,21 @@ Then restart Claude Code sessions for hooks and skills to take effect.
 
 Without it, skill-gated session types (feature, fix, chore, refactor, investigate, implement, pr, rca) will not function as intended.
 
-## Step 3: Launch
+## Step 3: Codex CLI support
+
+Codex support is installed by `install.sh`, not by editing the managed plugin cache. The installer only performs copy-if-missing actions: it copies the Codex hook bundle to `~/.codex/hooks/agent-dashboard` and copies the global hook template to `~/.codex/hooks.json` only when that file is absent.
+
+After installing, restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions like Claude sessions — same state file, same conversation panel, same cost dashboard.
+
+If `~/.codex/hooks.json` already exists, the installer leaves it untouched. Review the template at `~/.codex/hooks/agent-dashboard/hooks.json` and reconcile it with your existing Codex hooks before restarting Codex.
+
+## Step 4: Launch
 
 ```bash
 agent-dashboard
 ```
 
-You should see the dashboard with any running Claude Code agents listed. Try these first interactions:
+You should see the dashboard with any running Claude Code or Codex agents listed. Try these first interactions:
 
 - **`j` / `k`** — navigate the agent list
 - **`Enter`** — jump to an agent's tmux pane
@@ -79,7 +88,7 @@ You should see the dashboard with any running Claude Code agents listed. Try the
 - **`q`** — quit
 
 {: .note }
-If no agents appear, start a Claude Code session in tmux first. The dashboard watches for agent state files written by the adapter hooks.
+If no agents appear, start a Claude Code or Codex session in tmux first. The dashboard watches for agent state files written by the adapter hooks.
 
 ## Uninstall
 
