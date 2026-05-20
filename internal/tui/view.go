@@ -1140,7 +1140,7 @@ func (m model) renderRightPanel() string {
 	panelHeight := m.height - 5 - m.bannerHeight()
 
 	// Create wizard modes: simple form
-	if m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage {
+	if m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateMessage {
 		return borderStyle.
 			Width(m.rightWidth + 2).
 			Height(panelHeight + 2).
@@ -1404,7 +1404,7 @@ func (m model) modeBadge() string {
 		return badgeStyle.Foreground(questionColor).Render("-- JUMP? --")
 	case m.mode == modeConfirmDeleteDiagram:
 		return badgeStyle.Foreground(errorColor).Render("-- DELETE? --")
-	case m.mode == modeCreateFolder || m.mode == modeCreateSkill || m.mode == modeCreateMessage:
+	case m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateMessage:
 		return badgeStyle.Foreground(themeSapphire).Render("-- CREATE --")
 	case m.mode == modeDinoGame:
 		return badgeStyle.Foreground(themeGreen).Render("-- DINO --")
@@ -1541,6 +1541,14 @@ func (m model) renderHelpBar() string {
 	if m.mode == modeCreateFolder {
 		parts = append(parts, boldStyle.Render("enter")+" create")
 		parts = append(parts, boldStyle.Render("esc")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeCreateHarness {
+		parts = append(parts, boldStyle.Render("enter")+" select")
+		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
+		parts = append(parts, boldStyle.Render("esc")+" back")
+		parts = append(parts, boldStyle.Render("^c")+" cancel")
 		return m.truncateHelpBar(parts)
 	}
 

@@ -421,6 +421,76 @@ func TestCreateHarnessViewShowsOnlyClaudeAndCodex(t *testing.T) {
 	}
 }
 
+// The harness picker must render as a clean full-panel form (like the skill picker),
+// not overlaid on the currently-selected agent's right panel. Regression test for the
+// bug where modeCreateHarness was missing from the renderRightPanel simple-form branch
+// and the agent header / files / history / live sections bled through underneath.
+func TestRenderRightPanel_CreateHarness_UsesSimpleFormLayout(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.width = 120
+	m.height = 40
+	m.startupDone = true
+	m.resizeViewports()
+	// A live agent must be present and selected so the buggy fallback path
+	// (agent != nil → full agent layout) is the one being exercised.
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", TmuxPaneID: "%5"},
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+	m.mode = modeCreateHarness
+	m.createFolder = "/Users/test/repo"
+	m.availableHarnesses = []string{"claude", "codex"}
+	m.selectedCreateHarness = 0
+	m.updateRightContent()
+
+	panel := m.renderRightPanel()
+
+	for _, want := range []string{"CREATE NEW SESSION", "Select harness:", "Claude Code", "Codex CLI"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("harness panel missing %q in:\n%s", want, panel)
+		}
+	}
+	// Parent-agent section labels (rendered by the fallback branch at view.go:~1282-1337)
+	// must NOT leak into the harness picker layout.
+	for _, unwanted := range []string{"Files:", "── History", "── Live"} {
+		if strings.Contains(panel, unwanted) {
+			t.Errorf("harness panel should not contain agent section label %q in:\n%s", unwanted, panel)
+		}
+	}
+}
+
+// The mode badge must show -- CREATE -- across every step of the create wizard,
+// including the harness step. Sister to TestRenderRightPanel_CreateHarness_UsesSimpleFormLayout.
+func TestModeBadge_CreateHarness_ShowsCreateLabel(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	m := NewModel(testConfig(""), nil)
+	m.mode = modeCreateHarness
+	if got := m.modeBadge(); !strings.Contains(got, "-- CREATE --") {
+		t.Errorf("modeBadge in modeCreateHarness = %q, want substring %q", got, "-- CREATE --")
+	}
+}
+
+// The help bar must advertise the harness picker's keybindings (enter/↑↓/esc/^c),
+// matching the parity already provided for modeCreateSkill.
+func TestRenderHelpBar_CreateHarness_ShowsPickerKeys(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	m := NewModel(testConfig(""), nil)
+	m.width = 200
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeCreateHarness
+	bar := m.renderHelpBar()
+	for _, want := range []string{"enter", "select", "cycle", "esc", "back"} {
+		if !strings.Contains(bar, want) {
+			t.Errorf("help bar in modeCreateHarness missing %q in:\n%s", want, bar)
+		}
+	}
+}
+
 func TestRenderHelpOverlayTwoColumnsWide(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
