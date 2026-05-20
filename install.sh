@@ -411,12 +411,74 @@ sync_codex_hooks_json() {
   esac
 }
 
+disable_legacy_codex_plugin_hooks() {
+  config_file="$CODEX_DIR/config.toml"
+  if [ ! -f "$config_file" ]; then
+    return 0
+  fi
+
+  tmp_file="$config_file.tmp.$$"
+  set +e
+  awk '
+    function flush_agent_dashboard() {
+      if (in_agent_dashboard && !saw_enabled) {
+        print "enabled = false"
+        changed = 1
+      }
+    }
+
+    /^\[/ {
+      flush_agent_dashboard()
+      in_agent_dashboard = ($0 == "[plugins.\"agent-dashboard@agent-dashboard\"]")
+      saw_enabled = 0
+      print
+      next
+    }
+
+    in_agent_dashboard && /^[[:space:]]*enabled[[:space:]]*=/ {
+      saw_enabled = 1
+      if ($0 !~ /^[[:space:]]*enabled[[:space:]]*=[[:space:]]*false([[:space:]]*(#.*)?)?$/) {
+        changed = 1
+      }
+      print "enabled = false"
+      next
+    }
+
+    { print }
+
+    END {
+      flush_agent_dashboard()
+      if (changed) {
+        exit 2
+      }
+    }
+  ' "$config_file" > "$tmp_file"
+  awk_status=$?
+  set -e
+
+  case "$awk_status" in
+    0)
+      rm -f "$tmp_file"
+      ;;
+    2)
+      mv "$tmp_file" "$config_file"
+      info "Disabled legacy Codex plugin hooks for agent-dashboard."
+      ;;
+    *)
+      rm -f "$tmp_file"
+      err "Failed to update $config_file"
+      exit "$awk_status"
+      ;;
+  esac
+}
+
 install_codex_hooks() {
   step "3/3" "Installing Codex dashboard hooks..."
   resolve_codex_hooks_source
 
   sync_codex_bundle
   sync_codex_hooks_json
+  disable_legacy_codex_plugin_hooks
 
   info "Codex hook runtime: $CODEX_HOOKS_DIR"
   info "Codex hook config: $CODEX_HOOKS_FILE"

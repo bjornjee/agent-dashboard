@@ -235,4 +235,33 @@ describe('install.sh --sync-adapters (integration)', () => {
       'AGENT_DASHBOARD_ASSUME_YES must overwrite a user-modified hooks.json'
     );
   });
+
+  it('disables the legacy Codex plugin hook path when global hooks are synced', () => {
+    freshEnv('legacy-plugin-hooks');
+    fs.mkdirSync(codexHome, { recursive: true });
+    fs.writeFileSync(
+      path.join(codexHome, 'config.toml'),
+      [
+        '[plugins."agent-dashboard@agent-dashboard"]',
+        'enabled = true',
+        '',
+        '[plugins."browser@openai-bundled"]',
+        'enabled = true',
+        '',
+      ].join('\n')
+    );
+
+    const out = runSync({ codexHome, stateDir });
+    const config = fs.readFileSync(path.join(codexHome, 'config.toml'), 'utf8');
+
+    assert.match(out, /Disabled legacy Codex plugin hooks/);
+    assert.match(
+      config,
+      /\[plugins\."agent-dashboard@agent-dashboard"\]\nenabled = false/
+    );
+    assert.match(
+      config,
+      /\[plugins\."browser@openai-bundled"\]\nenabled = true/
+    );
+  });
 });
