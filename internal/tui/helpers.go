@@ -22,14 +22,14 @@ const accentBarGlyph = "▌"
 
 // withAccentBar replaces the first leading space of line with a styled accent
 // bar tinted to harness. Net visual width is unchanged: the bar is one cell
-// wide and replaces one space. Returns line unchanged when not selected or
-// when the line has no leading space.
+// wide and replaces one space. Returns line unchanged when it has no leading
+// space.
 //
 // Apply this BEFORE highlightLine so the bar participates in the background
 // overlay; highlightLine is ANSI-aware and re-applies bg after the bar's
 // foreground reset, so both colors persist.
-func withAccentBar(line string, selected bool, harness string) string {
-	if !selected || !strings.HasPrefix(line, " ") {
+func withAccentBar(line string, harness string) string {
+	if !strings.HasPrefix(line, " ") {
 		return line
 	}
 	bar := lipgloss.NewStyle().Foreground(harnessColor(harness)).Render(accentBarGlyph)
@@ -192,7 +192,7 @@ func harnessColor(harness string) color.Color {
 func harnessBadgeToken(harness string, selected bool) string {
 	label := normalizeHarness(harness)
 	if selected {
-		return lipgloss.NewStyle().Foreground(harnessColor(label)).Bold(true).Render(label)
+		return lipgloss.NewStyle().Foreground(harnessColor(harness)).Bold(true).Render(label)
 	}
 	return lipgloss.NewStyle().Foreground(themeSubtext0).Render(label)
 }

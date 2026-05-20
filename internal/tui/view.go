@@ -386,7 +386,7 @@ func (m model) agentListContentWithLine() (string, int) {
 			}
 			line := fmt.Sprintf("    %s %s %s", helpStyle.Render(prefix), subIcon, subLabel)
 			if nodeIdx == m.selected {
-				line = withAccentBar(line, true, agent.Harness)
+				line = withAccentBar(line, agent.Harness)
 				line = highlightLine(line, m.leftWidth)
 			}
 			lines = append(lines, line)
@@ -441,7 +441,7 @@ func (m model) agentListContentWithLine() (string, int) {
 		}
 
 		if nodeIdx == m.selected {
-			line = withAccentBar(line, true, agent.Harness)
+			line = withAccentBar(line, agent.Harness)
 			line = highlightLine(line, m.leftWidth)
 		}
 
@@ -457,7 +457,7 @@ func (m model) agentListContentWithLine() (string, int) {
 			}
 			branchLine := branchIndent + styledBranch(branchStr)
 			if nodeIdx == m.selected {
-				branchLine = withAccentBar(branchLine, true, agent.Harness)
+				branchLine = withAccentBar(branchLine, agent.Harness)
 				branchLine = highlightLine(branchLine, m.leftWidth)
 			}
 			lines = append(lines, branchLine)
@@ -470,7 +470,7 @@ func (m model) agentListContentWithLine() (string, int) {
 		// least the harness token.
 		badgeLine := "    " + agentBadges(agent, nodeIdx == m.selected)
 		if nodeIdx == m.selected {
-			badgeLine = withAccentBar(badgeLine, true, agent.Harness)
+			badgeLine = withAccentBar(badgeLine, agent.Harness)
 			badgeLine = highlightLine(badgeLine, m.leftWidth)
 		}
 		lines = append(lines, badgeLine)
