@@ -176,11 +176,14 @@ func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
 // lookupAgent finds an agent by session ID from the current state.
 func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 	sf := state.ReadState(s.cfg.Profile.StateDir)
+	var paneCwds map[string]string
 	if tmux.TmuxIsAvailable() {
 		state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
-		state.ResolveAgentBranches(&sf, tmux.TmuxListPaneCwds())
+		paneCwds = tmux.TmuxListPaneCwds()
 	}
 	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
+	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
+	state.ResolveAgentBranches(&sf, paneCwds)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
 	agent, ok := sf.Agents[id]

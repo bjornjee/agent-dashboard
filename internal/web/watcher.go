@@ -103,11 +103,14 @@ func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 // readAgentState reads and resolves the current agent state.
 func (s *Server) readAgentState() []domain.Agent {
 	sf := state.ReadState(s.cfg.Profile.StateDir)
+	var paneCwds map[string]string
 	if tmux.TmuxIsAvailable() {
 		state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
-		state.ResolveAgentBranches(&sf, tmux.TmuxListPaneCwds())
+		paneCwds = tmux.TmuxListPaneCwds()
 	}
 	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
+	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
+	state.ResolveAgentBranches(&sf, paneCwds)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
 	return state.SortedAgents(sf, "")
