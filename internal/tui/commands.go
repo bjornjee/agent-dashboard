@@ -498,11 +498,10 @@ func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
 			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", agent.TmuxPaneID)}
 		}
 		if agent.Harness == "codex" {
-			submitKey := "Enter"
 			if agent.State == "running" {
-				submitKey = "Tab"
+				return sendResultMsg{err: tmux.TmuxSendKeysClearingInput(target, text, "Tab", "Enter")}
 			}
-			return sendResultMsg{err: tmux.TmuxSendKeysClearingInput(target, text, submitKey)}
+			return sendResultMsg{err: tmux.TmuxSendKeysClearingInput(target, text, "Enter")}
 		}
 		return sendResultMsg{err: tmux.TmuxSendKeys(target, text)}
 	}

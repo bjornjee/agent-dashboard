@@ -170,7 +170,7 @@ func TmuxSendKeys(target, text string) error {
 	return tmuxSendKeysWithSubmit(target, text, "Enter")
 }
 
-func tmuxSendKeysWithSubmit(target, text, submitKey string) error {
+func tmuxSendKeysWithSubmit(target, text string, submitKeys ...string) error {
 	for len(text) > 0 {
 		chunk := text
 		if len(chunk) > sendKeysChunkSize {
@@ -184,19 +184,25 @@ func tmuxSendKeysWithSubmit(target, text, submitKey string) error {
 			return err
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
-	defer cancel()
-	return runner.Run(ctx, "send-keys", "-t", target, submitKey)
+	for _, key := range submitKeys {
+		ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+		err := runner.Run(ctx, "send-keys", "-t", target, key)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func TmuxSendKeysClearingInput(target, text, submitKey string) error {
+func TmuxSendKeysClearingInput(target, text string, submitKeys ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	err := runner.Run(ctx, "send-keys", "-t", target, "C-u")
 	cancel()
 	if err != nil {
 		return err
 	}
-	return tmuxSendKeysWithSubmit(target, text, submitKey)
+	return tmuxSendKeysWithSubmit(target, text, submitKeys...)
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.
