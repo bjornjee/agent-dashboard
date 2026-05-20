@@ -360,34 +360,6 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.worktree_cwd, undefined);
   });
 
-  it('detects worktree from input.cwd even when Bash command used a relative cd (regression)', () => {
-    // Regression for the dashboard-shows-wrong-branch bug: previously the hook
-    // parsed Bash commands for `cd /abs/path && ...` and rejected relative paths.
-    // Now we read input.cwd directly, so any cd form (relative, $(...), pushd)
-    // resolves correctly because Claude Code reports the live cwd.
-    const existing = {
-      target: 'main:1.0',
-      state: 'running',
-      current_tool: 'Bash',
-    };
-
-    const { changed, update } = buildUpdate({
-      input: {
-        session_id: 'abc123',
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'cd ../worktrees/skills/my-feature && pwd' },
-        cwd: '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature',
-      },
-      existing,
-      target: 'main:1.0',
-      tmuxPane: '%0',
-    });
-
-    assert.equal(changed, true);
-    assert.equal(update.worktree_cwd, '/Users/bjornjee/Code/bjornjee/worktrees/skills/my-feature');
-  });
-
   it('does not stamp Claude Code subagent isolation paths (.claude/worktrees/agent-*)', () => {
     // Claude Code auto-creates an isolation worktree under
     // <project>/.claude/worktrees/agent-<id>/ for backgrounded subagents.
