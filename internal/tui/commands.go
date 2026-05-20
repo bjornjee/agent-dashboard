@@ -20,6 +20,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/repo"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
+	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
@@ -531,7 +532,7 @@ func validateFolder(path string) (string, error) {
 
 // createSessionWithPrompt creates a new agent session with an optional skill,
 // message, and harness override. The wizard picks the harness; per-harness
-// settings (Pi.Provider/Model, Codex.Model/Approval/Sandbox/effort) flow
+// settings (Codex.Model/Approval/Sandbox/effort) flow
 // through harness.SpawnOptsFor exactly like the web spawn path does.
 func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings, harnessName, skill, message string) tea.Cmd {
 	return func() tea.Msg {
@@ -569,9 +570,13 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			}
 		}
 
+		if !skills.SupportsHarness(skill, h.Name()) {
+			return createSessionMsg{err: fmt.Errorf("skill %q is not supported by %s", skill, h.Name())}
+		}
+
 		// Build the spawn command via the harness so per-harness flags
-		// (claude --effort, pi --provider/--model, codex --model/-a/-s)
-		// are added consistently across UIs.
+		// (claude --effort, codex --model/-a/-s) are added consistently
+		// across UIs.
 		cmd := h.SpawnCommand(skill, message, harness.SpawnOptsFor(h.Name(), settings))
 
 		if found {

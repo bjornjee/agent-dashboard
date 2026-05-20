@@ -8,8 +8,6 @@ nav_order: 3
 
 The adapter is a Claude Code plugin that bridges between Claude Code sessions and the dashboard. It writes agent state files that the dashboard reads, and provides workflow skills that agents use.
 
-A second adapter for [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) lives in `adapters/pi/` (JS-only). It registers a pi extension that writes the same `~/.agent-dashboard/agents/<sid>.json` contract, so pi sessions appear in the dashboard alongside Claude Code sessions. Install with `make install-pi-adapter` from a repo checkout; pi auto-discovers the extension on next launch.
-
 Codex CLI state sync is installed through global Codex hooks instead of the managed plugin cache. `install.sh` copies the hook runtime to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` only if that file is missing. If you already have Codex hooks, reconcile them manually with the template at `~/.codex/hooks/agent-dashboard/hooks.json`.
 
 ---

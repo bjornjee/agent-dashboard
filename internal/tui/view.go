@@ -94,10 +94,21 @@ func (m *model) updateRightContent() {
 		lines = append(lines, "")
 		for i, h := range m.availableHarnesses {
 			prefix := "  "
+			label := harnessDisplayName(h)
+			var badges []string
+			if h == m.cfg.Settings.Harness.Default {
+				badges = append(badges, "default")
+			}
 			if i == m.selectedCreateHarness {
-				lines = append(lines, prefix+selectedStyle.Render(" "+h+" "))
+				badges = append(badges, "selected")
+			}
+			if len(badges) > 0 {
+				label += " (" + strings.Join(badges, ", ") + ")"
+			}
+			if i == m.selectedCreateHarness {
+				lines = append(lines, prefix+selectedStyle.Render(" "+label+" "))
 			} else {
-				lines = append(lines, prefix+helpStyle.Render(" "+h))
+				lines = append(lines, prefix+helpStyle.Render(" "+label))
 			}
 		}
 		lines = append(lines, "")
@@ -215,6 +226,17 @@ func (m *model) updateRightContent() {
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
 	} else {
 		m.messageVP.SetContent("")
+	}
+}
+
+func harnessDisplayName(name string) string {
+	switch name {
+	case "codex":
+		return "Codex CLI"
+	case "claude":
+		return "Claude Code"
+	default:
+		return name
 	}
 }
 

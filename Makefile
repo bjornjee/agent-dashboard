@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web install-pi-adapter test-pi-adapter uninstall clean seed web docs help
+.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web uninstall clean seed web docs help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -46,12 +46,6 @@ uninstall: ## Remove binary and state directory
 
 install-web: build-web ## Install web server binary
 	cp bin/agent-dashboard-web ~/.local/bin/
-
-install-pi-adapter: ## Symlink pi extension into ~/.pi/agent/extensions/
-	./adapters/pi/scripts/install.sh
-
-test-pi-adapter: ## Run pi adapter tests
-	cd adapters/pi && node --test test/*.test.js
 
 install-codex-adapter: ## Register the dashboard plugin with codex (codex hook schema is 1:1 with Claude's)
 	@codex plugin marketplace add bjornjee/agent-dashboard

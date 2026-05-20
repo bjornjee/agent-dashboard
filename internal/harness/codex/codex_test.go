@@ -89,13 +89,3 @@ func TestCodex_ConfigDir(t *testing.T) {
 		t.Errorf("ConfigDir() = %q, want %q", got, "/tmp/.codex")
 	}
 }
-
-// Provider field on SpawnOpts is pi-mono-specific and ignored by codex.
-func TestCodex_SpawnCommand_IgnoresProvider(t *testing.T) {
-	h := codex.New(codex.Config{Command: "codex"})
-	got := h.SpawnCommand("", "", domain.SpawnOpts{Provider: "openai"})
-	want := "codex"
-	if got != want {
-		t.Errorf("got %q, want %q (Provider must be ignored)", got, want)
-	}
-}

@@ -10,7 +10,6 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/harness/claude"
 	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
-	"github.com/bjornjee/agent-dashboard/internal/harness/pi"
 )
 
 // ErrUnknownHarness is returned by Resolve when name doesn't match a known
@@ -19,7 +18,7 @@ import (
 type ErrUnknownHarness struct{ Name string }
 
 func (e ErrUnknownHarness) Error() string {
-	return fmt.Sprintf("unknown harness %q (known: claude, pi, codex)", e.Name)
+	return fmt.Sprintf("unknown harness %q (known: claude, codex)", e.Name)
 }
 
 // Resolve constructs a Harness by name. Returns ErrUnknownHarness for any
@@ -30,12 +29,6 @@ func Resolve(name string, profile domain.AgentProfile) (domain.Harness, error) {
 	switch name {
 	case "claude", "":
 		return claude.New(profile), nil
-	case "pi":
-		return pi.New(pi.Config{
-			Command:     "pi",
-			SessionsDir: filepath.Join(profile.HomeDir, ".pi", "agent", "sessions"),
-			ConfigDir:   filepath.Join(profile.HomeDir, ".pi"),
-		}), nil
 	case "codex":
 		return codex.New(codex.Config{
 			Command:     "codex",

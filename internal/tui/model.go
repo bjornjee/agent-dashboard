@@ -212,9 +212,9 @@ type model struct {
 	availableSkills       []string // display list: ["(none)", "chore", "feature", ...]
 	skillsAvailable       bool     // true if any skills were discovered on disk
 	createFolder          string   // folder selected in step 1
-	availableHarnesses    []string // display list: ["claude", "pi", "codex"]
+	availableHarnesses    []string // display list: ["claude", "codex"]
 	selectedCreateHarness int      // index into availableHarnesses
-	createHarness         string   // selected harness ("claude" | "pi" | "codex")
+	createHarness         string   // selected harness ("claude" | "codex")
 	selectedCreateSkill   int      // index into availableSkills
 	createSkillName       string   // selected skill name ("" if none)
 
@@ -517,9 +517,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	ss.Spinner = spinner.Dot
 	ss.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
-	// Discover skills from agent-dashboard plugin cache. Skills are
-	// Claude-only today; the create-wizard's harness step decides whether
-	// the skill mode actually runs.
+	// Discover skills from agent-dashboard plugin cache.
 	rawSkills := skills.DiscoverSkills(cfg.Profile.PluginCacheDir)
 	skillList := skills.BuildSkillList(rawSkills)
 	hasSkills := len(skillList) > 0
@@ -527,7 +525,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	// Default the harness picker to the configured default so the wizard
 	// pre-selects what settings.toml says. Falls back to claude (index 0)
 	// if the configured value isn't in availableHarnesses.
-	harnessOptions := []string{"claude", "pi", "codex"}
+	harnessOptions := []string{"claude", "codex"}
 	defaultHarnessIdx := 0
 	for i, name := range harnessOptions {
 		if name == cfg.Settings.Harness.Default {

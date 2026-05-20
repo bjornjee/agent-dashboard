@@ -65,11 +65,9 @@ func TestClaude_ConfigDir(t *testing.T) {
 	}
 }
 
-// Provider/Model fields on SpawnOpts are ignored by claude — only pi-mono
-// dispatches on them. This locks that contract.
-func TestClaude_SpawnCommand_IgnoresProviderAndModel(t *testing.T) {
+func TestClaude_SpawnCommand_IgnoresCodexModel(t *testing.T) {
 	h := claude.New(domain.AgentProfile{Command: "claude"})
-	got := h.SpawnCommand("feature", "", domain.SpawnOpts{DefaultEffort: "high", Provider: "openai", Model: "openai-codex/gpt-5.5"})
+	got := h.SpawnCommand("feature", "", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5"})
 	want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/feature'"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)

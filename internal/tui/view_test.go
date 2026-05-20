@@ -171,6 +171,30 @@ func TestRenderHelpOverlayDocumentsDiagramKeys(t *testing.T) {
 	}
 }
 
+func TestCreateHarnessViewShowsOnlyClaudeAndCodex(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 100
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeCreateHarness
+	m.createFolder = "/Users/test/repo"
+	m.availableHarnesses = []string{"claude", "codex"}
+	m.selectedCreateHarness = 1
+	m.updateRightContent()
+
+	content := m.messageVP.View()
+	for _, want := range []string{"Claude Code", "Codex CLI", "selected", "default"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("create harness view missing %q in:\n%s", want, content)
+		}
+	}
+	if strings.Contains(content, "pi") {
+		t.Errorf("create harness view should not mention pi:\n%s", content)
+	}
+}
+
 func TestRenderHelpOverlayTwoColumnsWide(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 

@@ -163,44 +163,45 @@ func TestDefaultSettings_Harness(t *testing.T) {
 	if s.Harness.Default != "claude" {
 		t.Errorf("Harness.Default = %q, want \"claude\"", s.Harness.Default)
 	}
-	if s.Harness.Pi.Provider != "" {
-		t.Errorf("Harness.Pi.Provider = %q, want \"\"", s.Harness.Pi.Provider)
-	}
-	if s.Harness.Pi.Model != "" {
-		t.Errorf("Harness.Pi.Model = %q, want \"\"", s.Harness.Pi.Model)
-	}
 }
 
-func TestLoadSettings_HarnessPi(t *testing.T) {
+func TestLoadSettings_HarnessCodex(t *testing.T) {
 	dir := t.TempDir()
 	content := `[harness]
-default = "pi"
+default = "codex"
 
-[harness.pi]
-provider = "openai"
-model    = "openai-codex/gpt-5.5"
+[harness.codex]
+model = "gpt-5.5"
+approval = "on-request"
+sandbox = "workspace-write"
+default_reasoning_effort = "high"
 `
 	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	s := LoadSettings(dir)
-	if s.Harness.Default != "pi" {
-		t.Errorf("Harness.Default = %q, want \"pi\"", s.Harness.Default)
+	if s.Harness.Default != "codex" {
+		t.Errorf("Harness.Default = %q, want \"codex\"", s.Harness.Default)
 	}
-	if s.Harness.Pi.Provider != "openai" {
-		t.Errorf("Harness.Pi.Provider = %q, want \"openai\"", s.Harness.Pi.Provider)
+	if s.Harness.Codex.Model != "gpt-5.5" {
+		t.Errorf("Harness.Codex.Model = %q, want \"gpt-5.5\"", s.Harness.Codex.Model)
 	}
-	if s.Harness.Pi.Model != "openai-codex/gpt-5.5" {
-		t.Errorf("Harness.Pi.Model = %q, want \"openai-codex/gpt-5.5\"", s.Harness.Pi.Model)
+	if s.Harness.Codex.Approval != "on-request" {
+		t.Errorf("Harness.Codex.Approval = %q, want \"on-request\"", s.Harness.Codex.Approval)
+	}
+	if s.Harness.Codex.Sandbox != "workspace-write" {
+		t.Errorf("Harness.Codex.Sandbox = %q, want \"workspace-write\"", s.Harness.Codex.Sandbox)
+	}
+	if s.Harness.Codex.DefaultReasoningEffort != "high" {
+		t.Errorf("Harness.Codex.DefaultReasoningEffort = %q, want \"high\"", s.Harness.Codex.DefaultReasoningEffort)
 	}
 }
 
-func TestLoadSettings_HarnessPartial(t *testing.T) {
+func TestLoadSettings_HarnessCodexPartial(t *testing.T) {
 	dir := t.TempDir()
-	// Only [harness.pi].provider — default harness key omitted, model omitted.
-	content := `[harness.pi]
-provider = "anthropic"
+	content := `[harness.codex]
+model = "gpt-5.5"
 `
 	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -210,11 +211,8 @@ provider = "anthropic"
 	if s.Harness.Default != "claude" {
 		t.Errorf("Harness.Default = %q, want \"claude\" (omitted key falls back)", s.Harness.Default)
 	}
-	if s.Harness.Pi.Provider != "anthropic" {
-		t.Errorf("Harness.Pi.Provider = %q, want \"anthropic\"", s.Harness.Pi.Provider)
-	}
-	if s.Harness.Pi.Model != "" {
-		t.Errorf("Harness.Pi.Model = %q, want \"\"", s.Harness.Pi.Model)
+	if s.Harness.Codex.Model != "gpt-5.5" {
+		t.Errorf("Harness.Codex.Model = %q, want \"gpt-5.5\"", s.Harness.Codex.Model)
 	}
 }
 

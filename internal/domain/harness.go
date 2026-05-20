@@ -1,7 +1,7 @@
 package domain
 
 // Harness abstracts the per-coding-agent operational surface — the parts that
-// actually differ between claude-code, pi-mono, and any future harness.
+// actually differ between claude-code, codex, and any future harness.
 //
 // What does NOT belong on this interface: directories that are dashboard-owned
 // (e.g. AgentProfile.StateDir is the same ~/.agent-dashboard for every
@@ -9,7 +9,7 @@ package domain
 // state file writes). The interface captures only spawn-command construction
 // and the two harness-owned filesystem locations the dashboard reads from.
 type Harness interface {
-	// Name returns a stable, lowercase identifier ("claude", "pi"). Used as
+	// Name returns a stable, lowercase identifier ("claude", "codex"). Used as
 	// the registry key in settings.toml ([harness] default = "<Name>").
 	Name() string
 
@@ -23,7 +23,7 @@ type Harness interface {
 	SessionsDir() string
 
 	// ConfigDir returns this harness's user-config root (e.g. ~/.claude,
-	// ~/.pi). The dashboard reads plugin/skill metadata from this location.
+	// ~/.codex). The dashboard reads plugin/skill metadata from this location.
 	ConfigDir() string
 }
 
@@ -31,13 +31,12 @@ type Harness interface {
 // Fields that don't apply to a given harness are ignored.
 type SpawnOpts struct {
 	DefaultEffort string // claude + codex
-	Provider      string // pi-mono only: "" | "openai" | "anthropic" | ...
-	Model         string // pi-mono + codex: e.g. "openai-codex/gpt-5.5", "gpt-5.5"
+	Model         string // codex: e.g. "gpt-5.5"
 	Approval      string // codex only: "never" | "untrusted" | "on-request"
 	Sandbox       string // codex only: "danger-full-access" | "workspace-write" | ...
 
 	// ResumeSessionID, when non-empty, switches codex's spawn to
 	// `codex resume <sid>` and drops other per-session flags (codex
-	// persists them with the session). Ignored by claude/pi.
+	// persists them with the session). Ignored by claude.
 	ResumeSessionID string
 }

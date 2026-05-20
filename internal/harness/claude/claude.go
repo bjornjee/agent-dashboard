@@ -49,7 +49,7 @@ func (c *Claude) SpawnCommand(skill, message string, opts domain.SpawnOpts) stri
 
 // effortOptedSkills lists the skills that opt into spawn-time effort pinning.
 // Kept here (alongside SpawnCommand) rather than in web/ because it's a
-// claude-specific contract: pi-mono has no equivalent flag today.
+// claude-specific contract: codex uses model_reasoning_effort instead.
 var effortOptedSkills = map[string]struct{}{
 	"feature":  {},
 	"fix":      {},
