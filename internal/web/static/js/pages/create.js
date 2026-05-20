@@ -24,8 +24,9 @@ export function renderCreate(app, agents) {
           <option value="">Default (settings.toml)</option>
           <option value="claude">claude</option>
           <option value="pi">pi (supports openai/codex models)</option>
+          <option value="codex">codex</option>
         </select>
-        <div class="form-hint">Pi reads provider+model from <code>[harness.pi]</code> in settings.toml.</div>
+        <div class="form-hint">pi reads <code>[harness.pi]</code>; codex reads <code>[harness.codex]</code> (model/approval/sandbox) from settings.toml.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Skill</label>

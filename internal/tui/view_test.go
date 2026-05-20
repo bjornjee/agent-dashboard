@@ -593,6 +593,7 @@ func TestView_MouseModeNone_InTextInputModes(t *testing.T) {
 	}{
 		{"reply", modeReply},
 		{"createFolder", modeCreateFolder},
+		{"createHarness", modeCreateHarness},
 		{"createSkill", modeCreateSkill},
 		{"createMessage", modeCreateMessage},
 	}

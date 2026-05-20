@@ -53,6 +53,14 @@ install-pi-adapter: ## Symlink pi extension into ~/.pi/agent/extensions/
 test-pi-adapter: ## Run pi adapter tests
 	cd adapters/pi && node --test test/*.test.js
 
+install-codex-adapter: ## Register the dashboard plugin with codex (codex hook schema is 1:1 with Claude's)
+	@codex plugin marketplace add bjornjee/agent-dashboard
+	@echo ""
+	@echo "Marketplace registered. To enable, append the following to ~/.codex/config.toml and restart codex:"
+	@echo ""
+	@echo "  [plugins.\"agent-dashboard@agent-dashboard\"]"
+	@echo "  enabled = true"
+
 web: build-web ## Run web server locally
 	./bin/agent-dashboard-web --port 8390
 
