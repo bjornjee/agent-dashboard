@@ -132,6 +132,232 @@ func TestAgentListContent_DiagramBadgeOnTitleLine(t *testing.T) {
 	}
 }
 
+// Harness rendering tests — the badges row must always carry a harness token,
+// dimmed by default and amplified (full color + bold) on the selected row.
+func TestAgentListContent_RendersHarnessBadge_Claude(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 60,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "claude",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		selected:        999, // none selected
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	if !strings.Contains(stripANSI(content), "claude") {
+		t.Errorf("rendered list should always include the claude harness label, got:\n%s", stripANSI(content))
+	}
+	// Non-selected → themeSubtext0 = RGB(165,173,206)
+	if !strings.Contains(content, "38;2;165;173;206") {
+		t.Errorf("non-selected claude harness badge should be dim, got:\n%s", content)
+	}
+}
+
+func TestAgentListContent_RendersHarnessBadge_Codex(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 60,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "codex",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		selected:        999,
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	if !strings.Contains(stripANSI(content), "codex") {
+		t.Errorf("rendered list should include codex harness label, got:\n%s", stripANSI(content))
+	}
+}
+
+// Accent-bar tests — the selected row must carry a left-edge '▌' bar tinted
+// to its harness color; non-selected rows and group headers must not.
+func TestAgentList_AccentBarOnSelectedRow_Claude(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 80,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "claude",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		selected:        1,
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	if !strings.Contains(content, "▌") {
+		t.Errorf("selected row must contain accent bar '▌', got:\n%s", content)
+	}
+	// Sapphire RGB on the bar.
+	if !strings.Contains(content, "38;2;133;193;220") {
+		t.Errorf("claude accent bar should be themeSapphire (RGB 133,193,220), got:\n%s", content)
+	}
+}
+
+func TestAgentList_AccentBarOnSelectedRow_Codex(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 80,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "codex",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		selected:        1,
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	if !strings.Contains(content, "▌") {
+		t.Errorf("selected codex row must contain accent bar '▌', got:\n%s", content)
+	}
+	// Peach RGB on the bar.
+	if !strings.Contains(content, "38;2;239;159;118") {
+		t.Errorf("codex accent bar should be themePeach (RGB 239,159,118), got:\n%s", content)
+	}
+}
+
+func TestAgentList_NoAccentBarOnUnselectedRows(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 80,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "claude",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		selected:        999, // no row selected
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	if strings.Contains(content, "▌") {
+		t.Errorf("no row selected — accent bar '▌' must not appear, got:\n%s", content)
+	}
+}
+
+func TestAgentList_AccentBarPreservesVisualWidth(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 80,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "claude",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		selected:        1,
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		plain := stripANSI(line)
+		// Each non-header rendered line should not exceed leftWidth.
+		if lipgloss.Width(line) > m.leftWidth {
+			t.Errorf("line %d width %d exceeds leftWidth %d: %q", i, lipgloss.Width(line), m.leftWidth, plain)
+		}
+	}
+}
+
+func TestAgentListContent_SelectedHarnessBadgeIsBold(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := model{
+		leftWidth: 60,
+		agents: []domain.Agent{{
+			Target:  "1:1.0",
+			Window:  1,
+			Pane:    1,
+			State:   "running",
+			Cwd:     "/tmp/myrepo",
+			Harness: "codex",
+		}},
+		treeNodes: []treeNode{
+			{AgentIdx: -1, GroupHeader: 3},
+			{AgentIdx: 0},
+		},
+		// treeNodes index 1 is the only selectable parent agent.
+		selected:        1,
+		agentSubagents:  map[string][]domain.SubagentInfo{},
+		collapsed:       map[string]bool{},
+		collapsedGroups: map[int]bool{},
+	}
+
+	content := m.agentListContent()
+	// themePeach = RGB(239,159,118) must appear for the selected codex badge.
+	if !strings.Contains(content, "38;2;239;159;118") {
+		t.Errorf("selected codex harness should render in themePeach, got:\n%s", content)
+	}
+}
+
 func TestRenderHelpOverlayContainsSections(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 

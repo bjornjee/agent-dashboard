@@ -122,18 +122,19 @@ func TestPermissionModeColor_Bypass(t *testing.T) {
 }
 
 func TestAgentBadges_NoModelIndicator(t *testing.T) {
-	// Test with model only — no permission mode to avoid false matches
+	// Test with model only — claude harness badge is always present, model itself is not.
 	agent := domain.Agent{
-		Model: "claude-opus-4-6",
+		Model:   "claude-opus-4-6",
+		Harness: "claude",
 	}
-	badges := agentBadges(agent)
-	if badges != "" {
-		t.Errorf("agentBadges with only model should be empty, got %q", badges)
+	badges := agentBadges(agent, false)
+	if strings.Contains(stripANSI(badges), "claude-opus-4-6") {
+		t.Errorf("agentBadges should not contain model name, got %q", stripANSI(badges))
 	}
 
-	// Test with model + permission — should only show permission
+	// Test with model + permission — should contain permission and the harness badge.
 	agent.PermissionMode = "bypassPermissions"
-	badges = agentBadges(agent)
+	badges = agentBadges(agent, false)
 	if !strings.Contains(badges, "bypassPermissions") {
 		t.Errorf("agentBadges should contain permission mode, got %q", badges)
 	}
@@ -142,11 +143,12 @@ func TestAgentBadges_NoModelIndicator(t *testing.T) {
 func TestAgentBadges_EffortIncluded(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	agent := domain.Agent{
+		Harness:        "claude",
 		PermissionMode: "bypassPermissions",
 		Effort:         "max",
 		CurrentTool:    "Bash",
 	}
-	badges := agentBadges(agent)
+	badges := agentBadges(agent, false)
 	if !strings.Contains(badges, "max") {
 		t.Errorf("agentBadges should contain effort token 'max', got %q", badges)
 	}
@@ -156,27 +158,117 @@ func TestAgentBadges_EffortIncluded(t *testing.T) {
 	if !strings.Contains(badges, "Bash") {
 		t.Errorf("agentBadges should still contain current_tool, got %q", badges)
 	}
-	// Order: permission_mode → effort → current_tool
-	permIdx := strings.Index(badges, "bypassPermissions")
-	effIdx := strings.Index(badges, "max")
-	toolIdx := strings.Index(badges, "Bash")
-	if !(permIdx < effIdx && effIdx < toolIdx) {
-		t.Errorf("expected order permission_mode → effort → current_tool, got %q", badges)
+	// Order: harness → permission_mode → effort → current_tool.
+	// Strip ANSI before searching so the assertion does not depend on the
+	// shape of the embedded escape sequences.
+	plain := stripANSI(badges)
+	harnessIdx := strings.Index(plain, "claude")
+	permIdx := strings.Index(plain, "bypassPermissions")
+	effIdx := strings.Index(plain, "max")
+	toolIdx := strings.Index(plain, "Bash")
+	if !(harnessIdx < permIdx && permIdx < effIdx && effIdx < toolIdx) {
+		t.Errorf("expected order harness → permission_mode → effort → current_tool, got %q", plain)
 	}
 }
 
 func TestAgentBadges_EffortOmittedWhenEmpty(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	agent := domain.Agent{
+		Harness:        "claude",
 		PermissionMode: "bypassPermissions",
 		CurrentTool:    "Bash",
 	}
-	badges := agentBadges(agent)
+	badges := agentBadges(agent, false)
 	// Without an Effort field set, none of the levels should appear as a token.
 	for _, level := range []string{" max ", " high ", " low ", " medium ", " xhigh "} {
 		if strings.Contains(badges, level) {
 			t.Errorf("agentBadges should omit effort when Agent.Effort is empty, got %q (matched %q)", badges, level)
 		}
+	}
+}
+
+func TestAgentBadges_HarnessClaudeDimWhenNotSelected(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+	agent := domain.Agent{Harness: "claude"}
+	badges := agentBadges(agent, false)
+	if !strings.Contains(stripANSI(badges), "claude") {
+		t.Errorf("agentBadges should always include claude harness token, got %q", stripANSI(badges))
+	}
+	// themeSubtext0 = #a5adce = RGB(165, 173, 206)
+	if !strings.Contains(badges, "38;2;165;173;206") {
+		t.Errorf("non-selected claude harness should render in themeSubtext0 (dim) RGB, got %q", badges)
+	}
+	// Should NOT contain sapphire color (selected color) on the harness token.
+	// Allow the substring to appear elsewhere but the dim RGB must precede it
+	// or it must be absent.
+	if strings.Contains(badges, "38;2;133;193;220") {
+		t.Error("non-selected claude harness should not use the full sapphire color")
+	}
+	// Should NOT contain bold sequence
+	if strings.Contains(badges, "\x1b[1m") || strings.Contains(badges, "\x1b[1;") {
+		t.Error("non-selected harness badge should not be bold")
+	}
+}
+
+func TestAgentBadges_HarnessClaudeBoldWhenSelected(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+	agent := domain.Agent{Harness: "claude"}
+	badges := agentBadges(agent, true)
+	if !strings.Contains(stripANSI(badges), "claude") {
+		t.Errorf("selected agentBadges should include claude harness token, got %q", stripANSI(badges))
+	}
+	// themeSapphire = #85c1dc = RGB(133, 193, 220). Lipgloss may combine bold
+	// and foreground into a single SGR sequence (e.g. "\x1b[1;38;2;...m"), so
+	// match the RGB triplet inside any escape.
+	if !strings.Contains(badges, "38;2;133;193;220") {
+		t.Errorf("selected claude harness should render in themeSapphire RGB, got %q", badges)
+	}
+	if !strings.Contains(badges, "\x1b[1;") && !strings.Contains(badges, "\x1b[1m") {
+		t.Errorf("selected harness badge should be bold (SGR 1), got %q", badges)
+	}
+}
+
+func TestAgentBadges_HarnessCodexBoldWhenSelected(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+	agent := domain.Agent{Harness: "codex"}
+	badges := agentBadges(agent, true)
+	if !strings.Contains(stripANSI(badges), "codex") {
+		t.Errorf("selected agentBadges should include codex harness token, got %q", stripANSI(badges))
+	}
+	// themePeach = #ef9f76 = RGB(239, 159, 118)
+	if !strings.Contains(badges, "38;2;239;159;118") {
+		t.Errorf("selected codex harness should render in themePeach RGB, got %q", badges)
+	}
+	if !strings.Contains(badges, "\x1b[1;") && !strings.Contains(badges, "\x1b[1m") {
+		t.Errorf("selected harness badge should be bold (SGR 1), got %q", badges)
+	}
+}
+
+func TestAgentBadges_HarnessDefaultsToClaudeOnEmpty(t *testing.T) {
+	// Per domain/types.go:73, empty Harness means claude (back-compat).
+	agent := domain.Agent{Harness: ""}
+	badges := agentBadges(agent, false)
+	if !strings.Contains(stripANSI(badges), "claude") {
+		t.Errorf("empty Harness should default to claude, got %q", stripANSI(badges))
+	}
+	if strings.Contains(stripANSI(badges), "codex") {
+		t.Errorf("empty Harness should not render codex, got %q", stripANSI(badges))
+	}
+}
+
+func TestHarnessColor(t *testing.T) {
+	if harnessColor("claude") != themeSapphire {
+		t.Errorf("harnessColor(claude) = %v, want themeSapphire", harnessColor("claude"))
+	}
+	if harnessColor("codex") != themePeach {
+		t.Errorf("harnessColor(codex) = %v, want themePeach", harnessColor("codex"))
+	}
+	// Unknown harness falls back to claude (sapphire) — matches the back-compat default.
+	if harnessColor("") != themeSapphire {
+		t.Errorf("harnessColor(empty) = %v, want themeSapphire", harnessColor(""))
+	}
+	if harnessColor("future-harness") != themeSapphire {
+		t.Errorf("harnessColor(unknown) should fall back to themeSapphire, got %v", harnessColor("future-harness"))
 	}
 }
 

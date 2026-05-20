@@ -15,6 +15,27 @@ import (
 //go:embed catppuccin-frappe.json
 var catppuccinFrappeStyle []byte
 
+// accentBarGlyph is the single-cell left-edge accent rendered on the selected
+// row to give selection a strong peripheral cue independent of the background
+// highlight.
+const accentBarGlyph = "▌"
+
+// withAccentBar replaces the first leading space of line with a styled accent
+// bar tinted to harness. Net visual width is unchanged: the bar is one cell
+// wide and replaces one space. Returns line unchanged when not selected or
+// when the line has no leading space.
+//
+// Apply this BEFORE highlightLine so the bar participates in the background
+// overlay; highlightLine is ANSI-aware and re-applies bg after the bar's
+// foreground reset, so both colors persist.
+func withAccentBar(line string, selected bool, harness string) string {
+	if !selected || !strings.HasPrefix(line, " ") {
+		return line
+	}
+	bar := lipgloss.NewStyle().Foreground(harnessColor(harness)).Render(accentBarGlyph)
+	return bar + line[1:]
+}
+
 // highlightLine applies a background highlight to a line while preserving
 // inner ANSI foreground colors. It pads the line to the given width and
 // re-applies the background after each SGR reset so colors aren't lost.
@@ -146,9 +167,41 @@ func permissionModeStyle(mode string) string {
 	return lipgloss.NewStyle().Foreground(permissionModeColor(mode)).Render(mode)
 }
 
-// agentBadges returns a compact metadata string like "auto Bash [2]".
-func agentBadges(agent domain.Agent) string {
-	var parts []string
+// normalizeHarness collapses empty/unknown harness strings to "claude" to
+// match the back-compat default documented at domain/types.go:73.
+func normalizeHarness(harness string) string {
+	if harness == "codex" {
+		return "codex"
+	}
+	return "claude"
+}
+
+// harnessColor returns the theme color for a given harness name.
+// Empty / unknown harnesses are treated as "claude".
+func harnessColor(harness string) color.Color {
+	if normalizeHarness(harness) == "codex" {
+		return themePeach
+	}
+	return themeSapphire
+}
+
+// harnessBadgeToken renders the harness label for the metadata badges row.
+// Selected rows render in the full harness color + bold; non-selected rows
+// render in themeSubtext0 so the badge fades into the background while still
+// being scannable on every row.
+func harnessBadgeToken(harness string, selected bool) string {
+	label := normalizeHarness(harness)
+	if selected {
+		return lipgloss.NewStyle().Foreground(harnessColor(label)).Bold(true).Render(label)
+	}
+	return lipgloss.NewStyle().Foreground(themeSubtext0).Render(label)
+}
+
+// agentBadges returns a compact metadata string like "claude bypass max Bash [2]".
+// The harness badge is always the first token; selected controls whether it is
+// rendered in the full harness color (selected) or dimmed (unselected).
+func agentBadges(agent domain.Agent, selected bool) string {
+	parts := []string{harnessBadgeToken(agent.Harness, selected)}
 	if agent.PermissionMode != "" && agent.PermissionMode != "default" {
 		parts = append(parts, permissionModeStyle(agent.PermissionMode))
 	}
@@ -163,9 +216,6 @@ func agentBadges(agent domain.Agent) string {
 	if agent.SubagentCount > 0 {
 		parts = append(parts, lipgloss.NewStyle().Foreground(runningColor).
 			Render(fmt.Sprintf("[%d]", agent.SubagentCount)))
-	}
-	if len(parts) == 0 {
-		return ""
 	}
 	return strings.Join(parts, " ")
 }

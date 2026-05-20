@@ -386,6 +386,7 @@ func (m model) agentListContentWithLine() (string, int) {
 			}
 			line := fmt.Sprintf("    %s %s %s", helpStyle.Render(prefix), subIcon, subLabel)
 			if nodeIdx == m.selected {
+				line = withAccentBar(line, true, agent.Harness)
 				line = highlightLine(line, m.leftWidth)
 			}
 			lines = append(lines, line)
@@ -440,6 +441,7 @@ func (m model) agentListContentWithLine() (string, int) {
 		}
 
 		if nodeIdx == m.selected {
+			line = withAccentBar(line, true, agent.Harness)
 			line = highlightLine(line, m.leftWidth)
 		}
 
@@ -455,17 +457,23 @@ func (m model) agentListContentWithLine() (string, int) {
 			}
 			branchLine := branchIndent + styledBranch(branchStr)
 			if nodeIdx == m.selected {
+				branchLine = withAccentBar(branchLine, true, agent.Harness)
 				branchLine = highlightLine(branchLine, m.leftWidth)
 			}
 			lines = append(lines, branchLine)
 		}
 
 		// Metadata badges (diagram badge is rendered inline on the title
-		// row above, so it is intentionally omitted here).
-		badges := agentBadges(agent)
-		if badges != "" {
-			lines = append(lines, "    "+badges)
+		// row above, so it is intentionally omitted here). The harness
+		// badge is always the first token; selection brightens it. The
+		// row is always emitted because agentBadges always returns at
+		// least the harness token.
+		badgeLine := "    " + agentBadges(agent, nodeIdx == m.selected)
+		if nodeIdx == m.selected {
+			badgeLine = withAccentBar(badgeLine, true, agent.Harness)
+			badgeLine = highlightLine(badgeLine, m.leftWidth)
 		}
+		lines = append(lines, badgeLine)
 
 		// Collapse indicator if has subagents
 		if subs := m.agentSubagents[agent.Target]; len(subs) > 0 && m.collapsed[agent.Target] {
