@@ -1036,7 +1036,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// Plan state: send Escape to select "Deny" in the permission prompt,
 			// which opens the feedback text input. The user's reply text is then
 			// sent as the denial reason.
-			if agent.State == "plan" {
+			if agent.State == "plan" && agent.Harness != "codex" {
 				cmds = append(cmds, sendRawKey(agent.TmuxPaneID, "Escape", "Plan feedback selected"))
 			}
 			m.mode = modeReply

@@ -372,6 +372,52 @@ func TestReplyMode_PlanStateSendsEscape(t *testing.T) {
 	}
 }
 
+func TestReplyMode_CodexPlanDoesNotSendEscape(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []domain.Agent{
+		{Target: "main:2.0", TmuxPaneID: "%5", Window: 2, Pane: 0, State: "plan", Harness: "codex", Cwd: "/tmp"},
+	}
+	m.buildTree()
+	m.selected = 1
+	m.tmuxAvailable = true
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	updated := result.(model)
+
+	if updated.mode != modeReply {
+		t.Fatalf("expected modeReply, got %d", updated.mode)
+	}
+	if commandEmitsRawKeySent(cmd) {
+		t.Fatal("codex plan reply must not send Escape; codex has no Claude-style plan feedback prompt")
+	}
+}
+
+func commandEmitsRawKeySent(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	msg := cmd()
+	if _, ok := msg.(rawKeySentMsg); ok {
+		return true
+	}
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return false
+	}
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		if _, ok := c().(rawKeySentMsg); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func TestReplyMode_SendReplyFailureShowsError(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
 	m.width = 120

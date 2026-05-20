@@ -575,6 +575,8 @@ func TestLoadDiffWithRef_BranchPath_DiffsBaseToRef(t *testing.T) {
 
 	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", ref, "origin/main").
 		Return([]byte("abc123\n"), nil)
+	m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").
+		Return([]byte("main\n"), nil)
 
 	commitDiff := "diff --git a/r.md b/r.md\n" +
 		"--- a/r.md\n+++ b/r.md\n@@ -1 +1 @@\n-old\n+new\n"
@@ -591,6 +593,41 @@ func TestLoadDiffWithRef_BranchPath_DiffsBaseToRef(t *testing.T) {
 	}
 	if len(files) != 1 {
 		t.Fatalf("expected 1 file in diff, got %d", len(files))
+	}
+}
+
+func TestLoadDiffWithRef_CurrentBranchIncludesUncommittedTrackedChanges(t *testing.T) {
+	m := mocks.NewMockGitRunner(t)
+	orig := gitRunner
+	gitRunner = m
+	t.Cleanup(func() { gitRunner = orig })
+
+	dir := "/fake/project"
+	ref := "feat/codex-adapter-boundary"
+
+	m.On("Output", mock.Anything, "git", "-C", dir, "merge-base", ref, "origin/main").
+		Return([]byte("abc123\n"), nil)
+	m.On("Output", mock.Anything, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").
+		Return([]byte(ref+"\n"), nil)
+
+	workingTreeDiff := "diff --git a/internal/tui/keys.go b/internal/tui/keys.go\n" +
+		"--- a/internal/tui/keys.go\n+++ b/internal/tui/keys.go\n@@ -1 +1 @@\n-old\n+new\n"
+	m.On("Output", mock.Anything, "git", "-C", dir, "diff", "abc123").
+		Return([]byte(workingTreeDiff), nil)
+
+	m.On("Output", mock.Anything, "git", "-C", dir,
+		"ls-files", "--others", "--exclude-standard").
+		Return([]byte(""), nil)
+
+	files, err := loadDiffWithRef(context.Background(), dir, ref)
+	if err != nil {
+		t.Fatalf("loadDiffWithRef failed: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file in diff, got %d", len(files))
+	}
+	if got := files[0].NewName; got != "internal/tui/keys.go" {
+		t.Fatalf("diff file = %q, want internal/tui/keys.go", got)
 	}
 }
 

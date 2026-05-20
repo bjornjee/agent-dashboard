@@ -50,6 +50,14 @@ func isLocalDefault(name string) bool {
 	return name == "main" || name == "master"
 }
 
+func currentGitBranch(ctx context.Context, dir string) string {
+	out, err := gitRunner.Output(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // resolveDiffRef picks the git ref to diff against base. It combines two
 // signals already produced elsewhere in the dashboard:
 //
@@ -91,7 +99,7 @@ func loadDiffWithRef(ctx context.Context, dir, ref string) ([]*gitdiff.File, err
 	}
 	base := findMergeBase(dir, ref)
 	diffTarget := base
-	if ref != "HEAD" {
+	if ref != "HEAD" && currentGitBranch(ctx, dir) != ref {
 		diffTarget = base + ".." + ref
 	}
 	out, err := gitRunner.Output(ctx, "git", "-C", dir, "diff", diffTarget)
