@@ -122,6 +122,11 @@ if (require.main === module) {
     } catch {
       // Silent — don't break Claude Code
     }
+    // Codex 0.130 parses hook stdout as JSON per
+    // codex-rs/hooks/schema/generated/<event>.command.output.schema.json.
+    // Empty stdout fails with "hook returned invalid <event> JSON output";
+    // `{}` is valid for every event (all fields are optional with defaults).
+    process.stdout.write('{}\n');
   });
 }
 
