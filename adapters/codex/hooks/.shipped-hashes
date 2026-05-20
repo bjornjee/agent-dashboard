@@ -1,0 +1,14 @@
+# sha256 of every shipped hooks.json that the installer is allowed to
+# overwrite automatically. One hex digest per line; blank lines and
+# `# comment` lines are ignored.
+#
+# Adding a new release that changes hooks.json:
+#   1. Compute the *outgoing* (currently committed) file's hash and append
+#      it here — this lets users on the prior release auto-upgrade.
+#   2. Edit hooks.json.
+#
+# An installed ~/.codex/hooks.json whose hash is NOT in this list is treated
+# as user-modified: the installer prompts on a TTY, skips with a warning
+# otherwise.
+
+46f4d4ffe2a0ea5e6a38cb8d9b18cec9de4c2a3ea5f9fb4b7b45360c0ad48bf7
