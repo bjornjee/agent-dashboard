@@ -271,7 +271,7 @@ type createRequest struct {
 	Message string `json:"message"`
 	// Harness overrides the [harness] default in settings.toml for this
 	// spawn only. Empty string falls back to the configured default.
-	// Valid: "claude" | "pi" (unknown values fall back to claude).
+	// Valid: "claude" | "codex".
 	Harness string `json:"harness"`
 }
 
@@ -318,8 +318,8 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	repoName := repowin.SanitizeWindowName(rawRepo)
 
 	// Resolve the harness for this spawn — request override takes precedence
-	// over the configured default. Per-harness settings (Pi.Provider/Model,
-	// Codex.Model/Approval/Sandbox/effort) flow into SpawnOpts based on the
+	// over the configured default. Per-harness settings
+	// (Codex.Model/Approval/Sandbox/effort) flow into SpawnOpts based on the
 	// active harness; other harnesses ignore the unused fields. Unknown
 	// harness names are HTTP 400 (not silently coerced to claude — see
 	// harness.Resolve docs).
@@ -332,14 +332,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		activeHarness = h
 	}
-	// Block Claude-only skills on codex sessions — codex CLI 0.130.0 has
-	// no EnterPlanMode/ExitPlanMode/AskUserQuestion/Agent tools (evidence
-	// E13). Allowing the spawn would let codex boot and then crash on the
-	// first plan-mode call; a 400 here lets the user pick a different
-	// harness or run codex with an empty skill (free prompt) instead.
-	if activeHarness.Name() == "codex" && skills.RequiresClaude(req.Skill) {
+	if !skills.SupportsHarness(req.Skill, activeHarness.Name()) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "skill '" + req.Skill + "' requires Claude-only tools (EnterPlanMode/AskUserQuestion/Agent). Start a Claude session for this skill, or run codex with an empty skill (free prompt).",
+			"error": "skill '" + req.Skill + "' is not supported by " + activeHarness.Name(),
 		})
 		return
 	}

@@ -302,10 +302,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.createHarness = "claude"
 			}
-			// Only the claude harness has the slash-command surface that
-			// dashboard skills target — for pi/codex, jump straight to
-			// the message step.
-			if m.skillsAvailable && m.createHarness == "claude" {
+			if m.skillsAvailable && isSkillCapableHarness(m.createHarness) {
 				m.mode = modeCreateSkill
 				m.selectedCreateSkill = 0
 				m.textInput.Reset()
@@ -429,10 +426,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.spawningSpinner.Tick,
 			)
 		case "esc":
-			// Back one step: skill if the chosen harness was claude AND
+			// Back one step: skill if the chosen harness supports skills and
 			// skills exist; otherwise back to the harness picker.
 			m.textInput.Reset()
-			if m.skillsAvailable && m.createHarness == "claude" {
+			if m.skillsAvailable && isSkillCapableHarness(m.createHarness) {
 				m.mode = modeCreateSkill
 				m.createSkillName = ""
 				m.updateRightContent()
@@ -1237,4 +1234,8 @@ func (m model) scrollFocused(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.messageVP, cmd = m.messageVP.Update(msg)
 	}
 	return m, cmd
+}
+
+func isSkillCapableHarness(name string) bool {
+	return name == "claude" || name == "codex"
 }

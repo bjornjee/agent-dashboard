@@ -67,8 +67,8 @@ type Agent struct {
 	ProjDir string `json:"-"`
 
 	// Harness names the agent's coding-agent runtime: "claude" (default
-	// when omitted, for backward compat with pre-codex state files), "pi",
-	// or "codex". Conversation/state parsers route on this so the right
+	// when omitted, for backward compat with pre-codex state files) or
+	// "codex". Conversation/state parsers route on this so the right
 	// JSONL schema is used per agent. Written by SessionStart hooks.
 	Harness string `json:"harness,omitempty"`
 }
@@ -183,7 +183,7 @@ type AgentProfile struct {
 // Config holds all dashboard configuration.
 type Config struct {
 	Profile  AgentProfile
-	Harness  Harness  // Active coding-agent harness (claude, pi, ...)
+	Harness  Harness  // Active coding-agent harness (claude, codex, ...)
 	Username string   // Greeting name
 	Editor   string   // Editor command
 	Settings Settings // User-facing settings from settings.toml
@@ -228,14 +228,6 @@ type EffortSettings struct {
 	Default string `toml:"default"` // pinned at spawn and restored on plan exit
 }
 
-// PiHarnessSettings carries pi-mono-specific spawn knobs. Provider and Model
-// flow into the harness's SpawnCommand as --provider/--model flags. Either
-// being empty inherits pi-mono's own resolution chain (auth.json > env var).
-type PiHarnessSettings struct {
-	Provider string `toml:"provider"` // "" | "openai" | "anthropic" | ...
-	Model    string `toml:"model"`    // e.g. "openai-codex/gpt-5.5"
-}
-
 // CodexHarnessSettings carries codex-CLI-specific spawn knobs. Model,
 // Approval, Sandbox, and DefaultReasoningEffort flow into SpawnCommand as
 // --model / -a / -s / -c model_reasoning_effort=... flags. Empty fields
@@ -251,8 +243,7 @@ type CodexHarnessSettings struct {
 // Default names the harness used when the New Agent flow doesn't override.
 // Per-harness subtables hold knobs that only apply to that harness.
 type HarnessSettings struct {
-	Default string               `toml:"default"` // "claude" | "pi" | "codex"
-	Pi      PiHarnessSettings    `toml:"pi"`
+	Default string               `toml:"default"` // "claude" | "codex"
 	Codex   CodexHarnessSettings `toml:"codex"`
 }
 

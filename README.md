@@ -15,15 +15,15 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 - **Workflow gates, not vibes.** Skills (feature, fix, chore, refactor, investigate, implement, pr, rca) plus hooks (commit-lint, test-gate, no-commits-to-main, destructive-op warnings) enforce TDD and conventional commits at the harness level — agents can't merge if tests fail.
 - **Phone-first remote control.** A companion PWA on `cmd/web/` exposes the same orchestration surface over your local network: approve permissions, reply to questions, open/merge PRs, and get browser notifications when an agent needs you — all without opening your laptop.
 - **tmux-native, not tmux-replacing.** Agents stay where they live; the dashboard adds a control plane on top of `tmux capture-pane`. No new pane manager, no daemon competing with tmux.
-- **Multi-backend.** Claude Code is first-class; pi-mono is a second-class harness (including OpenAI / codex `gpt-5.x` models via pi-mono's unified LLM API); Codex CLI is supported via skill delegation. The harness picker in `settings.toml` (`[harness] default`) selects the active backend; per-spawn override is exposed in the New Agent form.
+- **Multi-backend.** Claude Code and Codex CLI are supported directly. The harness picker in `settings.toml` (`[harness] default`) selects the active backend; per-spawn override is exposed in the New Agent form.
 
 ## FAQ
 
 **Do I need tmux?** Yes. agent-dashboard reads live pane content via `tmux capture-pane` and spawns agent sessions in tmux panes. Without tmux there are no panes to monitor.
 
-**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. A second adapter for [`@mariozechner/pi-coding-agent`](https://www.npmjs.com/package/@mariozechner/pi-coding-agent) lives in `adapters/pi/` (install with `make install-pi-adapter`); pi-mono's unified LLM API also lets you run OpenAI / codex `gpt-5.x` models inside the dashboard. Codex CLI is supported directly as a harness with global Codex hooks installed by `install.sh` (see "How do I see codex agents in the dashboard?" below). Codex is also reachable via skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
+**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. Codex CLI is supported directly as a harness with global Codex hooks installed by `install.sh` (see "How do I see codex agents in the dashboard?" below). Codex is also reachable via skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
 
-**How do I use codex / gpt-5.x models?** Two routes: (1) pick `codex` in the New Agent harness step (TUI wizard or web form) to spawn the codex CLI directly, with per-spawn flags from `[harness.codex]` in `~/.agent-dashboard/settings.toml`. (2) Use pi-mono as a unified LLM proxy: set `[harness] default = "pi"` and `[harness.pi] provider = "openai" model = "openai-codex/gpt-5.5"`, configure your OpenAI key in `~/.pi/auth.json`, and restart the dashboard. See [adapters/pi/README.md](adapters/pi/README.md#codex--gpt-5x-models) for the pi-mono walkthrough.
+**How do I use codex / gpt-5.x models?** Pick `codex` in the New Agent harness step (TUI wizard or web form) to spawn the Codex CLI directly, with per-spawn flags from `[harness.codex]` in `~/.agent-dashboard/settings.toml`.
 
 **How do I see codex agents in the dashboard?** Codex sessions appear once the global Codex hooks are installed and approved. `install.sh` copies the hook runtime to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` only if that file is missing. If you already have `~/.codex/hooks.json`, reconcile it with the template at `~/.codex/hooks/agent-dashboard/hooks.json`, then restart Codex and approve the `agent-dashboard` hooks prompt.
 
@@ -169,7 +169,7 @@ From a repo checkout, rerun the source installer after pulling changes:
 
 Caveats specific to codex:
 
-- **Skills require Claude.** `/feature`, `/fix`, `/refactor`, `/implement`, `/investigate`, `/chore`, `/rca`, and `/pr` all rely on Claude-only tools (EnterPlanMode, AskUserQuestion, Agent). The dashboard returns a 400 if you try to spawn these against a codex session. Use a Claude session for skill-gated workflows; use codex sessions for free-prompt work.
+- **Some skills remain Claude-only.** `/implement` and `/rca` still rely on Claude-only orchestration primitives. The dashboard returns a 400 for unsupported codex skill combinations.
 - **Plan mode is signaled, not gated.** Codex's `/plan` slash command flips the hook payload's `permission_mode` to `"plan"`. The dashboard captures this as a field but doesn't flip state to `plan` — codex has no `ExitPlanMode` equivalent, so there's no discrete "plan ready" review moment.
 - **No subagent tree for codex.** Codex doesn't have a `Task`/`Agent` tool, so the subagent tree panel stays empty for codex sessions.
 

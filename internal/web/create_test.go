@@ -50,7 +50,7 @@ func createTestServer(t *testing.T, agents ...domain.Agent) (*httptest.Server, s
 }
 
 // createTestServerWithCfg lets a test mutate cfg after the defaults are loaded
-// (e.g. to set Settings.Harness.Pi.Provider) before the server is built.
+// before the server is built.
 func createTestServerWithCfg(t *testing.T, mutate func(*domain.Config), agents ...domain.Agent) (*httptest.Server, string) {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -262,7 +262,7 @@ func TestCreateWorktreeMatchesSameRepo(t *testing.T) {
 }
 
 // TestCreate_DefaultHarnessIsClaude confirms the spawn command falls through
-// the unchanged claude path when neither settings nor request body picks pi.
+// the unchanged claude path when no request harness override is provided.
 func TestCreate_DefaultHarnessIsClaude(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
@@ -295,60 +295,26 @@ func TestCreate_DefaultHarnessIsClaude(t *testing.T) {
 	if !strings.Contains(capturedCmd, " claude --effort ") {
 		t.Errorf("expected claude binary invocation, got %q", capturedCmd)
 	}
-	if strings.Contains(capturedCmd, "pi --provider") {
-		t.Errorf("unexpected pi spawn in default case: %q", capturedCmd)
-	}
 }
 
-// TestCreate_HarnessOverridePi proves the per-request Harness field actually
-// routes spawn-command construction through the pi harness, including
-// settings.Harness.Pi.Provider/Model flowing through as --provider/--model.
-func TestCreate_HarnessOverridePi(t *testing.T) {
+func TestCreate_HarnessOverridePiReturns400(t *testing.T) {
 	m := withMockTmuxRunner(t)
-	mockReadAgentState(m)
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
 
 	folder := t.TempDir()
-	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
-
-	mutate := func(c *domain.Config) {
-		c.Settings.Harness.Pi.Provider = "openai"
-		c.Settings.Harness.Pi.Model = "openai-codex/gpt-5.5"
-	}
-	ts, _ := createTestServerWithCfg(t, mutate, existingAgent)
-
-	m.On("Output", mock.Anything,
-		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
-	).Return([]byte("0\n"), nil)
-
-	var capturedCmd string
-	m.On("Output", mock.Anything,
-		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
-	).Return([]byte("main:0.1\n"), nil)
-	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+	ts, _ := createTestServer(t)
 
 	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"pi","message":"hello"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	want := "pi --provider 'openai' --model 'openai-codex/gpt-5.5' 'hello'"
-	if capturedCmd != want {
-		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 
 // TestCreate_HarnessOverrideCodex proves the per-request Harness="codex"
 // override flows settings.Harness.Codex.* into the spawn-command builder.
-// Mirrors the pi override test above; locks the codex flag surface so a
-// drift in CodexHarnessSettings or web wiring shows up here.
-//
-// Uses an empty skill to bypass the Claude-only skill guard — the
-// effort flag still drops because effort-opted skills (feature/fix/refactor)
-// are all Claude-only by definition. We assert --model, -a, -s here;
-// effort coverage lives in the codex harness unit test.
+// This locks the codex flag surface so drift in CodexHarnessSettings or web
+// wiring shows up here.
 func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
@@ -388,22 +354,74 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	}
 }
 
-// TestCreate_CodexBlocksClaudeOnlySkill blocks /feature against codex
-// because codex CLI 0.130.0 has no EnterPlanMode/ExitPlanMode/AskUserQuestion/
-// Agent tools (evidence E13). Spawning would let the session start and
-// then crash on the first plan-mode call — better to return a clear
-// error at request time. Mirrors the harness-unknown 400 path so the
-// user gets one consistent error surface for "this combination won't work".
-func TestCreate_CodexBlocksClaudeOnlySkill(t *testing.T) {
+func TestCreate_CodexAllowsSupportedSkill(t *testing.T) {
 	m := withMockTmuxRunner(t)
-	// Only TmuxIsAvailable runs before the 400; no readAgentState needed.
-	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+	mockReadAgentState(m)
 
 	folder := t.TempDir()
 	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
 	ts, _ := createTestServer(t, existingAgent)
 
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
 	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"feature","message":"hi"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if capturedCmd != "codex '/feature hi'" {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '/feature hi'")
+	}
+}
+
+func TestCreate_CodexAllowsCustomSkill(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+
+	folder := t.TempDir()
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+	ts, _ := createTestServer(t, existingAgent)
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
+	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"custom-maintained","message":"hi"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if capturedCmd != "codex '/custom-maintained hi'" {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '/custom-maintained hi'")
+	}
+}
+
+func TestCreate_CodexRejectsBlockedSkill(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+
+	folder := t.TempDir()
+	ts, _ := createTestServer(t)
+
+	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"implement","message":"hi"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)

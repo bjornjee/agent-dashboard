@@ -19,24 +19,6 @@ func TestResolve_Claude(t *testing.T) {
 	}
 }
 
-func TestResolve_Pi(t *testing.T) {
-	h, err := harness.Resolve("pi", domain.AgentProfile{HomeDir: "/home/u"})
-	if err != nil {
-		t.Fatalf("Resolve(\"pi\") returned err: %v", err)
-	}
-	if h.Name() != "pi" {
-		t.Errorf("Resolve(\"pi\").Name() = %q, want \"pi\"", h.Name())
-	}
-	wantSessions := filepath.Join("/home/u", ".pi", "agent", "sessions")
-	if h.SessionsDir() != wantSessions {
-		t.Errorf("SessionsDir() = %q, want %q", h.SessionsDir(), wantSessions)
-	}
-	wantConfig := filepath.Join("/home/u", ".pi")
-	if h.ConfigDir() != wantConfig {
-		t.Errorf("ConfigDir() = %q, want %q", h.ConfigDir(), wantConfig)
-	}
-}
-
 func TestResolve_Codex(t *testing.T) {
 	h, err := harness.Resolve("codex", domain.AgentProfile{HomeDir: "/home/u"})
 	if err != nil {
@@ -52,6 +34,20 @@ func TestResolve_Codex(t *testing.T) {
 	wantConfig := filepath.Join("/home/u", ".codex")
 	if h.ConfigDir() != wantConfig {
 		t.Errorf("ConfigDir() = %q, want %q", h.ConfigDir(), wantConfig)
+	}
+}
+
+func TestResolve_PiReturnsUnknownHarness(t *testing.T) {
+	h, err := harness.Resolve("pi", domain.AgentProfile{HomeDir: "/home/u"})
+	if h != nil {
+		t.Errorf("Resolve(\"pi\") returned non-nil harness %v", h)
+	}
+	var unkErr harness.ErrUnknownHarness
+	if !errors.As(err, &unkErr) {
+		t.Fatalf("Resolve(\"pi\") err = %v, want ErrUnknownHarness", err)
+	}
+	if unkErr.Name != "pi" {
+		t.Errorf("ErrUnknownHarness.Name = %q, want \"pi\"", unkErr.Name)
 	}
 }
 

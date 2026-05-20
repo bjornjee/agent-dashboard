@@ -12,9 +12,7 @@ import (
 )
 
 // DefaultConfig returns a fully populated config with auto-detected values.
-// The active Harness is selected from settings.toml's [harness] default — a
-// user who sets default = "pi" gets the pi-mono harness with their
-// [harness.pi] provider+model preferences applied at spawn time.
+// The active Harness is selected from settings.toml's [harness] default.
 //
 // An unrecognized [harness] default (typo, removed harness) logs a warning
 // and falls back to claude so the dashboard still boots. The web layer

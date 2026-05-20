@@ -393,7 +393,7 @@ func TestCreateWizard_FolderToHarness(t *testing.T) {
 	m.mode = modeCreateFolder
 	m.skillsAvailable = true
 	m.availableSkills = []string{"(none)", "feature", "fix"}
-	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.availableHarnesses = []string{"claude", "codex"}
 	m.textInput.SetValue("/Users/test/code/myrepo")
 	m.suggestions = nil
 
@@ -412,10 +412,10 @@ func TestCreateWizard_FolderToHarness(t *testing.T) {
 func TestCreateWizard_HarnessNavigation(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateHarness
-	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.availableHarnesses = []string{"claude", "codex"}
 	m.selectedCreateHarness = 0
 
-	// Down → 1 (pi)
+	// Down -> 1 (codex)
 	msg := tea.KeyPressMsg{Code: tea.KeyDown}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
@@ -423,38 +423,29 @@ func TestCreateWizard_HarnessNavigation(t *testing.T) {
 		t.Errorf("expected selectedCreateHarness=1 after down, got %d", rm.selectedCreateHarness)
 	}
 
-	// Down → 2 (codex)
+	// Down past end stays at 1 (no wrap)
 	rm.mode = modeCreateHarness
 	msg = tea.KeyPressMsg{Code: tea.KeyDown}
 	result, _ = rm.handleKey(msg)
 	rm = result.(model)
-	if rm.selectedCreateHarness != 2 {
-		t.Errorf("expected selectedCreateHarness=2 after second down, got %d", rm.selectedCreateHarness)
+	if rm.selectedCreateHarness != 1 {
+		t.Errorf("expected selectedCreateHarness=1 (clamped), got %d", rm.selectedCreateHarness)
 	}
 
-	// Down past end stays at 2 (no wrap)
-	rm.mode = modeCreateHarness
-	msg = tea.KeyPressMsg{Code: tea.KeyDown}
-	result, _ = rm.handleKey(msg)
-	rm = result.(model)
-	if rm.selectedCreateHarness != 2 {
-		t.Errorf("expected selectedCreateHarness=2 (clamped), got %d", rm.selectedCreateHarness)
-	}
-
-	// Up → 1
+	// Up -> 0
 	rm.mode = modeCreateHarness
 	msg = tea.KeyPressMsg{Code: tea.KeyUp}
 	result, _ = rm.handleKey(msg)
 	rm = result.(model)
-	if rm.selectedCreateHarness != 1 {
-		t.Errorf("expected selectedCreateHarness=1 after up, got %d", rm.selectedCreateHarness)
+	if rm.selectedCreateHarness != 0 {
+		t.Errorf("expected selectedCreateHarness=0 after up, got %d", rm.selectedCreateHarness)
 	}
 }
 
 func TestCreateWizard_HarnessClaudeToSkill(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateHarness
-	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.availableHarnesses = []string{"claude", "codex"}
 	m.selectedCreateHarness = 0 // claude
 	m.createFolder = "/Users/test/repo"
 	m.skillsAvailable = true
@@ -472,11 +463,11 @@ func TestCreateWizard_HarnessClaudeToSkill(t *testing.T) {
 	}
 }
 
-func TestCreateWizard_HarnessCodexSkipsToMessage(t *testing.T) {
+func TestCreateWizard_HarnessCodexToSkill(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateHarness
-	m.availableHarnesses = []string{"claude", "pi", "codex"}
-	m.selectedCreateHarness = 2 // codex
+	m.availableHarnesses = []string{"claude", "codex"}
+	m.selectedCreateHarness = 1 // codex
 	m.createFolder = "/Users/test/repo"
 	m.skillsAvailable = true
 	m.availableSkills = []string{"(none)", "feature"}
@@ -485,21 +476,21 @@ func TestCreateWizard_HarnessCodexSkipsToMessage(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeCreateMessage {
-		t.Errorf("expected modeCreateMessage when non-claude harness, got %d", rm.mode)
+	if rm.mode != modeCreateSkill {
+		t.Errorf("expected modeCreateSkill when codex+skills, got %d", rm.mode)
 	}
 	if rm.createHarness != "codex" {
 		t.Errorf("expected createHarness=codex, got %q", rm.createHarness)
 	}
 	if rm.createSkillName != "" {
-		t.Errorf("expected createSkillName empty for non-claude harness, got %q", rm.createSkillName)
+		t.Errorf("expected createSkillName empty before skill selection, got %q", rm.createSkillName)
 	}
 }
 
 func TestCreateWizard_EscFromHarnessGoesBackToFolder(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateHarness
-	m.availableHarnesses = []string{"claude", "pi", "codex"}
+	m.availableHarnesses = []string{"claude", "codex"}
 	m.createFolder = "/Users/test/repo"
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
@@ -661,11 +652,11 @@ func TestCreateWizard_EscFromMessageGoesToHarnessWhenNoSkills(t *testing.T) {
 	}
 }
 
-func TestCreateWizard_EscFromMessageGoesToHarnessForNonClaude(t *testing.T) {
+func TestCreateWizard_EscFromMessageGoesToSkillForCodex(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateMessage
 	m.createFolder = "/Users/test/repo"
-	m.createHarness = "codex" // codex skipped the skill step
+	m.createHarness = "codex"
 	m.skillsAvailable = true
 	m.availableSkills = []string{"(none)", "feature"}
 	m.textInput.SetValue("hi")
@@ -674,9 +665,8 @@ func TestCreateWizard_EscFromMessageGoesToHarnessForNonClaude(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// Codex skipped skill mode, so esc should also skip back over it.
-	if rm.mode != modeCreateHarness {
-		t.Errorf("expected modeCreateHarness after esc (non-claude), got %d", rm.mode)
+	if rm.mode != modeCreateSkill {
+		t.Errorf("expected modeCreateSkill after esc (codex), got %d", rm.mode)
 	}
 }
 

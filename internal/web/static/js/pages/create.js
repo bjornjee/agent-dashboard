@@ -21,13 +21,12 @@ export function renderCreate(app, agents) {
       <div class="form-group">
         <label class="form-label">Harness</label>
         <select id="create-harness" class="action-input" style="width:100%">
-          <option value="">Default (settings.toml)</option>
-          <option value="claude">claude</option>
-          <option value="pi">pi (supports openai/codex models)</option>
-          <option value="codex">codex</option>
-        </select>
-        <div class="form-hint">pi reads <code>[harness.pi]</code>; codex reads <code>[harness.codex]</code> (model/approval/sandbox) from settings.toml.</div>
-      </div>
+	          <option value="">Default (settings.toml)</option>
+	          <option value="claude">Claude Code</option>
+	          <option value="codex">Codex CLI</option>
+	        </select>
+	        <div class="form-hint">Codex reads <code>[harness.codex]</code> (model/approval/sandbox) from settings.toml.</div>
+	      </div>
       <div class="form-group">
         <label class="form-label">Skill</label>
         <select id="create-skill" class="action-input" style="width:100%">

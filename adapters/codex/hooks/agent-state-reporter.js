@@ -201,6 +201,8 @@ if (require.main === module) {
     } catch {
       // Silent — don't break Claude Code
     }
+    // See agent-state-fast.js — codex 0.130 requires JSON stdout.
+    process.stdout.write('{}\n');
   });
 }
 

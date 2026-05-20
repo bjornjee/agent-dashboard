@@ -33,20 +33,9 @@ default = "high"  # level pinned at spawn and restored on plan exit
 [harness]
 # Active coding-agent harness. Choose the binary that backs new agents.
 #   "claude" — Claude Code (default; uses ~/.claude config)
-#   "pi"     — pi-mono coding agent (uses ~/.pi config; supports OpenAI/codex
-#              models via unified LLM API)
 #   "codex"  — OpenAI codex CLI (uses ~/.codex config; install hooks via
 #              `codex plugin marketplace add github.com/bjornjee/agent-dashboard`)
 default = "claude"
-
-[harness.pi]
-# Pi-mono spawn knobs — only consulted when [harness] default = "pi".
-# Provider+Model flow into `pi --provider <p> --model <m>`. Either being
-# empty inherits pi-mono's resolution chain (auth.json > env var). Configure
-# the OpenAI key in ~/.pi/auth.json. See:
-# https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md
-provider = ""   # e.g. "openai"
-model    = ""   # e.g. "openai-codex/gpt-5.5"
 
 [harness.codex]
 # Codex CLI spawn knobs — only consulted when [harness] default = "codex".
