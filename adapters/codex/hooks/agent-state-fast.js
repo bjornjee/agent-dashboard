@@ -144,6 +144,33 @@ function effortTransition(existingMode, newMode) {
   return null;
 }
 
+// Parse `git worktree add` invocations from a PostToolUse Bash payload and
+// return the absolute path of the newly created worktree, or null if the
+// command doesn't match. Walks tokens left-to-right; recognized flags with
+// arguments are skipped (along with their arg), boolean flags are skipped,
+// and the first positional token is treated as the path. Relative paths are
+// resolved against input.cwd so the stamp is always absolute.
+function detectWorktreeFromBash(input) {
+  if (input.hook_event_name !== 'PostToolUse') return null;
+  if ((input.tool_name || '') !== 'Bash') return null;
+  const cmd = ((input.tool_input || {}).command || '').trim();
+  const m = cmd.match(/^git\s+worktree\s+add\b(.*)$/);
+  if (!m) return null;
+  const tokens = m[1].trim().split(/\s+/).filter(Boolean);
+  const flagsWithArg = new Set(['-b', '-B', '--reason']);
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (flagsWithArg.has(t)) { i++; continue; }
+    if (t.startsWith('-')) continue;
+    let candidate = t;
+    if (!candidate.startsWith('/') && input.cwd) {
+      candidate = path.resolve(input.cwd, candidate);
+    }
+    return candidate;
+  }
+  return null;
+}
+
 /**
  * Build the state update object from hook input and existing state.
  * Pure logic — no I/O. Returns { changed, update } where update is the
@@ -162,16 +189,24 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   // features (diff viewer, PR creation, cleanup) trust this dir and shouldn't
   // have it shifting as the agent cd's around.
   //
+  // Signal priority (first-write-wins across both):
+  //   Primary:  `git worktree add <path>` from PostToolUse Bash — explicit
+  //             user/skill action, strictly more specific than path matching.
+  //   Fallback: input.cwd matching /worktrees/ (and not the Claude Code
+  //             subagent isolation dir .claude/worktrees/agent-*) — covers
+  //             agents launched directly into a worktree.
+  //
   // Only the MAIN agent can write worktree_cwd. A subagent's hook fires with
-  // input.cwd under `.claude/worktrees/agent-<id>/` (Claude Code's per-subagent
-  // isolation dir), which is not a user worktree — drop those observations so
-  // they cannot poison the stamp. Among main-agent observations,
-  // first-stamp-wins.
+  // input.cwd under `.claude/worktrees/agent-<id>/`, which is not a user
+  // worktree — drop those observations so they cannot poison the stamp.
   const liveCwd = input.cwd || null;
   const isMainWorktree = liveCwd
     && /\/worktrees\//.test(liveCwd)
     && !/\/\.claude\/worktrees\//.test(liveCwd);
-  const worktreeCwd = (!existing.worktree_cwd && isMainWorktree) ? liveCwd : null;
+  const bashWorktree = detectWorktreeFromBash(input);
+  const worktreeCwd = (!existing.worktree_cwd && (bashWorktree || isMainWorktree))
+    ? (bashWorktree || liveCwd)
+    : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';

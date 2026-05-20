@@ -444,6 +444,221 @@ describe('fast hook state updates (per-agent files)', () => {
       'existing worktree_cwd must not be overwritten when agent visits another worktree path');
   });
 
+  it('git worktree add <abs-path>: stamps the explicit path over input.cwd', () => {
+    // The explicit `git worktree add` signal is strictly more specific than
+    // the input.cwd heuristic — even when the agent is running from an
+    // unrelated cwd, the path it just created is the worktree to pin.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add /abs/path/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.worktree_cwd, '/abs/path/wt');
+  });
+
+  it('git worktree add -b <branch> <path>: skips the -b flag arg, stamps path', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/x /abs/path/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, '/abs/path/wt',
+      'must not stamp the -b branch name as the path');
+  });
+
+  it('git worktree add with relative path resolves against input.cwd', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/x ../worktrees/app/feat' },
+        cwd: '/Users/x/src',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, '/Users/x/worktrees/app/feat');
+  });
+
+  it('git worktree add --force <path>: boolean flag, stamps path', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add --force /abs/path/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, '/abs/path/wt');
+  });
+
+  it('git worktree add -b <branch> <path> <commit-ish>: stamps path, ignores commit-ish', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/x /abs/path/wt master' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, '/abs/path/wt');
+  });
+
+  it('git worktree add only fires on PostToolUse, not PreToolUse', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add /abs/path/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update?.worktree_cwd, undefined,
+      'PreToolUse must not stamp — the worktree may not exist yet');
+  });
+
+  it('git worktree add command on non-Bash tool does not stamp', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Read',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+        tool_input: { command: 'git worktree add /abs/path/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update?.worktree_cwd, undefined);
+  });
+
+  it('git worktree add does not overwrite a pre-stamped worktree_cwd', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      worktree_cwd: '/already/stamped/wt',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add /abs/path/new-wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update?.worktree_cwd, undefined,
+      'first-write-wins applies to the bash signal too');
+  });
+
+  it('git worktree list (non-add subcommand) does not stamp', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree list' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update?.worktree_cwd, undefined);
+  });
+
   it('allows transition out of "pr" state when not pinned', () => {
     // Unpinned "pr" state (e.g. from an older hook version) is overridable
     // by subsequent tool activity.
