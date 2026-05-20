@@ -1,0 +1,20 @@
+{
+  "name": "agent-dashboard",
+  "interface": {
+    "displayName": "Agent Dashboard"
+  },
+  "plugins": [
+    {
+      "name": "agent-dashboard",
+      "source": {
+        "source": "local",
+        "path": "./adapters/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

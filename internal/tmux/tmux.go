@@ -189,14 +189,14 @@ func tmuxSendKeysWithSubmit(target, text, submitKey string) error {
 	return runner.Run(ctx, "send-keys", "-t", target, submitKey)
 }
 
-func TmuxSendKeysClearingInput(target, text string) error {
+func TmuxSendKeysClearingInput(target, text, submitKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	err := runner.Run(ctx, "send-keys", "-t", target, "C-u")
 	cancel()
 	if err != nil {
 		return err
 	}
-	return tmuxSendKeysWithSubmit(target, text, "C-j")
+	return tmuxSendKeysWithSubmit(target, text, submitKey)
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.

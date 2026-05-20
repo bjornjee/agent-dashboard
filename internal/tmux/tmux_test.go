@@ -270,9 +270,9 @@ func TestTmuxSendKeysClearingInputClearsThenSubmits(t *testing.T) {
 	r := withMockRunner(t)
 	r.On("Run", mock.Anything, "send-keys", "-t", "main:2.1", "C-u").Return(nil).Once()
 	r.On("Run", mock.Anything, "send-keys", "-l", "-t", "main:2.1", "fix the test").Return(nil).Once()
-	r.On("Run", mock.Anything, "send-keys", "-t", "main:2.1", "C-j").Return(nil).Once()
+	r.On("Run", mock.Anything, "send-keys", "-t", "main:2.1", "Tab").Return(nil).Once()
 
-	if err := TmuxSendKeysClearingInput("main:2.1", "fix the test"); err != nil {
+	if err := TmuxSendKeysClearingInput("main:2.1", "fix the test", "Tab"); err != nil {
 		t.Fatalf("TmuxSendKeysClearingInput() error = %v", err)
 	}
 }

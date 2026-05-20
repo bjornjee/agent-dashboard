@@ -410,7 +410,7 @@ func (r *recordingTmuxRunner) Run(_ context.Context, args ...string) error {
 	return nil
 }
 
-func TestReplyMode_CodexReplyClearsPendingPromptBeforeSending(t *testing.T) {
+func TestReplyMode_CodexRunningReplyQueuesMessage(t *testing.T) {
 	runner := &recordingTmuxRunner{}
 	restore := tmux.SetTestRunner(runner)
 	t.Cleanup(restore)
@@ -437,7 +437,41 @@ func TestReplyMode_CodexReplyClearsPendingPromptBeforeSending(t *testing.T) {
 	want := [][]string{
 		{"send-keys", "-t", "main:2.1", "C-u"},
 		{"send-keys", "-l", "-t", "main:2.1", "continue the PR"},
-		{"send-keys", "-t", "main:2.1", "C-j"},
+		{"send-keys", "-t", "main:2.1", "Tab"},
+	}
+	if fmt.Sprint(runner.runs) != fmt.Sprint(want) {
+		t.Fatalf("tmux calls = %#v, want %#v", runner.runs, want)
+	}
+}
+
+func TestReplyMode_CodexWaitingReplySubmitsMessage(t *testing.T) {
+	runner := &recordingTmuxRunner{}
+	restore := tmux.SetTestRunner(runner)
+	t.Cleanup(restore)
+
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:2.0", TmuxPaneID: "%5", Window: 2, Pane: 0, State: "waiting", Harness: "codex", Cwd: "/tmp"},
+	}
+	m.mode = modeReply
+	m.textInput.SetValue("continue the PR")
+	m.buildTree()
+	m.selected = 1
+
+	result, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	updated := result.(model)
+	if updated.mode != modeNormal {
+		t.Fatalf("expected modeNormal after reply submit, got %d", updated.mode)
+	}
+	if cmd == nil {
+		t.Fatal("expected reply command")
+	}
+	cmd()
+
+	want := [][]string{
+		{"send-keys", "-t", "main:2.1", "C-u"},
+		{"send-keys", "-l", "-t", "main:2.1", "continue the PR"},
+		{"send-keys", "-t", "main:2.1", "Enter"},
 	}
 	if fmt.Sprint(runner.runs) != fmt.Sprint(want) {
 		t.Fatalf("tmux calls = %#v, want %#v", runner.runs, want)
