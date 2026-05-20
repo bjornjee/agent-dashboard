@@ -9,16 +9,6 @@ Diagnose and fix a bug.
 
 Bug description: $ARGUMENTS
 
-## Harness compatibility
-
-When running under Claude Code, use the named Claude tools below exactly as
-written. When running under Codex and a named Claude-only tool is unavailable,
-use the equivalent Codex-native workflow instead: perform exploration inline,
-ask concise user questions with the available user-input mechanism, present any
-needed plan in normal assistant text, wait for explicit user approval, and
-implement inline with strict TDD. Do not delegate to a Codex subprocess from
-inside Codex.
-
 ## Instructions
 
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied. Apply all project rules and conventions that are in your context.
@@ -130,7 +120,7 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 **Effort note:** When launched via the agent-dashboard's New Agent flow, this skill spawns with `--effort high` on the CLI, which Claude Code pins at the session level. The dynamic dispatcher in agent-state-fast.js bumps effort to `max` automatically while `permission_mode='plan'` (EnterPlanMode active) and drops back to `high` on exit — so planning runs at max effort without paying that cost during implementation. When invoked as a slash command inside an existing claude session, you can run `/effort max` before entering plan mode and `/effort high` (or lower) before implementation.
 
-**Delegation gate:** In Claude Code, invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the diagnosis (Phase 4) and failing test (Phase 3) as implementation context, then skip to the phase gate. In Codex, skip this gate and implement inline.
+**Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the diagnosis (Phase 4) and failing test (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
 1. Implement the **minimal fix** — change only what is necessary to fix the bug.
 2. Run `make test` — the previously failing test must now **pass**.

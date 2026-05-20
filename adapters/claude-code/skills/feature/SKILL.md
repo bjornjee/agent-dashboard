@@ -11,16 +11,6 @@ Start a new feature in an isolated git worktree.
 
 Feature description: $ARGUMENTS
 
-## Harness compatibility
-
-When running under Claude Code, use the named Claude tools below exactly as
-written. When running under Codex and a named Claude-only tool is unavailable,
-use the equivalent Codex-native workflow instead: perform exploration inline,
-ask concise user questions with the available user-input mechanism, present the
-plan in normal assistant text, wait for explicit user approval, and implement
-inline with strict TDD. Do not call unavailable tools or delegate to a Codex
-subprocess from inside Codex.
-
 ## Instructions
 
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
