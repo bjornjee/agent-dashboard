@@ -499,9 +499,9 @@ func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
 		}
 		if agent.Harness == "codex" {
 			if agent.State == "running" {
-				return sendResultMsg{err: tmux.TmuxSendKeysClearingInput(target, text, "Tab", "Enter")}
+				return sendResultMsg{err: tmux.TmuxPasteKeysClearingInput(target, text, "Tab", "Enter")}
 			}
-			return sendResultMsg{err: tmux.TmuxSendKeysClearingInput(target, text, "Enter")}
+			return sendResultMsg{err: tmux.TmuxPasteKeysClearingInput(target, text, "Enter")}
 		}
 		return sendResultMsg{err: tmux.TmuxSendKeys(target, text)}
 	}

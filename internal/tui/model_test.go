@@ -436,7 +436,8 @@ func TestReplyMode_CodexRunningReplyQueuesMessage(t *testing.T) {
 
 	want := [][]string{
 		{"send-keys", "-t", "main:2.1", "C-u"},
-		{"send-keys", "-l", "-t", "main:2.1", "continue the PR"},
+		{"set-buffer", "-b", "agent-dashboard-reply", "--", "continue the PR"},
+		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.1"},
 		{"send-keys", "-t", "main:2.1", "Tab"},
 		{"send-keys", "-t", "main:2.1", "Enter"},
 	}
@@ -471,7 +472,8 @@ func TestReplyMode_CodexWaitingReplySubmitsMessage(t *testing.T) {
 
 	want := [][]string{
 		{"send-keys", "-t", "main:2.1", "C-u"},
-		{"send-keys", "-l", "-t", "main:2.1", "continue the PR"},
+		{"set-buffer", "-b", "agent-dashboard-reply", "--", "continue the PR"},
+		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.1"},
 		{"send-keys", "-t", "main:2.1", "Enter"},
 	}
 	if fmt.Sprint(runner.runs) != fmt.Sprint(want) {
