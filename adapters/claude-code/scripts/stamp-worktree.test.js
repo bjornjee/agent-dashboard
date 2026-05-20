@@ -27,6 +27,7 @@ function run(args, env = {}) {
   delete baseEnv.CLAUDE_PLUGIN_ROOT;
   delete baseEnv.PLUGIN_ROOT;
   delete baseEnv.CLAUDE_SESSION_ID;
+  delete baseEnv.CLAUDE_CODE_SESSION_ID;
   return spawnSync('node', [SCRIPT, ...args], {
     env: { ...baseEnv, AGENT_DASHBOARD_DIR: tmpDir, ...env },
     encoding: 'utf8',
@@ -79,5 +80,13 @@ describe('stamp-worktree.js', () => {
     assert.equal(r.status, 0, r.stderr);
     const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
     assert.equal(written.worktree_cwd, '/tmp/x');
+  });
+
+  it('reads CLAUDE_CODE_SESSION_ID env var (the name Claude Code actually exports)', () => {
+    const sessionId = 'sess-6';
+    const r = run(['/tmp/y'], { CLAUDE_CODE_SESSION_ID: sessionId });
+    assert.equal(r.status, 0, r.stderr);
+    const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
+    assert.equal(written.worktree_cwd, '/tmp/y');
   });
 });
