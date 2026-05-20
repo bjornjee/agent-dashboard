@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.23.0](https://github.com/bjornjee/agent-dashboard/compare/v0.22.0...v0.23.0) (2026-05-20)
+
+
+### Features
+
+* add codex skill harness support ([#285](https://github.com/bjornjee/agent-dashboard/issues/285)) ([6f5fd58](https://github.com/bjornjee/agent-dashboard/commit/6f5fd5821e6788ef34160a8446ff08e4401d2f29))
+* show harness badge + selection accent bar in TUI left panel ([#288](https://github.com/bjornjee/agent-dashboard/issues/288)) ([8494b1e](https://github.com/bjornjee/agent-dashboard/commit/8494b1e494d1fcf88a9dd6c9ebe4db7fbd2844eb))
+
+
+### Bug Fixes
+
+* codex hooks emit JSON stdout so state reporting actually runs ([#284](https://github.com/bjornjee/agent-dashboard/issues/284)) ([5c31535](https://github.com/bjornjee/agent-dashboard/commit/5c31535a028f4a63388e14098b332481f44cf85e))
+* pin worktree branch/dir via git worktree add signal ([#287](https://github.com/bjornjee/agent-dashboard/issues/287)) ([e674053](https://github.com/bjornjee/agent-dashboard/commit/e67405384d906137406653358bc90420a86c7571))
+
 ## [0.22.0](https://github.com/bjornjee/agent-dashboard/compare/v0.21.0...v0.22.0) (2026-05-20)
 
 
