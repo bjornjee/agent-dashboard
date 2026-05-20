@@ -50,10 +50,10 @@ The dashboard supports two coding-agent harnesses today: `claude` and `codex`. P
 1. Implement `domain.Harness` under `internal/harness/<name>/` with `*runner.go` for any `os/exec` calls (same conventions as above).
 2. Register the name in `internal/harness/registry.go` `Resolve()`.
 3. Add a `<Name>HarnessSettings` struct to `internal/domain/types.go` and wire it into `HarnessSettings`.
-4. Route per-harness flags in `internal/web/actions.go` `spawnOptsFor()` so unused fields stay zero-valued.
+4. Route per-harness flags in `internal/harness/spawnopts.go` so unused fields stay zero-valued.
 5. If the harness has its own conversation/state schema, add a reader under `internal/<harness>/` and route through `internal/conversation/router.go` `Read()` (dispatches on `agent.Harness`).
 6. Update hook scripts (`adapters/claude-code/scripts/hooks/agent-state-fast.js` `detectHarness`) so the SessionStart hook stamps the harness name in the per-agent state file — without that, the router can't dispatch.
 
 For codex specifically: codex CLI 0.130.0's hook payload schema is **1:1 with Claude's** (`codex-rs/hooks/schema/generated/*.json`), and codex sets `CLAUDE_PLUGIN_ROOT` for OOTB plugin compatibility (`codex-rs/hooks/src/engine/discovery.rs`). Most JS hooks work unchanged; the discriminator is `process.env.PLUGIN_ROOT` (codex-only) or `input.model` starting with `gpt-`.
 
-When adding a new dashboard skill that calls `EnterPlanMode`, `ExitPlanMode`, `AskUserQuestion`, or the `Agent` (subagent) tool, append its name to `internal/skills/guard.go`'s `claudeOnlySkills` map so the web spawn handler returns 400 when the skill is selected against a codex session. The guard is an opt-in allowlist — skills that don't call those tools (e.g. a future codex-native skill) need no entry.
+When adding a new dashboard skill that requires Claude-only orchestration primitives, append its name to `internal/skills/guard.go`'s `codexBlockedSkills` map so both TUI and web creation reject that skill against a codex session. The guard is a Codex blocklist: supported built-in skills and custom maintained skills are allowed by default.
