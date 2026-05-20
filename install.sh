@@ -5,6 +5,7 @@ set -eu
 # agent-dashboard installer
 #
 # Downloads the pre-built binary, verifies its checksum, and installs it.
+# Also installs the Codex global hook bundle used by the dashboard.
 # Plugin registration is handled separately via Claude Code's /plugin command.
 #
 # Usage:
@@ -16,8 +17,12 @@ set -eu
 REPO="bjornjee/agent-dashboard"
 BIN_DIR="$HOME/.local/bin"
 STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
+CODEX_HOOKS_DIR="$CODEX_DIR/hooks/agent-dashboard"
+CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
 BUILD_FROM_SOURCE=false
 WORK_DIR=""
+CODEX_HOOKS_SOURCE=""
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -39,6 +44,42 @@ step()  { printf '[%s] %s\n' "$1" "$2"; }
 
 check_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+copy_dir_if_missing() {
+  src="$1"
+  dest="$2"
+  if [ -e "$dest" ]; then
+    info "$dest already exists, skipping."
+    return 1
+  fi
+
+  if ! mkdir -p "$(dirname "$dest")"; then
+    err "Failed to create $(dirname "$dest")"
+    exit 1
+  fi
+  if ! cp -R "$src" "$dest"; then
+    err "Failed to copy $src to $dest"
+    exit 1
+  fi
+}
+
+copy_file_if_missing() {
+  src="$1"
+  dest="$2"
+  if [ -e "$dest" ]; then
+    info "$dest already exists, skipping."
+    return 1
+  fi
+
+  if ! mkdir -p "$(dirname "$dest")"; then
+    err "Failed to create $(dirname "$dest")"
+    exit 1
+  fi
+  if ! cp "$src" "$dest"; then
+    err "Failed to copy $src to $dest"
+    exit 1
+  fi
 }
 
 cleanup() {
@@ -67,6 +108,15 @@ check_prerequisites() {
 
   if ! check_cmd tmux; then
     missing="$missing  - tmux: https://github.com/tmux/tmux/wiki/Installing\n"
+  fi
+
+  if ! check_cmd node; then
+    missing="$missing  - node (18+): https://nodejs.org/\n"
+  else
+    node_ver=$(node -v 2>/dev/null | sed 's/^v//')
+    if ! version_ge "$node_ver" "18.0"; then
+      missing="$missing  - node 18+ (found $node_ver): https://nodejs.org/\n"
+    fi
   fi
 
   if [ "$BUILD_FROM_SOURCE" = true ]; then
@@ -149,7 +199,7 @@ resolve_version() {
 # ---------------------------------------------------------------------------
 
 install_binary_download() {
-  step "1/2" "Downloading agent-dashboard v$VERSION ($OS/$ARCH)..."
+  step "1/3" "Downloading agent-dashboard v$VERSION ($OS/$ARCH)..."
 
   asset="agent-dashboard_${VERSION}_${OS}_${ARCH}.tar.gz"
   url="https://github.com/$REPO/releases/download/v${VERSION}/$asset"
@@ -210,7 +260,7 @@ install_binary_download() {
 
 install_binary_build() {
   REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-  step "1/2" "Building agent-dashboard from source..."
+  step "1/3" "Building agent-dashboard from source..."
   cd "$REPO_DIR"
   make build
   mkdir -p "$BIN_DIR"
@@ -220,46 +270,74 @@ install_binary_build() {
 }
 
 # ---------------------------------------------------------------------------
+# Install Codex hooks
+# ---------------------------------------------------------------------------
+
+resolve_codex_hooks_source() {
+  repo_dir="$(cd "$(dirname "$0")" && pwd)"
+  if [ -f "$repo_dir/adapters/codex/hooks/hooks.json" ]; then
+    CODEX_HOOKS_SOURCE="$repo_dir/adapters/codex/hooks"
+    return
+  fi
+
+  if [ -z "${VERSION:-}" ]; then
+    err "Could not locate adapters/codex/hooks in this checkout."
+    exit 1
+  fi
+
+  source_archive="$WORK_DIR/source.tar.gz"
+  source_dir="$WORK_DIR/source"
+  source_url="https://github.com/$REPO/archive/refs/tags/v${VERSION}.tar.gz"
+
+  mkdir -p "$source_dir"
+  if ! curl -fsSL "$source_url" -o "$source_archive"; then
+    err "Failed to download source archive from $source_url"
+    exit 1
+  fi
+
+  tar -xzf "$source_archive" -C "$source_dir"
+  hooks_json=$(find "$source_dir" -path "*/adapters/codex/hooks/hooks.json" -print | head -n 1)
+  if [ -z "$hooks_json" ]; then
+    err "adapters/codex/hooks/hooks.json not found in source archive."
+    exit 1
+  fi
+
+  CODEX_HOOKS_SOURCE="$(dirname "$hooks_json")"
+}
+
+install_codex_hooks() {
+  step "3/3" "Installing Codex dashboard hooks..."
+  resolve_codex_hooks_source
+
+  if copy_dir_if_missing "$CODEX_HOOKS_SOURCE" "$CODEX_HOOKS_DIR"; then
+    chmod +x "$CODEX_HOOKS_DIR/agent-state-fast.sh" "$CODEX_HOOKS_DIR/agent-state-reporter.sh"
+  fi
+  copy_file_if_missing "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE" || true
+
+  info "Codex hook runtime: $CODEX_HOOKS_DIR"
+  info "Codex hook config: $CODEX_HOOKS_FILE"
+}
+
+# ---------------------------------------------------------------------------
 # Bootstrap settings
 # ---------------------------------------------------------------------------
 
 bootstrap_settings() {
-  step "2/2" "Bootstrapping settings..."
-  local settings_file="$STATE_DIR/settings.toml"
+  step "2/3" "Bootstrapping settings..."
+  settings_file="$STATE_DIR/settings.toml"
   if [ ! -f "$settings_file" ]; then
-    mkdir -p "$STATE_DIR"
-
-    # Try repo root first (--build mode), then write a minimal default
-    local example=""
+    example=""
     if [ -f "$(dirname "$0")/settings.example.toml" ]; then
       example="$(dirname "$0")/settings.example.toml"
     fi
 
     if [ -n "$example" ]; then
+      mkdir -p "$STATE_DIR"
       cp "$example" "$settings_file"
+      info "Created $settings_file"
     else
-      # Write minimal default settings inline (no external dependency)
-      cat > "$settings_file" <<'TOML'
-# Agent Dashboard settings
-# See https://github.com/bjornjee/agent-dashboard#user-settings for all options.
-
-[banner]
-show_mascot   = true
-show_quote    = true
-
-[notifications]
-enabled       = false
-sound         = false
-silent_events = false
-
-[debug]
-key_log       = false
-
-[experimental]
-ascii_pet     = false
-TOML
+      info "settings.example.toml not found, using built-in defaults."
     fi
-    info "Created $settings_file"
   else
     info "$settings_file already exists, skipping."
   fi
@@ -276,15 +354,7 @@ check_path() {
 
   echo ""
   info "WARNING: $BIN_DIR is not on your PATH."
-  info "Add it to your shell profile:"
-  case "${SHELL:-}" in
-    */zsh)  info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc" ;;
-    */bash) info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc" ;;
-    *)
-      info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc  # zsh"
-      info "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc # bash"
-      ;;
-  esac
+  info "Add $BIN_DIR to PATH in your shell profile."
 }
 
 # ---------------------------------------------------------------------------
@@ -309,6 +379,7 @@ else
 fi
 
 bootstrap_settings
+install_codex_hooks
 check_path
 
 echo ""
@@ -324,7 +395,12 @@ echo "     /plugin install agent-dashboard@agent-dashboard"
 echo ""
 echo "  3. Restart Claude Code sessions for hooks and skills to take effect."
 echo ""
-echo "  4. Run the dashboard in a tmux pane:"
+echo "  4. Restart Codex sessions and approve the agent-dashboard hooks prompt."
+echo ""
+echo "     Hooks: $CODEX_HOOKS_FILE"
+echo "     Runtime: $CODEX_HOOKS_DIR"
+echo ""
+echo "  5. Run the dashboard in a tmux pane:"
 echo ""
 echo "     agent-dashboard"
 echo ""

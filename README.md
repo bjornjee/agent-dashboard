@@ -99,9 +99,10 @@ A companion PWA (`cmd/web/`) for dispatching and managing agents from your phone
 |------------|----------|---------|
 | [tmux](https://github.com/tmux/tmux) | Yes | Agent pane management and live capture |
 | [Claude Code](https://claude.com/claude-code) | Yes | The agents this dashboard monitors |
-| [Node.js 18+](https://nodejs.org/) | Yes | Claude Code adapter hooks |
+| [Node.js 18+](https://nodejs.org/) | Yes | Claude Code and Codex adapter hooks |
 | [git](https://git-scm.com/) | Yes | Diff viewer, branch detection |
 | [GitHub CLI (`gh`)](https://cli.github.com/) | No | Detects existing PRs so `g` opens the diff page instead of creating a new PR |
+| [Codex CLI](https://developers.openai.com/codex/) 0.130+ | No | Show Codex sessions in the dashboard |
 | [z (zsh plugin)](https://github.com/agkozak/zsh-z) | No | Frecency-ranked directory suggestions when creating sessions |
 
 ## Install
@@ -114,7 +115,7 @@ Download the pre-built binary from the latest [GitHub Release](https://github.co
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. No Go toolchain required.
+The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. It also copies Codex dashboard hooks to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` when that file does not already exist. No Go toolchain required.
 
 Or build from source (requires [Go 1.26+](https://go.dev/dl/)):
 
@@ -148,13 +149,21 @@ Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not
 
 ### Codex CLI support
 
-The plugin is also installable into the OpenAI [`codex` CLI](https://developers.openai.com/codex/) (0.130+). Codex auto-discovers the plugin manifest at `.claude-plugin/plugin.json` (per codex's `DISCOVERABLE_PLUGIN_MANIFEST_PATHS` in `codex-rs/utils/plugins/src/plugin_namespace.rs`) and registers our hooks as managed hooks alongside any you've configured manually.
+Codex support is installed by `install.sh`, not by editing the managed plugin cache. The installer only performs copy-if-missing actions: it copies the Codex hook bundle to `~/.codex/hooks/agent-dashboard` and copies the global hook template to `~/.codex/hooks.json` only when that file is absent.
 
-```
-codex plugin marketplace add bjornjee/agent-dashboard
+```bash
+curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-Codex will prompt to trust the plugin's hooks on first run; once approved, the dashboard sees codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
+After installing, restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
+
+If `~/.codex/hooks.json` already exists, the installer leaves it untouched. Review the template at `~/.codex/hooks/agent-dashboard/hooks.json` and reconcile it with your existing Codex hooks before restarting Codex.
+
+From a repo checkout, rerun the source installer after pulling changes:
+
+```bash
+./install.sh --build
+```
 
 Caveats specific to codex:
 
@@ -247,7 +256,7 @@ Or if you set up the tmux keybinding, press `prefix + D` to switch to a dedicate
 
 ## User Settings
 
-The dashboard supports a TOML configuration file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). The installer creates this from [`settings.example.toml`](settings.example.toml). Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
+The dashboard supports a TOML configuration file at `~/.agent-dashboard/settings.toml` (or `$AGENT_DASHBOARD_DIR/settings.toml` if overridden). From a repo checkout, the installer copies this from [`settings.example.toml`](settings.example.toml) when the destination file does not already exist. Any missing keys fall back to sensible defaults — you only need to include the settings you want to change.
 
 Example `settings.toml`:
 
@@ -341,7 +350,7 @@ agent-dashboard/
 ├── LICENSE
 ├── SECURITY.md
 ├── release-please-config.json
-├── install.sh                         # installer (accepts adapter name, default: claude-code)
+├── install.sh                         # binary installer plus copy-if-missing Codex hook install
 ├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
 ├── settings.example.toml              # default settings (copied by install.sh)
 ├── go.mod / go.sum
