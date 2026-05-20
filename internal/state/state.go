@@ -133,6 +133,101 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 	}
 }
 
+// ResolveAgentWorktree self-heals empty `agent.WorktreeCwd` by scanning the
+// agent's JSONL for the most recent `git worktree add <path>` command and
+// validating that the candidate path is a real worktree of the same source
+// repo as the agent's cwd. On a successful match, the candidate is stamped
+// in-memory and persisted to the agent's state file so subsequent loads —
+// and downstream features keyed off worktree_cwd (diff, PR, cleanup) — see
+// the recovered value. Failures (no JSONL match, candidate gone, different
+// source repo) leave WorktreeCwd empty; ResolveAgentBranches then clears
+// Branch the same way it does for any unresolvable agent.
+//
+// Must run AFTER ResolveAgentProjDir (needs agent.ProjDir) and BEFORE
+// ResolveAgentBranches (so the recovered WorktreeCwd is the source of truth
+// for branch lookup).
+func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
+	for key, agent := range sf.Agents {
+		if agent.WorktreeCwd != "" {
+			continue
+		}
+		if agent.SessionID == "" || agent.ProjDir == "" {
+			continue
+		}
+		candidate := conversation.LastGitWorktreeAdd(agent.ProjDir, agent.SessionID)
+		if candidate == "" {
+			continue
+		}
+		if !filepath.IsAbs(candidate) && agent.Cwd != "" {
+			candidate = filepath.Clean(filepath.Join(agent.Cwd, candidate))
+		}
+		if !validateWorktreeCandidate(agent.Cwd, candidate) {
+			continue
+		}
+		agent.WorktreeCwd = candidate
+		sf.Agents[key] = agent
+		_ = stampWorktreeCwd(stateDir, agent.SessionID, candidate)
+	}
+}
+
+// validateWorktreeCandidate returns true when candidate is a real worktree
+// whose source repo matches the agent's source repo.
+func validateWorktreeCandidate(agentCwd, candidate string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	out, err := branchRunner.Output(ctx, "git", "-C", candidate, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return false
+	}
+	top := strings.TrimSpace(string(out))
+	normTop, err := filepath.EvalSymlinks(top)
+	if err != nil {
+		normTop = top
+	}
+	normCandidate, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		normCandidate = candidate
+	}
+	if normTop != normCandidate {
+		return false
+	}
+
+	agentTop, err := repo.Resolve(ctx, branchRunner, agentCwd)
+	if err != nil {
+		return false
+	}
+	candTop, err := repo.Resolve(ctx, branchRunner, candidate)
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(agentTop.Source) == filepath.Clean(candTop.Source)
+}
+
+// stampWorktreeCwd persists the recovered worktree path to the agent's
+// state JSON file. Mirrors PinAgentState: read → set field → write atomic.
+func stampWorktreeCwd(stateDir, sessionID, worktreeCwd string) error {
+	files := agentFileMap(stateDir)
+	path, ok := files[sessionID]
+	if !ok {
+		return fmt.Errorf("agent %s not found", sessionID)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	raw["worktree_cwd"] = worktreeCwd
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0600)
+}
+
 // ResolveAgentBranches overwrites each agent's Branch with the live value
 // from git, using the agent's static project directory:
 //  1. WorktreeCwd if set — stamped once by the hook from input.cwd and

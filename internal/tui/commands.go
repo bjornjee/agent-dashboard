@@ -452,8 +452,9 @@ func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool) tea.Cm
 			state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
 			paneCwds = tmux.TmuxListPaneCwds()
 		}
-		state.ResolveAgentBranches(&sf, paneCwds)
 		state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+		state.ResolveAgentWorktree(&sf, path)
+		state.ResolveAgentBranches(&sf, paneCwds)
 		state.ApplyPinnedStates(&sf)
 		return stateUpdatedMsg{state: sf}
 	}
@@ -1018,8 +1019,9 @@ func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxRea
 						if tmuxReady.Load() {
 							pc = tmux.TmuxListPaneCwds()
 						}
-						state.ResolveAgentBranches(&sf, pc)
 						state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+						state.ResolveAgentWorktree(&sf, dir)
+						state.ResolveAgentBranches(&sf, pc)
 						state.ApplyPinnedStates(&sf)
 						p.Send(stateUpdatedMsg{state: sf})
 					})

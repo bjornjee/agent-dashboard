@@ -1674,3 +1674,155 @@ func TestFindProjDirByScan_MissingDir(t *testing.T) {
 		t.Errorf("FindProjDirByScan = %q, want empty for missing dir", got)
 	}
 }
+
+// bashToolUseLine returns a JSONL line representing an assistant message
+// containing a single Bash tool_use block with the given command.
+func bashToolUseLine(t *testing.T, command string) string {
+	t.Helper()
+	type input struct {
+		Command string `json:"command"`
+	}
+	type block struct {
+		Type  string `json:"type"`
+		Name  string `json:"name"`
+		Input input  `json:"input"`
+	}
+	type msg struct {
+		Role    string  `json:"role"`
+		Content []block `json:"content"`
+	}
+	type entry struct {
+		Type    string `json:"type"`
+		Message msg    `json:"message"`
+	}
+	e := entry{
+		Type: "assistant",
+		Message: msg{
+			Role: "assistant",
+			Content: []block{{
+				Type:  "tool_use",
+				Name:  "Bash",
+				Input: input{Command: command},
+			}},
+		},
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(b)
+}
+
+func TestLastGitWorktreeAdd_AbsolutePath(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git worktree add /abs/path/to/wt"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "/abs/path/to/wt" {
+		t.Errorf("LastGitWorktreeAdd = %q, want /abs/path/to/wt", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_RelativePath(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git worktree add ../worktrees/app/feat"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "../worktrees/app/feat" {
+		t.Errorf("LastGitWorktreeAdd = %q, want ../worktrees/app/feat", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_FlagBranchPair(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git worktree add -b feat/x worktrees/foo"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "worktrees/foo" {
+		t.Errorf("LastGitWorktreeAdd = %q, want worktrees/foo", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_BooleanFlag(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git worktree add --force worktrees/foo"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "worktrees/foo" {
+		t.Errorf("LastGitWorktreeAdd = %q, want worktrees/foo", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_PathBeforeCommitish(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git worktree add -b feat/x worktrees/foo master"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "worktrees/foo" {
+		t.Errorf("LastGitWorktreeAdd = %q, want worktrees/foo (path before commit-ish)", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_MostRecentWins(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git worktree add /first/path"),
+		bashToolUseLine(t, "git worktree add /second/path"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "/second/path" {
+		t.Errorf("LastGitWorktreeAdd = %q, want /second/path (most recent wins)", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_IgnoresNonMatching(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		bashToolUseLine(t, "git status"),
+		bashToolUseLine(t, "cd /worktrees/foo"),
+		bashToolUseLine(t, "git worktree list"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "" {
+		t.Errorf("LastGitWorktreeAdd = %q, want empty (no matching command)", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_MalformedLineSkipped(t *testing.T) {
+	projectsDir := t.TempDir()
+	dir := writeJSONLLines(t, projectsDir, "/repo", "sess-1", []string{
+		`not-json`,
+		bashToolUseLine(t, "git worktree add /abs/path"),
+	})
+
+	got := LastGitWorktreeAdd(dir, "sess-1")
+	if got != "/abs/path" {
+		t.Errorf("LastGitWorktreeAdd = %q, want /abs/path (malformed line skipped)", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_EmptySessionID(t *testing.T) {
+	got := LastGitWorktreeAdd(t.TempDir(), "")
+	if got != "" {
+		t.Errorf("LastGitWorktreeAdd = %q, want empty for missing sessionID", got)
+	}
+}
+
+func TestLastGitWorktreeAdd_MissingFile(t *testing.T) {
+	got := LastGitWorktreeAdd("/nonexistent-projdir-xyz", "sess-1")
+	if got != "" {
+		t.Errorf("LastGitWorktreeAdd = %q, want empty for missing file", got)
+	}
+}
