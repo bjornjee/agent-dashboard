@@ -466,7 +466,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.updateRightContent()
 			if text != "" {
 				if agent := m.selectedAgent(); agent != nil {
-					return m, sendReply(agent.TmuxPaneID, text, m.selfPaneID)
+					return m, sendReply(*agent, text, m.selfPaneID)
 				}
 			}
 			return m, nil

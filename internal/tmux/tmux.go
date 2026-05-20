@@ -185,6 +185,16 @@ func TmuxSendKeys(target, text string) error {
 	return runner.Run(ctx, "send-keys", "-t", target, "Enter")
 }
 
+func TmuxSendKeysClearingInput(target, text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	err := runner.Run(ctx, "send-keys", "-t", target, "C-u")
+	cancel()
+	if err != nil {
+		return err
+	}
+	return TmuxSendKeys(target, text)
+}
+
 // TmuxSendRaw sends a single key to a tmux pane without Enter.
 func TmuxSendRaw(target, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
