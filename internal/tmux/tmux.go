@@ -167,6 +167,10 @@ const sendKeysChunkSize = 512
 // TmuxSendKeys sends text literally to a tmux pane, followed by Enter.
 // Long text is split into chunks to avoid tmux's input buffer truncation.
 func TmuxSendKeys(target, text string) error {
+	return tmuxSendKeysWithSubmit(target, text, "Enter")
+}
+
+func tmuxSendKeysWithSubmit(target, text, submitKey string) error {
 	for len(text) > 0 {
 		chunk := text
 		if len(chunk) > sendKeysChunkSize {
@@ -182,7 +186,7 @@ func TmuxSendKeys(target, text string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
-	return runner.Run(ctx, "send-keys", "-t", target, "Enter")
+	return runner.Run(ctx, "send-keys", "-t", target, submitKey)
 }
 
 func TmuxSendKeysClearingInput(target, text string) error {
@@ -192,7 +196,7 @@ func TmuxSendKeysClearingInput(target, text string) error {
 	if err != nil {
 		return err
 	}
-	return TmuxSendKeys(target, text)
+	return tmuxSendKeysWithSubmit(target, text, "C-j")
 }
 
 // TmuxSendRaw sends a single key to a tmux pane without Enter.

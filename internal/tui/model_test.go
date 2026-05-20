@@ -437,7 +437,7 @@ func TestReplyMode_CodexReplyClearsPendingPromptBeforeSending(t *testing.T) {
 	want := [][]string{
 		{"send-keys", "-t", "main:2.1", "C-u"},
 		{"send-keys", "-l", "-t", "main:2.1", "continue the PR"},
-		{"send-keys", "-t", "main:2.1", "Enter"},
+		{"send-keys", "-t", "main:2.1", "C-j"},
 	}
 	if fmt.Sprint(runner.runs) != fmt.Sprint(want) {
 		t.Fatalf("tmux calls = %#v, want %#v", runner.runs, want)
