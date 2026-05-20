@@ -242,6 +242,8 @@ func TestContainsTrustPrompt_Positive(t *testing.T) {
 		{"exact match", []string{"Yes, I trust this folder"}},
 		{"surrounded by other text", []string{"", "  Yes, I trust this folder  ", ""}},
 		{"mixed with other lines", []string{"Claude Code", "Yes, I trust this folder", "Yes / No"}},
+		{"codex prompt", []string{"Do you trust the contents of this directory?"}},
+		{"codex prompt mixed", []string{"OpenAI Codex (v0.130)", "Do you trust the contents of this directory? Working with untrusted contents...", "  Yes, continue", "  No, quit"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

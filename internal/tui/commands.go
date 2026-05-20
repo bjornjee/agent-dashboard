@@ -98,12 +98,17 @@ func (m model) captureSelected() tea.Cmd {
 	}
 }
 
-// containsTrustPrompt returns true if the pane buffer contains
-// Claude Code's folder trust dialog. Matches the select menu options
-// rendered by the trust dialog component.
+// containsTrustPrompt returns true if the pane buffer contains a folder
+// trust dialog from a supported harness. Claude Code uses the select-menu
+// option "Yes, I trust this folder"; codex (codex-rs/tui/src/onboarding/
+// trust_directory.rs) renders the question "Do you trust the contents of
+// this directory?". Either is enough to surface the "press Enter to jump
+// and accept" hint — the user resolves the prompt with the harness's own
+// keybinds once they're inside the pane.
 func containsTrustPrompt(lines []string) bool {
 	for _, line := range lines {
-		if strings.Contains(line, "Yes, I trust this folder") {
+		if strings.Contains(line, "Yes, I trust this folder") ||
+			strings.Contains(line, "Do you trust the contents of this directory?") {
 			return true
 		}
 	}
