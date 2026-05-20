@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.0](https://github.com/bjornjee/agent-dashboard/compare/v0.21.0...v0.22.0) (2026-05-20)
+
+
+### Features
+
+* codex CLI harness with conversation, billing, and skill guard ([#281](https://github.com/bjornjee/agent-dashboard/issues/281)) ([8446d2a](https://github.com/bjornjee/agent-dashboard/commit/8446d2a3f9284b4e797f26ac9ad6011e8217c2aa))
+* harness picker in new-agent flow + default-harness settings page ([#282](https://github.com/bjornjee/agent-dashboard/issues/282)) ([c0b99a6](https://github.com/bjornjee/agent-dashboard/commit/c0b99a61e7d3ba5b119f13989fdb0eb1398dda93))
+
+
+### Bug Fixes
+
+* add codex global hooks bundle ([#283](https://github.com/bjornjee/agent-dashboard/issues/283)) ([68745f9](https://github.com/bjornjee/agent-dashboard/commit/68745f969dff0b43eeb5c643c2140770c54cd669))
+* subagent hook events must not corrupt main agent state ([#279](https://github.com/bjornjee/agent-dashboard/issues/279)) ([8a014bb](https://github.com/bjornjee/agent-dashboard/commit/8a014bb611f1a9c527666ac561359e9a7654e51d))
+
 ## [0.21.0](https://github.com/bjornjee/agent-dashboard/compare/v0.20.1...v0.21.0) (2026-05-13)
 
 
