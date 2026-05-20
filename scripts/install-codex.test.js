@@ -7,9 +7,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const REPO_DIR = path.resolve(__dirname, '..');
+const installScript = fs.readFileSync(path.join(REPO_DIR, 'install.sh'), 'utf8');
 
 describe('codex installer support', () => {
-  const installScript = fs.readFileSync(path.join(REPO_DIR, 'install.sh'), 'utf8');
 
   it('installs the codex hook bundle into the durable codex hooks directory', () => {
     assert.match(installScript, /install_codex_hooks\(\)/);
@@ -40,8 +40,6 @@ describe('codex installer support', () => {
 // installed bundle so version changes drive an automatic replace, and gates
 // global ~/.codex/hooks.json edits behind a known-shipped-hash allowlist.
 describe('codex adapter upgrade sync', () => {
-  const installScript = fs.readFileSync(path.join(REPO_DIR, 'install.sh'), 'utf8');
-
   it('exposes a --sync-adapters flag that skips the binary install', () => {
     assert.match(installScript, /--sync-adapters/);
     // The flag must short-circuit binary download/build — only adapters touched.

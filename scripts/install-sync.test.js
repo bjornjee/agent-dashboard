@@ -24,8 +24,6 @@ function sha256(buf) {
 }
 
 function runSync({ codexHome, stateDir, input }) {
-  // --sync-adapters must skip binary install, settings bootstrap, and PATH
-  // checks — exit cleanly with adapters synced.
   return execFileSync('sh', [INSTALL_SH, '--sync-adapters'], {
     env: {
       ...process.env,
