@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.24.0](https://github.com/bjornjee/agent-dashboard/compare/v0.23.0...v0.24.0) (2026-05-20)
+
+
+### Features
+
+* upgrade-aware codex adapter sync (version+hash stamp) ([#290](https://github.com/bjornjee/agent-dashboard/issues/290)) ([9b0be33](https://github.com/bjornjee/agent-dashboard/commit/9b0be331e89998e66ece74825be7172b4007c15b))
+
+
+### Bug Fixes
+
+* handle codex replies and worktree diffs ([#293](https://github.com/bjornjee/agent-dashboard/issues/293)) ([c3b0cc3](https://github.com/bjornjee/agent-dashboard/commit/c3b0cc3c574322d2cde7a3e4dfa63b198d69456d))
+* render harness picker as simple form, on par with skill picker ([#289](https://github.com/bjornjee/agent-dashboard/issues/289)) ([dcde2fb](https://github.com/bjornjee/agent-dashboard/commit/dcde2fb99d6802cc8475c313a11e30a09eeb5797))
+* surface codex trust prompts + stamp-worktree env var ([#292](https://github.com/bjornjee/agent-dashboard/issues/292)) ([673e316](https://github.com/bjornjee/agent-dashboard/commit/673e31616e4177ef53dfae0bf1c66399a0dba7fa))
+
 ## [0.23.0](https://github.com/bjornjee/agent-dashboard/compare/v0.22.0...v0.23.0) (2026-05-20)
 
 
