@@ -114,7 +114,8 @@ const (
 	modeConfirmSend    // confirm before sending a key to an agent pane
 	modeConfirmJump    // confirm before jumping to an agent pane
 	modeCreateFolder
-	modeCreateSkill   // skill selection step of create wizard
+	modeCreateHarness // harness selection step of create wizard
+	modeCreateSkill   // skill selection step of create wizard (claude only)
 	modeCreateMessage // message input step of create wizard
 	modeDinoGame      // full-screen dino runner game
 	modeDepsStatus    // full-screen deps status (gh / tmux / git / codex)

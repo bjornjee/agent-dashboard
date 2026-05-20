@@ -209,11 +209,14 @@ type model struct {
 	selectedSugg int              // index of highlighted suggestion
 
 	// Skill-aware create wizard state
-	availableSkills     []string // display list: ["(none)", "chore", "feature", ...]
-	skillsAvailable     bool     // true if skills found AND agent is Claude
-	createFolder        string   // folder selected in step 1
-	selectedCreateSkill int      // index into availableSkills
-	createSkillName     string   // selected skill name ("" if none)
+	availableSkills       []string // display list: ["(none)", "chore", "feature", ...]
+	skillsAvailable       bool     // true if any skills were discovered on disk
+	createFolder          string   // folder selected in step 1
+	availableHarnesses    []string // display list: ["claude", "pi", "codex"]
+	selectedCreateHarness int      // index into availableHarnesses
+	createHarness         string   // selected harness ("claude" | "pi" | "codex")
+	selectedCreateSkill   int      // index into availableSkills
+	createSkillName       string   // selected skill name ("" if none)
 
 	// Spawning status — keeps the bottom "Spawning agent..." spinner alive
 	// until the agent's state file appears on disk or 30s safety expiry.
@@ -514,10 +517,24 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	ss.Spinner = spinner.Dot
 	ss.Style = lipgloss.NewStyle().Foreground(textInputColor)
 
-	// Discover skills from agent-dashboard plugin cache
+	// Discover skills from agent-dashboard plugin cache. Skills are
+	// Claude-only today; the create-wizard's harness step decides whether
+	// the skill mode actually runs.
 	rawSkills := skills.DiscoverSkills(cfg.Profile.PluginCacheDir)
 	skillList := skills.BuildSkillList(rawSkills)
-	hasSkills := len(skillList) > 0 && strings.Contains(cfg.Profile.Command, "claude")
+	hasSkills := len(skillList) > 0
+
+	// Default the harness picker to the configured default so the wizard
+	// pre-selects what settings.toml says. Falls back to claude (index 0)
+	// if the configured value isn't in availableHarnesses.
+	harnessOptions := []string{"claude", "pi", "codex"}
+	defaultHarnessIdx := 0
+	for i, name := range harnessOptions {
+		if name == cfg.Settings.Harness.Default {
+			defaultHarnessIdx = i
+			break
+		}
+	}
 
 	// Resolve Codex sessions directory ($CODEX_HOME/sessions or ~/.codex/sessions)
 	codexHome := os.Getenv("CODEX_HOME")
@@ -527,44 +544,46 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	codexSessions := filepath.Join(codexHome, "sessions")
 
 	return model{
-		cfg:                  cfg,
-		agents:               nil,
-		statePath:            cfg.Profile.StateDir,
-		selfPaneID:           "",
-		tmuxAvailable:        false,
-		TmuxReady:            &atomic.Bool{},
-		textInput:            ti,
-		spawningSpinner:      s,
-		startupSpinner:       ss,
-		startupDone:          false,
-		mode:                 modeNormal,
-		db:                   database,
-		agentListVP:          viewport.New(),
-		filesVP:              viewport.New(),
-		historyVP:            viewport.New(),
-		messageVP:            viewport.New(),
-		focusedVP:            focusAgentList,
-		diffFileVP:           viewport.New(),
-		diffContentVP:        viewport.New(),
-		diffCollapsedDirs:    make(map[string]bool),
-		diffFilterInput:      dfi,
-		agentCaches:          make(map[string]*agentCache),
-		lastSeenDiagramCount: make(map[string]int),
-		agentSubagents:       make(map[string][]domain.SubagentInfo),
-		collapsed:            make(map[string]bool),
-		dismissed:            make(map[string]bool),
-		collapsedGroups:      make(map[int]bool),
-		quote:                "",
-		quoteAuthor:          "",
-		nowFunc:              time.Now,
-		pathExists:           zsuggest.DirExists,
-		availableSkills:      skillList,
-		skillsAvailable:      hasSkills,
-		pet:                  newPetModel(0),
-		petEnabled:           cfg.Settings.Experimental.AsciiPet,
-		dino:                 newDinoGameModel(0, 0),
-		dinoEnabled:          cfg.Settings.Experimental.DinoGame,
-		codexSessionsDir:     codexSessions,
+		cfg:                   cfg,
+		agents:                nil,
+		statePath:             cfg.Profile.StateDir,
+		selfPaneID:            "",
+		tmuxAvailable:         false,
+		TmuxReady:             &atomic.Bool{},
+		textInput:             ti,
+		spawningSpinner:       s,
+		startupSpinner:        ss,
+		startupDone:           false,
+		mode:                  modeNormal,
+		db:                    database,
+		agentListVP:           viewport.New(),
+		filesVP:               viewport.New(),
+		historyVP:             viewport.New(),
+		messageVP:             viewport.New(),
+		focusedVP:             focusAgentList,
+		diffFileVP:            viewport.New(),
+		diffContentVP:         viewport.New(),
+		diffCollapsedDirs:     make(map[string]bool),
+		diffFilterInput:       dfi,
+		agentCaches:           make(map[string]*agentCache),
+		lastSeenDiagramCount:  make(map[string]int),
+		agentSubagents:        make(map[string][]domain.SubagentInfo),
+		collapsed:             make(map[string]bool),
+		dismissed:             make(map[string]bool),
+		collapsedGroups:       make(map[int]bool),
+		quote:                 "",
+		quoteAuthor:           "",
+		nowFunc:               time.Now,
+		pathExists:            zsuggest.DirExists,
+		availableSkills:       skillList,
+		skillsAvailable:       hasSkills,
+		availableHarnesses:    harnessOptions,
+		selectedCreateHarness: defaultHarnessIdx,
+		pet:                   newPetModel(0),
+		petEnabled:            cfg.Settings.Experimental.AsciiPet,
+		dino:                  newDinoGameModel(0, 0),
+		dinoEnabled:           cfg.Settings.Experimental.DinoGame,
+		codexSessionsDir:      codexSessions,
 	}
 }
 
