@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Register Codex agent in dashboard on session start"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Fast Codex state sync for dashboard before tool use"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Fast Codex state sync for dashboard after tool use"
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Instant Codex needs-attention detection for dashboard"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Final Codex state sync for dashboard"
+      }
+    ]
+  }
+}
