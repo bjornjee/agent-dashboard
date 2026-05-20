@@ -63,6 +63,98 @@ func LastGitBranch(projDir, sessionID string) string {
 	return last
 }
 
+// gitWorktreeAddRe matches the leading `git worktree add` command prefix.
+// The submatch captures the argument tail (flags + path + optional commit-ish).
+var gitWorktreeAddRe = regexp.MustCompile(`^\s*git\s+worktree\s+add\b(.*)$`)
+
+// worktreeAddValueFlags lists short/long flags whose next whitespace-separated
+// token is the flag value (and therefore not the worktree path).
+var worktreeAddValueFlags = map[string]struct{}{
+	"-b":       {},
+	"-B":       {},
+	"--reason": {},
+}
+
+// LastGitWorktreeAdd returns the worktree path argument from the most recent
+// `git worktree add` Bash tool_use recorded in projDir/<sessionID>.jsonl,
+// or "" if none. The returned path is the first positional argument (as
+// per `git worktree add [<options>] <path> [<commit-ish>]`) and is returned
+// verbatim — callers resolve relative paths against the agent's cwd.
+func LastGitWorktreeAdd(projDir, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	f, err := os.Open(filepath.Join(projDir, sessionID+".jsonl"))
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+
+	type bashInput struct {
+		Command string `json:"command"`
+	}
+	type block struct {
+		Type  string    `json:"type"`
+		Name  string    `json:"name"`
+		Input bashInput `json:"input"`
+	}
+	type msg struct {
+		Content []block `json:"content"`
+	}
+	type entry struct {
+		Type    string `json:"type"`
+		Message msg    `json:"message"`
+	}
+
+	var last string
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var e entry
+		if json.Unmarshal(line, &e) != nil {
+			continue
+		}
+		if e.Type != "assistant" {
+			continue
+		}
+		for _, b := range e.Message.Content {
+			if b.Type != "tool_use" || b.Name != "Bash" {
+				continue
+			}
+			if p := extractWorktreePath(b.Input.Command); p != "" {
+				last = p
+			}
+		}
+	}
+	return last
+}
+
+// extractWorktreePath returns the first positional argument of a
+// `git worktree add` command (the worktree path), or "" if cmd is not
+// a worktree add invocation or no positional argument is present.
+func extractWorktreePath(cmd string) string {
+	m := gitWorktreeAddRe.FindStringSubmatch(cmd)
+	if m == nil {
+		return ""
+	}
+	tokens := strings.Fields(m[1])
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if !strings.HasPrefix(tok, "-") {
+			return tok
+		}
+		if _, takesValue := worktreeAddValueFlags[tok]; takesValue {
+			i++ // skip the flag's value token
+		}
+	}
+	return ""
+}
+
 // FindProjDirByScan walks every subdirectory of projectsDir looking for one
 // that contains <sessionID>.jsonl. Last-resort fallback for when no candidate
 // path could produce the right slug — typically because the agent's worktree
