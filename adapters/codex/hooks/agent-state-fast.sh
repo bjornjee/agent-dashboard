@@ -5,4 +5,4 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 export PLUGIN_ROOT="$ROOT"
 export CLAUDE_PLUGIN_ROOT="$ROOT"
 
-exec node "$ROOT/scripts/hooks/agent-state-fast.js"
+exec node "$ROOT/agent-state-fast.js"

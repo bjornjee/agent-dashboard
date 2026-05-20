@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || __dirname;
 const toml = require(path.join(pluginRoot, 'packages', 'toml-lite'));
 
 const DEFAULTS = Object.freeze({ plan: 'max', default: 'high' });

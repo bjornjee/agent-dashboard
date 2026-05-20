@@ -11,7 +11,7 @@ const os = require('os');
 const { resolveState, buildUpdate, detectHarness } = require('./agent-state-fast');
 
 // Import shared packages
-const pluginRoot = path.resolve(__dirname, '..', '..');
+const pluginRoot = __dirname;
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 
 let tmpDir;

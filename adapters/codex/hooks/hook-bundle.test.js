@@ -44,9 +44,9 @@ describe('codex global hook bundle', () => {
     for (const file of [
       'agent-state-fast.sh',
       'agent-state-reporter.sh',
-      'scripts/hooks/agent-state-fast.js',
-      'scripts/hooks/agent-state-reporter.js',
-      'scripts/hooks/effort-config.js',
+      'agent-state-fast.js',
+      'agent-state-reporter.js',
+      'effort-config.js',
       'packages/agent-state/index.js',
       'packages/tmux/index.js',
       'packages/git-status/index.js',
@@ -54,5 +54,9 @@ describe('codex global hook bundle', () => {
     ]) {
       assert.equal(fs.existsSync(path.join(ROOT, file)), true, file);
     }
+  });
+
+  it('keeps the copied codex source folder flat', () => {
+    assert.equal(fs.existsSync(path.join(ROOT, 'scripts', 'hooks')), false);
   });
 });

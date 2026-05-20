@@ -5,7 +5,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildReportEntry, resolveStopState, shouldGuardWrite } = require('./agent-state-reporter');
-const { detectState } = require('../../packages/agent-state/detect');
+const { detectState } = require('./packages/agent-state/detect');
 
 const BASE_INPUT = {
   session_id: 'abc-123',
@@ -392,7 +392,7 @@ describe('SubagentStop writeState guard prevents TOCTOU race', () => {
   const fs = require('fs');
   const path = require('path');
   const os = require('os');
-  const { writeState, readAgentState } = require('../../packages/agent-state');
+  const { writeState, readAgentState } = require('./packages/agent-state');
 
   it('guardStates aborts write when on-disk state is idle_prompt', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));

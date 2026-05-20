@@ -18,7 +18,7 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || __dirname;
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { readEffortConfig } = require('./effort-config');

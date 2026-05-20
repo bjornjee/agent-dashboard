@@ -15,7 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
+const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || __dirname;
 const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { detectHarness } = require('./agent-state-fast');
 const { hasPendingParentToolUse } = require(path.join(pluginRoot, 'packages', 'agent-state', 'pending-tools'));
