@@ -161,7 +161,7 @@ func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 		if !filepath.IsAbs(candidate) && agent.Cwd != "" {
 			candidate = filepath.Clean(filepath.Join(agent.Cwd, candidate))
 		}
-		if !validateWorktreeCandidate(agent.Cwd, agent.WorktreeCwd, candidate) {
+		if !validateWorktreeCandidate(agent.Cwd, candidate) {
 			continue
 		}
 		agent.WorktreeCwd = candidate
@@ -172,7 +172,7 @@ func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 
 // validateWorktreeCandidate returns true when candidate is a real worktree
 // whose source repo matches the agent's source repo.
-func validateWorktreeCandidate(agentCwd, agentWorktreeCwd, candidate string) bool {
+func validateWorktreeCandidate(agentCwd, candidate string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -193,7 +193,7 @@ func validateWorktreeCandidate(agentCwd, agentWorktreeCwd, candidate string) boo
 		return false
 	}
 
-	agentTop, err := repo.Resolve(ctx, branchRunner, agentCwd, agentWorktreeCwd)
+	agentTop, err := repo.Resolve(ctx, branchRunner, agentCwd)
 	if err != nil {
 		return false
 	}

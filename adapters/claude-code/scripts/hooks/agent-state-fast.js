@@ -144,12 +144,6 @@ function effortTransition(existingMode, newMode) {
   return null;
 }
 
-// Parse `git worktree add` invocations from a PostToolUse Bash payload and
-// return the absolute path of the newly created worktree, or null if the
-// command doesn't match. Walks tokens left-to-right; recognized flags with
-// arguments are skipped (along with their arg), boolean flags are skipped,
-// and the first positional token is treated as the path. Relative paths are
-// resolved against input.cwd so the stamp is always absolute.
 function detectWorktreeFromBash(input) {
   if (input.hook_event_name !== 'PostToolUse') return null;
   if ((input.tool_name || '') !== 'Bash') return null;
