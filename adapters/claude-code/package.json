@@ -4,6 +4,6 @@
   "private": true,
   "description": "Claude Code adapter for agent-dashboard",
   "scripts": {
-    "test": "node --test packages/*/test.js scripts/hooks/*.test.js"
+    "test": "node --test packages/*/test.js scripts/hooks/*.test.js scripts/*.test.js"
   }
 }
