@@ -7,10 +7,8 @@ const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || 
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 
 const worktreePath = process.argv[2];
-// Claude Code exports the session id as CLAUDE_CODE_SESSION_ID; codex's
-// OOTB plugin compat (codex-rs/hooks/src/engine/discovery.rs) mirrors
-// Claude-named env vars, so reading CLAUDE_CODE_SESSION_ID works under
-// both harnesses. CLAUDE_SESSION_ID stays as a documented alias.
+// CLAUDE_SESSION_ID kept as alias; codex mirrors Claude-named env vars so
+// CLAUDE_CODE_SESSION_ID works under both harnesses.
 const sessionId = process.env.CLAUDE_CODE_SESSION_ID
   || process.env.CLAUDE_SESSION_ID
   || process.argv[3];
