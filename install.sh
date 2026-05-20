@@ -20,7 +20,9 @@ STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 CODEX_HOOKS_DIR="$CODEX_DIR/hooks/agent-dashboard"
 CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
+CODEX_STAMP_NAME=".agent-dashboard-installed"
 BUILD_FROM_SOURCE=false
+SYNC_ADAPTERS_ONLY=false
 WORK_DIR=""
 CODEX_HOOKS_SOURCE=""
 
@@ -29,8 +31,9 @@ CODEX_HOOKS_SOURCE=""
 # ---------------------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
-    --build) BUILD_FROM_SOURCE=true; shift ;;
-    *)       shift ;;
+    --build)          BUILD_FROM_SOURCE=true; shift ;;
+    --sync-adapters)  SYNC_ADAPTERS_ONLY=true; shift ;;
+    *)                shift ;;
   esac
 done
 
@@ -44,42 +47,6 @@ step()  { printf '[%s] %s\n' "$1" "$2"; }
 
 check_cmd() {
   command -v "$1" >/dev/null 2>&1
-}
-
-copy_dir_if_missing() {
-  src="$1"
-  dest="$2"
-  if [ -e "$dest" ]; then
-    info "$dest already exists, skipping."
-    return 1
-  fi
-
-  if ! mkdir -p "$(dirname "$dest")"; then
-    err "Failed to create $(dirname "$dest")"
-    exit 1
-  fi
-  if ! cp -R "$src" "$dest"; then
-    err "Failed to copy $src to $dest"
-    exit 1
-  fi
-}
-
-copy_file_if_missing() {
-  src="$1"
-  dest="$2"
-  if [ -e "$dest" ]; then
-    info "$dest already exists, skipping."
-    return 1
-  fi
-
-  if ! mkdir -p "$(dirname "$dest")"; then
-    err "Failed to create $(dirname "$dest")"
-    exit 1
-  fi
-  if ! cp "$src" "$dest"; then
-    err "Failed to copy $src to $dest"
-    exit 1
-  fi
 }
 
 cleanup() {
@@ -305,14 +272,151 @@ resolve_codex_hooks_source() {
   CODEX_HOOKS_SOURCE="$(dirname "$hooks_json")"
 }
 
+# ---------------------------------------------------------------------------
+# Hashing helpers (portable across darwin/linux)
+# ---------------------------------------------------------------------------
+
+sha256_stdin() {
+  if check_cmd sha256sum; then
+    sha256sum | awk '{print $1}'
+  elif check_cmd shasum; then
+    shasum -a 256 | awk '{print $1}'
+  else
+    err "Neither sha256sum nor shasum is available; cannot compute hash."
+    exit 1
+  fi
+}
+
+sha256_file() {
+  if check_cmd sha256sum; then
+    sha256sum "$1" | awk '{print $1}'
+  elif check_cmd shasum; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    err "Neither sha256sum nor shasum is available; cannot compute hash."
+    exit 1
+  fi
+}
+
+# bundle_hash <dir> — deterministic sha256 over file paths + contents in the
+# directory, excluding the version-stamp file itself. Stable across darwin
+# and linux because find output is fixed with LC_ALL=C sort.
+bundle_hash() {
+  dir="$1"
+  (
+    cd "$dir" || exit 1
+    find . -type f ! -name "$CODEX_STAMP_NAME" | LC_ALL=C sort | while IFS= read -r f; do
+      printf '%s ' "$f"
+      sha256_file "$f"
+    done
+  ) | sha256_stdin
+}
+
+# is_shipped_hooks_json — returns 0 if the installed CODEX_HOOKS_FILE has a
+# sha256 listed in the .shipped-hashes allowlist (a known prior release).
+is_shipped_hooks_json() {
+  if [ ! -f "$CODEX_HOOKS_FILE" ]; then
+    return 1
+  fi
+  manifest="${AGENT_DASHBOARD_SHIPPED_HASHES:-$CODEX_HOOKS_SOURCE/.shipped-hashes}"
+  if [ ! -f "$manifest" ]; then
+    return 1
+  fi
+  installed_hash=$(sha256_file "$CODEX_HOOKS_FILE")
+  # Strip blank/comment lines, exact-match against the digest.
+  grep -E '^[a-f0-9]{64}$' "$manifest" | grep -qx "$installed_hash"
+}
+
+# ---------------------------------------------------------------------------
+# Codex adapter sync (replaces copy-if-missing semantics so new releases
+# actually land on existing installs).
+# ---------------------------------------------------------------------------
+
+sync_codex_bundle() {
+  source_hash=$(bundle_hash "$CODEX_HOOKS_SOURCE")
+  stamp_path="$CODEX_HOOKS_DIR/$CODEX_STAMP_NAME"
+
+  if [ -d "$CODEX_HOOKS_DIR" ] && [ -f "$stamp_path" ]; then
+    installed_hash=$(head -n1 "$stamp_path" | awk '{print $1}')
+    if [ "$installed_hash" = "$source_hash" ]; then
+      info "Codex hook bundle is up to date."
+      return 0
+    fi
+    info "Codex hook bundle drift detected; upgrading."
+  elif [ -d "$CODEX_HOOKS_DIR" ]; then
+    info "Codex hook bundle missing version stamp; upgrading."
+  else
+    info "Installing Codex hook bundle."
+  fi
+
+  rm -rf "$CODEX_HOOKS_DIR"
+  mkdir -p "$(dirname "$CODEX_HOOKS_DIR")"
+  cp -R "$CODEX_HOOKS_SOURCE" "$CODEX_HOOKS_DIR"
+  # The shipped-hashes manifest lives in the source dir but is not a runtime
+  # asset — drop it from the installed copy to keep the install minimal.
+  rm -f "$CODEX_HOOKS_DIR/.shipped-hashes"
+  chmod +x "$CODEX_HOOKS_DIR/agent-state-fast.sh" "$CODEX_HOOKS_DIR/agent-state-reporter.sh"
+  printf '%s\n' "$source_hash" > "$stamp_path"
+}
+
+sync_codex_hooks_json() {
+  if [ ! -f "$CODEX_HOOKS_FILE" ]; then
+    info "Installing Codex hooks.json."
+    mkdir -p "$(dirname "$CODEX_HOOKS_FILE")"
+    cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
+    return 0
+  fi
+
+  source_hash=$(sha256_file "$CODEX_HOOKS_SOURCE/hooks.json")
+  installed_hash=$(sha256_file "$CODEX_HOOKS_FILE")
+  if [ "$installed_hash" = "$source_hash" ]; then
+    info "Codex hooks.json is up to date."
+    return 0
+  fi
+
+  if is_shipped_hooks_json; then
+    info "Upgrading Codex hooks.json from a previously shipped version."
+    cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
+    return 0
+  fi
+
+  if [ "${AGENT_DASHBOARD_ASSUME_YES:-}" = "1" ]; then
+    info "Overwriting locally-modified Codex hooks.json (AGENT_DASHBOARD_ASSUME_YES=1)."
+    cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
+    return 0
+  fi
+
+  if [ "${AGENT_DASHBOARD_NONINTERACTIVE:-}" = "1" ] || ! [ -t 0 ]; then
+    info "Codex hooks.json appears locally modified (stdin is not a TTY); skipping."
+    info "  Installed: $CODEX_HOOKS_FILE"
+    info "  Source:    $CODEX_HOOKS_SOURCE/hooks.json"
+    info "  Re-run with AGENT_DASHBOARD_ASSUME_YES=1 to overwrite."
+    return 0
+  fi
+
+  printf '\n'
+  printf 'Codex hooks.json appears locally modified.\n'
+  printf '  Installed: %s\n' "$CODEX_HOOKS_FILE"
+  printf '  Source:    %s\n' "$CODEX_HOOKS_SOURCE/hooks.json"
+  printf 'Overwrite %s? [y/N] ' "$CODEX_HOOKS_FILE"
+  read answer || answer=""
+  case "$answer" in
+    y|Y|yes|YES)
+      cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
+      info "Overwrote $CODEX_HOOKS_FILE."
+      ;;
+    *)
+      info "Left $CODEX_HOOKS_FILE in place."
+      ;;
+  esac
+}
+
 install_codex_hooks() {
   step "3/3" "Installing Codex dashboard hooks..."
   resolve_codex_hooks_source
 
-  if copy_dir_if_missing "$CODEX_HOOKS_SOURCE" "$CODEX_HOOKS_DIR"; then
-    chmod +x "$CODEX_HOOKS_DIR/agent-state-fast.sh" "$CODEX_HOOKS_DIR/agent-state-reporter.sh"
-  fi
-  copy_file_if_missing "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE" || true
+  sync_codex_bundle
+  sync_codex_hooks_json
 
   info "Codex hook runtime: $CODEX_HOOKS_DIR"
   info "Codex hook config: $CODEX_HOOKS_FILE"
@@ -363,6 +467,23 @@ check_path() {
 
 echo "=== agent-dashboard installer ==="
 echo ""
+
+if [ "$SYNC_ADAPTERS_ONLY" = true ]; then
+  # Adapter-only sync: no binary install, no settings bootstrap. Used by
+  # `make sync-adapters` from a checkout. For curl-pipe upgrades the user
+  # would still re-run the full installer, so resolve_version + source-archive
+  # fetch only kick in when this script isn't sitting beside a checkout.
+  echo "Syncing codex adapter..."
+  if [ ! -f "$(dirname "$0")/adapters/codex/hooks/hooks.json" ]; then
+    resolve_version
+    WORK_DIR=$(mktemp -d)
+    trap cleanup EXIT
+  fi
+  install_codex_hooks
+  echo ""
+  echo "Adapter sync complete."
+  exit 0
+fi
 
 check_prerequisites
 

@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web uninstall clean seed web docs help
+.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web sync-adapters uninstall clean seed web docs help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -46,6 +46,9 @@ uninstall: ## Remove binary and state directory
 
 install-web: build-web ## Install web server binary
 	cp bin/agent-dashboard-web ~/.local/bin/
+
+sync-adapters: ## Re-sync codex adapter files (upgrade-aware: version+hash stamp)
+	./install.sh --sync-adapters
 
 install-codex-adapter: ## Register the dashboard plugin with codex (codex hook schema is 1:1 with Claude's)
 	@codex plugin marketplace add bjornjee/agent-dashboard
