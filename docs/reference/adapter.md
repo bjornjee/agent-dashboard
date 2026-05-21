@@ -10,7 +10,7 @@ Agent adapters bridge coding-agent sessions and the dashboard. They write agent 
 
 The project ships two adapters:
 
-- `adapters/claude/` — Claude Code plugin adapter with hooks, skills, shared hook packages, and Claude subagent definitions.
+- `adapters/claude-code/` — Claude Code plugin adapter with hooks, skills, shared hook packages, and Claude subagent definitions.
 - `adapters/codex/` — Codex plugin adapter with a `.codex-plugin` manifest, plugin-local hooks, and Codex-flavored workflow skills.
 
 `install.sh` also syncs the Codex global hook bundle from `adapters/codex/hooks/` to `~/.codex/hooks/agent-dashboard` for non-plugin installs and upgrades.
@@ -21,7 +21,7 @@ The project ships two adapters:
 
 ### Claude adapter
 
-The Claude adapter lives in `adapters/claude/` and consists of three components:
+The Claude adapter lives in `adapters/claude-code/` and consists of three components:
 
 #### Hooks
 

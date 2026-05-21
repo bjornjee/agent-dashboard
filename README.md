@@ -7,7 +7,7 @@ A tmux-integrated orchestrator and dispatcher for AI coding agents — Claude Co
 https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
 
-Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude/` and the Codex adapter in `adapters/codex/`).
+Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/` and the Codex adapter in `adapters/codex/`).
 
 ## Why agent-dashboard?
 
@@ -21,7 +21,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 
 **Do I need tmux?** Yes. agent-dashboard reads live pane content via `tmux capture-pane` and spawns agent sessions in tmux panes. Without tmux there are no panes to monitor.
 
-**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude/`. Codex CLI is supported directly via the adapter in `adapters/codex/` (see "How do I see codex agents in the dashboard?" below). Codex is also reachable via skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
+**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. Codex CLI is supported directly via the adapter in `adapters/codex/` (see "How do I see codex agents in the dashboard?" below). Codex is also reachable via skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
 
 **How do I use codex / gpt-5.x models?** Pick `codex` in the New Agent harness step (TUI wizard or web form) to spawn the Codex CLI directly, with per-spawn flags from `[harness.codex]` in `~/.agent-dashboard/settings.toml`.
 
@@ -368,7 +368,7 @@ agent-dashboard/
 │   └── populate-quotes/
 │       └── main.go                    # bulk quote fetcher for SQLite cache
 ├── internal/                          # core packages (see below)
-├── adapters/claude/              # Claude Code plugin adapter (see below)
+├── adapters/claude-code/              # Claude Code plugin adapter (see below)
 ├── adapters/codex/               # Codex plugin adapter and hook bundle
 └── schema/
     └── agent-state.schema.json        # JSON Schema for agent state files
@@ -416,10 +416,10 @@ internal/
 </details>
 
 <details>
-<summary><code>adapters/claude/</code> — Claude Code plugin</summary>
+<summary><code>adapters/claude-code/</code> — Claude Code plugin</summary>
 
 ```
-adapters/claude/
+adapters/claude-code/
 ├── CLAUDE.md                          # agent instructions for the adapter
 ├── package.json                       # plugin metadata
 ├── hooks/hooks.json                   # lifecycle hook definitions

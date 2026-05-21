@@ -52,7 +52,7 @@ The dashboard supports two coding-agent harnesses today: `claude` and `codex`. P
 3. Add a `<Name>HarnessSettings` struct to `internal/domain/types.go` and wire it into `HarnessSettings`.
 4. Route per-harness flags in `internal/harness/spawnopts.go` so unused fields stay zero-valued.
 5. If the harness has its own conversation/state schema, add a reader under `internal/<harness>/` and route through `internal/conversation/router.go` `Read()` (dispatches on `agent.Harness`).
-6. Update hook scripts (`adapters/claude/scripts/hooks/agent-state-fast.js` `detectHarness`) so the SessionStart hook stamps the harness name in the per-agent state file — without that, the router can't dispatch.
+6. Update hook scripts (`adapters/claude-code/scripts/hooks/agent-state-fast.js` `detectHarness`) so the SessionStart hook stamps the harness name in the per-agent state file — without that, the router can't dispatch.
 
 For codex specifically: codex CLI 0.130.0's hook payload schema is **1:1 with Claude's** (`codex-rs/hooks/schema/generated/*.json`), and codex sets `CLAUDE_PLUGIN_ROOT` for OOTB plugin compatibility (`codex-rs/hooks/src/engine/discovery.rs`). Most JS hooks work unchanged; the discriminator is `process.env.PLUGIN_ROOT` (codex-only) or `input.model` starting with `gpt-`.
 

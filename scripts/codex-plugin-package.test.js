@@ -44,7 +44,7 @@ describe('codex plugin package', () => {
       .map(entry => entry.name)
       .sort();
 
-    assert.deepEqual(adapters, ['claude', 'codex']);
+    assert.deepEqual(adapters, ['claude-code', 'codex']);
   });
 
   it('publishes a Codex marketplace entry that points at the Codex adapter', () => {
@@ -89,7 +89,7 @@ describe('codex plugin package', () => {
 
   it('packages the agent-dashboard skills inside the Codex plugin root', () => {
     const codexSkills = path.join(REPO, 'adapters/codex/skills');
-    const claudeSkills = path.join(REPO, 'adapters/claude/skills');
+    const claudeSkills = path.join(REPO, 'adapters/claude-code/skills');
 
     assert.deepEqual(skillNames(codexSkills), skillNames(claudeSkills));
     assert.deepEqual(relativeFiles(codexSkills), relativeFiles(claudeSkills));
