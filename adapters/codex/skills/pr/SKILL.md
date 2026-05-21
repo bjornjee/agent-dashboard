@@ -37,6 +37,9 @@ Delete transient files left over from implementation, testing, and discovery —
 screenshots, Playwright MCP output, and tmp scratch — before the cleaner pass
 inspects the diff. **Untracked only.** Never touch tracked or staged files.
 
+Deletion is destructive and irreversible. This phase **requires explicit user
+confirmation** before any `rm` runs.
+
 1. Identify untracked artifacts. Use `git ls-files --others --exclude-standard`
    for unignored untracked files, and `git ls-files --others --ignored
    --exclude-standard` for ignored untracked files. Filter for these patterns:
@@ -45,31 +48,80 @@ inspects the diff. **Untracked only.** Never touch tracked or staged files.
    - `*.tmp` (anywhere)
    - `tmp/` (directory, when at repo root or inside a subproject root)
 
-2. Show the user the list of files about to be deleted (one line each). If the
-   list is empty, skip the rest of this phase.
+2. If the list is empty, skip the rest of this phase.
 
-3. Delete them. For files: `rm -f <path>`. For directories: `rm -rf <path>`.
-   Run from the repo root.
+3. **Confirmation gate** — show the user the exact list of paths about to be
+   deleted (one line each) and ask explicit permission before deleting. Use
+   `request_user_input` when available, otherwise ask one concise direct
+   question:
 
-4. Verify with `git status --porcelain` — none of the deletions should appear,
+   > About to permanently delete N untracked scratch files: <list>. Proceed?
+
+   Options: `"Delete all (Recommended)"`, `"Skip cleanup — keep these files"`,
+   `"Let me edit the list"` (if the user picks edit, accept a revised path
+   list and re-confirm before any deletion). If `request_user_input` is
+   unavailable and the user does not affirm, **skip deletion** and proceed to
+   Phase 3.
+
+   Any path outside the worktree root (absolute paths, `..` traversal) must be
+   rejected — fail this gate rather than delete.
+
+4. Delete the confirmed paths. For files: `rm -f <path>`. For directories:
+   `rm -rf <path>`. Run from the repo root. **Never** pass `/`, `~`, `.`,
+   `..`, or a glob like `*` to `rm` — only the explicit confirmed paths from
+   step 3.
+
+5. Verify with `git status --porcelain` — none of the deletions should appear,
    because every removed path was untracked. If any tracked file shows as
    deleted, **stop** and surface it to the user (something matched a tracked
    path; the patterns above are wrong for this repo).
 
-**Gate:** No matching untracked artifacts remain in the worktree, and `git
-status` shows no unexpected tracked-file deletions.
+**Gate:** Either the user confirmed and matching untracked artifacts were
+removed, or the user declined and the phase was skipped. `git status` shows no
+unexpected tracked-file deletions.
 
 ---
 
-### Phase 3: Refactor-cleaner pass on the branch diff
+### Phase 3: Cleaner pass on the branch diff
 
-1. Spawn the `refactor-cleaner` agent synchronously with Codex `spawn_agent`, using the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
-2. If the cleaner edited files:
+Codex only has two `spawn_agent` roles: `explorer` (read-only research) and
+`worker` (implementation). There is no `refactor-cleaner` role in this
+harness — spawn a `worker` with the inline cleanup brief below.
+
+1. Spawn a Codex `worker` subagent scoped to the changed-file list from
+   Phase 1. Pass file paths explicitly — do not let it roam the whole repo.
+   Then call `wait_agent` to block on its completion before continuing.
+
+   Inline brief for the worker (pass as the worker's prompt):
+
+   > You are doing a narrow cleanup pass on a branch diff. Scope: the files
+   > listed below — do not read or edit anything outside this set.
+   >
+   > Files: `<paste changed-file list from Phase 1>`
+   >
+   > Allowed edits:
+   > - Remove unused imports, dead variables, and unreachable code introduced
+   >   by this diff.
+   > - Remove debug/log statements added during implementation
+   >   (`console.log`, `fmt.Println`, `print(...)` for debugging, etc.).
+   > - Collapse trivially duplicated code added in this diff into a single
+   >   call site when the duplication is obvious and local.
+   > - Apply project formatting if a formatter config exists.
+   >
+   > Forbidden:
+   > - Behavioral changes, refactors that move code between files, API
+   >   renames, dependency additions/removals, or any change to tests.
+   > - Editing files outside the listed scope.
+   >
+   > After your changes, run `make test` (if a `test` target exists) and
+   > report whether it passes. Do not commit — the parent skill commits.
+
+2. If the worker edited files:
    - Run `make test`. If it fails, fix the regression before continuing.
    - Commit: `git add -u && git commit -m "chore: ai-fmt"`.
-3. If the cleaner made no changes, skip the commit.
+3. If the worker made no changes, skip the commit.
 
-**Gate:** Either the cleaner made no changes, or its changes are committed and tests are green.
+**Gate:** Either the worker made no changes, or its changes are committed and tests are green.
 
 ---
 
