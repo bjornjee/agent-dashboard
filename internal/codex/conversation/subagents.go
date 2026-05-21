@@ -37,17 +37,9 @@ func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 	}
 
 	var agents []domain.SubagentInfo
-	_ = filepath.WalkDir(sessionsRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
-			return nil
-		}
-		meta, ok := readSubagentSessionMeta(path)
-		if !ok || meta.Source.Subagent.ThreadSpawn.ParentThreadID != parentSessionID {
-			return nil
+	walkSubagentSessionMetas(sessionsRoot, func(path string, meta subagentSessionMeta) {
+		if meta.Source.Subagent.ThreadSpawn.ParentThreadID != parentSessionID {
+			return
 		}
 		agents = append(agents, domain.SubagentInfo{
 			AgentID:     meta.ID,
@@ -56,7 +48,6 @@ func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 			Completed:   rolloutCompleted(path),
 			StartedAt:   meta.Timestamp,
 		})
-		return nil
 	})
 
 	sort.Slice(agents, func(i, j int) bool {
@@ -83,6 +74,15 @@ func SubagentSessionIDs(sessionsRoot string) map[string]bool {
 	}
 
 	ids := make(map[string]bool)
+	walkSubagentSessionMetas(sessionsRoot, func(_ string, meta subagentSessionMeta) {
+		if meta.Source.Subagent.ThreadSpawn.ParentThreadID != "" {
+			ids[meta.ID] = true
+		}
+	})
+	return ids
+}
+
+func walkSubagentSessionMetas(sessionsRoot string, visit func(string, subagentSessionMeta)) {
 	_ = filepath.WalkDir(sessionsRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
@@ -92,12 +92,11 @@ func SubagentSessionIDs(sessionsRoot string) map[string]bool {
 			return nil
 		}
 		meta, ok := readSubagentSessionMeta(path)
-		if ok && meta.Source.Subagent.ThreadSpawn.ParentThreadID != "" {
-			ids[meta.ID] = true
+		if ok {
+			visit(path, meta)
 		}
 		return nil
 	})
-	return ids
 }
 
 func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
