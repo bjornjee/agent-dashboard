@@ -34,3 +34,27 @@ func Read(agent domain.Agent, roots Roots, limit int) []domain.ConversationEntry
 		return ReadConversation(agent.ProjDir, agent.SessionID, limit)
 	}
 }
+
+func ReadSubagents(agent domain.Agent, roots Roots) []domain.SubagentInfo {
+	switch agent.Harness {
+	case "codex":
+		return codexconv.FindSubagents(roots.CodexSessionsRoot, agent.SessionID)
+	default:
+		return FindSubagents(agent.ProjDir, agent.SessionID)
+	}
+}
+
+func TopLevelAgents(agents []domain.Agent, roots Roots) []domain.Agent {
+	if len(agents) == 0 {
+		return nil
+	}
+	codexSubagentIDs := codexconv.SubagentSessionIDs(roots.CodexSessionsRoot)
+	out := make([]domain.Agent, 0, len(agents))
+	for _, agent := range agents {
+		if agent.Harness == "codex" && codexSubagentIDs[agent.SessionID] {
+			continue
+		}
+		out = append(out, agent)
+	}
+	return out
+}

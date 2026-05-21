@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	codexconv "github.com/bjornjee/agent-dashboard/internal/codex/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
@@ -256,7 +257,25 @@ func parseNameStatus(out string) []string {
 func (m model) loadSubagentActivity() tea.Cmd {
 	agent := m.selectedAgent()
 	sub := m.selectedSubagent()
-	if agent == nil || sub == nil || agent.ProjDir == "" || agent.SessionID == "" {
+	if agent == nil || sub == nil || agent.SessionID == "" {
+		return nil
+	}
+	if agent.Harness == "codex" {
+		codexRoot := m.codexSessionsDir
+		agentID := sub.AgentID
+		return func() tea.Msg {
+			path, err := codexconv.LocateRollout(codexRoot, agentID)
+			if err != nil || path == "" {
+				return activityMsg{}
+			}
+			entries, err := codexconv.Read(path, 500)
+			if err != nil {
+				return activityMsg{}
+			}
+			return activityMsg{entries: conversationEntriesToActivity(entries)}
+		}
+	}
+	if agent.ProjDir == "" {
 		return nil
 	}
 	projDir := agent.ProjDir
@@ -270,16 +289,35 @@ func (m model) loadSubagentActivity() tea.Cmd {
 	}
 }
 
+func conversationEntriesToActivity(entries []domain.ConversationEntry) []domain.ActivityEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	activity := make([]domain.ActivityEntry, 0, len(entries))
+	for _, entry := range entries {
+		activity = append(activity, domain.ActivityEntry{
+			Timestamp: entry.Timestamp,
+			Kind:      entry.Role,
+			Content:   entry.Content,
+		})
+	}
+	return activity
+}
+
 // loadAllSubagents loads subagent info for all agents.
 func (m model) loadAllSubagents() []tea.Cmd {
 	var cmds []tea.Cmd
 	for _, agent := range m.agents {
-		if agent.ProjDir == "" || agent.SessionID == "" {
+		if agent.SessionID == "" {
+			continue
+		}
+		if agent.Harness != "codex" && agent.ProjDir == "" {
 			continue
 		}
 		a := agent // copy for closure
+		codexRoot := m.codexSessionsDir
 		cmds = append(cmds, func() tea.Msg {
-			subs := conversation.FindSubagents(a.ProjDir, a.SessionID)
+			subs := conversation.ReadSubagents(a, conversation.Roots{CodexSessionsRoot: codexRoot})
 			return subagentsMsg{parentTarget: a.Target, agents: subs}
 		})
 	}

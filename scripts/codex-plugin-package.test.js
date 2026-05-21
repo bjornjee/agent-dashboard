@@ -92,6 +92,12 @@ describe('codex plugin package', () => {
     }
   });
 
+  it('registers Codex plugin subagent lifecycle events', () => {
+    const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json')).hooks;
+    assert.ok(hooks.SubagentStart, 'SubagentStart hook should be registered');
+    assert.ok(hooks.SubagentStop, 'SubagentStop hook should be registered');
+  });
+
   it('packages the agent-dashboard skills inside the Codex plugin root', () => {
     const codexSkills = path.join(REPO, 'adapters/codex/skills');
     const claudeSkills = path.join(REPO, 'adapters/claude-code/skills');

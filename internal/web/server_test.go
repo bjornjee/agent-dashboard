@@ -776,6 +776,106 @@ func TestSubagentsEndpoint(t *testing.T) {
 	}
 }
 
+func TestSubagentsEndpointCodex(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	homeDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.HomeDir = homeDir
+	parentID := "parent-codex"
+	childID := "child-codex"
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+	agent := domain.Agent{
+		SessionID: parentID,
+		State:     "running",
+		Cwd:       "/tmp/subrepo",
+		Harness:   "codex",
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, parentID+".json"), data, 0600)
+	writeWebRollout(t, filepath.Join(homeDir, ".codex", "sessions"), childID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_nickname":"Nietzsche","agent_role":"explorer"}}},"thread_source":"subagent","agent_nickname":"Nietzsche","agent_role":"explorer"}}
+`)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + parentID + "/subagents")
+	if err != nil {
+		t.Fatalf("GET subagents: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var got []domain.SubagentInfo
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d subagents, want 1: %+v", len(got), got)
+	}
+	if got[0].AgentID != childID {
+		t.Errorf("AgentID = %q, want %q", got[0].AgentID, childID)
+	}
+}
+
+func TestAgentsEndpointFiltersCodexSubagentTopLevelRows(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	homeDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.HomeDir = homeDir
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+	for _, agent := range []domain.Agent{
+		{SessionID: "parent-codex", State: "running", Cwd: "/tmp/repo", Harness: "codex"},
+		{SessionID: "child-codex", State: "running", Cwd: "/tmp/repo", Harness: "codex"},
+	} {
+		data, _ := json.Marshal(agent)
+		os.WriteFile(filepath.Join(agentsDir, agent.SessionID+".json"), data, 0600)
+	}
+	writeWebRollout(t, filepath.Join(homeDir, ".codex", "sessions"), "child-codex", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_role":"explorer"}}},"thread_source":"subagent"}}
+`)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents")
+	if err != nil {
+		t.Fatalf("GET agents: %v", err)
+	}
+	defer resp.Body.Close()
+	var got []domain.Agent
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d top-level agents, want only parent: %+v", len(got), got)
+	}
+	if got[0].SessionID != "parent-codex" {
+		t.Errorf("top-level agent = %q, want parent-codex", got[0].SessionID)
+	}
+}
+
+func writeWebRollout(t *testing.T, root, sessionID, contents string) string {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "21")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir rollout dir: %v", err)
+	}
+	path := filepath.Join(dir, "rollout-2026-05-21T00-00-00-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("write rollout: %v", err)
+	}
+	return path
+}
+
 func TestCSRFRequired(t *testing.T) {
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()

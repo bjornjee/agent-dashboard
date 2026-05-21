@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1291,6 +1292,97 @@ func TestSelectedSubagent_PreservesIcon(t *testing.T) {
 	if !strings.Contains(content, "✓") {
 		t.Error("selected completed subagent should contain ✓ icon")
 	}
+}
+
+func TestCodexSubagents_BuildTreeAndCollapseLikeClaude(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Harness: "codex"},
+	}
+	m.agentSubagents = map[string][]domain.SubagentInfo{
+		"main:1.0": {
+			{AgentID: "child-running", AgentType: "explorer", Description: "Nietzsche"},
+			{AgentID: "child-done", AgentType: "worker", Description: "Spinoza", Completed: true},
+		},
+	}
+
+	m.buildTree()
+	if len(m.treeNodes) != 4 {
+		t.Fatalf("got %d tree nodes, want header + parent + 2 subagents", len(m.treeNodes))
+	}
+	if m.treeNodes[2].Sub == nil || m.treeNodes[2].Sub.AgentID != "child-running" {
+		t.Fatalf("first subagent node = %+v, want child-running", m.treeNodes[2].Sub)
+	}
+
+	m.collapsed["main:1.0"] = true
+	m.buildTree()
+	if len(m.treeNodes) != 2 {
+		t.Fatalf("collapsed codex parent got %d tree nodes, want header + parent", len(m.treeNodes))
+	}
+}
+
+func TestCodexSubagents_RenderRunningAndCompletedIndicators(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 80
+	m.height = 40
+	m.resizeViewports()
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Harness: "codex"},
+	}
+	m.agentSubagents = map[string][]domain.SubagentInfo{
+		"main:1.0": {
+			{AgentID: "child-running", AgentType: "explorer", Description: "Nietzsche"},
+			{AgentID: "child-done", AgentType: "worker", Description: "Spinoza", Completed: true},
+		},
+	}
+	m.buildTree()
+
+	content := stripANSI(m.agentListContent())
+	if !strings.Contains(content, "▶ explorer") {
+		t.Errorf("running codex subagent should render play indicator, got:\n%s", content)
+	}
+	if !strings.Contains(content, "✓ worker") {
+		t.Errorf("completed codex subagent should render check indicator, got:\n%s", content)
+	}
+}
+
+func TestStateUpdated_FiltersCodexSubagentTopLevelRows(t *testing.T) {
+	root := t.TempDir()
+	writeModelRollout(t, root, "child-codex", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_role":"explorer"}}},"thread_source":"subagent"}}
+`)
+	m := NewModel(testConfig(""), nil)
+	m.codexSessionsDir = root
+
+	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"parent-codex": {SessionID: "parent-codex", Harness: "codex", Target: "main:1.0", State: "running"},
+			"child-codex":  {SessionID: "child-codex", Harness: "codex", Target: "main:2.0", State: "running"},
+		},
+	}})
+	rm := updated.(model)
+
+	if len(rm.agents) != 1 {
+		t.Fatalf("got %d top-level agents, want only parent: %+v", len(rm.agents), rm.agents)
+	}
+	if rm.agents[0].SessionID != "parent-codex" {
+		t.Errorf("top-level agent = %q, want parent-codex", rm.agents[0].SessionID)
+	}
+}
+
+func writeModelRollout(t *testing.T, root, sessionID, contents string) string {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "21")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir rollout dir: %v", err)
+	}
+	path := filepath.Join(dir, "rollout-2026-05-21T00-00-00-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("write rollout: %v", err)
+	}
+	return path
 }
 
 func TestCreateSessionMsg_PlaceholderAgent(t *testing.T) {
