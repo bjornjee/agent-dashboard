@@ -5,6 +5,13 @@ disable-model-invocation: true
 effort: max
 ---
 
+<codex_skill_must>
+1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add ../worktrees/<app>/<name> -b fix/<name> main` standalone. Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
+2. Reproduce the bug with a FAILING test BEFORE diagnosing. Show the failing output (paste it) before changing any code.
+3. Fix only what is necessary to make the failing test pass. No drive-by cleanup, no refactors, no unrelated improvements.
+4. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (worker role for delegation), `apply_patch`. Anything outside this list is forbidden in this skill.
+</codex_skill_must>
+
 Diagnose and fix a bug.
 
 Bug description: $ARGUMENTS

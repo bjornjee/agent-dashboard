@@ -5,6 +5,14 @@ disable-model-invocation: true
 effort: max
 ---
 
+<codex_skill_must>
+1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add ../worktrees/<app>/<name> -b refactor/<name> main` standalone. Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add`.
+2. Establish a passing test baseline (`make test`) BEFORE touching code. If the baseline fails, halt — invoke `$agent-dashboard:fix` first.
+3. Refactor in atomic steps: one focused change, then `make test`, then repeat. One change per test run — never batch.
+4. Behavior is preserved. No new features, no bug fixes. If behavior changed you are in the wrong skill.
+5. Tool names you may emit: `exec_command`, `apply_patch`, `spawn_agent` (worker role for delegation).
+</codex_skill_must>
+
 Safely refactor code while preserving all existing behavior.
 
 Refactoring goal: $ARGUMENTS

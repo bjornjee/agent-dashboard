@@ -7,6 +7,14 @@ disable-model-invocation: true
 effort: max
 ---
 
+<codex_skill_must>
+1. `/plan` is the FIRST action in Phase 2 — before any `spawn_agent`, any `request_user_input`, any plan drafting. Nothing else in Phase 2 happens until `permission_mode='plan'` is active.
+2. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add ../worktrees/<app>/<name> -b feat/<name> main` standalone. Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
+3. Plan submission MUST use `<proposed_plan>...</proposed_plan>` tags. Plain assistant text is not a fallback.
+4. After plan approval, write the absolute plan path to `.feature-plan-path` BEFORE starting Phase 3.
+5. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (roles: `explorer`, `worker`), `update_plan`, `apply_patch`. Anything outside this list is a foreign-harness tool and forbidden in this skill.
+</codex_skill_must>
+
 Start a new feature in an isolated git worktree.
 
 Feature description: $ARGUMENTS
@@ -79,32 +87,15 @@ Start two tracks in parallel:
 
 Phase order: Plan Mode first, then research, then interview, then submit. Plan Mode is the *entry* gate to Phase 2 — nothing else in this phase happens outside it. Each step has a HARD-GATE you cannot rationalize past.
 
-1. **Enter Codex Plan Mode via `/plan` immediately.** Before any research, before any user interview, before any drafting — flip the session into Plan Mode. Codex Plan Mode is the high-reasoning planning surface and the visible signal to the dashboard that this work is gated on user approval. Phase 2 is a Plan-Mode-only phase.
+1. **Enter Codex Plan Mode via `/plan` immediately.** Before any research, before any user interview, before any drafting — flip the session into Plan Mode. Phase 2 is Plan-Mode-only; the entire planning effort runs under the high-reasoning, read-only surface.
 
-   **Why first:** entering Plan Mode after research and interview defeats the purpose. It must be active *while* you research and interview so the entire planning effort runs under the high-reasoning, read-only surface the user expects.
+   <HARD-GATE>No `spawn_agent`, `request_user_input`, or plan drafting until `permission_mode='plan'`.</HARD-GATE>
 
-   <HARD-GATE>
-   No `spawn_agent`, no `request_user_input`, no plan drafting until `/plan` has been called and Plan Mode is active. Plan Mode is not a closing ceremony — it's the entry point.
-   </HARD-GATE>
+2. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for non-trivial codebase or library lookups. Do not delegate planning — composing the plan is your job. Synthesize what you found inline as your own assistant text so it lands in the visible plan artifact (not in a tool result the user can't approve). Do not wait for environment setup to finish.
 
-2. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for any non-trivial codebase question or library lookup. Do not delegate planning — composing the plan is your job, not a subagent's. Synthesize what you found inline as your own assistant text.
+   <HARD-GATE>`explorer` for research is fine; never dispatch a worker/planner to compose the plan.</HARD-GATE>
 
-   **Why:** a delegated planning subagent returns the plan as a tool result, not as the visible plan artifact the user approves. Synthesizing inline puts the plan in your assistant text and keeps the approval surface honest.
-
-   Symptoms you're about to violate:
-   - You're about to dispatch a worker or planner to compose the plan.
-   - You're rationalizing *"the planner does this better."*
-
-   <HARD-GATE>
-   Research subagent (`explorer`): allowed and encouraged.
-   Planning subagent: forbidden in this skill. Compose the plan yourself.
-   </HARD-GATE>
-
-   Do not wait for environment setup to finish.
-
-3. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. In Plan Mode (already active from step 1), ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
-
-   If `request_user_input` is unavailable in the current mode, ask one concise direct question in assistant text. That fallback is for tool unavailability only, not convenience.
+3. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text. If `request_user_input` is unavailable, fall back to one concise direct question.
 
    Schema: 1–3 questions per call, each with a `header` (≤12 chars), 2–3 mutually exclusive `options`. Recommended option goes first with `(Recommended)` suffix. The client adds an "Other" escape hatch automatically.
 
@@ -122,17 +113,9 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
    })
    ```
 
-   The plan you submit in step 4 must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body. If a user answer changes scope, return to this step and re-interview.
+   The plan you submit in step 4 must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections. If a user answer changes scope, re-interview before submitting.
 
-   Symptoms you're about to violate:
-   - You're typing "1." "2." "3." numbered questions in assistant text.
-   - You're writing "Decisions needed before implementation" inside the plan.
-   - You're rationalizing "the user can answer these after approval."
-
-   <HARD-GATE>
-   Freeform numbered questions in assistant text are a violation when `request_user_input` is available. If you find yourself typing "1." "2." "3." to ask the user something — STOP, call `request_user_input` instead.
-   The plan is not ready for review until every decision it gates is answered.
-   </HARD-GATE>
+   <HARD-GATE>If you find yourself typing "1." "2." "3." questions in assistant text — STOP. Use `request_user_input`.</HARD-GATE>
 
 4. **Draft inline, then submit via `<proposed_plan>`. Wait for user approval.** Plan Mode is already active (step 1); draft the plan as your own assistant text and then wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject.
 
@@ -259,18 +242,11 @@ Triggered when the user indicates the feature has been merged upstream.
 
 ## Red Flags — STOP
 
-If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+Failure modes the MUST block doesn't already cover. If you catch yourself saying any of these, pause:
 
 - "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
-- "I'll start research first and enter Plan Mode later" → Phase 2 step 1 violation. `/plan` is the *first* action in Phase 2, before any `spawn_agent` or `request_user_input`. The whole planning effort runs inside Plan Mode.
-- "I'll delegate the plan to a planning subagent" → Phase 2 step 2 violation. Research with `explorer`; plan inline. The dashboard can't surface delegated plans as the approved artifact.
-- "I'll just type the questions as numbered text" → Phase 2 step 3 violation when `request_user_input` is available. That tool exists for exactly this. Use it.
-- "I'll just paste the plan as text instead of using `<proposed_plan>`" → Phase 2 step 4 violation. `<proposed_plan>` is the only acceptable submission. Pasting in assistant text is not a fallback.
-- "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
+- "The plan is obvious, let me start" → Phase 2 gate violation. Wait for `<proposed_plan>` approval.
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.
-- "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
-- "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
-- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `$agent-dashboard:pr`.
-- "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
-- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason (context). Don't second-guess.
-- "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `$agent-dashboard:implement` and resume can't find the plan without it.
+- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it; use `$agent-dashboard:pr`.
+- "I'll bundle this unrelated cleanup into the feature commit" → split it into a separate PR.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason; don't second-guess.
