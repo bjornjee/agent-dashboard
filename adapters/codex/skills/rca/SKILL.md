@@ -33,7 +33,7 @@ Follow these phases strictly in order. Do NOT speculate or reason about root cau
      ```
    - Filter to the time window around the incident.
 
-4. Identify **all active agents/processes** — check Claude Code session logs:
+4. Identify **all active agents/processes** — check Codex session logs:
    ```
    ls -lt ~/.claude/projects/<project-dir>/*.jsonl | head -15
    ```
@@ -99,9 +99,9 @@ Check for any crash/diagnostic files the application writes (e.g., `crash.log`, 
 
 ### Phase 3: Session Forensics
 
-For each Claude Code session active during the incident window:
+For each Codex session active during the incident window:
 
-1. **Extract all Bash tool calls** — these are the commands Claude actually executed:
+1. **Extract all shell tool calls** — these are the commands Codex actually executed:
    ```python
    python3 << 'PYEOF'
    import json, os
@@ -115,7 +115,7 @@ For each Claude Code session active during the incident window:
                    content = obj.get('message', {}).get('content', [])
                    if isinstance(content, list):
                        for block in content:
-                           if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'Bash':
+                           if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'shell':
                                cmd = block.get('input', {}).get('command', '')
                                print(f'CMD: {cmd[:400]}')
                                print()
@@ -131,10 +131,10 @@ For each Claude Code session active during the incident window:
    - `signal`, `SIGKILL`, `SIGTERM` (signal sending)
    - Any command referencing the crashed process
 
-3. **Extract subagent launches** — check for Agent tool calls, especially background agents:
+3. **Extract subagent launches** — check for Codex `spawn_agent` tool calls:
    ```python
-   # Same pattern but filter for block.get('name') == 'Agent'
-   # Check run_in_background, prompt content
+   # Same pattern but filter for spawn_agent tool calls
+   # Check agent_type, prompt content, and whether the parent waited for results
    ```
 
 4. **Identify the LAST command before the crash** — cross-reference the session's final tool call timestamp with the system log timestamps from Phase 2.

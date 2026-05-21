@@ -21,8 +21,9 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
 3. Switch to main: `git checkout main`
 4. Pull latest: `git pull origin main`
-5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main:
-   `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b refactor/<name> main`
+5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main with separate `exec_command` tool calls:
+   - Create the parent directory: `mkdir -p ../worktrees/<app>`
+   - Run `git worktree add ../worktrees/<app>/<name> -b refactor/<name> main` as its own `exec_command` tool call. Do not combine it with `mkdir`, `cd`, `&&`, `;`, or pipes; the Codex dashboard hook observes this standalone command to pin the worktree directory and branch.
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
      `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
@@ -45,7 +46,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
+**Environment setup:** Use Codex `exec_command` tool calls in the worktree to set up the dev environment. Do not use Claude-only background-agent arguments. The setup must:
 
 1. Auto-detect project type from project files (highest match wins):
 
