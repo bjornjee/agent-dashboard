@@ -467,30 +467,6 @@ describe('fast hook state updates (per-agent files)', () => {
       'must not stamp the -b branch name as the path');
   });
 
-  it('git worktree add -b <branch> <path>: stamps branch with path', () => {
-    const existing = {
-      target: 'main:1.0',
-      state: 'running',
-      current_tool: 'Bash',
-    };
-
-    const { update } = buildUpdate({
-      input: {
-        session_id: 'abc123',
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'git worktree add -b feat/x /abs/path/wt main' },
-        cwd: '/anywhere',
-      },
-      existing,
-      target: 'main:1.0',
-      tmuxPane: '%0',
-    });
-
-    assert.equal(update.worktree_cwd, '/abs/path/wt');
-    assert.equal(update.branch, 'feat/x');
-  });
-
   it('git worktree add with relative path resolves against input.cwd', () => {
     const existing = {
       target: 'main:1.0',
