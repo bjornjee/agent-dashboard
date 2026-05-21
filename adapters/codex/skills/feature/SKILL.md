@@ -25,7 +25,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 4. Pull latest: `git pull origin main`
 5. Create branch `feat/<name>` and worktree `../worktrees/<app>/<name>` from main with separate `exec_command` tool calls:
    - Create the parent directory: `mkdir -p ../worktrees/<app>`
-   - Run `git worktree add ../worktrees/<app>/<name> -b feat/<name> main` as its own `exec_command` tool call. Do not combine it with `mkdir`, `cd`, `&&`, `;`, or pipes; the Codex dashboard hook observes this standalone command to pin the worktree directory and branch.
+   - Run `git worktree add -b feat/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call. Do not combine it with `mkdir`, `cd`, `&&`, `;`, or pipes; the Codex dashboard hook observes this standalone command to pin the worktree directory and branch.
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
      `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`

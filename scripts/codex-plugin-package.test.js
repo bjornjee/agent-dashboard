@@ -123,6 +123,7 @@ describe('codex plugin package', () => {
       ['dangerouslyDisableSandbox', /\bdangerouslyDisableSandbox\b/],
       ['Claude Agent run_in_background argument', /\brun_in_background\b/],
       ['Claude plan directory', /~\/\.claude\/plans/],
+      ['Claude projects directory', /~\/\.claude\/projects/],
       ['Claude Code plan approval', /\bCC'?s plan-mode|\bClaude Code\b.*\bplan\b/i],
       ['codex-delegate slash command', /\/codex-delegate\b/],
       ['codex setup slash command', /\/codex:setup\b/],
@@ -174,7 +175,9 @@ describe('codex plugin package', () => {
   });
 
   it('keeps Codex worktree setup stampable by dashboard hooks', () => {
-    for (const skillName of ['feature', 'fix', 'refactor']) {
+    const branchPrefixes = { feature: 'feat', fix: 'fix', refactor: 'refactor' };
+
+    for (const [skillName, branchPrefix] of Object.entries(branchPrefixes)) {
       const text = fs.readFileSync(path.join(REPO, `adapters/codex/skills/${skillName}/SKILL.md`), 'utf8');
 
       assert.doesNotMatch(
@@ -191,6 +194,11 @@ describe('codex plugin package', () => {
         text,
         /stamp-worktree\.js/,
         `${skillName} must still run the explicit stamp helper after creating the worktree`,
+      );
+      assert.match(
+        text,
+        new RegExp(`git worktree add -b ${branchPrefix}/<name> \\.\\./worktrees/<app>/<name> main`),
+        `${skillName} must put -b before the worktree path so hooks can observe the branch`,
       );
     }
   });

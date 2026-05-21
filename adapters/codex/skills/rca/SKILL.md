@@ -35,7 +35,7 @@ Follow these phases strictly in order. Do NOT speculate or reason about root cau
 
 4. Identify **all active agents/processes** — check Codex session logs:
    ```
-   ls -lt ~/.claude/projects/<project-dir>/*.jsonl | head -15
+   ls -lt "${CODEX_HOME:-$HOME/.codex}"/sessions/*/*/*/rollout-*.jsonl 2>/dev/null | head -15
    ```
    Cross-reference modification times with the incident window.
 
