@@ -1,14 +1,14 @@
 ---
 name: implement
 description: Dispatch each phase of an approved plan to a fresh subagent with TDD; re-invoke to resume
-when_to_use: when `/feature` (or `/fix`, `/refactor`, `/chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `/feature`), inline TDD on small features (also `/feature`), or non-code work.
+when_to_use: when `/agent-dashboard:feature` (or `/agent-dashboard:fix`, `/agent-dashboard:refactor`, `/agent-dashboard:chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `/agent-dashboard:feature`), inline TDD on small features (also `/agent-dashboard:feature`), or non-code work.
 disable-model-invocation: true
 effort: max
 ---
 
 Run the dispatch loop on a worktree with an approved multi-phase plan.
 
-Opt-in. Invoked after `/feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to /implement". Each phase dispatches to a fresh `Agent()` subagent, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
+Opt-in. Invoked after `/agent-dashboard:feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to /agent-dashboard:implement". Each phase dispatches to a fresh `Agent()` subagent, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
 
 ## Instructions
 
@@ -25,14 +25,14 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    cat .feature-plan-path
    ```
 
-3. **Fallback if the sentinel is missing** (older `/feature` run, or deleted):
+3. **Fallback if the sentinel is missing** (older `/agent-dashboard:feature` run, or deleted):
    - `ls -lt ~/.claude/plans/*.md | head -5`
    - Show the top 3 candidates via `AskUserQuestion`, including the current branch name in the prompt for context. User picks one or "Other" to type a path.
 
 4. **Wait for env setup.** Check the worktree root for the env sentinels:
    - `.env-setup-done` → proceed.
    - `.env-setup-failed` → surface contents, halt.
-   - Neither → `/feature` Phase 2's background agent is still running. Wait.
+   - Neither → `/agent-dashboard:feature` Phase 2's background agent is still running. Wait.
 
 **Gate:** Worktree confirmed, plan file path resolved, env setup complete.
 
@@ -44,7 +44,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier and deps.
 
-2. **Halt if no `## Phases` block.** The user opted into `/implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `/feature`, or return to `/feature` for inline TDD." Halt.
+2. **Halt if no `## Phases` block.** The user opted into `/agent-dashboard:implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `/agent-dashboard:feature`, or return to `/agent-dashboard:feature` for inline TDD." Halt.
 
 3. **Pick the next pending phase** (`- [ ]`) in checklist order. If all phases are `[x]`, skip to Phase 3.
 
@@ -116,7 +116,7 @@ Review the **full branch diff** (`git diff $(git merge-base HEAD main)..HEAD`), 
 
 ---
 
-### Phase 4: Handoff to /pr
+### Phase 4: Handoff to /agent-dashboard:pr
 
 Tell the user:
 
@@ -132,7 +132,7 @@ Implementation complete. All phases marked done. Open the PR with:
 
 ## Resume behavior
 
-No separate resume mode. Re-invoking `/implement` on a partially-done worktree just works:
+No separate resume mode. Re-invoking `/agent-dashboard:implement` on a partially-done worktree just works:
 
 - Phase 1 finds the plan via `.feature-plan-path`.
 - Phase 2 reads the checklist with some `[x]` already; the loop starts at the first `[ ]`.
@@ -150,6 +150,6 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "The subagent's tests failed but the diff looks fine, I'll move on" → Phase 2 step 7 violation. Halt and surface to the user.
 - "Subagent didn't commit, but the changes are there — I'll mark it done" → Phase 2 step 7 violation. No commit means no phase. Retry or abort.
 - "I'll fix a typo in the plan body while I'm flipping the checkbox" → Phase 2 step 8 violation. Checkbox only. Plan-content changes need a separate decision.
-- "No `## Phases` block, but I can infer the phases from the prose" → Phase 2 step 2 violation. Halt and point the user back to `/feature` for inline TDD.
+- "No `## Phases` block, but I can infer the phases from the prose" → Phase 2 step 2 violation. Halt and point the user back to `/agent-dashboard:feature` for inline TDD.
 - "`.feature-plan-path` is missing, but the latest plan is probably right" → Phase 1 step 3 violation. Show recent plans and let the user confirm.
 - "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `/agent-dashboard:pr`.

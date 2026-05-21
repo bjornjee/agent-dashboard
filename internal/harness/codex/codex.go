@@ -99,15 +99,21 @@ func mapEffort(level string) string {
 	return level
 }
 
+// dashboardPluginNamespace is the plugin name codex must dispatch through.
+// DiscoverSkills (internal/skills/skills.go) only scans the agent-dashboard
+// plugin cache, so every skill it returns lives under this namespace.
+const dashboardPluginNamespace = "agent-dashboard"
+
 // buildPrompt composes the prompt argument codex receives on the command
-// line. Codex CLI uses `$` (not `/`) as its plugin/skill sigil — see
-// codex's own help text: "Use one by name, for example:
-// $skills:terminal-ops run the failing tests". Prepending `/` causes codex
-// to treat the skill name as plain prompt text and skip plugin dispatch.
+// line. Codex CLI uses `$` (not `/`) as its plugin/skill sigil and requires
+// the fully-qualified `$<plugin>:<skill>` form — see codex's own help text:
+// "Use one by name, for example: $skills:terminal-ops run the failing
+// tests". Bare `$<skill>` is treated as plain prompt text and the plugin
+// is never dispatched.
 func buildPrompt(skill, message string) string {
 	var parts []string
 	if skill != "" {
-		parts = append(parts, "$"+skill)
+		parts = append(parts, "$"+dashboardPluginNamespace+":"+skill)
 	}
 	if message != "" {
 		parts = append(parts, message)

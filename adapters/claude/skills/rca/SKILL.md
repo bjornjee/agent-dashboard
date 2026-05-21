@@ -245,8 +245,8 @@ Concrete, minimal actions to prevent recurrence. Reference specific files and li
 
 This skill is read-only. If the user asks to implement a fix based on your findings, **do not start editing files**. Instead, hand off to the appropriate skill:
 
-- Bug fix or prevention → suggest `/fix <description>`
-- Structural change to prevent recurrence → suggest `/refactor <description>`
-- New safeguard or feature → suggest `/feature <description>`
+- Bug fix or prevention → suggest `/agent-dashboard:fix <description>`
+- Structural change to prevent recurrence → suggest `/agent-dashboard:refactor <description>`
+- New safeguard or feature → suggest `/agent-dashboard:feature <description>`
 
-These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/rca` skips those gates.
+These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/agent-dashboard:rca` skips those gates.

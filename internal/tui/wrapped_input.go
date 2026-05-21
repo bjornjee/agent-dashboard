@@ -57,6 +57,10 @@ func softWrapRunesTwoWidth(runes []rune, firstWidth, contWidth int) [][]rune {
 // (codex CLI help: "Use one by name, for example: $skills:..."). The sigil
 // must be at position 0 or preceded by a space.
 // Returns the exclusive end index and whether a match was found.
+//
+// Plugin-namespaced forms (`/agent-dashboard:feature`, `$agent-dashboard:fix`)
+// are matched against the bare skill name after the last `:` so the same
+// `skills` list works for both bare and namespaced inputs.
 func isSlashCommand(runes []rune, start int, sigil rune, skills []string) (int, bool) {
 	if start >= len(runes) || runes[start] != sigil {
 		return 0, false
@@ -72,8 +76,15 @@ func isSlashCommand(runes []rune, start int, sigil rune, skills []string) (int, 
 		return 0, false // bare slash
 	}
 	word := string(runes[start+1 : end])
+	tail := word
+	if i := strings.LastIndex(word, ":"); i >= 0 {
+		tail = word[i+1:]
+	}
+	if tail == "" {
+		return 0, false
+	}
 	for _, s := range skills {
-		if s == word {
+		if s == tail {
 			return end, true
 		}
 	}
@@ -81,8 +92,10 @@ func isSlashCommand(runes []rune, start int, sigil rune, skills []string) (int, 
 }
 
 // isCommandChar returns true for characters valid in a slash command name.
+// `:` is allowed so plugin-namespaced commands like `agent-dashboard:feature`
+// parse as a single token.
 func isCommandChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_'
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == ':'
 }
 
 var (
