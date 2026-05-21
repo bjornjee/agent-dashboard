@@ -5,8 +5,8 @@
  * Writes agent state on lifecycle events (SessionStart, SubagentStart/Stop, Stop).
  * Uses per-agent files keyed by session_id — no locking needed.
  *
- * Stdin: JSON from Claude Code hook system
- * Env: TMUX_PANE, CLAUDE_PLUGIN_ROOT
+ * Stdin: JSON from Claude Code or codex hook system
+ * Env: TMUX_PANE
  */
 
 'use strict';
@@ -15,12 +15,12 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || __dirname;
-const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
+const hookRoot = __dirname;
+const { readAgentState, writeState, detectState } = require(path.join(hookRoot, 'packages', 'agent-state'));
 const { detectHarness } = require('./agent-state-fast');
-const { hasPendingParentToolUse } = require(path.join(pluginRoot, 'packages', 'agent-state', 'pending-tools'));
-const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
-const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
+const { hasPendingParentToolUse } = require(path.join(hookRoot, 'packages', 'agent-state', 'pending-tools'));
+const { getTarget, getPaneId, capture, parseTarget } = require(path.join(hookRoot, 'packages', 'tmux'));
+const { getChangedFiles } = require(path.join(hookRoot, 'packages', 'git-status'));
 
 // readSettingsEffort returns the persisted effortLevel from
 // ~/.claude/settings.json. Claude Code writes this when the user passes
@@ -199,7 +199,7 @@ if (require.main === module) {
       const input = data.trim() ? JSON.parse(data) : {};
       report(input);
     } catch {
-      // Silent — don't break Claude Code
+      // Silent — don't break the hook host
     }
     // See agent-state-fast.js — codex 0.130 requires JSON stdout.
     process.stdout.write('{}\n');

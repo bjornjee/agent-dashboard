@@ -3,8 +3,9 @@
 
 const path = require('path');
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || path.resolve(__dirname, '..', 'hooks');
-const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
+const hookRoot = path.resolve(__dirname, '..', 'hooks');
+const { readAgentState, writeState } = require(path.join(hookRoot, 'packages', 'agent-state'));
+const { getBranch } = require(path.join(hookRoot, 'packages', 'git-status'));
 
 const worktreePath = process.argv[2];
 // CLAUDE_SESSION_ID kept as alias; codex mirrors Claude-named env vars so
@@ -20,7 +21,21 @@ if (!worktreePath || !sessionId) {
 
 const abs = path.resolve(worktreePath);
 const existing = readAgentState(sessionId) || {};
+const pinnedCwd = existing.worktree_cwd || abs;
+const branch = getBranch(pinnedCwd);
+const update = {};
+
 if (!existing.worktree_cwd) {
-  writeState(sessionId, { worktree_cwd: abs });
+  update.worktree_cwd = abs;
+}
+if (!existing.cwd) {
+  update.cwd = pinnedCwd;
+}
+if (!existing.branch && branch) {
+  update.branch = branch;
+}
+
+if (Object.keys(update).length > 0) {
+  writeState(sessionId, update);
 }
 process.stdout.write('{}\n');

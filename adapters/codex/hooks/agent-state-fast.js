@@ -10,7 +10,7 @@
  *
  * Stdin: JSON from Claude Code or codex hook system (1:1 payload schemas
  * per codex-rs/hooks/schema/generated/*.json).
- * Env: TMUX_PANE, CLAUDE_PLUGIN_ROOT (claude + codex), PLUGIN_ROOT (codex only).
+ * Env: TMUX_PANE. Bundled packages are resolved from this hook directory.
  */
 
 'use strict';
@@ -18,9 +18,9 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.PLUGIN_ROOT || __dirname;
-const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
-const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const hookRoot = __dirname;
+const { readAgentState, writeState } = require(path.join(hookRoot, 'packages', 'agent-state'));
+const { getTarget, getPaneId } = require(path.join(hookRoot, 'packages', 'tmux'));
 const { readEffortConfig } = require('./effort-config');
 
 // dispatchEffortKeys types `/effort <level>\r` into the agent's tmux pane.
@@ -120,7 +120,7 @@ if (require.main === module) {
       const input = data.trim() ? JSON.parse(data) : {};
       fastUpdate(input);
     } catch {
-      // Silent — don't break Claude Code
+      // Silent — don't break the hook host
     }
     // Codex 0.130 parses hook stdout as JSON per
     // codex-rs/hooks/schema/generated/<event>.command.output.schema.json.

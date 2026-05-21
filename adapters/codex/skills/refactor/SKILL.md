@@ -11,133 +11,110 @@ Refactoring goal: $ARGUMENTS
 
 ## Instructions
 
-Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied. Apply all project rules and conventions that are in your context.
+Follow these phases in order. Each phase has a gate. Apply all project rules and conventions already in context.
 
 ---
 
 ### Phase 1: Setup
 
 1. Derive a short kebab-case name from the refactoring goal.
-2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
-3. Switch to main: `git checkout main`
-4. Pull latest: `git pull origin main`
+2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`.
+3. Switch to main: `git checkout main`.
+4. Pull latest: `git pull origin main`.
 5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main:
    `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b refactor/<name> main`
    - If the branch already exists, ask the user whether to resume it or choose a new name.
-   - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
-     `node "$CLAUDE_PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
-6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
-   - Find all env files recursively: `find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'`
-   - For each file found, recreate its directory structure in the worktree and copy it. For example:
-     - `./.env` → `../worktrees/<app>/<name>/.env`
-     - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
-   - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
-   - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-   - **Important:** All Bash tool calls in this step must set `dangerouslyDisableSandbox: true` because they write outside the project root.
-6. cd into the worktree and confirm with `pwd` and `git branch --show-current`
-7. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+   - Register the worktree with the dashboard:
+     `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
+6. Copy `.env*` files from the source repo into the worktree, preserving relative paths and excluding `.git` and dependency directories.
+   - Commands that write outside the current sandbox must use Codex escalation: set `sandbox_permissions` to `require_escalated` with a concise justification.
+7. cd into the worktree and confirm with `pwd` and `git branch --show-current`.
+8. Verify the env-file list in the source and worktree. If source env files existed and any are missing, halt and report the mismatch.
 
-**Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
+**Gate:** Working directory is the new worktree on the correct branch, based on latest main. Any source `.env*` files are present in the worktree.
 
 ---
 
 ### Phase 2: Scope
 
-Start two tracks in parallel:
+1. Search the repo for the code to restructure and its dependents.
+2. Identify all affected files and existing tests.
+3. If test coverage is insufficient to preserve behavior, tell the user and propose characterization tests first.
+4. If a gating decision is missing, ask it before planning. In Plan Mode use `request_user_input` when available; otherwise ask one concise direct question.
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
-
-1. Auto-detect project type from project files (highest match wins):
-
-   | Priority | Signal | Type |
-   |----------|--------|------|
-   | 1 | `react-native` in package.json dependencies | Mobile |
-   | 2 | `next`, `vite`, or `webpack` in package.json | Web |
-   | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
-   | 4 | `go.mod` | Go |
-   | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
-
-   Ask the user only if no signal matches.
-
-2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed.
-3. Symlink large data directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying.
-4. On success, write a sentinel file: `touch .env-setup-done`
-   On failure, write the error: `echo "<error message>" > .env-setup-failed`
-
-**Foreground — Scoping:**
-
-1. Parse the refactoring goal — what is being restructured and why?
-2. Identify all affected files by searching the codebase for the code to be changed and its dependents.
-3. Check test coverage for the affected code — what tests exist? What is untested?
-4. If test coverage is insufficient for safe refactoring, **tell the user** and suggest writing tests first before refactoring.
-
-**Gate:** The scope is clear. Affected files and their test coverage are identified.
+**Gate:** Scope, affected files, and coverage gaps are known.
 
 ---
 
 ### Phase 3: Baseline
 
-**Pre-gate:** Check for `.env-setup-done` in the worktree root.
-- If present: verify dependencies are installed (e.g. `node_modules/` exists, `pip list` succeeds, `go env GOPATH` works) and data symlinks resolve correctly.
-- If `.env-setup-failed` exists: surface the error and halt.
-- If neither file exists: the background agent is still running — wait for it to finish before proceeding.
+1. Run the focused tests for the affected area.
+2. Run the broader baseline, normally `make test`.
+3. If the baseline fails, stop and report. Do not refactor on a broken baseline unless the user changes the task to fixing the failure first.
 
-1. Run `make test` to establish a passing baseline.
-2. If tests fail, **stop and report**. Do not refactor on a broken codebase. Suggest using `$agent-dashboard:fix` first.
-3. Record the test output as the regression baseline.
-
-**Gate:** All tests pass. The baseline is established.
+**Gate:** Baseline tests pass.
 
 ---
 
-### Phase 4: Transform
+### Phase 4: Plan
 
-**Effort note:** When launched via the agent-dashboard's New Agent flow, this skill spawns with `--effort high` on the CLI, which Claude Code pins at the session level. The dynamic dispatcher in agent-state-fast.js bumps effort to `max` automatically while `permission_mode='plan'` (EnterPlanMode active) and drops back to `high` on exit — so planning runs at max effort without paying that cost during implementation. When invoked as a slash command inside an existing claude session, you can run `/effort max` before entering plan mode and `/effort high` (or lower) before implementation.
+Use `/plan` or Plan Mode for the refactor plan. `update_plan` is only Default-mode progress tracking; it is not a Plan Mode substitute.
 
-**Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the refactor touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the scope (Phase 2) and baseline (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
+Submit the plan in this exact shape and wait for approval:
 
-Apply the refactoring in small, atomic steps. For each step:
+```xml
+<proposed_plan>
+## Summary
+<what structure changes and why behavior stays the same>
 
-1. Make a single, focused change (e.g., extract a function, rename a variable, move a file).
-2. Run `make test` immediately after the change.
-3. If tests fail:
-   - Revert only the changed files (`git checkout -- <file1> <file2> ...`)
-   - Analyze why it failed
-   - Try a different approach
-4. If tests pass, proceed to the next step.
+## What Already Exists
+<current pattern and tests>
 
-Do not batch multiple changes between test runs. One change, one test run.
+## Affected Files
+<files and ownership boundaries>
 
-**Gate:** All transformations applied. All tests pass after each step.
+## Transformation Steps
+<small behavior-preserving steps>
 
----
+## Test Plan
+<baseline command and after-each-step command>
 
-### Phase 5: Cleanup
+## Risks
+<specific risks and mitigations>
+</proposed_plan>
+```
 
-1. Remove dead code — unused imports, functions, variables, files.
-2. Update any affected documentation or comments.
-3. Run `make test` one final time.
+Do not include unresolved decisions, TBDs, or placeholders.
 
-**Gate:** No dead code remains. All tests pass.
-
----
-
-### Phase 6: Review, Commit, and Open PR
-
-1. Review all changes for correctness, security, and convention adherence.
-2. Verify that behavior is preserved — no new features, no bug fixes, only structural changes.
-3. Commit with a `refactor:` conventional commit message that describes what was restructured and why.
-4. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
-
-**Gate:** Clean commit with conventional message. Behavior is unchanged. No critical or high-severity review issues. PR opened via `$agent-dashboard:pr`.
+**Gate:** User has approved the behavior-preserving plan.
 
 ---
 
-### Phase 7: Cleanup (on merge)
+### Phase 5: Transform
 
-Triggered when the user indicates the refactor has been merged upstream.
+1. Make one focused refactor step.
+2. Run the focused test command immediately.
+3. If tests fail, stop, inspect the failure, and repair the step before continuing.
+4. Repeat until all planned transformations are complete.
+5. Run the broader baseline again.
 
-1. Verify the branch is merged (warn if unmerged commits remain)
-2. Tear down environment resources: remove symlinks, stop dev servers or emulators, delete `.env-setup-done`/`.env-setup-failed` sentinel files
-3. Remove worktree and delete branch
-4. Confirm cleanup is complete
+Use `update_plan` to track Default-mode progress after approval.
+
+**Gate:** Tests pass after each step and after the final transformation.
+
+---
+
+### Phase 6: Review, Commit, And PR
+
+1. Remove dead code and update affected docs when needed.
+2. Review the diff for behavior preservation, correctness, security, convention adherence, and scope control.
+3. Commit with a conventional `refactor:` message.
+4. Open the PR through `$agent-dashboard:pr` when a PR is requested or expected.
+
+**Gate:** Behavior is preserved, tests pass, and no critical or high-severity review issues remain.
+
+---
+
+## Delegation
+
+Use Codex `spawn_agent` only when explicitly requested. Use `explorer` for independent dependency mapping and `worker` for bounded transformation steps. Workers must receive exact file paths, the approved phase text, the relevant baseline output, and a note that other agents may also be editing the codebase.

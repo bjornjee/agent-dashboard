@@ -8,7 +8,7 @@
 // optional with defaults). These tests spawn the actual scripts and assert
 // stdout is parseable JSON.
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -16,6 +16,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const ROOT = __dirname;
+const PLUGIN_ROOT = path.resolve(ROOT, '..');
 
 function runHook(scriptName, payload, env = {}) {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-stdout-test-'));
@@ -26,8 +27,8 @@ function runHook(scriptName, payload, env = {}) {
         ...process.env,
         HOME: tmpHome,
         AGENT_DASHBOARD_DIR: path.join(tmpHome, '.agent-dashboard'),
-        PLUGIN_ROOT: ROOT,
-        CLAUDE_PLUGIN_ROOT: ROOT,
+        PLUGIN_ROOT,
+        CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
         TMUX_PANE: '',
         ...env,
       },
