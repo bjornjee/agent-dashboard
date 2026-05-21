@@ -42,21 +42,26 @@ func TestIsSlashCommand(t *testing.T) {
 		name    string
 		runes   []rune
 		start   int
+		sigil   rune
 		want    bool
 		wantEnd int
 	}{
-		{"start of string", []rune("/feature rest"), 0, true, 8},
-		{"after space", []rune("do /chore thing"), 3, true, 9},
-		{"not in skills", []rune("/unknown"), 0, false, 0},
-		{"bare slash", []rune("/"), 0, false, 0},
-		{"slash space", []rune("/ nope"), 0, false, 0},
-		{"mid-word no match", []rune("foo/feature"), 3, false, 0},
-		{"hyphenated", []rune("/feat-fix"), 0, true, 9},
-		{"none skipped", []rune("/(none)"), 0, false, 0},
+		{"start of string", []rune("/feature rest"), 0, '/', true, 8},
+		{"after space", []rune("do /chore thing"), 3, '/', true, 9},
+		{"not in skills", []rune("/unknown"), 0, '/', false, 0},
+		{"bare slash", []rune("/"), 0, '/', false, 0},
+		{"slash space", []rune("/ nope"), 0, '/', false, 0},
+		{"mid-word no match", []rune("foo/feature"), 3, '/', false, 0},
+		{"hyphenated", []rune("/feat-fix"), 0, '/', true, 9},
+		{"none skipped", []rune("/(none)"), 0, '/', false, 0},
+		// Codex sigil: `$` matches; `/` does not when sigil is `$`.
+		{"codex dollar start", []rune("$feature rest"), 0, '$', true, 8},
+		{"codex dollar after space", []rune("do $chore thing"), 3, '$', true, 9},
+		{"codex slash ignored", []rune("/feature rest"), 0, '$', false, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			end, matched := isSlashCommand(tt.runes, tt.start, skills)
+			end, matched := isSlashCommand(tt.runes, tt.start, tt.sigil, skills)
 			if matched != tt.want {
 				t.Errorf("matched = %v, want %v", matched, tt.want)
 			}
@@ -72,25 +77,25 @@ func TestRenderWrappedInput_SlashHighlighting(t *testing.T) {
 	skills := []string{"(none)", "feature", "chore"}
 
 	// Matched skill should contain blue ANSI (themeBlue #8caaee)
-	out := renderWrappedInput("/feature build it", 0, 40, false, skills)
+	out := renderWrappedInput("/feature build it", 0, 40, false, '/', skills)
 	if !strings.Contains(out, "8caaee") && !strings.Contains(out, "38;2;140;170;238") {
 		t.Errorf("expected blue ANSI for /feature, got %q", out)
 	}
 
 	// Unmatched slash — no blue
-	out2 := renderWrappedInput("/unknown build", 0, 40, false, skills)
+	out2 := renderWrappedInput("/unknown build", 0, 40, false, '/', skills)
 	if strings.Contains(out2, "8caaee") || strings.Contains(out2, "38;2;140;170;238") {
 		t.Error("unexpected blue ANSI for unmatched /unknown")
 	}
 
 	// No slash at all
-	out3 := renderWrappedInput("hello world", 0, 40, false, skills)
+	out3 := renderWrappedInput("hello world", 0, 40, false, '/', skills)
 	if strings.Contains(out3, "8caaee") || strings.Contains(out3, "38;2;140;170;238") {
 		t.Error("unexpected blue ANSI in plain text")
 	}
 
 	// Multiple slash commands
-	out4 := renderWrappedInput("/feature then /chore", 0, 40, false, skills)
+	out4 := renderWrappedInput("/feature then /chore", 0, 40, false, '/', skills)
 	// Both /feature (8 chars) and /chore (6 chars) should be styled
 	// Each styled char gets its own ANSI sequence, so we should see many occurrences
 	blueCount := strings.Count(out4, "38;2;140;170;238")
@@ -99,23 +104,42 @@ func TestRenderWrappedInput_SlashHighlighting(t *testing.T) {
 	}
 }
 
+// Codex sessions use `$` as the skill sigil — same highlighting must
+// fire when the renderer is told that's the active sigil.
+func TestRenderWrappedInput_DollarHighlighting(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+	skills := []string{"(none)", "feature", "chore"}
+
+	out := renderWrappedInput("$feature build it", 0, 40, false, '$', skills)
+	if !strings.Contains(out, "8caaee") && !strings.Contains(out, "38;2;140;170;238") {
+		t.Errorf("expected blue ANSI for $feature, got %q", out)
+	}
+
+	// A `/feature` typed in a codex-sigil context should NOT highlight —
+	// codex won't dispatch the plugin via `/`.
+	out2 := renderWrappedInput("/feature build it", 0, 40, false, '$', skills)
+	if strings.Contains(out2, "8caaee") || strings.Contains(out2, "38;2;140;170;238") {
+		t.Error("unexpected blue ANSI for /feature when sigil is $")
+	}
+}
+
 func TestRenderWrappedInput_Cursor(t *testing.T) {
 	t.Setenv("COLORTERM", "truecolor")
 
 	// Focused: cursor shows as reverse video
-	out := renderWrappedInput("abc", 1, 40, true, nil)
+	out := renderWrappedInput("abc", 1, 40, true, '/', nil)
 	if !strings.Contains(out, "\x1b[7m") {
 		t.Errorf("expected reverse video ANSI when focused, got %q", out)
 	}
 
 	// Not focused: no reverse video
-	out2 := renderWrappedInput("abc", 1, 40, false, nil)
+	out2 := renderWrappedInput("abc", 1, 40, false, '/', nil)
 	if strings.Contains(out2, "\x1b[7m") {
 		t.Error("unexpected reverse video when not focused")
 	}
 
 	// Cursor at end: synthetic space with reverse video
-	out3 := renderWrappedInput("ab", 2, 40, true, nil)
+	out3 := renderWrappedInput("ab", 2, 40, true, '/', nil)
 	if !strings.Contains(out3, "\x1b[7m") {
 		t.Errorf("expected reverse video for cursor at end, got %q", out3)
 	}
@@ -125,7 +149,7 @@ func TestRenderWrappedInput_Wrapping(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
 	// 20 chars at width 8 should produce 3 lines
-	out := renderWrappedInput("abcdefghijklmnopqrst", 0, 8, false, nil)
+	out := renderWrappedInput("abcdefghijklmnopqrst", 0, 8, false, '/', nil)
 	lines := strings.Split(out, "\n")
 	if len(lines) != 3 {
 		t.Errorf("got %d lines, want 3", len(lines))
@@ -136,7 +160,7 @@ func TestRenderWrappedInput_Placeholder(t *testing.T) {
 	t.Setenv("COLORTERM", "truecolor")
 
 	// Empty + focused: should show cursor block, not placeholder text
-	out := renderWrappedInput("", 0, 40, true, nil)
+	out := renderWrappedInput("", 0, 40, true, '/', nil)
 	if !strings.Contains(out, "\x1b[7m") {
 		t.Errorf("expected reverse video cursor when empty+focused, got %q", out)
 	}
@@ -151,7 +175,7 @@ func TestRenderWrappedInput_IndentedWrapping(t *testing.T) {
 	prefix := "        " // 8 chars
 	width := 20
 	text := strings.Repeat("x", 50)
-	out := renderWrappedInput(text, 0, width, false, nil, prefix)
+	out := renderWrappedInput(text, 0, width, false, '/', nil, prefix)
 	lines := strings.Split(out, "\n")
 
 	if len(lines) < 2 {
@@ -172,7 +196,7 @@ func TestRenderWrappedInput_IndentedWrapping(t *testing.T) {
 
 func TestRenderWrappedInput_NilSkills(t *testing.T) {
 	// Should not panic
-	out := renderWrappedInput("/feature test", 0, 40, true, nil)
+	out := renderWrappedInput("/feature test", 0, 40, true, '/', nil)
 	if out == "" {
 		t.Error("expected non-empty output")
 	}
