@@ -92,6 +92,18 @@ describe('codex plugin package', () => {
     }
   });
 
+  it('registers the Codex auto-plan helper on SessionStart', () => {
+    const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json'));
+    const sessionStartCommands = hooks.hooks.SessionStart
+      .flatMap(entry => entry.hooks)
+      .map(hook => hook.command);
+
+    assert.ok(
+      sessionStartCommands.some(command => /auto-plan\.js/.test(command)),
+      'SessionStart must invoke auto-plan.js',
+    );
+  });
+
   it('packages the agent-dashboard skills inside the Codex plugin root', () => {
     const codexSkills = path.join(REPO, 'adapters/codex/skills');
     const claudeSkills = path.join(REPO, 'adapters/claude-code/skills');
@@ -165,6 +177,16 @@ describe('codex plugin package', () => {
     assert.match(feature, /\boptions:\s*\[/);
   });
 
+  it('requires Codex feature to ask and wait when request_user_input is unavailable', () => {
+    const feature = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/feature/SKILL.md'), 'utf8');
+
+    assert.match(
+      feature,
+      /If `request_user_input` is unavailable during Phase 2, stop and ask the user to run `\/plan`\./,
+    );
+    assert.doesNotMatch(feature, /If `request_user_input` is unavailable, ask one concise direct question/);
+  });
+
   it('forces Codex feature planning before interview or plan drafting', () => {
     const feature = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/feature/SKILL.md'), 'utf8');
     const phase2 = feature.slice(feature.indexOf('### Phase 2: Plan'));
@@ -177,6 +199,21 @@ describe('codex plugin package', () => {
     assert.ok(planMode < research, 'Plan Mode must be active before research');
     assert.ok(planMode < interview, 'Plan Mode must be active before request_user_input');
     assert.doesNotMatch(phase2, /research first, interview second, plan mode third/i);
+  });
+
+  it('requires Codex feature to stop after proposed_plan until review approval', () => {
+    const feature = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/feature/SKILL.md'), 'utf8');
+
+    assert.match(feature, /After submitting `<proposed_plan>`, stop/i);
+    assert.match(feature, /ordinary chat approval is not implementation approval/i);
+  });
+
+  it('documents Codex feature phase gate adherence', () => {
+    const feature = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/feature/SKILL.md'), 'utf8');
+
+    assert.match(feature, /Before every action, identify the current phase and check its gate/i);
+    assert.match(feature, /If a gate is not satisfied, stop instead of falling back/i);
+    assert.match(feature, /If you violate phase order, halt and report the violated gate/i);
   });
 
   it('keeps Codex worktree setup stampable by dashboard hooks', () => {

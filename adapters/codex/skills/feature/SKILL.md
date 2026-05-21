@@ -8,12 +8,12 @@ effort: max
 ---
 
 <codex_skill_must>
-1. Phase 2 starts with `/plan`; do not research, interview, or draft before `permission_mode='plan'`.
+1. Phase 2 is gated on `permission_mode='plan'`; if not plan, stop and ask the user to run `/plan`.
 2. Run `mkdir -p` and `git worktree add -b feat/<name> ... main` as separate `exec_command` calls.
 3. Submit plans only inside `<proposed_plan>...</proposed_plan>`.
-4. After approval, write `.feature-plan-path` before implementation.
-5. Allowed tools: `exec_command`, `request_user_input`, `spawn_agent`, `wait_agent`, `update_plan`, `apply_patch`.
-6. Every `spawn_agent` call must be followed by `wait_agent`.
+4. After `<proposed_plan>`, stop until plan-review approval; ordinary chat approval is not implementation approval.
+5. After approval, write `.feature-plan-path` before implementation.
+6. Allowed tools: `exec_command`, `request_user_input`, `spawn_agent`, `wait_agent`, `update_plan`, `apply_patch`; every `spawn_agent` needs `wait_agent`.
 </codex_skill_must>
 
 Start a new feature in an isolated git worktree.
@@ -23,6 +23,8 @@ Feature description: $ARGUMENTS
 ## Instructions
 
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
+
+Before every action, identify the current phase and check its gate. If a gate is not satisfied, stop instead of falling back. If you violate phase order, halt and report the violated gate.
 
 ---
 
@@ -71,7 +73,7 @@ the post-approval actions below.
 
 Phase order: Plan Mode first, then research, then interview, then submit. Plan Mode is the *entry* gate to Phase 2 — nothing else in this phase happens outside it. Each step has a HARD-GATE you cannot rationalize past.
 
-1. **Enter Codex Plan Mode via `/plan` immediately.** Before any research, before any user interview, before any drafting — flip the session into Plan Mode. Phase 2 is Plan-Mode-only; the entire planning effort runs under the high-reasoning, read-only surface.
+1. **Enter Codex Plan Mode via `/plan` before continuing.** Dashboard-created Codex feature sessions should auto-enter Plan Mode before the skill prompt is submitted. If `permission_mode` is not `plan`, stop immediately and ask the user to run `/plan`; do not research, interview, draft, call `spawn_agent`, call `update_plan`, edit files, write tests, run setup, or create sentinels.
 
    <HARD-GATE>No `spawn_agent`, `request_user_input`, or plan drafting until `permission_mode='plan'`.</HARD-GATE>
 
@@ -79,7 +81,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    <HARD-GATE>`explorer` for research is fine; never dispatch another role to compose the plan. Every `spawn_agent` must be followed by `wait_agent`.</HARD-GATE>
 
-3. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text. If `request_user_input` is unavailable, fall back to one concise direct question.
+3. **Interview the user via `request_user_input`.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text. If `request_user_input` is unavailable during Phase 2, stop and ask the user to run `/plan`.
 
    Schema: 1–3 questions per call, each with a `header` (≤12 chars), 2–3 mutually exclusive `options`. Recommended option goes first with `(Recommended)` suffix. The client adds an "Other" escape hatch automatically.
 
@@ -102,7 +104,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    <HARD-GATE>If you find yourself typing "1." "2." "3." questions in assistant text — STOP. Use `request_user_input`.</HARD-GATE>
 
-4. **Draft inline, then submit via `<proposed_plan>`. Wait for user approval.** Plan Mode is already active (step 1); draft the plan as your own assistant text and then wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject.
+4. **Draft inline, then submit via `<proposed_plan>`. Wait for user approval.** Plan Mode is already active (step 1); draft the plan as your own assistant text and then wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject. After submitting `<proposed_plan>`, stop until the plan-review approval arrives; ordinary chat approval is not implementation approval.
 
    Caveat: `update_plan` is a progress checklist tool, not a planning-mode substitute. Use it after approval to track implementation progress; do not use it to bypass Plan Mode.
 
@@ -165,7 +167,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 (inline TDD).
 
-   4. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question:
+   4. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question and wait for the user's answer. Never choose the recommended option yourself.
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
