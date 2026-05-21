@@ -8,11 +8,12 @@ effort: max
 ---
 
 <codex_skill_must>
-1. `/plan` is the FIRST action in Phase 2 — before any `spawn_agent`, any `request_user_input`, any plan drafting. Nothing else in Phase 2 happens until `permission_mode='plan'` is active.
-2. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b feat/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
-3. Plan submission MUST use `<proposed_plan>...</proposed_plan>` tags. Plain assistant text is not a fallback.
-4. After plan approval, write the absolute plan path to `.feature-plan-path` BEFORE starting Phase 3.
-5. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (roles: `explorer`, `worker`), `update_plan`, `apply_patch`. Anything outside this list is a foreign-harness tool and forbidden in this skill.
+1. Phase 2 starts with `/plan`; do not research, interview, or draft before `permission_mode='plan'`.
+2. Run `mkdir -p` and `git worktree add -b feat/<name> ... main` as separate `exec_command` calls.
+3. Submit plans only inside `<proposed_plan>...</proposed_plan>`.
+4. After approval, write `.feature-plan-path` before implementation.
+5. Allowed tools: `exec_command`, `request_user_input`, `spawn_agent`, `wait_agent`, `update_plan`, `apply_patch`.
+6. Every `spawn_agent` call must be followed by `wait_agent`.
 </codex_skill_must>
 
 Start a new feature in an isolated git worktree.
@@ -62,28 +63,11 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 ### Phase 2: Plan
 
-Start two tracks in parallel:
-
-**Background — Environment setup:** Launch a background `exec_command` to set up the dev environment. It must:
-
-1. Auto-detect project type from project files (highest match wins):
-
-   | Priority | Signal | Type |
-   |----------|--------|------|
-   | 1 | `react-native` in package.json dependencies | Mobile |
-   | 2 | `next`, `vite`, or `webpack` in package.json | Web |
-   | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
-   | 4 | `go.mod` | Go |
-   | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
-
-   Ask the user only if no signal matches.
-
-2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed.
-3. Symlink large data directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying.
-4. On success, write a sentinel file: `touch .env-setup-done`
-   On failure, write the error: `echo "<error message>" > .env-setup-failed`
-
-**Foreground — Planning:**
+**Plan-first guarantee.** Phase 2 is planning only. No dependency installs, no
+sentinel writes, no environment setup runs until the plan is approved. The
+only writes allowed in this phase are read-only research (Codex `explorer`)
+and the `<proposed_plan>` submission itself. Environment setup kicks off in
+the post-approval actions below.
 
 Phase order: Plan Mode first, then research, then interview, then submit. Plan Mode is the *entry* gate to Phase 2 — nothing else in this phase happens outside it. Each step has a HARD-GATE you cannot rationalize past.
 
@@ -91,9 +75,9 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    <HARD-GATE>No `spawn_agent`, `request_user_input`, or plan drafting until `permission_mode='plan'`.</HARD-GATE>
 
-2. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for non-trivial codebase or library lookups. Do not delegate planning — composing the plan is your job. Synthesize what you found inline as your own assistant text so it lands in the visible plan artifact (not in a tool result the user can't approve). Do not wait for environment setup to finish.
+2. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for non-trivial codebase or library lookups. Always pair `spawn_agent` with a `wait_agent` to retrieve the explorer's findings — never spawn-and-forget. Do not delegate planning — composing the plan is your job. Synthesize what you found inline as your own assistant text so it lands in the visible plan artifact (not in a tool result the user can't approve).
 
-   <HARD-GATE>`explorer` for research is fine; never dispatch a worker/planner to compose the plan.</HARD-GATE>
+   <HARD-GATE>`explorer` for research is fine; never dispatch another role to compose the plan. Every `spawn_agent` must be followed by `wait_agent`.</HARD-GATE>
 
 3. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text. If `request_user_input` is unavailable, fall back to one concise direct question.
 
@@ -160,9 +144,28 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
-   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 (inline TDD).
+   2. **Kick off environment setup as a background `exec_command`** (always). The setup task runs in parallel with the dispatch probe and any pre-Phase-3 work so its install time is amortised. It must:
 
-   3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question:
+      1. Auto-detect project type from project files (highest match wins):
+
+         | Priority | Signal | Type |
+         |----------|--------|------|
+         | 1 | `react-native` in package.json dependencies | Mobile |
+         | 2 | `next`, `vite`, or `webpack` in package.json | Web |
+         | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
+         | 4 | `go.mod` | Go |
+         | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
+
+         Ask the user only if no signal matches.
+
+      2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed.
+      3. Symlink large data directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying.
+      4. On success, write a sentinel file: `touch .env-setup-done`
+         On failure, write the error: `echo "<error message>" > .env-setup-failed`
+
+   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 (inline TDD).
+
+   4. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question:
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
@@ -224,7 +227,7 @@ Review all changes for correctness, security, and convention adherence. Apply al
 ### Phase 5: Deliver
 
 1. Commit the feature changes with a `feat:` conventional commit message.
-2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (Codex `worker` with an inline cleanup brief), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit history with conventional commit messages. PR opened via `$agent-dashboard:pr`.
 

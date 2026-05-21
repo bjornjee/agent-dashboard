@@ -12,12 +12,7 @@ Question or concern: $ARGUMENTS
 
 Follow these phases in order. Apply all project rules and conventions that are in your context.
 
----
-
-### Phase 0: Sync
-
-1. Switch to main: `git checkout main`
-2. Pull latest: `git pull origin main`
+This skill is **read-only**. Do not checkout another branch, pull from remotes, fetch, stash, or otherwise mutate repo state — even "preparatory" steps. Investigate the current branch. If you need a fresher base ref than the local `origin/main`, ask before refreshing it.
 
 ---
 

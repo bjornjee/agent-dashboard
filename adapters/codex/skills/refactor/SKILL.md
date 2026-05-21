@@ -6,11 +6,11 @@ effort: max
 ---
 
 <codex_skill_must>
-1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b refactor/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add`.
-2. Establish a passing test baseline (`make test`) BEFORE touching code. If the baseline fails, halt — invoke `$agent-dashboard:fix` first.
-3. Refactor in atomic steps: one focused change, then `make test`, then repeat. One change per test run — never batch.
-4. Behavior is preserved. No new features, no bug fixes. If behavior changed you are in the wrong skill.
-5. Tool names you may emit: `exec_command`, `apply_patch`, `spawn_agent` (worker role for delegation).
+1. Run `mkdir -p` and `git worktree add -b refactor/<name> ... main` as separate `exec_command` calls.
+2. Run `make test` before editing; halt if the baseline fails.
+3. Make one behavior-preserving change, then run `make test`; repeat.
+4. Allowed tools: `exec_command`, `apply_patch`, `spawn_agent`, `wait_agent`.
+5. Every `spawn_agent` call must be followed by `wait_agent`.
 </codex_skill_must>
 
 Safely refactor code while preserving all existing behavior.
@@ -110,7 +110,7 @@ Start two tracks in parallel:
 
 **Effort note:** When launched via the agent-dashboard's New Agent flow, this skill starts at implementation effort. Use Codex Plan Mode for high-reasoning scoping when the refactor needs it, then return to proportional implementation effort for the mechanical transformation.
 
-**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the refactor touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than implementing directly. If delegating, pass the scope (Phase 2), baseline (Phase 3), exact file paths, and a bounded write scope to a `worker`; then review and verify locally. Otherwise, proceed below.
+**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the refactor touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than implementing directly. If delegating, pass the scope (Phase 2), baseline (Phase 3), exact file paths, and a bounded write scope to a `worker`; then call `wait_agent`, review the result, and verify locally. Otherwise, proceed below.
 
 Apply the refactoring in small, atomic steps. For each step:
 
@@ -143,7 +143,7 @@ Do not batch multiple changes between test runs. One change, one test run.
 1. Review all changes for correctness, security, and convention adherence.
 2. Verify that behavior is preserved — no new features, no bug fixes, only structural changes.
 3. Commit with a `refactor:` conventional commit message that describes what was restructured and why.
-4. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+4. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns cleanup, `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit with conventional message. Behavior is unchanged. No critical or high-severity review issues. PR opened via `$agent-dashboard:pr`.
 

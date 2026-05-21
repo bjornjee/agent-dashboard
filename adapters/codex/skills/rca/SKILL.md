@@ -131,7 +131,7 @@ For each Codex session active during the incident window:
    - `signal`, `SIGKILL`, `SIGTERM` (signal sending)
    - Any command referencing the crashed process
 
-3. **Extract subagent launches** — check for Codex `spawn_agent` tool calls:
+3. **Extract subagent launches** — check for Codex `spawn_agent` and `wait_agent` tool calls in logs. Do not call either tool from this read-only RCA skill:
    ```python
    # Same pattern but filter for spawn_agent tool calls
    # Check agent_type, prompt content, and whether the parent waited for results

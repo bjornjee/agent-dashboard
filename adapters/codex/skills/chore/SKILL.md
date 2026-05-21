@@ -65,6 +65,6 @@ Review all changes for correctness and convention adherence. Apply all project r
    | `ci` | CI/CD pipeline changes |
    | `build` | Build system, Makefile changes |
 
-2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns cleanup, `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit with conventional message. PR opened via `$agent-dashboard:pr`.
