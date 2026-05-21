@@ -7,7 +7,7 @@ A tmux-integrated orchestrator and dispatcher for AI coding agents — Claude Co
 https://github.com/user-attachments/assets/01aa0f85-cfd4-4dc3-ac46-651bcfc03f99
 
 
-Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/`).
+Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboard/agents/` (written by the Claude Code adapter in `adapters/claude-code/` and the Codex adapter in `adapters/codex/`).
 
 ## Why agent-dashboard?
 
@@ -21,11 +21,11 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 
 **Do I need tmux?** Yes. agent-dashboard reads live pane content via `tmux capture-pane` and spawns agent sessions in tmux panes. Without tmux there are no panes to monitor.
 
-**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. Codex CLI is supported directly as a harness with global Codex hooks installed by `install.sh` (see "How do I see codex agents in the dashboard?" below). Codex is also reachable via skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
+**Which agents are supported?** Claude Code is first-class via the adapter in `adapters/claude-code/`. Codex CLI is supported directly via the adapter in `adapters/codex/` (see "How do I see codex agents in the dashboard?" below). Codex is also reachable via skill delegation (`/codex-delegate`). The architecture supports additional backends via the `domain.Harness` interface.
 
 **How do I use codex / gpt-5.x models?** Pick `codex` in the New Agent harness step (TUI wizard or web form) to spawn the Codex CLI directly, with per-spawn flags from `[harness.codex]` in `~/.agent-dashboard/settings.toml`.
 
-**How do I see codex agents in the dashboard?** Codex sessions appear once the global Codex hooks are installed and approved. `install.sh` copies the hook runtime to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` only if that file is missing. If you already have `~/.codex/hooks.json`, reconcile it with the template at `~/.codex/hooks/agent-dashboard/hooks.json`, then restart Codex and approve the `agent-dashboard` hooks prompt.
+**How do I see codex agents in the dashboard?** Codex sessions appear once the Codex adapter hooks are installed and approved. Install the packaged Codex adapter with `make install-codex-adapter`, or use `install.sh` to sync the global hook bundle to `~/.codex/hooks/agent-dashboard` for non-plugin installs. Then restart Codex and approve the `agent-dashboard` hooks prompt.
 
 **Does this require a paid Claude account?** No — it uses whatever Claude Code itself requires (Pro, Max, or API). agent-dashboard does not call the Anthropic API directly; it reads the JSONL transcripts Claude Code writes locally.
 
@@ -117,7 +117,7 @@ Download the pre-built binary from the latest [GitHub Release](https://github.co
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. It also copies Codex dashboard hooks to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` when that file does not already exist. No Go toolchain required.
+The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. It also syncs the Codex global hook bundle to `~/.codex/hooks/agent-dashboard` for non-plugin Codex installs. No Go toolchain required.
 
 Or build from source (requires [Go 1.26+](https://go.dev/dl/)):
 
@@ -151,15 +151,19 @@ Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not
 
 ### Codex CLI support
 
-Codex support is installed by `install.sh`, not by editing the managed plugin cache. The installer only performs copy-if-missing actions: it copies the Codex hook bundle to `~/.codex/hooks/agent-dashboard` and copies the global hook template to `~/.codex/hooks.json` only when that file is absent.
+Codex support is packaged as a Codex plugin adapter in `adapters/codex/`. From a repo checkout, register the marketplace entry and then enable the plugin in `~/.codex/config.toml`:
+
+```bash
+make install-codex-adapter
+```
+
+For non-plugin installs, `install.sh` also syncs the Codex global hook bundle to `~/.codex/hooks/agent-dashboard` and manages `~/.codex/hooks.json` when it matches a shipped version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-After installing, restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
-
-If `~/.codex/hooks.json` already exists, the installer leaves it untouched. Review the template at `~/.codex/hooks/agent-dashboard/hooks.json` and reconcile it with your existing Codex hooks before restarting Codex.
+After installing either path, restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
 
 From a repo checkout, rerun the source installer after pulling changes:
 
@@ -352,7 +356,7 @@ agent-dashboard/
 ├── LICENSE
 ├── SECURITY.md
 ├── release-please-config.json
-├── install.sh                         # binary installer plus copy-if-missing Codex hook install
+├── install.sh                         # binary installer plus Codex global hook sync
 ├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
 ├── settings.example.toml              # default settings (copied by install.sh)
 ├── go.mod / go.sum
@@ -364,7 +368,8 @@ agent-dashboard/
 │   └── populate-quotes/
 │       └── main.go                    # bulk quote fetcher for SQLite cache
 ├── internal/                          # core packages (see below)
-├── adapters/claude-code/              # Claude Code plugin (see below)
+├── adapters/claude-code/              # Claude Code plugin adapter (see below)
+├── adapters/codex/               # Codex plugin adapter and hook bundle
 └── schema/
     └── agent-state.schema.json        # JSON Schema for agent state files
 ```

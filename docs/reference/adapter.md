@@ -6,17 +6,24 @@ nav_order: 3
 
 # Agent Adapters
 
-The adapter is a Claude Code plugin that bridges between Claude Code sessions and the dashboard. It writes agent state files that the dashboard reads, and provides workflow skills that agents use.
+Agent adapters bridge coding-agent sessions and the dashboard. They write agent state files that the dashboard reads, and provide workflow skills that agents use.
 
-Codex CLI state sync is installed through global Codex hooks instead of the managed plugin cache. `install.sh` copies the hook runtime to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` only if that file is missing. If you already have Codex hooks, reconcile them manually with the template at `~/.codex/hooks/agent-dashboard/hooks.json`.
+The project ships two adapters:
+
+- `adapters/claude-code/` — Claude Code plugin adapter with hooks, skills, shared hook packages, and Claude subagent definitions.
+- `adapters/codex/` — Codex plugin adapter with a `.codex-plugin` manifest, plugin-local hooks, and Codex-flavored workflow skills.
+
+`install.sh` also syncs the Codex global hook bundle from `adapters/codex/hooks/` to `~/.codex/hooks/agent-dashboard` for non-plugin installs and upgrades.
 
 ---
 
 ## How it works
 
-The adapter lives in `adapters/claude-code/` and consists of three components:
+### Claude adapter
 
-### Hooks
+The Claude adapter lives in `adapters/claude-code/` and consists of three components:
+
+#### Hooks
 
 Lifecycle hooks run automatically during Claude Code sessions. They write agent state to `~/.agent-dashboard/agents/<session-id>.json` on every significant event.
 
@@ -34,7 +41,7 @@ Lifecycle hooks run automatically during Claude Code sessions. They write agent 
 | `test-gate.js` | Before merge | Blocks merge if tests fail |
 | `warn-destructive.js` | Before destructive git ops | Warns about force pushes, resets, etc. |
 
-### Skills
+#### Skills
 
 Workflow skills are prompted routines that guide agents through specific tasks:
 
@@ -48,7 +55,7 @@ Workflow skills are prompted routines that guide agents through specific tasks:
 | `pr` | PR review and iteration |
 | `rca` | Root cause analysis for incidents |
 
-### Agents
+#### Agents
 
 Pre-configured agent definitions for specialized tasks:
 
@@ -59,6 +66,16 @@ Pre-configured agent definitions for specialized tasks:
 | `planner` | Creates phased implementation plans |
 | `security-reviewer` | Detects security vulnerabilities and OWASP issues |
 | `tdd-guide` | Enforces RED-GREEN-REFACTOR test-driven development |
+
+### Codex adapter
+
+The Codex adapter lives in `adapters/codex/` and consists of three plugin-facing components:
+
+- `.codex-plugin/plugin.json` — Codex plugin manifest for skills, hooks, and marketplace metadata.
+- `hooks/plugin-hooks.json` — plugin-local hook definitions that run the bundled hook scripts through `${PLUGIN_ROOT}`.
+- `skills/` — Codex-flavored workflow skills that invoke agent-dashboard skills with `$agent-dashboard:<skill>` syntax.
+
+The `adapters/codex/hooks/` directory also contains the global hook bundle that `install.sh --sync-adapters` can sync for non-plugin installs.
 
 ## Agent state schema
 
@@ -76,5 +93,13 @@ Each agent's state is stored as a JSON file conforming to the schema at `schema/
 /marketplace add bjornjee/agent-dashboard
 /plugin install agent-dashboard@agent-dashboard
 ```
+
+## Installing the Codex adapter
+
+```
+make install-codex-adapter
+```
+
+The target registers `.agents/plugins/marketplace.json`, whose `agent-dashboard` entry points at `./adapters/codex`. Enable `agent-dashboard@agent-dashboard` in `~/.codex/config.toml`, then restart Codex and approve the hooks prompt.
 
 See [Getting Started](../../getting-started/) for the full installation walkthrough.
