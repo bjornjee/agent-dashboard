@@ -58,6 +58,11 @@ func TestIsSlashCommand(t *testing.T) {
 		{"codex dollar start", []rune("$feature rest"), 0, '$', true, 8},
 		{"codex dollar after space", []rune("do $chore thing"), 3, '$', true, 9},
 		{"codex slash ignored", []rune("/feature rest"), 0, '$', false, 0},
+		// Codex requires the namespaced `$<plugin>:<skill>` form to dispatch
+		// the plugin. The highlighter must treat the colon as part of the
+		// command word and match the bare skill name from the skills list.
+		{"codex namespaced", []rune("$agent-dashboard:feature rest"), 0, '$', true, 24},
+		{"claude namespaced", []rune("/agent-dashboard:chore now"), 0, '/', true, 22},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

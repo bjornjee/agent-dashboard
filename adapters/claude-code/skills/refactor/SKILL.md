@@ -83,7 +83,7 @@ Start two tracks in parallel:
 - If neither file exists: the background agent is still running — wait for it to finish before proceeding.
 
 1. Run `make test` to establish a passing baseline.
-2. If tests fail, **stop and report**. Do not refactor on a broken codebase. Suggest using `/fix` first.
+2. If tests fail, **stop and report**. Do not refactor on a broken codebase. Suggest using `/agent-dashboard:fix` first.
 3. Record the test output as the regression baseline.
 
 **Gate:** All tests pass. The baseline is established.
