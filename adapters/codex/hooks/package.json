@@ -1,6 +1,6 @@
 {
   "name": "agent-dashboard-codex-hooks",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "private": true,
   "description": "Global Codex hook bundle for agent-dashboard",
   "scripts": {
