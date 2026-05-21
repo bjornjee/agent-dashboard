@@ -52,11 +52,13 @@ func softWrapRunesTwoWidth(runes []rune, firstWidth, contWidth int) [][]rune {
 	return rows
 }
 
-// isSlashCommand checks whether runes[start] begins a /skill command.
-// The slash must be at position 0 or preceded by a space.
+// isSlashCommand checks whether runes[start] begins a <sigil>skill command.
+// sigil is the per-harness skill prefix — `/` for claude, `$` for codex
+// (codex CLI help: "Use one by name, for example: $skills:..."). The sigil
+// must be at position 0 or preceded by a space.
 // Returns the exclusive end index and whether a match was found.
-func isSlashCommand(runes []rune, start int, skills []string) (int, bool) {
-	if start >= len(runes) || runes[start] != '/' {
+func isSlashCommand(runes []rune, start int, sigil rune, skills []string) (int, bool) {
+	if start >= len(runes) || runes[start] != sigil {
 		return 0, false
 	}
 	if start > 0 && !unicode.IsSpace(runes[start-1]) {
@@ -91,9 +93,10 @@ var (
 )
 
 // renderWrappedInput renders an input value with soft wrapping, a cursor, and
-// slash-command highlighting. It replaces textinput.Model.View() for all input
-// fields in the dashboard.
-func renderWrappedInput(value string, cursorPos int, width int, focused bool, skills []string, indent ...string) string {
+// skill-command highlighting. It replaces textinput.Model.View() for all input
+// fields in the dashboard. sigil is the per-harness skill prefix — pass `/`
+// for claude-context inputs, `$` for codex-context inputs.
+func renderWrappedInput(value string, cursorPos int, width int, focused bool, sigil rune, skills []string, indent ...string) string {
 	prefix := ""
 	if len(indent) > 0 {
 		prefix = indent[0]
@@ -123,11 +126,11 @@ func renderWrappedInput(value string, cursorPos int, width int, focused bool, sk
 		return placeholderStyle.Render("Type here...")
 	}
 
-	// Build token map: false = normal, true = slash command.
+	// Build token map: false = normal, true = skill command.
 	isSlash := make([]bool, len(runes))
 	for i := 0; i < len(runes); i++ {
-		if runes[i] == '/' {
-			end, matched := isSlashCommand(runes, i, skills)
+		if runes[i] == sigil {
+			end, matched := isSlashCommand(runes, i, sigil, skills)
 			if matched {
 				for j := i; j < end; j++ {
 					isSlash[j] = true

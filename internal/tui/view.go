@@ -16,6 +16,16 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// harnessSigil returns the skill-command prefix rune for a harness.
+// Codex CLI dispatches plugins via `$` (per its own help text); claude
+// and all other harnesses use `/`.
+func harnessSigil(harness string) rune {
+	if harness == "codex" {
+		return '$'
+	}
+	return '/'
+}
+
 // -- Content Builders --
 
 func (m *model) updateLeftContent() {
@@ -61,7 +71,7 @@ func (m *model) updateRightContent() {
 		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Git folder path:"))
-		lines = append(lines, "  "+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-4, true, nil, "  "))
+		lines = append(lines, "  "+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-4, true, '/', nil, "  "))
 		lines = append(lines, "")
 		// Show z-plugin suggestions
 		if len(m.suggestions) > 0 {
@@ -154,12 +164,13 @@ func (m *model) updateRightContent() {
 		lines = append(lines, "")
 		lines = append(lines, "  "+helpStyle.Render("Folder:  "+m.createFolder))
 		lines = append(lines, "  "+helpStyle.Render("Harness: "+m.createHarness))
+		sigil := harnessSigil(m.createHarness)
 		if m.createSkillName != "" {
-			lines = append(lines, "  "+helpStyle.Render("Skill:   /"+m.createSkillName))
+			lines = append(lines, "  "+helpStyle.Render("Skill:   "+string(sigil)+m.createSkillName))
 		}
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Message:"))
-		lines = append(lines, "  "+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-4, true, m.availableSkills, "  "))
+		lines = append(lines, "  "+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-4, true, sigil, m.availableSkills, "  "))
 		lines = append(lines, "")
 		lines = append(lines, "  "+helpStyle.Render("Enter to launch │ Esc back │ ^C cancel"))
 		m.filesVP.SetContent("")
@@ -622,8 +633,12 @@ func (m model) waitingMessageContent() string {
 
 	lines = append(lines, "")
 	if m.mode == modeReply {
+		sigil := '/'
+		if a := m.selectedAgent(); a != nil {
+			sigil = harnessSigil(a.Harness)
+		}
 		lines = append(lines, " "+lipgloss.NewStyle().Foreground(textInputColor).Bold(true).
-			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, m.availableSkills, "        "))
+			Render("Reply: ")+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-12, true, sigil, m.availableSkills, "        "))
 	} else {
 		agent := m.selectedAgent()
 		if agent != nil && agent.State == "question" {

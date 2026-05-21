@@ -1015,7 +1015,7 @@ func (m model) renderDiffFilePanel() string {
 
 	filterLine := ""
 	if m.diffFilterActive || m.diffFilterText != "" {
-		filterLine = "\n " + renderWrappedInput(m.diffFilterInput.Value(), m.diffFilterInput.Position(), m.diffLeftWidth-4, m.diffFilterActive, nil, " ")
+		filterLine = "\n " + renderWrappedInput(m.diffFilterInput.Value(), m.diffFilterInput.Position(), m.diffLeftWidth-4, m.diffFilterActive, '/', nil, " ")
 	}
 
 	content := header + filterLine + "\n\n" + m.diffFileVP.View()
