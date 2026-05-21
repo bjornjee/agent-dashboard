@@ -379,8 +379,8 @@ func TestCreate_CodexAllowsSupportedSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	if capturedCmd != "codex '/feature hi'" {
-		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '/feature hi'")
+	if capturedCmd != "codex '$feature hi'" {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '$feature hi'")
 	}
 }
 
@@ -409,8 +409,8 @@ func TestCreate_CodexAllowsCustomSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	if capturedCmd != "codex '/custom-maintained hi'" {
-		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '/custom-maintained hi'")
+	if capturedCmd != "codex '$custom-maintained hi'" {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '$custom-maintained hi'")
 	}
 }
 

@@ -99,10 +99,15 @@ func mapEffort(level string) string {
 	return level
 }
 
+// buildPrompt composes the prompt argument codex receives on the command
+// line. Codex CLI uses `$` (not `/`) as its plugin/skill sigil — see
+// codex's own help text: "Use one by name, for example:
+// $skills:terminal-ops run the failing tests". Prepending `/` causes codex
+// to treat the skill name as plain prompt text and skip plugin dispatch.
 func buildPrompt(skill, message string) string {
 	var parts []string
 	if skill != "" {
-		parts = append(parts, "/"+skill)
+		parts = append(parts, "$"+skill)
 	}
 	if message != "" {
 		parts = append(parts, message)
