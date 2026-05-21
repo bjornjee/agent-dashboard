@@ -36,6 +36,7 @@ describe('codex global hook bundle', () => {
       [
         '$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh',
         '$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh',
+        '$HOME/.codex/hooks/agent-dashboard/auto-plan.sh',
       ]
     );
   });
@@ -44,8 +45,10 @@ describe('codex global hook bundle', () => {
     for (const file of [
       'agent-state-fast.sh',
       'agent-state-reporter.sh',
+      'auto-plan.sh',
       'agent-state-fast.js',
       'agent-state-reporter.js',
+      'auto-plan.js',
       'effort-config.js',
       'packages/agent-state/index.js',
       'packages/tmux/index.js',
