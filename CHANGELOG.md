@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/bjornjee/agent-dashboard/compare/v0.26.0...v0.26.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* improve codex skill adherence ([#304](https://github.com/bjornjee/agent-dashboard/issues/304)) ([63f5f02](https://github.com/bjornjee/agent-dashboard/commit/63f5f02464301ac2d73384b151e1b0ee473f384a))
+
 ## [0.26.0](https://github.com/bjornjee/agent-dashboard/compare/v0.25.0...v0.26.0) (2026-05-21)
 
 
