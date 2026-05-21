@@ -1,0 +1,42 @@
+{
+  "name": "agent-dashboard",
+  "version": "0.24.0",
+  "description": "Multi-agent tmux dashboard with skills, hooks, and workflow automation for Codex",
+  "author": {
+    "name": "bjornjee"
+  },
+  "homepage": "https://bjornjee.github.io/agent-dashboard",
+  "repository": "https://github.com/bjornjee/agent-dashboard",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "tmux",
+    "agent-dashboard",
+    "workflow-automation",
+    "tdd"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/plugin-hooks.json",
+  "interface": {
+    "displayName": "agent-dashboard",
+    "shortDescription": "Multi-agent tmux dashboard for Codex",
+    "longDescription": "Install agent-dashboard's Codex skills and plugin-local hooks for tracking agent state, worktrees, permission prompts, and workflow automation.",
+    "developerName": "bjornjee",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://bjornjee.github.io/agent-dashboard",
+    "privacyPolicyURL": "https://github.com/bjornjee/agent-dashboard",
+    "termsOfServiceURL": "https://github.com/bjornjee/agent-dashboard",
+    "defaultPrompt": [
+      "Start an agent-dashboard feature branch",
+      "Investigate this codebase with dashboard tracking",
+      "Open a PR through the agent-dashboard workflow"
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}
