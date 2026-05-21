@@ -44,14 +44,18 @@ func ReadSubagents(agent domain.Agent, roots Roots) []domain.SubagentInfo {
 	}
 }
 
+// TopLevelAgents filters out codex sessions that are themselves subagents
+// of another session. The check is per-agent (not a global walk) — for
+// each codex agent we ask whether its own rollout file carries a
+// parent_thread_id. Both LocateRollout and the session_meta read are
+// cached, so repeated calls within the TTL window cost O(map lookups).
 func TopLevelAgents(agents []domain.Agent, roots Roots) []domain.Agent {
 	if len(agents) == 0 {
 		return nil
 	}
-	codexSubagentIDs := codexconv.SubagentSessionIDs(roots.CodexSessionsRoot)
 	out := make([]domain.Agent, 0, len(agents))
 	for _, agent := range agents {
-		if agent.Harness == "codex" && codexSubagentIDs[agent.SessionID] {
+		if agent.Harness == "codex" && codexconv.ParentThreadID(roots.CodexSessionsRoot, agent.SessionID) != "" {
 			continue
 		}
 		out = append(out, agent)

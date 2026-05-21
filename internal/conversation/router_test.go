@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	codexconv "github.com/bjornjee/agent-dashboard/internal/codex/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
@@ -73,6 +74,7 @@ func TestRead_EmptyHarnessDefaultsToClaude(t *testing.T) {
 }
 
 func TestReadSubagents_RoutesCodexAgentToRolloutDiscovery(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
 	root := t.TempDir()
 	parentID := "parent-codex"
 	childID := "child-codex"
@@ -123,6 +125,8 @@ func TestReadSubagents_RoutesClaudeAgentToProjectDiscovery(t *testing.T) {
 }
 
 func TestTopLevelAgents_FiltersCodexSubagentSessions(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
 	root := t.TempDir()
 	parentID := "parent-codex"
 	childID := "child-codex"
@@ -140,6 +144,39 @@ func TestTopLevelAgents_FiltersCodexSubagentSessions(t *testing.T) {
 	}
 	if got[0].SessionID != parentID || got[1].SessionID != "claude" {
 		t.Errorf("agents = %+v, want child codex filtered", got)
+	}
+}
+
+// Non-codex harnesses must not trigger any codex filesystem work. With a
+// non-existent CodexSessionsRoot, claude/legacy agents still flow through
+// unchanged — the per-agent guard short-circuits before any walk.
+func TestTopLevelAgents_NonCodexHarnessSkipsCodexLookup(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
+	agents := []domain.Agent{
+		{SessionID: "claude-1", Harness: "claude", Target: "main:1.0"},
+		{SessionID: "legacy-1", Harness: "", Target: "main:2.0"},
+	}
+
+	got := conversation.TopLevelAgents(agents, conversation.Roots{CodexSessionsRoot: "/nonexistent-root-aaa"})
+	if len(got) != 2 {
+		t.Fatalf("got %d agents, want 2: %+v", len(got), got)
+	}
+}
+
+// A codex agent that has no rollout file (or no parent_thread_id in its
+// session_meta) is a top-level agent and must NOT be filtered.
+func TestTopLevelAgents_CodexParentWithoutRolloutKept(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
+	root := t.TempDir()
+	agents := []domain.Agent{
+		{SessionID: "parent-no-rollout", Harness: "codex", Target: "main:1.0"},
+	}
+
+	got := conversation.TopLevelAgents(agents, conversation.Roots{CodexSessionsRoot: root})
+	if len(got) != 1 || got[0].SessionID != "parent-no-rollout" {
+		t.Errorf("got %+v, want the codex parent kept", got)
 	}
 }
 

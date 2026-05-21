@@ -24,8 +24,15 @@ func LocateRollout(sessionsRoot, sessionID string) (string, error) {
 	if sessionID == "" {
 		return "", nil
 	}
+	key := cacheKey{root: sessionsRoot, sessionID: sessionID}
+	if entry, ok := pkgCache.getRollout(key); ok {
+		return entry.Path, nil
+	}
 	if _, err := os.Stat(sessionsRoot); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			// codex isn't installed yet — cache the negative so the next
+			// TopLevelAgents tick doesn't replay this stat.
+			pkgCache.putRollout(key, rolloutEntry{Path: "", MetaRead: true})
 			return "", nil
 		}
 		return "", err
@@ -49,5 +56,8 @@ func LocateRollout(sessionsRoot, sessionID string) (string, error) {
 	if walkErr != nil {
 		return "", walkErr
 	}
+	// For a missing session (newest == ""), MetaRead=true short-circuits any
+	// subsequent ParentThreadID call too — no file to open.
+	pkgCache.putRollout(key, rolloutEntry{Path: newest, MetaRead: newest == ""})
 	return newest, nil
 }
