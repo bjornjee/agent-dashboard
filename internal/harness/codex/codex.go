@@ -13,7 +13,7 @@
 //
 // Plan-mode, permission-mode, and tool-use signaling come over codex's
 // native hook protocol (1:1 with Claude's; see internal/codex/ readers and
-// adapters/claude-code/scripts/hooks/*.js). The harness itself only
+// adapters/claude/scripts/hooks/*.js). The harness itself only
 // composes spawn strings.
 package codex
 

@@ -83,7 +83,7 @@ Start two tracks in parallel:
 - If neither file exists: the background agent is still running — wait for it to finish before proceeding.
 
 1. Run `make test` to establish a passing baseline.
-2. If tests fail, **stop and report**. Do not refactor on a broken codebase. Suggest using `/fix` first.
+2. If tests fail, **stop and report**. Do not refactor on a broken codebase. Suggest using `$agent-dashboard:fix` first.
 3. Record the test output as the regression baseline.
 
 **Gate:** All tests pass. The baseline is established.
@@ -127,9 +127,9 @@ Do not batch multiple changes between test runs. One change, one test run.
 1. Review all changes for correctness, security, and convention adherence.
 2. Verify that behavior is preserved — no new features, no bug fixes, only structural changes.
 3. Commit with a `refactor:` conventional commit message that describes what was restructured and why.
-4. Open the PR by invoking **`/agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+4. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
-**Gate:** Clean commit with conventional message. Behavior is unchanged. No critical or high-severity review issues. PR opened via `/agent-dashboard:pr`.
+**Gate:** Clean commit with conventional message. Behavior is unchanged. No critical or high-severity review issues. PR opened via `$agent-dashboard:pr`.
 
 ---
 

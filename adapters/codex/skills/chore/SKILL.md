@@ -31,7 +31,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 1. Parse the change description — what needs to change and why?
 2. Identify the affected files.
-3. Confirm this is a non-code change (config, docs, rules, CI, dependencies). If it involves application logic or tests, suggest `/feature` or `/fix` instead. If a rule or config change introduces new agent behavior, consider `/feature` for planning and review.
+3. Confirm this is a non-code change (config, docs, rules, CI, dependencies). If it involves application logic or tests, suggest `$agent-dashboard:feature` or `$agent-dashboard:fix` instead. If a rule or config change introduces new agent behavior, consider `$agent-dashboard:feature` for planning and review.
 
 **Gate:** The scope is clear and limited to non-code changes.
 
@@ -65,6 +65,6 @@ Review all changes for correctness and convention adherence. Apply all project r
    | `ci` | CI/CD pipeline changes |
    | `build` | Build system, Makefile changes |
 
-2. Open the PR by invoking **`/agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
-**Gate:** Clean commit with conventional message. PR opened via `/agent-dashboard:pr`.
+**Gate:** Clean commit with conventional message. PR opened via `$agent-dashboard:pr`.

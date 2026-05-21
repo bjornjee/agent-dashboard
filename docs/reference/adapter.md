@@ -14,7 +14,7 @@ Codex CLI state sync is installed through global Codex hooks instead of the mana
 
 ## How it works
 
-The adapter lives in `adapters/claude-code/` and consists of three components:
+The adapter lives in `adapters/claude/` and consists of three components:
 
 ### Hooks
 

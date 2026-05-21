@@ -50,7 +50,7 @@ describe('install version resolution', () => {
   it('version from plugin.json can be extracted by node', () => {
     const pluginJson = JSON.parse(
       fs.readFileSync(
-        path.join(REPO_DIR, 'adapters/claude-code/.claude-plugin/plugin.json'),
+        path.join(REPO_DIR, 'adapters/claude/.claude-plugin/plugin.json'),
         'utf8'
       )
     );

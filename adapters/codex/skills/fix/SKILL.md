@@ -147,9 +147,9 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 1. Review all changes for correctness, security, and convention adherence.
 2. Commit with a `fix:` conventional commit message that describes what was fixed and why.
-3. Open the PR by invoking **`/agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+3. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
-**Gate:** Clean commit with conventional message. No critical or high-severity review issues. PR opened via `/agent-dashboard:pr`.
+**Gate:** Clean commit with conventional message. No critical or high-severity review issues. PR opened via `$agent-dashboard:pr`.
 
 ---
 

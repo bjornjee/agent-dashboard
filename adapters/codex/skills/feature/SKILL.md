@@ -1,7 +1,7 @@
 ---
 name: feature
 description: Start a new feature in an isolated git worktree with TDD workflow
-when_to_use: when the user says "start a feature", "new feature", invokes "/agent-dashboard:feature", or describes work that needs an isolated branch + worktree + TDD loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use /chore, /fix, /investigate instead).
+when_to_use: when the user says "start a feature", "new feature", invokes "$agent-dashboard:feature", or describes work that needs an isolated branch + worktree + TDD loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use $agent-dashboard:chore, $agent-dashboard:fix, $agent-dashboard:investigate instead).
 version: 1.0.0
 disable-model-invocation: true
 effort: max
@@ -129,7 +129,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    No drafting the plan in assistant text until `EnterPlanMode` has been called and `permission_mode='plan'` is active.
    </HARD-GATE>
 
-   **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. Step 4 reads this format to offer the dispatch probe; `/implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
+   **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. Step 4 reads this format to offer the dispatch probe; `$agent-dashboard:implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
 
    ```markdown
    ## Phases
@@ -150,7 +150,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    Rules:
    - The `## Phases` block is the dispatch index. Phase names MUST match between checklist and `### Phase X:` headings (case-sensitive).
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
-   - `- [ ]` = pending. `- [x]` = done. `/implement` flips these as it dispatches.
+   - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
    - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
 
 4. **Submit via `ExitPlanMode`. Wait for user approval.** Pass the full plan markdown to the plan file (per CC's plan-mode workflow) and call `ExitPlanMode`. This renders the plan in CC's native plan-review UI for accept/reject.
@@ -164,7 +164,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
    **Post-approval actions** (immediately after the user accepts the plan, before Phase 3):
 
-   1. **Write the plan-path sentinel** (always). CC's plan-mode system prompt told you where the approved plan markdown lives (typically `~/.claude/plans/<slug>.md`). Record that path so `/implement` can find it:
+   1. **Write the plan-path sentinel** (always). CC's plan-mode system prompt told you where the approved plan markdown lives (typically `~/.claude/plans/<slug>.md`). Record that path so `$agent-dashboard:implement` can find it:
       ```bash
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
@@ -172,22 +172,22 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 (inline TDD).
 
    3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `AskUserQuestion` exactly once:
-      - Question: `"Plan has {N} phases. Continue inline here, or hand off to /implement for context isolation?"`
+      - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
         - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run RED → GREEN → REFACTOR per phase in order.
-        - `"Hand off to /implement"` — Exit /feature. The user invokes `/agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
+        - `"Hand off to $agent-dashboard:implement"` — Exit $agent-dashboard:feature. The user invokes `$agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
 
       **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
 
-      **If `Hand off to /implement`:** print the message below and exit cleanly. Do not start Phase 3.
+      **If `Hand off to $agent-dashboard:implement`:** print the message below and exit cleanly. Do not start Phase 3.
 
       ```
       Plan saved to <plan-path>.
       Worktree ready at <worktree-path>.
       To continue, run:
 
-          /agent-dashboard:implement
+          $agent-dashboard:implement
 
       (Recommended: open a fresh terminal session for max context isolation.)
       ```
@@ -233,9 +233,9 @@ Review all changes for correctness, security, and convention adherence. Apply al
 ### Phase 5: Deliver
 
 1. Commit the feature changes with a `feat:` conventional commit message.
-2. Open the PR by invoking **`/agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
-**Gate:** Clean commit history with conventional commit messages. PR opened via `/agent-dashboard:pr`.
+**Gate:** Clean commit history with conventional commit messages. PR opened via `$agent-dashboard:pr`.
 
 ---
 
@@ -263,7 +263,7 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.
 - "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
 - "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
-- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `/agent-dashboard:pr`.
+- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `$agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
 - "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason (context). Don't second-guess.
-- "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `/implement` and resume can't find the plan without it.
+- "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `$agent-dashboard:implement` and resume can't find the plan without it.

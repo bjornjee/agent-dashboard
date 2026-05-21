@@ -38,6 +38,15 @@ function relativeFiles(root) {
 }
 
 describe('codex plugin package', () => {
+  it('keeps adapters named by supported harness', () => {
+    const adapters = fs.readdirSync(path.join(REPO, 'adapters'), { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .sort();
+
+    assert.deepEqual(adapters, ['claude', 'codex']);
+  });
+
   it('publishes a Codex marketplace entry that points at the Codex adapter', () => {
     const marketplace = readJson(path.join(REPO, '.agents/plugins/marketplace.json'));
     const plugin = marketplace.plugins.find(entry => entry.name === 'agent-dashboard');
@@ -80,15 +89,27 @@ describe('codex plugin package', () => {
 
   it('packages the agent-dashboard skills inside the Codex plugin root', () => {
     const codexSkills = path.join(REPO, 'adapters/codex/skills');
-    const claudeSkills = path.join(REPO, 'adapters/claude-code/skills');
+    const claudeSkills = path.join(REPO, 'adapters/claude/skills');
 
     assert.deepEqual(skillNames(codexSkills), skillNames(claudeSkills));
-    for (const relativeFile of relativeFiles(claudeSkills)) {
-      assert.equal(
-        fs.readFileSync(path.join(codexSkills, relativeFile), 'utf8'),
-        fs.readFileSync(path.join(claudeSkills, relativeFile), 'utf8'),
-        `${relativeFile} should match the Claude skill source`,
-      );
+    assert.deepEqual(relativeFiles(codexSkills), relativeFiles(claudeSkills));
+  });
+
+  it('uses Codex skill references in Codex-packaged skill content', () => {
+    const codexSkills = path.join(REPO, 'adapters/codex/skills');
+    const skillReference = '(?:feature|fix|refactor|chore|implement|investigate|pr|rca)';
+    const agentDashboardSlash = new RegExp(`/agent-dashboard:${skillReference}\\b`);
+    const bareSlash = new RegExp(`(^|[^\\w$])/${skillReference}\\b`);
+
+    for (const relativeFile of relativeFiles(codexSkills)) {
+      const text = fs.readFileSync(path.join(codexSkills, relativeFile), 'utf8');
+      assert.doesNotMatch(text, agentDashboardSlash, `${relativeFile} should not use Claude agent-dashboard slash references`);
+      assert.doesNotMatch(text, bareSlash, `${relativeFile} should not use bare Claude slash references`);
     }
+
+    assert.match(
+      fs.readFileSync(path.join(codexSkills, 'feature/SKILL.md'), 'utf8'),
+      /\$agent-dashboard:feature\b/,
+    );
   });
 });

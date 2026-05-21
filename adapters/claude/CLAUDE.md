@@ -1,4 +1,4 @@
-# adapters/claude-code
+# adapters/claude
 
 ## Version bumping
 

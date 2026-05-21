@@ -30,7 +30,7 @@ agent-dashboard/
 │   ├── web/main.go                    # web server entry point
 │   └── populate-quotes/main.go        # bulk quote fetcher for SQLite cache
 ├── internal/                          # core packages (see below)
-├── adapters/claude-code/              # Claude Code plugin (see Adapter reference)
+├── adapters/claude/              # Claude Code plugin (see Adapter reference)
 ├── adapters/codex/hooks/              # Codex global hook bundle copied by install.sh
 └── schema/
     └── agent-state.schema.json        # JSON Schema for agent state files
