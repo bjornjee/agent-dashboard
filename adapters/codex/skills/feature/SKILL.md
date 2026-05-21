@@ -9,7 +9,7 @@ effort: max
 
 <codex_skill_must>
 1. `/plan` is the FIRST action in Phase 2 — before any `spawn_agent`, any `request_user_input`, any plan drafting. Nothing else in Phase 2 happens until `permission_mode='plan'` is active.
-2. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add ../worktrees/<app>/<name> -b feat/<name> main` standalone. Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
+2. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b feat/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
 3. Plan submission MUST use `<proposed_plan>...</proposed_plan>` tags. Plain assistant text is not a fallback.
 4. After plan approval, write the absolute plan path to `.feature-plan-path` BEFORE starting Phase 3.
 5. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (roles: `explorer`, `worker`), `update_plan`, `apply_patch`. Anything outside this list is a foreign-harness tool and forbidden in this skill.
@@ -37,9 +37,9 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    ```
    mkdir -p ../worktrees/<app>
    ```
-   Then run `git worktree add ../worktrees/<app>/<name> -b feat/<name> main` as its own `exec_command` tool call:
+   Then run `git worktree add -b feat/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call:
    ```
-   git worktree add ../worktrees/<app>/<name> -b feat/<name> main
+   git worktree add -b feat/<name> ../worktrees/<app>/<name> main
    ```
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
@@ -103,6 +103,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
    ```
    request_user_input({
      questions: [{
+       id: "focus_path",
        question: "Where should focus.json live?",
        header: "Focus path",
        options: [

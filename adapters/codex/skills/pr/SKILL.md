@@ -63,7 +63,7 @@ status` shows no unexpected tracked-file deletions.
 
 ### Phase 3: Refactor-cleaner pass on the branch diff
 
-1. Spawn the `refactor-cleaner` agent synchronously (do not background it) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
+1. Spawn the `refactor-cleaner` agent synchronously with Codex `spawn_agent`, using the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
 2. If the cleaner edited files:
    - Run `make test`. If it fails, fix the regression before continuing.
    - Commit: `git add -u && git commit -m "chore: ai-fmt"`.
@@ -78,9 +78,9 @@ status` shows no unexpected tracked-file deletions.
 Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 
 - **If the target exists:** run `make fmt`. Then check `git status --porcelain`. If anything changed, run `make test`, then commit with `git add -u && git commit -m "chore: fmt"`. If nothing changed, skip the commit.
-- **If no Makefile exists, or no `fmt` target:** surface this hint to the user, then proceed:
+- **If no Makefile exists, or no `fmt` target:** surface this hint to the user, then ask with `request_user_input` when available. If unavailable, ask one concise direct question with the same two choices:
 
-  > No `make fmt` target found in this repo. Recommend adding one — even a thin wrapper around the language-native formatter (`gofmt -w .`, `ruff format`, `prettier --write`, `cargo fmt`, etc.) is enough to make this gate work and keeps formatting deterministic across contributors. Want me to add it now? (Y/n)
+  > No `make fmt` target found in this repo. Recommend adding one — even a thin wrapper around the language-native formatter (`gofmt -w .`, `ruff format`, `prettier --write`, `cargo fmt`, etc.) is enough to make this gate work and keeps formatting deterministic across contributors.
 
   If the user says yes, add the target *before* opening the PR (a separate `chore: add make fmt target` commit). If no, proceed without formatting.
 
@@ -93,9 +93,9 @@ Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `test-fast` per the `test-gate` hook's preference order).
 
 - **If the target exists:** run it — must pass. If it fails, **stop**. Do not push a broken branch. Fix the failure (likely a separate `fix:` commit) and re-run.
-- **If no Makefile exists, or no `test`/`test-fast` target:** surface this hint to the user, then proceed:
+- **If no Makefile exists, or no `test`/`test-fast` target:** surface this hint to the user, then ask with `request_user_input` when available. If unavailable, ask one concise direct question with the same two choices:
 
-  > No `make test` target found in this repo. Recommend adding one (e.g. `test: ; <runner>`) so the PR gate can verify changes pass before opening the PR. Want me to add it now? (Y/n)
+  > No `make test` target found in this repo. Recommend adding one (e.g. `test: ; <runner>`) so the PR gate can verify changes pass before opening the PR.
 
   If yes, add it (separate `chore: add make test target` commit) and run it. If no, proceed but note in the PR body that tests were not gated.
 

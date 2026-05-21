@@ -6,7 +6,7 @@ effort: max
 ---
 
 <codex_skill_must>
-1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add ../worktrees/<app>/<name> -b refactor/<name> main` standalone. Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add`.
+1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b refactor/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add`.
 2. Establish a passing test baseline (`make test`) BEFORE touching code. If the baseline fails, halt — invoke `$agent-dashboard:fix` first.
 3. Refactor in atomic steps: one focused change, then `make test`, then repeat. One change per test run — never batch.
 4. Behavior is preserved. No new features, no bug fixes. If behavior changed you are in the wrong skill.
@@ -35,9 +35,9 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    ```
    mkdir -p ../worktrees/<app>
    ```
-   Then run `git worktree add ../worktrees/<app>/<name> -b refactor/<name> main` as its own `exec_command` tool call:
+   Then run `git worktree add -b refactor/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call:
    ```
-   git worktree add ../worktrees/<app>/<name> -b refactor/<name> main
+   git worktree add -b refactor/<name> ../worktrees/<app>/<name> main
    ```
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:

@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawnSync } = require('child_process');
 
 // Import the module under test
 const { resolveState, buildUpdate, detectHarness } = require('./agent-state-fast');
@@ -25,6 +26,12 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+function initGitRepo(dir, branch) {
+  fs.mkdirSync(dir, { recursive: true });
+  const init = spawnSync('git', ['init', '-b', branch], { cwd: dir, encoding: 'utf8' });
+  assert.equal(init.status, 0, init.stderr);
+}
 
 describe('resolveState', () => {
   it('returns "permission" for PermissionRequest', () => {
@@ -443,6 +450,30 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.worktree_cwd, '/abs/path/wt');
   });
 
+  it('codex shell git worktree add <abs-path>: stamps the explicit path', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'shell',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'shell',
+        tool_input: { command: 'git worktree add /abs/path/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.worktree_cwd, '/abs/path/wt');
+  });
+
   it('git worktree add -b <branch> <path>: skips the -b flag arg, stamps path', () => {
     const existing = {
       target: 'main:1.0',
@@ -465,6 +496,57 @@ describe('fast hook state updates (per-agent files)', () => {
 
     assert.equal(update.worktree_cwd, '/abs/path/wt',
       'must not stamp the -b branch name as the path');
+  });
+
+  it('git worktree add -b <branch> <path>: stamps branch with path', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/x /abs/path/wt main' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, '/abs/path/wt');
+    assert.equal(update.branch, 'feat/x');
+  });
+
+  it('preserves pinned worktree when filling a missing branch', () => {
+    const pinned = path.join(tmpDir, 'pinned-wt');
+    initGitRepo(pinned, 'feat/pinned');
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      worktree_cwd: pinned,
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/other /abs/path/wt main' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, undefined);
+    assert.equal(update.branch, 'feat/pinned');
   });
 
   it('git worktree add with relative path resolves against input.cwd', () => {
@@ -560,7 +642,7 @@ describe('fast hook state updates (per-agent files)', () => {
       'PreToolUse must not stamp — the worktree may not exist yet');
   });
 
-  it('git worktree add command on non-Bash tool does not stamp', () => {
+  it('git worktree add command on non-shell-command tool does not stamp', () => {
     const existing = {
       target: 'main:1.0',
       state: 'running',

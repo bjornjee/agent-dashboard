@@ -20,6 +20,7 @@ const { spawnSync } = require('child_process');
 
 const hookRoot = __dirname;
 const { readAgentState, writeState } = require(path.join(hookRoot, 'packages', 'agent-state'));
+const { getBranch } = require(path.join(hookRoot, 'packages', 'git-status'));
 const { getTarget, getPaneId } = require(path.join(hookRoot, 'packages', 'tmux'));
 const { readEffortConfig } = require('./effort-config');
 
@@ -149,23 +150,30 @@ function effortTransition(existingMode, newMode) {
   return null;
 }
 
-function detectWorktreeFromBash(input) {
+function detectWorktreeFromShell(input) {
   if (input.hook_event_name !== 'PostToolUse') return null;
-  if ((input.tool_name || '') !== 'Bash') return null;
+  if (!['Bash', 'shell'].includes(input.tool_name || '')) return null;
   const cmd = ((input.tool_input || {}).command || '').trim();
   const m = cmd.match(/^git\s+worktree\s+add\b(.*)$/);
   if (!m) return null;
   const tokens = m[1].trim().split(/\s+/).filter(Boolean);
   const flagsWithArg = new Set(['-b', '-B', '--reason']);
+  let branch = null;
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (flagsWithArg.has(t)) { i++; continue; }
+    if (flagsWithArg.has(t)) {
+      if ((t === '-b' || t === '-B') && tokens[i + 1]) {
+        branch = tokens[i + 1];
+      }
+      i++;
+      continue;
+    }
     if (t.startsWith('-')) continue;
     let candidate = t;
     if (!candidate.startsWith('/') && input.cwd) {
       candidate = path.resolve(input.cwd, candidate);
     }
-    return candidate;
+    return { path: candidate, branch };
   }
   return null;
 }
@@ -202,9 +210,15 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   const isMainWorktree = liveCwd
     && /\/worktrees\//.test(liveCwd)
     && !/\/\.claude\/worktrees\//.test(liveCwd);
-  const bashWorktree = detectWorktreeFromBash(input);
-  const worktreeCwd = (!existing.worktree_cwd && (bashWorktree || isMainWorktree))
-    ? (bashWorktree || liveCwd)
+  const shellWorktree = detectWorktreeFromShell(input);
+  const shellWorktreePath = shellWorktree && shellWorktree.path;
+  const worktreeCwd = (!existing.worktree_cwd && (shellWorktreePath || isMainWorktree))
+    ? (shellWorktreePath || liveCwd)
+    : null;
+  const worktreeBranch = !existing.branch
+    ? (existing.worktree_cwd
+      ? getBranch(existing.worktree_cwd)
+      : ((shellWorktree && shellWorktree.branch) || getBranch(worktreeCwd)))
     : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
@@ -266,6 +280,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
     || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
+    || !!worktreeBranch
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
@@ -289,6 +304,9 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 
   if (worktreeCwd) {
     update.worktree_cwd = worktreeCwd;
+  }
+  if (worktreeBranch) {
+    update.branch = worktreeBranch;
   }
 
   if (stampDelegatedPlanId) {

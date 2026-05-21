@@ -6,7 +6,7 @@ effort: max
 ---
 
 <codex_skill_must>
-1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add ../worktrees/<app>/<name> -b fix/<name> main` standalone. Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
+1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b fix/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
 2. Reproduce the bug with a FAILING test BEFORE diagnosing. Show the failing output (paste it) before changing any code.
 3. Fix only what is necessary to make the failing test pass. No drive-by cleanup, no refactors, no unrelated improvements.
 4. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (worker role for delegation), `apply_patch`. Anything outside this list is forbidden in this skill.
@@ -34,9 +34,9 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    ```
    mkdir -p ../worktrees/<app>
    ```
-   Then run `git worktree add ../worktrees/<app>/<name> -b fix/<name> main` as its own `exec_command` tool call:
+   Then run `git worktree add -b fix/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call:
    ```
-   git worktree add ../worktrees/<app>/<name> -b fix/<name> main
+   git worktree add -b fix/<name> ../worktrees/<app>/<name> main
    ```
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
