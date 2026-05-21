@@ -23,8 +23,16 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
 3. Switch to main: `git checkout main`
 4. Pull latest: `git pull origin main`
-5. Create branch `feat/<name>` and worktree `../worktrees/<app>/<name>` from main:
-   `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b feat/<name> main`
+5. Create branch `feat/<name>` and worktree `../worktrees/<app>/<name>` from main. Run **two separate `exec_command` tool calls** — do not chain them with `&&`. The dashboard's PostToolUse hook only stamps `worktree_cwd` + `branch` when the command starts with `git worktree add`; a compound `mkdir … && git worktree add …` slips past the regex and leaves the dashboard unable to pin dir or branch.
+
+   First, ensure the parent directory exists:
+   ```
+   mkdir -p ../worktrees/<app>
+   ```
+   Then run `git worktree add ../worktrees/<app>/<name> -b feat/<name> main` as its own `exec_command` tool call:
+   ```
+   git worktree add ../worktrees/<app>/<name> -b feat/<name> main
+   ```
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
      `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
@@ -48,7 +56,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
+**Background — Environment setup:** Launch a background `exec_command` to set up the dev environment. It must:
 
 1. Auto-detect project type from project files (highest match wins):
 
@@ -69,9 +77,17 @@ Start two tracks in parallel:
 
 **Foreground — Planning:**
 
-Phase order: research first, interview second, plan mode third, submit fourth. Plan mode is the *last* gate before approval, not a pre-research speed-bump. Each step has a HARD-GATE you cannot rationalize past.
+Phase order: Plan Mode first, then research, then interview, then submit. Plan Mode is the *entry* gate to Phase 2 — nothing else in this phase happens outside it. Each step has a HARD-GATE you cannot rationalize past.
 
-1. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for any non-trivial codebase question or library lookup. Do not delegate planning — composing the plan is your job, not a subagent's. Synthesize what you found inline as your own assistant text.
+1. **Enter Codex Plan Mode via `/plan` immediately.** Before any research, before any user interview, before any drafting — flip the session into Plan Mode. Codex Plan Mode is the high-reasoning planning surface and the visible signal to the dashboard that this work is gated on user approval. Phase 2 is a Plan-Mode-only phase.
+
+   **Why first:** entering Plan Mode after research and interview defeats the purpose. It must be active *while* you research and interview so the entire planning effort runs under the high-reasoning, read-only surface the user expects.
+
+   <HARD-GATE>
+   No `spawn_agent`, no `request_user_input`, no plan drafting until `/plan` has been called and Plan Mode is active. Plan Mode is not a closing ceremony — it's the entry point.
+   </HARD-GATE>
+
+2. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for any non-trivial codebase question or library lookup. Do not delegate planning — composing the plan is your job, not a subagent's. Synthesize what you found inline as your own assistant text.
 
    **Why:** a delegated planning subagent returns the plan as a tool result, not as the visible plan artifact the user approves. Synthesizing inline puts the plan in your assistant text and keeps the approval surface honest.
 
@@ -86,7 +102,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
    Do not wait for environment setup to finish.
 
-2. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. In Plan Mode, ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
+3. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. In Plan Mode (already active from step 1), ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
 
    If `request_user_input` is unavailable in the current mode, ask one concise direct question in assistant text. That fallback is for tool unavailability only, not convenience.
 
@@ -118,17 +134,11 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    The plan is not ready for review until every decision it gates is answered.
    </HARD-GATE>
 
-3. **Enter Codex Plan Mode via `/plan`, then draft the plan inline.** Now that research is done and decisions are resolved, use `/plan` / Plan Mode. This puts the session in the official planning surface while you write the plan as your own assistant text.
-
-   **Why this order:** drafting inside Plan Mode pairs the visible mode-flip with the actual planning work, and `<proposed_plan>` (step 4) is the review artifact the user approves.
+4. **Draft inline, then submit via `<proposed_plan>`. Wait for user approval.** Plan Mode is already active (step 1); draft the plan as your own assistant text and then wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject.
 
    Caveat: `update_plan` is a progress checklist tool, not a planning-mode substitute. Use it after approval to track implementation progress; do not use it to bypass Plan Mode.
 
-   <HARD-GATE>
-   No drafting the plan in assistant text until `/plan` / Plan Mode is active.
-   </HARD-GATE>
-
-   **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. Step 4 reads this format to offer the dispatch probe; `$agent-dashboard:implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
+   **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. The post-approval probe reads this format to offer dispatch; `$agent-dashboard:implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
 
    ```markdown
    ## Phases
@@ -151,8 +161,6 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
    - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
    - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
-
-4. **Submit via `<proposed_plan>`. Wait for user approval.** Wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject.
 
    **`<proposed_plan>` is the only acceptable submission.** Pasting the plan as ordinary assistant text is a violation, even if you also update a checklist afterwards. The user reviews and approves through the plan-review UI — nowhere else.
 
@@ -254,9 +262,9 @@ Triggered when the user indicates the feature has been merged upstream.
 If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
 
 - "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
-- "I'll delegate the plan to a planning subagent" → Phase 2 step 1 violation. Research with `explorer`; plan inline. The dashboard can't surface delegated plans as the approved artifact.
-- "I'll just type the questions as numbered text" → Phase 2 step 2 violation when `request_user_input` is available. That tool exists for exactly this. Use it.
-- "I'll skip `/plan`, Plan Mode is overhead" → Phase 2 step 3 violation. After research and the `request_user_input` interview, you enter Plan Mode to draft the plan, then submit `<proposed_plan>` for approval. The visible planning ceremony is the point.
+- "I'll start research first and enter Plan Mode later" → Phase 2 step 1 violation. `/plan` is the *first* action in Phase 2, before any `spawn_agent` or `request_user_input`. The whole planning effort runs inside Plan Mode.
+- "I'll delegate the plan to a planning subagent" → Phase 2 step 2 violation. Research with `explorer`; plan inline. The dashboard can't surface delegated plans as the approved artifact.
+- "I'll just type the questions as numbered text" → Phase 2 step 3 violation when `request_user_input` is available. That tool exists for exactly this. Use it.
 - "I'll just paste the plan as text instead of using `<proposed_plan>`" → Phase 2 step 4 violation. `<proposed_plan>` is the only acceptable submission. Pasting in assistant text is not a fallback.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.

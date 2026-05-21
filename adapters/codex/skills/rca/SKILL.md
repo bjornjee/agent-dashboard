@@ -131,10 +131,10 @@ For each Claude Code session active during the incident window:
    - `signal`, `SIGKILL`, `SIGTERM` (signal sending)
    - Any command referencing the crashed process
 
-3. **Extract subagent launches** — check for Agent tool calls, especially background agents:
+3. **Extract subagent launches** — check for subagent tool calls (Claude `Agent` or Codex `spawn_agent`), especially background ones:
    ```python
-   # Same pattern but filter for block.get('name') == 'Agent'
-   # Check run_in_background, prompt content
+   # Same pattern but filter for block.get('name') in {'Agent', 'spawn_agent'}
+   # Check the background flag and prompt content
    ```
 
 4. **Identify the LAST command before the crash** — cross-reference the session's final tool call timestamp with the system log timestamps from Phase 2.

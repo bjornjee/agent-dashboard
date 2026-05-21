@@ -121,6 +121,7 @@ describe('codex plugin package', () => {
       ['AskUserQuestion', /\bAskUserQuestion\b/],
       ['Agent() subagent calls', /\bAgent\s*\(/],
       ['dangerouslyDisableSandbox', /\bdangerouslyDisableSandbox\b/],
+      ['Claude Agent run_in_background argument', /\brun_in_background\b/],
       ['Claude plan directory', /~\/\.claude\/plans/],
       ['Claude Code plan approval', /\bCC'?s plan-mode|\bClaude Code\b.*\bplan\b/i],
       ['codex-delegate slash command', /\/codex-delegate\b/],
@@ -146,5 +147,41 @@ describe('codex plugin package', () => {
     assert.match(feature, /\.feature-plan-path/);
     assert.match(implement, /\bspawn_agent\b/);
     assert.match(implement, /\bworker\b/);
+  });
+
+  it('forces Codex feature planning before interview or plan drafting', () => {
+    const feature = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/feature/SKILL.md'), 'utf8');
+    const phase2 = feature.slice(feature.indexOf('### Phase 2: Plan'));
+
+    const planMode = phase2.indexOf('Enter Codex Plan Mode');
+    const research = phase2.indexOf('Research');
+    const interview = phase2.indexOf('request_user_input');
+
+    assert.notEqual(planMode, -1, 'feature skill must explicitly enter Codex Plan Mode');
+    assert.ok(planMode < research, 'Plan Mode must be active before research');
+    assert.ok(planMode < interview, 'Plan Mode must be active before request_user_input');
+    assert.doesNotMatch(phase2, /research first, interview second, plan mode third/i);
+  });
+
+  it('keeps Codex worktree setup stampable by dashboard hooks', () => {
+    for (const skillName of ['feature', 'fix', 'refactor']) {
+      const text = fs.readFileSync(path.join(REPO, `adapters/codex/skills/${skillName}/SKILL.md`), 'utf8');
+
+      assert.doesNotMatch(
+        text,
+        /mkdir -p[^\n]+&&\s*git worktree add/,
+        `${skillName} must not hide git worktree add behind a chained shell command`,
+      );
+      assert.match(
+        text,
+        /git worktree add[^\n]+as its own `exec_command` tool call/,
+        `${skillName} must require standalone git worktree add so hooks can pin the worktree`,
+      );
+      assert.match(
+        text,
+        /stamp-worktree\.js/,
+        `${skillName} must still run the explicit stamp helper after creating the worktree`,
+      );
+    }
   });
 });

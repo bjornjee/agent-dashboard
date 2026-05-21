@@ -63,7 +63,7 @@ status` shows no unexpected tracked-file deletions.
 
 ### Phase 3: Refactor-cleaner pass on the branch diff
 
-1. Spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
+1. Spawn the `refactor-cleaner` agent synchronously (do not background it) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
 2. If the cleaner edited files:
    - Run `make test`. If it fails, fix the regression before continuing.
    - Commit: `git add -u && git commit -m "chore: ai-fmt"`.

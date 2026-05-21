@@ -157,15 +157,22 @@ function detectWorktreeFromBash(input) {
   if (!m) return null;
   const tokens = m[1].trim().split(/\s+/).filter(Boolean);
   const flagsWithArg = new Set(['-b', '-B', '--reason']);
+  let branch = null;
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (flagsWithArg.has(t)) { i++; continue; }
+    if (flagsWithArg.has(t)) {
+      if ((t === '-b' || t === '-B') && tokens[i + 1]) {
+        branch = tokens[i + 1];
+      }
+      i++;
+      continue;
+    }
     if (t.startsWith('-')) continue;
     let candidate = t;
     if (!candidate.startsWith('/') && input.cwd) {
       candidate = path.resolve(input.cwd, candidate);
     }
-    return candidate;
+    return { path: candidate, branch };
   }
   return null;
 }
@@ -203,8 +210,12 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     && /\/worktrees\//.test(liveCwd)
     && !/\/\.claude\/worktrees\//.test(liveCwd);
   const bashWorktree = detectWorktreeFromBash(input);
-  const worktreeCwd = (!existing.worktree_cwd && (bashWorktree || isMainWorktree))
-    ? (bashWorktree || liveCwd)
+  const bashWorktreePath = bashWorktree && bashWorktree.path;
+  const worktreeCwd = (!existing.worktree_cwd && (bashWorktreePath || isMainWorktree))
+    ? (bashWorktreePath || liveCwd)
+    : null;
+  const worktreeBranch = (!existing.branch && bashWorktree && bashWorktree.branch)
+    ? bashWorktree.branch
     : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
@@ -266,6 +277,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
     || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
+    || !!worktreeBranch
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
@@ -289,6 +301,9 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 
   if (worktreeCwd) {
     update.worktree_cwd = worktreeCwd;
+  }
+  if (worktreeBranch) {
+    update.branch = worktreeBranch;
   }
 
   if (stampDelegatedPlanId) {
