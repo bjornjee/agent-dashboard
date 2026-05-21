@@ -112,4 +112,39 @@ describe('codex plugin package', () => {
       /\$agent-dashboard:feature\b/,
     );
   });
+
+  it('does not publish Claude-only workflow primitives in Codex skill content', () => {
+    const codexSkills = path.join(REPO, 'adapters/codex/skills');
+    const forbidden = [
+      ['EnterPlanMode', /\bEnterPlanMode\b/],
+      ['ExitPlanMode', /\bExitPlanMode\b/],
+      ['AskUserQuestion', /\bAskUserQuestion\b/],
+      ['Agent() subagent calls', /\bAgent\s*\(/],
+      ['dangerouslyDisableSandbox', /\bdangerouslyDisableSandbox\b/],
+      ['Claude plan directory', /~\/\.claude\/plans/],
+      ['Claude Code plan approval', /\bCC'?s plan-mode|\bClaude Code\b.*\bplan\b/i],
+      ['codex-delegate slash command', /\/codex-delegate\b/],
+      ['codex setup slash command', /\/codex:setup\b/],
+    ];
+
+    for (const relativeFile of relativeFiles(codexSkills)) {
+      const text = fs.readFileSync(path.join(codexSkills, relativeFile), 'utf8');
+      for (const [label, pattern] of forbidden) {
+        assert.doesNotMatch(text, pattern, `${relativeFile} should not use ${label}`);
+      }
+    }
+  });
+
+  it('documents Codex-native planning and delegation primitives', () => {
+    const feature = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/feature/SKILL.md'), 'utf8');
+    const implement = fs.readFileSync(path.join(REPO, 'adapters/codex/skills/implement/SKILL.md'), 'utf8');
+
+    assert.match(feature, /\/plan\b/);
+    assert.match(feature, /<proposed_plan>[\s\S]*<\/proposed_plan>/);
+    assert.match(feature, /\brequest_user_input\b/);
+    assert.match(feature, /\brequire_escalated\b/);
+    assert.match(feature, /\.feature-plan-path/);
+    assert.match(implement, /\bspawn_agent\b/);
+    assert.match(implement, /\bworker\b/);
+  });
 });

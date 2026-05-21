@@ -27,7 +27,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b feat/<name> main`
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
-     `node "$CLAUDE_PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
+     `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
 6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
    - Find all env files recursively: `find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'`
    - For each file found, recreate its directory structure in the worktree and copy it. For example:
@@ -36,7 +36,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
      - `./infra/.env.production` → `../worktrees/<app>/<name>/infra/.env.production`
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-   - **Important:** All Bash tool calls in this step must set `dangerouslyDisableSandbox: true` because they write outside the project root.
+   - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
 7. cd into the worktree and confirm with `pwd` and `git branch --show-current`
 8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
@@ -71,34 +71,33 @@ Start two tracks in parallel:
 
 Phase order: research first, interview second, plan mode third, submit fourth. Plan mode is the *last* gate before approval, not a pre-research speed-bump. Each step has a HARD-GATE you cannot rationalize past.
 
-1. **Research with `Explore`.** Use the built-in `Explore` subagent for any non-trivial codebase question or library lookup. Do not call `Agent` with `subagent_type=Plan` — composing the plan is your job, not a delegated subagent's. Synthesize what you found inline as your own assistant text.
+1. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for any non-trivial codebase question or library lookup. Do not delegate planning — composing the plan is your job, not a subagent's. Synthesize what you found inline as your own assistant text.
 
-   **Why:** a delegated Plan subagent returns the plan inside a `tool_result` block that lives in the JSONL but never reaches the dashboard's plan panel, conversation view, or activity log. Synthesizing inline puts the plan in your assistant text, which the dashboard renders everywhere.
+   **Why:** a delegated planning subagent returns the plan as a tool result, not as the visible plan artifact the user approves. Synthesizing inline puts the plan in your assistant text and keeps the approval surface honest.
 
    Symptoms you're about to violate:
-   - You're about to call `Agent` with `subagent_type: "Plan"`.
+   - You're about to dispatch a worker or planner to compose the plan.
    - You're rationalizing *"the planner does this better."*
 
    <HARD-GATE>
-   Research subagent (`Explore`): allowed and encouraged.
-   Planning subagent (`Plan`): forbidden in this skill. Compose the plan yourself.
+   Research subagent (`explorer`): allowed and encouraged.
+   Planning subagent: forbidden in this skill. Compose the plan yourself.
    </HARD-GATE>
 
    Do not wait for environment setup to finish.
 
-2. **Interview the user via `AskUserQuestion`.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `AskUserQuestion` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
+2. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. In Plan Mode, ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
 
-   Load via `ToolSearch` if `AskUserQuestion` isn't in scope: `ToolSearch("select:AskUserQuestion")`.
+   If `request_user_input` is unavailable in the current mode, ask one concise direct question in assistant text. That fallback is for tool unavailability only, not convenience.
 
-   Schema: 1–4 questions per call, each with a `header` (≤12 chars), 2–4 mutually exclusive `options`, `multiSelect: false` unless the choices genuinely combine. Recommended option goes first with `(Recommended)` suffix. The user always gets an "Other" escape hatch automatically.
+   Schema: 1–3 questions per call, each with a `header` (≤12 chars), 2–3 mutually exclusive `options`. Recommended option goes first with `(Recommended)` suffix. The client adds an "Other" escape hatch automatically.
 
    Worked example:
    ```
-   AskUserQuestion({
+   request_user_input({
      questions: [{
        question: "Where should focus.json live?",
        header: "Focus path",
-       multiSelect: false,
        options: [
          {label: "~/.agent-dashboard/focus.json (Recommended)", description: "Co-located with agents/ state dir already watched."},
          {label: "$XDG_RUNTIME_DIR/agent-dashboard/focus.json", description: "Tmpfs-backed, cleared on reboot."},
@@ -115,18 +114,18 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    - You're rationalizing "the user can answer these after approval."
 
    <HARD-GATE>
-   Freeform numbered questions in assistant text are a violation. If you find yourself typing "1." "2." "3." to ask the user something — STOP, call `AskUserQuestion` instead.
+   Freeform numbered questions in assistant text are a violation when `request_user_input` is available. If you find yourself typing "1." "2." "3." to ask the user something — STOP, call `request_user_input` instead.
    The plan is not ready for review until every decision it gates is answered.
    </HARD-GATE>
 
-3. **Enter plan mode via `EnterPlanMode`, then draft the plan inline.** Now that research is done and decisions are resolved, call `EnterPlanMode` (load via `ToolSearch` if not in scope). This flips the parent's `permission_mode='plan'` and restricts you to read-only tools while you write the plan as your own assistant text.
+3. **Enter Codex Plan Mode via `/plan`, then draft the plan inline.** Now that research is done and decisions are resolved, use `/plan` / Plan Mode. This puts the session in the official planning surface while you write the plan as your own assistant text.
 
-   **Why this order:** drafting inside plan mode pairs the visible mode-flip with the actual planning work, and `EnterPlanMode` is a load-bearing prerequisite for `ExitPlanMode` (step 4) — which is the only path to user approval.
+   **Why this order:** drafting inside Plan Mode pairs the visible mode-flip with the actual planning work, and `<proposed_plan>` (step 4) is the review artifact the user approves.
 
-   Caveat: on approval (step 4), CC drops to its default `permission_mode`, not back to `bypassPermissions`. Subsequent edits in Phase 3 will re-prompt unless the user re-enables bypass. Accepted trade-off — visible planning is worth the one-time mode reset.
+   Caveat: `update_plan` is a progress checklist tool, not a planning-mode substitute. Use it after approval to track implementation progress; do not use it to bypass Plan Mode.
 
    <HARD-GATE>
-   No drafting the plan in assistant text until `EnterPlanMode` has been called and `permission_mode='plan'` is active.
+   No drafting the plan in assistant text until `/plan` / Plan Mode is active.
    </HARD-GATE>
 
    **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. Step 4 reads this format to offer the dispatch probe; `$agent-dashboard:implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
@@ -153,25 +152,25 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
    - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
 
-4. **Submit via `ExitPlanMode`. Wait for user approval.** Pass the full plan markdown to the plan file (per CC's plan-mode workflow) and call `ExitPlanMode`. This renders the plan in CC's native plan-review UI for accept/reject.
+4. **Submit via `<proposed_plan>`. Wait for user approval.** Wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject.
 
-   **`ExitPlanMode` is the only acceptable submission.** Pasting the plan as assistant text is a violation, even if you also call `ExitPlanMode` afterwards. The user reviews and approves through the plan-review UI — nowhere else.
+   **`<proposed_plan>` is the only acceptable submission.** Pasting the plan as ordinary assistant text is a violation, even if you also update a checklist afterwards. The user reviews and approves through the plan-review UI — nowhere else.
 
    **No exceptions:**
    - Don't start a "small" preparatory edit while waiting.
    - Don't write the test file "to save time".
-   - Don't ask "should I proceed?" in assistant text — the plan-mode UI's accept action is the approval.
+   - Don't ask "should I proceed?" in assistant text — the plan-review UI's accept action is the approval.
 
    **Post-approval actions** (immediately after the user accepts the plan, before Phase 3):
 
-   1. **Write the plan-path sentinel** (always). CC's plan-mode system prompt told you where the approved plan markdown lives (typically `~/.claude/plans/<slug>.md`). Record that path so `$agent-dashboard:implement` can find it:
+   1. **Write the plan-path sentinel** (always). Save the approved plan markdown to a worktree-local file and record that absolute path so `$agent-dashboard:implement` can find it:
       ```bash
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
    2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 (inline TDD).
 
-   3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `AskUserQuestion` exactly once:
+   3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question:
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
@@ -203,9 +202,9 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 - If `.env-setup-failed` exists: surface the error and halt.
 - If neither file exists: the background agent is still running — wait for it to finish before proceeding.
 
-**Effort note:** When launched via the agent-dashboard's New Agent flow, this skill spawns with `--effort high` on the CLI, which Claude Code pins at the session level. The dynamic dispatcher in agent-state-fast.js bumps effort to `max` automatically while `permission_mode='plan'` (EnterPlanMode active) and drops back to `high` on exit — so planning runs at max effort without paying that cost during implementation. When invoked as a slash command inside an existing claude session, you can run `/effort max` before entering plan mode and `/effort high` (or lower) before implementation.
+**Effort note:** When launched via the agent-dashboard's New Agent flow, this skill starts at implementation effort. Codex Plan Mode is the high-reasoning planning surface; once the approved plan is accepted, use `update_plan` for progress tracking and keep implementation effort proportional to the work.
 
-**Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
+**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than implementing directly. If delegating, use `$agent-dashboard:implement` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
 Build the feature following strict RED → GREEN → REFACTOR:
 
@@ -255,10 +254,10 @@ Triggered when the user indicates the feature has been merged upstream.
 If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
 
 - "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
-- "I'll delegate the plan to a Plan subagent" → Phase 2 step 1 violation. Research with `Explore`; plan inline. The dashboard can't surface delegated plans.
-- "I'll just type the questions as numbered text" → Phase 2 step 2 violation. `AskUserQuestion` exists for exactly this. Load via `ToolSearch` and call it.
-- "I'll skip `EnterPlanMode`, plan mode resets `bypassPermissions`" → Phase 2 step 3 violation. After research and the `AskUserQuestion` interview, you call `EnterPlanMode` to draft the plan inside plan mode, then `ExitPlanMode` to submit. The reset to default `permission_mode` is the accepted cost.
-- "I'll just paste the plan as text instead of calling `ExitPlanMode`" → Phase 2 step 4 violation. `ExitPlanMode` is the only acceptable submission. Pasting in assistant text is not a fallback.
+- "I'll delegate the plan to a planning subagent" → Phase 2 step 1 violation. Research with `explorer`; plan inline. The dashboard can't surface delegated plans as the approved artifact.
+- "I'll just type the questions as numbered text" → Phase 2 step 2 violation when `request_user_input` is available. That tool exists for exactly this. Use it.
+- "I'll skip `/plan`, Plan Mode is overhead" → Phase 2 step 3 violation. After research and the `request_user_input` interview, you enter Plan Mode to draft the plan, then submit `<proposed_plan>` for approval. The visible planning ceremony is the point.
+- "I'll just paste the plan as text instead of using `<proposed_plan>`" → Phase 2 step 4 violation. `<proposed_plan>` is the only acceptable submission. Pasting in assistant text is not a fallback.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
 - "Tests pass on my reading of the code" → didn't run `make test`. Run it.
 - "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.

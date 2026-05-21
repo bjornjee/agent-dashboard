@@ -9,6 +9,7 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, 'stamp-worktree.js');
+const PLUGIN_ROOT = path.resolve(__dirname, '..');
 
 let tmpDir;
 let agentsDir;
@@ -34,15 +35,23 @@ function run(args, env = {}) {
   });
 }
 
+function initGitRepo(dir, branch) {
+  fs.mkdirSync(dir, { recursive: true });
+  const init = spawnSync('git', ['init', '-b', branch], { cwd: dir, encoding: 'utf8' });
+  assert.equal(init.status, 0, init.stderr);
+}
+
 describe('stamp-worktree.js (codex)', () => {
   it('writes worktree_cwd when agent state is empty', () => {
     const sessionId = 'sess-1';
     const wt = path.join(tmpDir, 'wt');
-    fs.mkdirSync(wt);
+    initGitRepo(wt, 'feat/pinned');
     const r = run([wt], { CLAUDE_SESSION_ID: sessionId });
     assert.equal(r.status, 0, r.stderr);
     const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
     assert.equal(written.worktree_cwd, wt);
+    assert.equal(written.cwd, wt);
+    assert.equal(written.branch, 'feat/pinned');
   });
 
   it('preserves existing worktree_cwd (first-write-wins)', () => {
@@ -88,5 +97,17 @@ describe('stamp-worktree.js (codex)', () => {
     assert.equal(r.status, 0, r.stderr);
     const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
     assert.equal(written.worktree_cwd, '/tmp/y');
+  });
+
+  it('resolves bundled packages when plugin env vars point at the Codex plugin root', () => {
+    const sessionId = 'sess-7';
+    const r = run(['/tmp/z'], {
+      CLAUDE_CODE_SESSION_ID: sessionId,
+      CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+      PLUGIN_ROOT,
+    });
+    assert.equal(r.status, 0, r.stderr);
+    const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
+    assert.equal(written.worktree_cwd, '/tmp/z');
   });
 });

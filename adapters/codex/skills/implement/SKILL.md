@@ -8,7 +8,7 @@ effort: max
 
 Run the dispatch loop on a worktree with an approved multi-phase plan.
 
-Opt-in. Invoked after `$agent-dashboard:feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to $agent-dashboard:implement". Each phase dispatches to a fresh `Agent()` subagent, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
+Opt-in. Invoked after `$agent-dashboard:feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to $agent-dashboard:implement". Each phase dispatches to a fresh Codex `worker` via `spawn_agent`, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
 
 ## Instructions
 
@@ -26,8 +26,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    ```
 
 3. **Fallback if the sentinel is missing** (older `$agent-dashboard:feature` run, or deleted):
-   - `ls -lt ~/.claude/plans/*.md | head -5`
-   - Show the top 3 candidates via `AskUserQuestion`, including the current branch name in the prompt for context. User picks one or "Other" to type a path.
+   - Search the worktree for approved plan markdown files such as `.feature-plan.md` or `plans/*.md`.
+   - Show the top 3 candidates via `request_user_input` when available, including the current branch name in the prompt for context. User picks one or "Other" to type a path. If `request_user_input` is unavailable, ask one concise direct question.
 
 4. **Wait for env setup.** Check the worktree root for the env sentinels:
    - `.env-setup-done` → proceed.
@@ -52,19 +52,18 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
-6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Do not set `model`; the dashboard controls model selection at session level:
+6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Use Codex `spawn_agent` with the `worker` role. Do not set `model`; the dashboard controls model selection at session level:
    ```
-   Agent({
-     description: "Phase X dispatch",
-     subagent_type: "general-purpose",
-     prompt: <subagent prompt template, see below>,
+   spawn_agent({
+     agent_type: "worker",
+     message: <subagent prompt template, see below>,
    })
    ```
 
 7. **Verify** when the subagent returns:
    - `make test` in the worktree → must pass. On failure, surface output verbatim.
    - `git log --oneline <prev-sha>..HEAD` → must show exactly one new commit. Zero: subagent didn't commit; halt. Multiple: surface and ask the user to inspect.
-   - On any failure, call `AskUserQuestion` with options `["Retry the phase", "Skip and mark done anyway", "Abort the loop"]`.
+   - On any failure, call `request_user_input` when available with options `["Retry the phase", "Skip and mark done anyway", "Abort the loop"]`. If unavailable, ask one concise direct question with those choices.
 
 8. **Mark done.** Edit the plan: flip the matching `- [ ]` → `- [x]`, append the short commit SHA in parens. **Only** the checklist line — don't touch the `### Phase X:` body.
    ```
