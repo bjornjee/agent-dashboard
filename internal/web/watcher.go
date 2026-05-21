@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -113,5 +114,8 @@ func (s *Server) readAgentState() []domain.Agent {
 	state.ResolveAgentBranches(&sf, paneCwds)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
-	return state.SortedAgents(sf, "")
+	return conversation.TopLevelAgents(
+		state.SortedAgents(sf, ""),
+		conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
+	)
 }

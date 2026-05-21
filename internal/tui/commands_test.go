@@ -272,6 +272,92 @@ func TestContainsTrustPrompt_Negative(t *testing.T) {
 	}
 }
 
+func TestLoadAllSubagents_RoutesCodexAgentToRolloutDiscovery(t *testing.T) {
+	root := t.TempDir()
+	parentID := "parent-codex"
+	childID := "child-codex"
+	writeTUIRollout(t, root, childID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_nickname":"Nietzsche","agent_role":"explorer"}}},"thread_source":"subagent","agent_nickname":"Nietzsche","agent_role":"explorer"}}
+`)
+
+	m := model{
+		agents: []domain.Agent{{
+			Target:    "main:1.0",
+			SessionID: parentID,
+			Harness:   "codex",
+		}},
+		codexSessionsDir: root,
+	}
+
+	cmds := m.loadAllSubagents()
+	if len(cmds) != 1 {
+		t.Fatalf("got %d cmds, want 1", len(cmds))
+	}
+	msg, ok := cmds[0]().(subagentsMsg)
+	if !ok {
+		t.Fatalf("got %T, want subagentsMsg", cmds[0]())
+	}
+	if msg.parentTarget != "main:1.0" {
+		t.Errorf("parentTarget = %q, want main:1.0", msg.parentTarget)
+	}
+	if len(msg.agents) != 1 {
+		t.Fatalf("got %d subagents, want 1: %+v", len(msg.agents), msg.agents)
+	}
+	if msg.agents[0].AgentID != childID {
+		t.Errorf("AgentID = %q, want %q", msg.agents[0].AgentID, childID)
+	}
+}
+
+func TestLoadSubagentActivity_RoutesCodexSubagentToRollout(t *testing.T) {
+	root := t.TempDir()
+	childID := "child-codex"
+	writeTUIRollout(t, root, childID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z"}}
+{"timestamp":"2026-05-21T14:45:00.000Z","type":"event_msg","payload":{"type":"agent_message","message":"child result"}}
+`)
+
+	m := model{
+		agents: []domain.Agent{{
+			Target:    "main:1.0",
+			SessionID: "parent-codex",
+			Harness:   "codex",
+		}},
+		agentSubagents: map[string][]domain.SubagentInfo{
+			"main:1.0": {{AgentID: childID}},
+		},
+		codexSessionsDir: root,
+	}
+	m.buildTree()
+	m.selected = 2
+
+	cmd := m.loadSubagentActivity()
+	if cmd == nil {
+		t.Fatal("loadSubagentActivity returned nil, want activity command")
+	}
+	msg, ok := cmd().(activityMsg)
+	if !ok {
+		t.Fatalf("got %T, want activityMsg", cmd())
+	}
+	if len(msg.entries) != 1 {
+		t.Fatalf("got %d activity entries, want 1: %+v", len(msg.entries), msg.entries)
+	}
+	if msg.entries[0].Kind != "assistant" || msg.entries[0].Content != "child result" {
+		t.Errorf("entry = %+v, want assistant child result", msg.entries[0])
+	}
+}
+
+func writeTUIRollout(t *testing.T, root, sessionID, contents string) string {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "21")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir rollout dir: %v", err)
+	}
+	path := filepath.Join(dir, "rollout-2026-05-21T00-00-00-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("write rollout: %v", err)
+	}
+	return path
+}
+
 // --- postMergeCleanup tests ---
 //
 // The cleanup pipeline must:

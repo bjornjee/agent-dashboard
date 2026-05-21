@@ -1,6 +1,7 @@
 package conversation_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,4 +70,89 @@ func TestRead_EmptyHarnessDefaultsToClaude(t *testing.T) {
 	if len(got) != 0 {
 		t.Errorf("got %d, want 0", len(got))
 	}
+}
+
+func TestReadSubagents_RoutesCodexAgentToRolloutDiscovery(t *testing.T) {
+	root := t.TempDir()
+	parentID := "parent-codex"
+	childID := "child-codex"
+	writeCodexRollout(t, root, childID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_nickname":"Nietzsche","agent_role":"explorer"}}},"thread_source":"subagent","agent_nickname":"Nietzsche","agent_role":"explorer"}}
+`)
+
+	agent := domain.Agent{SessionID: parentID, Harness: "codex"}
+	got := conversation.ReadSubagents(agent, conversation.Roots{CodexSessionsRoot: root})
+
+	if len(got) != 1 {
+		t.Fatalf("got %d subagents, want 1: %+v", len(got), got)
+	}
+	if got[0].AgentID != childID {
+		t.Errorf("AgentID = %q, want %q", got[0].AgentID, childID)
+	}
+}
+
+func TestReadSubagents_RoutesClaudeAgentToProjectDiscovery(t *testing.T) {
+	proj := t.TempDir()
+	sessionID := "claude-parent"
+	subDir := filepath.Join(proj, sessionID, "subagents")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta, _ := json.Marshal(map[string]string{
+		"agentType":   "worker",
+		"description": "Claude worker",
+	})
+	if err := os.WriteFile(filepath.Join(subDir, "agent-abc.meta.json"), meta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	jsonl := `{"sessionId":"claude-parent","timestamp":"2026-05-21T10:00:00Z"}
+{"type":"result"}
+`
+	if err := os.WriteFile(filepath.Join(subDir, "agent-abc.jsonl"), []byte(jsonl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent := domain.Agent{SessionID: sessionID, ProjDir: proj, Harness: "claude"}
+	got := conversation.ReadSubagents(agent, conversation.Roots{})
+
+	if len(got) != 1 {
+		t.Fatalf("got %d subagents, want 1: %+v", len(got), got)
+	}
+	if got[0].AgentID != "abc" {
+		t.Errorf("AgentID = %q, want abc", got[0].AgentID)
+	}
+}
+
+func TestTopLevelAgents_FiltersCodexSubagentSessions(t *testing.T) {
+	root := t.TempDir()
+	parentID := "parent-codex"
+	childID := "child-codex"
+	writeCodexRollout(t, root, childID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_nickname":"Nietzsche","agent_role":"explorer"}}},"thread_source":"subagent","agent_nickname":"Nietzsche","agent_role":"explorer"}}
+`)
+	agents := []domain.Agent{
+		{SessionID: parentID, Harness: "codex", Target: "main:1.0"},
+		{SessionID: childID, Harness: "codex", Target: "main:2.0"},
+		{SessionID: "claude", Harness: "claude", Target: "main:3.0"},
+	}
+
+	got := conversation.TopLevelAgents(agents, conversation.Roots{CodexSessionsRoot: root})
+	if len(got) != 2 {
+		t.Fatalf("got %d agents, want parent codex + claude: %+v", len(got), got)
+	}
+	if got[0].SessionID != parentID || got[1].SessionID != "claude" {
+		t.Errorf("agents = %+v, want child codex filtered", got)
+	}
+}
+
+func writeCodexRollout(t *testing.T, root, sessionID, contents string) string {
+	t.Helper()
+
+	dir := filepath.Join(root, "2026", "05", "21")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir rollout dir: %v", err)
+	}
+	path := filepath.Join(dir, "rollout-2026-05-21T00-00-00-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("write rollout: %v", err)
+	}
+	return path
 }

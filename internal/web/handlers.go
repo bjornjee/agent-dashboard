@@ -528,11 +528,17 @@ func (s *Server) handleSubagents(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.ProjDir == "" || agent.SessionID == "" {
+	if agent.SessionID == "" {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return
 	}
-	subs := conversation.FindSubagents(agent.ProjDir, agent.SessionID)
+	if agent.Harness != "codex" && agent.ProjDir == "" {
+		writeJSON(w, http.StatusOK, []struct{}{})
+		return
+	}
+	subs := conversation.ReadSubagents(agent, conversation.Roots{
+		CodexSessionsRoot: s.codexSessionsRootDir,
+	})
 	if subs == nil {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return

@@ -19,6 +19,32 @@
         "description": "Register Codex agent in dashboard on session start"
       }
     ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Track Codex subagent start in dashboard"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Track Codex subagent stop in dashboard"
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "*",

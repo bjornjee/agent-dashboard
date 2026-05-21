@@ -92,6 +92,12 @@ describe('codex plugin package', () => {
     }
   });
 
+  it('registers Codex plugin subagent lifecycle events', () => {
+    const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json')).hooks;
+    assert.ok(hooks.SubagentStart, 'SubagentStart hook should be registered');
+    assert.ok(hooks.SubagentStop, 'SubagentStop hook should be registered');
+  });
+
   it('registers the Codex auto-plan helper on SessionStart', () => {
     const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json'));
     const sessionStartCommands = hooks.hooks.SessionStart
