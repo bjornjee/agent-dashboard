@@ -125,4 +125,21 @@ describe('codex hook stdout contract', () => {
       );
     });
   }
+
+  it('pr-skill-detect.js emits valid JSON on stdout for UserPromptSubmit', () => {
+    const result = runHook('pr-skill-detect.js', {
+      session_id: SESSION_ID,
+      cwd: '/tmp',
+      model: 'gpt-5.5',
+      hook_event_name: 'UserPromptSubmit',
+      prompt: '$agent-dashboard:pr',
+    });
+
+    assert.equal(result.status, 0, `exit ${result.status}; stderr=${result.stderr}`);
+    assert.notEqual(result.stdout.trim(), '', 'UserPromptSubmit: stdout empty');
+    assert.doesNotThrow(
+      () => JSON.parse(result.stdout),
+      `UserPromptSubmit: stdout not parseable JSON: ${JSON.stringify(result.stdout)}`
+    );
+  });
 });

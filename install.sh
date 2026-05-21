@@ -355,7 +355,7 @@ sync_codex_bundle() {
   # The shipped-hashes manifest lives in the source dir but is not a runtime
   # asset — drop it from the installed copy to keep the install minimal.
   rm -f "$CODEX_HOOKS_DIR/.shipped-hashes"
-  chmod +x "$CODEX_HOOKS_DIR/agent-state-fast.sh" "$CODEX_HOOKS_DIR/agent-state-reporter.sh"
+  chmod +x "$CODEX_HOOKS_DIR/agent-state-fast.sh" "$CODEX_HOOKS_DIR/agent-state-reporter.sh" "$CODEX_HOOKS_DIR/pr-skill-detect.sh"
   printf '%s\n' "$source_hash" > "$stamp_path"
 }
 
