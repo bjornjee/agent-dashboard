@@ -640,7 +640,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				prevDiagramCounts[a.SessionID] = a.DiagramCount
 			}
 		}
-		m.agents = state.SortedAgents(msg.state, m.selfPaneID)
+		m.agents = conversation.TopLevelAgents(
+			state.SortedAgents(msg.state, m.selfPaneID),
+			conversation.Roots{CodexSessionsRoot: m.codexSessionsDir},
+		)
 		// Flash status when any agent gains a new diagram while panel is closed.
 		for _, a := range m.agents {
 			if a.SessionID == "" || a.DiagramCount == 0 {
