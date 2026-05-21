@@ -12,6 +12,7 @@ effort: max
 3. Dispatch each pending `- [ ]` phase to a fresh `spawn_agent` with role `worker`. Strictly sequential — never overlap phases.
 4. After each phase: `make test` must pass AND `git log --oneline <prev-sha>..HEAD` must show exactly one new commit. Halt on either failure.
 5. When marking a phase done, flip only the `- [ ]` → `- [x]` checklist line. Never edit the `### Phase X:` body.
+6. Every `spawn_agent` call must be followed by `wait_agent`.
 </codex_skill_must>
 
 Run the dispatch loop on a worktree with an approved multi-phase plan.
@@ -60,12 +61,13 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
-6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Use Codex `spawn_agent` with the `worker` role. Do not set `model`; the dashboard controls model selection at session level:
+6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Use Codex `spawn_agent` with the `worker` role, then call `wait_agent` for that agent before continuing. Do not set `model`; the dashboard controls model selection at session level:
    ```
    spawn_agent({
      agent_type: "worker",
      message: <subagent prompt template, see below>,
    })
+   wait_agent({ targets: ["<agent-id>"] })
    ```
 
 7. **Verify** when the subagent returns:

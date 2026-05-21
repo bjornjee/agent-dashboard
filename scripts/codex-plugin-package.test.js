@@ -37,6 +37,10 @@ function relativeFiles(root) {
   return files.sort();
 }
 
+function readCodexSkill(name) {
+  return fs.readFileSync(path.join(REPO, `adapters/codex/skills/${name}/SKILL.md`), 'utf8');
+}
+
 describe('codex plugin package', () => {
   it('keeps adapters named by supported harness', () => {
     const adapters = fs.readdirSync(path.join(REPO, 'adapters'), { withFileTypes: true })
@@ -63,9 +67,10 @@ describe('codex plugin package', () => {
 
   it('has a Codex manifest under the Codex adapter', () => {
     const manifest = readJson(path.join(REPO, 'adapters/codex/.codex-plugin/plugin.json'));
+    const releaseManifest = readJson(path.join(REPO, '.release-please-manifest.json'));
 
     assert.equal(manifest.name, 'agent-dashboard');
-    assert.equal(manifest.version, '0.24.0');
+    assert.equal(manifest.version, releaseManifest['.']);
     assert.equal(manifest.skills, './skills/');
     assert.equal(manifest.hooks, './hooks/plugin-hooks.json');
     assert.equal(manifest.interface.developerName, 'bjornjee');
@@ -200,6 +205,80 @@ describe('codex plugin package', () => {
         new RegExp(`git worktree add -b ${branchPrefix}/<name> \\.\\./worktrees/<app>/<name> main`),
         `${skillName} must put -b before the worktree path so hooks can observe the branch`,
       );
+    }
+  });
+
+  it('keeps read-only Codex skills free of mutating git setup commands', () => {
+    const readOnlySkills = ['investigate', 'rca'];
+    const forbidden = [
+      ['checking out branches', /\bgit checkout\b/],
+      ['pulling remotes', /\bgit pull\b/],
+      ['stashing changes', /\bgit stash\b/],
+      ['switching branches', /\bswitch branches\b/i],
+    ];
+
+    for (const skillName of readOnlySkills) {
+      const text = readCodexSkill(skillName);
+      for (const [label, pattern] of forbidden) {
+        assert.doesNotMatch(text, pattern, `${skillName} must stay read-only and avoid ${label}`);
+      }
+    }
+  });
+
+  it('pairs Codex spawn_agent instructions with wait_agent unless explicitly fire-and-forget', () => {
+    const codexSkills = path.join(REPO, 'adapters/codex/skills');
+
+    for (const relativeFile of relativeFiles(codexSkills)) {
+      const text = fs.readFileSync(path.join(codexSkills, relativeFile), 'utf8');
+      if (!/\bspawn_agent\b/.test(text)) continue;
+
+      assert.match(
+        text,
+        /\bwait_agent\b|fire-and-forget/i,
+        `${relativeFile} mentions spawn_agent but does not say how results are consumed`,
+      );
+    }
+  });
+
+  it('uses only Codex-supported subagent roles in skill text', () => {
+    const codexSkills = path.join(REPO, 'adapters/codex/skills');
+    const unsupportedRoles = [
+      ['refactor-cleaner', /\brefactor-cleaner\b/],
+      ['planner', /\bplanner\b/],
+      ['general-purpose', /\bgeneral-purpose\b/],
+      ['Plan subagent', /\bPlan subagent\b/],
+    ];
+
+    for (const relativeFile of relativeFiles(codexSkills)) {
+      const text = fs.readFileSync(path.join(codexSkills, relativeFile), 'utf8');
+      for (const [label, pattern] of unsupportedRoles) {
+        assert.doesNotMatch(text, pattern, `${relativeFile} should not reference unsupported Codex role ${label}`);
+      }
+    }
+  });
+
+  it('requires confirmation and untracked-only safeguards before destructive PR cleanup', () => {
+    const pr = readCodexSkill('pr');
+
+    assert.match(pr, /\buntracked only\b/i);
+    assert.match(pr, /\brequest_user_input\b|\bconfirm/i);
+    assert.match(pr, /\bgit status --porcelain\b/);
+    assert.match(pr, /\brm -rf\b/);
+  });
+
+  it('keeps Codex hard-rules blocks concise and executable', () => {
+    const codexSkills = path.join(REPO, 'adapters/codex/skills');
+
+    for (const relativeFile of relativeFiles(codexSkills)) {
+      const text = fs.readFileSync(path.join(codexSkills, relativeFile), 'utf8');
+      const match = text.match(/<codex_skill_must>\n([\s\S]*?)\n<\/codex_skill_must>/);
+      if (!match) continue;
+
+      const lines = match[1].split('\n').filter(line => /^\d+\./.test(line.trim()));
+      assert.ok(lines.length <= 6, `${relativeFile} has too many hard rules for reliable Codex adherence`);
+      for (const line of lines) {
+        assert.ok(line.length <= 260, `${relativeFile} hard rule is too long: ${line}`);
+      }
     }
   });
 });

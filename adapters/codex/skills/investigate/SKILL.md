@@ -12,7 +12,7 @@ Question or concern: $ARGUMENTS
 
 Follow these phases in order. Apply all project rules and conventions that are in your context.
 
-This skill is **read-only**. Do not switch branches, pull from remotes, stash, or otherwise mutate repo state — even "preparatory" steps. Investigate whatever branch the user is on. If you need to compare against `main`, use `git fetch` (read-only) and reference `origin/main` directly.
+This skill is **read-only**. Do not checkout another branch, pull from remotes, fetch, stash, or otherwise mutate repo state — even "preparatory" steps. Investigate the current branch. If you need a fresher base ref than the local `origin/main`, ask before refreshing it.
 
 ---
 

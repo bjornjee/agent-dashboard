@@ -8,11 +8,12 @@ effort: max
 ---
 
 <codex_skill_must>
-1. `/plan` is the FIRST action in Phase 2 — before any `spawn_agent`, any `request_user_input`, any plan drafting. Nothing else in Phase 2 happens until `permission_mode='plan'` is active.
-2. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b feat/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
-3. Plan submission MUST use `<proposed_plan>...</proposed_plan>` tags. Plain assistant text is not a fallback.
-4. After plan approval, write the absolute plan path to `.feature-plan-path` BEFORE starting Phase 3.
-5. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (roles: `explorer`, `worker`), `wait_agent`, `update_plan`, `apply_patch`. Anything outside this list is a foreign-harness tool and forbidden in this skill. `wait_agent` is required to consume `spawn_agent` results — never spawn an agent without a matching `wait_agent`.
+1. Phase 2 starts with `/plan`; do not research, interview, or draft before `permission_mode='plan'`.
+2. Run `mkdir -p` and `git worktree add -b feat/<name> ... main` as separate `exec_command` calls.
+3. Submit plans only inside `<proposed_plan>...</proposed_plan>`.
+4. After approval, write `.feature-plan-path` before implementation.
+5. Allowed tools: `exec_command`, `request_user_input`, `spawn_agent`, `wait_agent`, `update_plan`, `apply_patch`.
+6. Every `spawn_agent` call must be followed by `wait_agent`.
 </codex_skill_must>
 
 Start a new feature in an isolated git worktree.
@@ -76,7 +77,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
 2. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for non-trivial codebase or library lookups. Always pair `spawn_agent` with a `wait_agent` to retrieve the explorer's findings — never spawn-and-forget. Do not delegate planning — composing the plan is your job. Synthesize what you found inline as your own assistant text so it lands in the visible plan artifact (not in a tool result the user can't approve).
 
-   <HARD-GATE>`explorer` for research is fine; never dispatch a worker/planner to compose the plan. Every `spawn_agent` must be followed by `wait_agent`.</HARD-GATE>
+   <HARD-GATE>`explorer` for research is fine; never dispatch another role to compose the plan. Every `spawn_agent` must be followed by `wait_agent`.</HARD-GATE>
 
 3. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. Ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text. If `request_user_input` is unavailable, fall back to one concise direct question.
 

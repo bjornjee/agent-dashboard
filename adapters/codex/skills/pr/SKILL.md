@@ -84,9 +84,9 @@ unexpected tracked-file deletions.
 
 ### Phase 3: Cleaner pass on the branch diff
 
-Codex only has two `spawn_agent` roles: `explorer` (read-only research) and
-`worker` (implementation). There is no `refactor-cleaner` role in this
-harness — spawn a `worker` with the inline cleanup brief below.
+Codex cleanup uses a `worker` subagent with the inline cleanup brief below.
+Keep the worker scoped to the changed-file list and wait for its result before
+continuing.
 
 1. Spawn a Codex `worker` subagent scoped to the changed-file list from
    Phase 1. Pass file paths explicitly — do not let it roam the whole repo.

@@ -6,10 +6,11 @@ effort: max
 ---
 
 <codex_skill_must>
-1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b fix/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add` and a compound command will not pin the worktree.
-2. Reproduce the bug with a FAILING test BEFORE diagnosing. Show the failing output (paste it) before changing any code.
-3. Fix only what is necessary to make the failing test pass. No drive-by cleanup, no refactors, no unrelated improvements.
-4. Tool names you may emit: `exec_command`, `request_user_input`, `spawn_agent` (worker role for delegation), `apply_patch`. Anything outside this list is forbidden in this skill.
+1. Run `mkdir -p` and `git worktree add -b fix/<name> ... main` as separate `exec_command` calls.
+2. Write and run the reproducing failing test before changing implementation.
+3. Change only what makes the reproducing test pass.
+4. Allowed tools: `exec_command`, `request_user_input`, `spawn_agent`, `wait_agent`, `apply_patch`.
+5. Every `spawn_agent` call must be followed by `wait_agent`.
 </codex_skill_must>
 
 Diagnose and fix a bug.
@@ -137,7 +138,7 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 **Effort note:** When launched via the agent-dashboard's New Agent flow, this skill starts at implementation effort. Use Codex Plan Mode for high-reasoning diagnosis or planning when the fix needs it, then return to proportional implementation effort after approval.
 
-**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than implementing directly. If delegating, pass the diagnosis (Phase 4), failing test output (Phase 3), exact file paths, and a bounded write scope to a `worker`; then review and verify locally. Otherwise, proceed below.
+**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than implementing directly. If delegating, pass the diagnosis (Phase 4), failing test output (Phase 3), exact file paths, and a bounded write scope to a `worker`; then call `wait_agent`, review the result, and verify locally. Otherwise, proceed below.
 
 1. Implement the **minimal fix** — change only what is necessary to fix the bug.
 2. Run `make test` — the previously failing test must now **pass**.
@@ -162,7 +163,7 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 
 1. Review all changes for correctness, security, and convention adherence.
 2. Commit with a `fix:` conventional commit message that describes what was fixed and why.
-3. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+3. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns cleanup, `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit with conventional message. No critical or high-severity review issues. PR opened via `$agent-dashboard:pr`.
 
