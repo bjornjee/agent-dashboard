@@ -17,6 +17,7 @@
 
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { allow } = require('./hook-output');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
@@ -122,6 +123,7 @@ if (require.main === module) {
     } catch {
       // Silent — don't break Claude Code
     }
+    allow();
   });
 }
 

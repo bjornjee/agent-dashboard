@@ -8,6 +8,7 @@
 'use strict';
 
 const path = require('path');
+const { allow, deny } = require('./hook-output');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
@@ -75,15 +76,14 @@ if (require.main === module && !process.stdin.isTTY) {
             try { writeState(sessionId, { hook_blocked: reason }); } catch { /* don't break Claude Code */ }
           }
           process.stderr.write(reason + '\n');
+          deny(reason);
           process.exit(2);
         }
       }
 
-      // Pass through — print original input to stdout
-      process.stdout.write(data);
+      allow();
     } catch {
-      // On parse error, don't block — let it through
-      process.stdout.write(data);
+      allow();
     }
   });
 }

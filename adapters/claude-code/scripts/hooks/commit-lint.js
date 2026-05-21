@@ -7,6 +7,8 @@
 
 'use strict';
 
+const { allow, deny } = require('./hook-output');
+
 const VALID_TYPES = ['feat', 'fix', 'refactor', 'docs', 'test', 'chore', 'perf', 'ci'];
 const COMMIT_RE = /^(feat|fix|refactor|docs|test|chore|perf|ci):\s+\S/;
 
@@ -60,7 +62,7 @@ if (require.main === module && !process.stdin.isTTY) {
 
       // Only check commands that contain git commit
       if (!/\bgit\s+commit\b/.test(command)) {
-        process.stdout.write(data);
+        allow();
         return;
       }
 
@@ -68,20 +70,22 @@ if (require.main === module && !process.stdin.isTTY) {
 
       // No -m flag: amend, --reuse-message, etc. — pass through
       if (message === null) {
-        process.stdout.write(data);
+        allow();
         return;
       }
 
       const result = validateCommitMessage(message);
 
       if (!result.valid) {
-        process.stderr.write(`Blocked: ${result.reason}\n`);
+        const reason = `Blocked: ${result.reason}`;
+        process.stderr.write(reason + '\n');
+        deny(reason);
         process.exit(2);
       }
 
-      process.stdout.write(data);
+      allow();
     } catch {
-      process.stdout.write(data);
+      allow();
     }
   });
 }

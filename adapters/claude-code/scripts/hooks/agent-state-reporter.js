@@ -14,6 +14,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { allow } = require('./hook-output');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
@@ -201,6 +202,7 @@ if (require.main === module) {
     } catch {
       // Silent — don't break Claude Code
     }
+    allow();
   });
 }
 

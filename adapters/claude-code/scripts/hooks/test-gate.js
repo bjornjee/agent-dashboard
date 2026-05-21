@@ -14,6 +14,7 @@
 const { execSync } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
+const { allow, deny } = require('./hook-output');
 
 const pluginRoot = path.resolve(__dirname, '..', '..');
 const { extractCwdFromCommand } = require(path.join(pluginRoot, 'packages', 'git-status'));
@@ -85,12 +86,12 @@ if (require.main === module && !process.stdin.isTTY) {
       const command = (input.tool_input && input.tool_input.command) || '';
 
       if (!isGitCommit(command)) {
-        process.stdout.write(data);
+        allow();
         return;
       }
 
       if (shouldSkip()) {
-        process.stdout.write(data);
+        allow();
         return;
       }
 
@@ -103,23 +104,24 @@ if (require.main === module && !process.stdin.isTTY) {
           `Warning: No Makefile with a "test" or "test-fast" target found. ` +
           `Add one to enable pre-commit test gating.\n`
         );
-        process.stdout.write(data);
+        allow();
         return;
       }
 
       const result = runMakeTest(repoRoot);
       if (!result.passed) {
-        process.stderr.write(
+        const reason =
           `Blocked: tests failed. Fix failing tests before committing.\n\n` +
           `${result.output}\n\n` +
-          `Set SKIP_TEST_GATE=1 to bypass (e.g., for WIP commits).\n`
-        );
+          `Set SKIP_TEST_GATE=1 to bypass (e.g., for WIP commits).`;
+        process.stderr.write(reason + '\n');
+        deny(reason);
         process.exit(2);
       }
 
-      process.stdout.write(data);
+      allow();
     } catch {
-      process.stdout.write(data);
+      allow();
     }
   });
 }

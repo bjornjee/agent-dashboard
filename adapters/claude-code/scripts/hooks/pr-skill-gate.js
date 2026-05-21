@@ -14,6 +14,8 @@
 
 'use strict';
 
+const { allow, deny } = require('./hook-output');
+
 const BYPASS_MARKER = /\bAGENT_DASHBOARD_PR_SKILL=1\b/;
 // `gh pr create` at the start of a shell segment, optionally preceded by
 // `VAR=value ` env-var assignments. Split on `[;&|]+` (pipes included) so
@@ -45,18 +47,19 @@ if (require.main === module && !process.stdin.isTTY) {
       const command = (input.tool_input && input.tool_input.command) || '';
 
       if (isUngatedPRCreate(command)) {
-        process.stderr.write(
+        const reason =
           'Blocked: direct `gh pr create` is disabled. ' +
           'Use /agent-dashboard:pr to run cleanup, fmt, and test gates ' +
           'before opening the PR.\n' +
-          'Set SKIP_PR_SKILL_GATE=1 to bypass (emergencies only).\n'
-        );
+          'Set SKIP_PR_SKILL_GATE=1 to bypass (emergencies only).';
+        process.stderr.write(reason + '\n');
+        deny(reason);
         process.exit(2);
       }
 
-      process.stdout.write(data);
+      allow();
     } catch {
-      process.stdout.write(data);
+      allow();
     }
   });
 }

@@ -8,6 +8,8 @@
 
 'use strict';
 
+const { allow, deny } = require('./hook-output');
+
 const BLOCK_MESSAGE = [
   'Codex task requires --write for workspace write access.',
   'Add --write to the codex-companion.mjs task command.',
@@ -38,7 +40,7 @@ if (require.main === module && !process.stdin.isTTY) {
   process.stdin.on('end', () => {
     try {
       if (shouldSkip()) {
-        process.stdout.write(data);
+        allow();
         return;
       }
 
@@ -46,14 +48,15 @@ if (require.main === module && !process.stdin.isTTY) {
       const command = input.tool_input?.command ?? '';
 
       if (!isCodexTask(command) || hasWriteFlag(command)) {
-        process.stdout.write(data);
+        allow();
         return;
       }
 
       process.stderr.write(BLOCK_MESSAGE + '\n');
+      deny(BLOCK_MESSAGE);
       process.exit(2);
     } catch {
-      process.stdout.write(data);
+      allow();
     }
   });
 }
