@@ -5,6 +5,14 @@ disable-model-invocation: true
 effort: max
 ---
 
+<codex_skill_must>
+1. Worktree creation is TWO separate `exec_command` calls: first `mkdir -p ../worktrees/<app>`, then `git worktree add -b refactor/<name> ../worktrees/<app>/<name> main` standalone (flag before path). Never chain with `&&` — the dashboard's PostToolUse hook regex is anchored at `^git worktree add`.
+2. Establish a passing test baseline (`make test`) BEFORE touching code. If the baseline fails, halt — invoke `$agent-dashboard:fix` first.
+3. Refactor in atomic steps: one focused change, then `make test`, then repeat. One change per test run — never batch.
+4. Behavior is preserved. No new features, no bug fixes. If behavior changed you are in the wrong skill.
+5. Tool names you may emit: `exec_command`, `apply_patch`, `spawn_agent` (worker role for delegation).
+</codex_skill_must>
+
 Safely refactor code while preserving all existing behavior.
 
 Refactoring goal: $ARGUMENTS
@@ -21,8 +29,16 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
 3. Switch to main: `git checkout main`
 4. Pull latest: `git pull origin main`
-5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main:
-   `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b refactor/<name> main`
+5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main. Run **two separate `exec_command` tool calls** — do not chain them with `&&`. The dashboard's PostToolUse hook only stamps `worktree_cwd` + `branch` when the command starts with `git worktree add`; a compound `mkdir … && git worktree add …` slips past the regex and leaves the dashboard unable to pin dir or branch.
+
+   First, ensure the parent directory exists:
+   ```
+   mkdir -p ../worktrees/<app>
+   ```
+   Then run `git worktree add -b refactor/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call:
+   ```
+   git worktree add -b refactor/<name> ../worktrees/<app>/<name> main
+   ```
    - If the branch already exists, ask the user whether to resume it or choose a new name.
    - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
      `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
@@ -34,8 +50,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
    - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
-6. cd into the worktree and confirm with `pwd` and `git branch --show-current`
-7. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+7. cd into the worktree and confirm with `pwd` and `git branch --show-current`
+8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -45,7 +61,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
+**Background — Environment setup:** Launch a background `exec_command` to set up the dev environment. It must:
 
 1. Auto-detect project type from project files (highest match wins):
 

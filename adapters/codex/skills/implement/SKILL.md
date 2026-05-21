@@ -6,6 +6,14 @@ disable-model-invocation: true
 effort: max
 ---
 
+<codex_skill_must>
+1. Cwd must match `.../worktrees/<app>/<name>`. Halt with a clear error otherwise — this skill runs only inside a feature worktree.
+2. Read `.feature-plan-path` first; fall back to a plan-file search only if the sentinel file is missing.
+3. Dispatch each pending `- [ ]` phase to a fresh `spawn_agent` with role `worker`. Strictly sequential — never overlap phases.
+4. After each phase: `make test` must pass AND `git log --oneline <prev-sha>..HEAD` must show exactly one new commit. Halt on either failure.
+5. When marking a phase done, flip only the `- [ ]` → `- [x]` checklist line. Never edit the `### Phase X:` body.
+</codex_skill_must>
+
 Run the dispatch loop on a worktree with an approved multi-phase plan.
 
 Opt-in. Invoked after `$agent-dashboard:feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to $agent-dashboard:implement". Each phase dispatches to a fresh Codex `worker` via `spawn_agent`, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
@@ -143,12 +151,9 @@ The plan file's checkbox state is the source of truth — the orchestrator's in-
 
 ## Red Flags — STOP
 
-If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+Failure modes the MUST block doesn't already cover:
 
-- "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially — a later phase may depend on an earlier one's commit.
-- "The subagent's tests failed but the diff looks fine, I'll move on" → Phase 2 step 7 violation. Halt and surface to the user.
-- "Subagent didn't commit, but the changes are there — I'll mark it done" → Phase 2 step 7 violation. No commit means no phase. Retry or abort.
-- "I'll fix a typo in the plan body while I'm flipping the checkbox" → Phase 2 step 8 violation. Checkbox only. Plan-content changes need a separate decision.
-- "No `## Phases` block, but I can infer the phases from the prose" → Phase 2 step 2 violation. Halt and point the user back to `$agent-dashboard:feature` for inline TDD.
-- "`.feature-plan-path` is missing, but the latest plan is probably right" → Phase 1 step 3 violation. Show recent plans and let the user confirm.
+- "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially; a later phase may depend on an earlier one's commit.
+- "The subagent's tests failed but the diff looks fine, I'll move on" → halt and surface to the user.
 - "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `$agent-dashboard:pr`.
+- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `$agent-dashboard:feature` for inline TDD.

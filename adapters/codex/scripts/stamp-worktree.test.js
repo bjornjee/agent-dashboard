@@ -65,6 +65,37 @@ describe('stamp-worktree.js (codex)', () => {
     assert.equal(written.worktree_cwd, '/already/set');
   });
 
+  it('fills missing branch from existing worktree_cwd', () => {
+    const sessionId = 'sess-existing-cwd';
+    const wt = path.join(tmpDir, 'existing-wt');
+    initGitRepo(wt, 'feat/existing');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, sessionId + '.json'),
+      JSON.stringify({ worktree_cwd: wt }));
+
+    const r = run(['/some/other/path'], { CLAUDE_SESSION_ID: sessionId });
+
+    assert.equal(r.status, 0, r.stderr);
+    const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
+    assert.equal(written.worktree_cwd, wt);
+    assert.equal(written.branch, 'feat/existing');
+  });
+
+  it('preserves existing branch (first-write-wins)', () => {
+    const sessionId = 'sess-existing-branch';
+    const wt = path.join(tmpDir, 'branch-wt');
+    initGitRepo(wt, 'feat/new');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, sessionId + '.json'),
+      JSON.stringify({ worktree_cwd: wt, branch: 'feat/original' }));
+
+    const r = run([wt], { CLAUDE_SESSION_ID: sessionId });
+
+    assert.equal(r.status, 0, r.stderr);
+    const written = JSON.parse(fs.readFileSync(path.join(agentsDir, sessionId + '.json'), 'utf8'));
+    assert.equal(written.branch, 'feat/original');
+  });
+
   it('exits 2 when worktree path arg is missing', () => {
     const r = run([], { CLAUDE_SESSION_ID: 'sess-3' });
     assert.equal(r.status, 2);
