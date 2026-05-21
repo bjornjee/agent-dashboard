@@ -13,107 +13,256 @@ Feature description: $ARGUMENTS
 
 ## Instructions
 
-Follow these phases in order. Each phase has a gate. Apply all project rules and conventions already in context.
+Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
 
 ---
 
 ### Phase 1: Setup
 
-1. Derive a short kebab-case name from the description.
-2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`.
-3. Switch to main: `git checkout main`.
-4. Pull latest: `git pull origin main`.
+1. Derive a short kebab-case name from the description
+2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
+3. Switch to main: `git checkout main`
+4. Pull latest: `git pull origin main`
 5. Create branch `feat/<name>` and worktree `../worktrees/<app>/<name>` from main:
    `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b feat/<name> main`
    - If the branch already exists, ask the user whether to resume it or choose a new name.
-   - Register the worktree with the dashboard:
+   - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
      `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
-6. Copy `.env*` files from the source repo into the worktree, preserving relative paths and excluding `.git` and dependency directories.
-   - Commands that write outside the current sandbox must use Codex escalation: set `sandbox_permissions` to `require_escalated` with a concise justification.
-7. cd into the worktree and confirm with `pwd` and `git branch --show-current`.
-8. Verify the env-file list in the source and worktree. If source env files existed and any are missing, halt and report the mismatch.
+6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
+   - Find all env files recursively: `find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'`
+   - For each file found, recreate its directory structure in the worktree and copy it. For example:
+     - `./. env` → `../worktrees/<app>/<name>/.env`
+     - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
+     - `./infra/.env.production` → `../worktrees/<app>/<name>/infra/.env.production`
+   - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
+   - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
+   - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
+7. cd into the worktree and confirm with `pwd` and `git branch --show-current`
+8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
-**Gate:** Working directory is the new worktree on the correct branch, based on latest main. Any source `.env*` files are present in the worktree.
-
----
-
-### Phase 2: Research And Plan
-
-Run research before writing code.
-
-1. Search the repo for existing implementation, tests, conventions, and dependency choices. Use `rg`/`rg --files` first.
-2. For non-trivial independent codebase questions, use Codex `spawn_agent` with the `explorer` role. Pass exact file paths and enough context for the explorer to start without this session history.
-3. If a gating decision is missing, ask it before planning.
-   - In Plan Mode, use `request_user_input` when the tool is available.
-   - If `request_user_input` is unavailable, ask one concise direct question in assistant text.
-4. Use `/plan` or Plan Mode as the official planning primitive. `update_plan` is only Default-mode progress tracking; it is not a Plan Mode substitute.
-5. Submit the plan in this exact shape and wait for approval:
-
-```xml
-<proposed_plan>
-## Summary
-<what will change and why>
-
-## What Already Exists
-<one-line research answer>
-
-## Affected Files
-<files and ownership boundaries>
-
-## Phases
-- [ ] **Phase A: <short name>** - files: <globs>, deps: -
-- [ ] **Phase B: <short name>** - files: <globs>, deps: A
-
-## Test Plan
-<RED command, GREEN command, final verification>
-
-## Risks
-<specific risks and mitigations>
-</proposed_plan>
-```
-
-For fewer than three work units, omit the `## Phases` checklist and describe the implementation directly. Do not include unresolved decisions, TBDs, or placeholders.
-
-6. After approval, write the approved plan into a worktree-local markdown file, then record its absolute path:
-   `printf '%s\n' "<absolute-plan-path>" > .feature-plan-path`
-7. If the approved plan has three or more phases, ask whether to continue inline or use `$agent-dashboard:implement` for phase dispatch. Use `request_user_input` when available; otherwise ask directly.
-
-**Gate:** Research is summarized, required decisions are resolved, and the user has approved the plan.
+**Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
 ---
 
-### Phase 3: Implement With TDD
+### Phase 2: Plan
 
-1. Write the smallest failing test for the first behavior. Run the focused command and confirm it fails for the expected reason.
-2. Implement the minimum code to pass.
-3. Run the focused test and confirm it passes.
-4. Refactor only after GREEN, then rerun the same test.
-5. Repeat for each behavior. Keep tests atomic: one assertion focus per test, with golden path, edge cases, and error paths split.
+Start two tracks in parallel:
 
-Use `update_plan` to track Default-mode implementation progress after approval.
+**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
 
-**Gate:** Every change follows RED -> GREEN -> REFACTOR and the focused tests pass after each code change.
+1. Auto-detect project type from project files (highest match wins):
+
+   | Priority | Signal | Type |
+   |----------|--------|------|
+   | 1 | `react-native` in package.json dependencies | Mobile |
+   | 2 | `next`, `vite`, or `webpack` in package.json | Web |
+   | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
+   | 4 | `go.mod` | Go |
+   | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
+
+   Ask the user only if no signal matches.
+
+2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed.
+3. Symlink large data directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying.
+4. On success, write a sentinel file: `touch .env-setup-done`
+   On failure, write the error: `echo "<error message>" > .env-setup-failed`
+
+**Foreground — Planning:**
+
+Phase order: research first, interview second, plan mode third, submit fourth. Plan mode is the *last* gate before approval, not a pre-research speed-bump. Each step has a HARD-GATE you cannot rationalize past.
+
+1. **Research with `spawn_agent` explorer.** Use a Codex `explorer` subagent for any non-trivial codebase question or library lookup. Do not delegate planning — composing the plan is your job, not a subagent's. Synthesize what you found inline as your own assistant text.
+
+   **Why:** a delegated planning subagent returns the plan as a tool result, not as the visible plan artifact the user approves. Synthesizing inline puts the plan in your assistant text and keeps the approval surface honest.
+
+   Symptoms you're about to violate:
+   - You're about to dispatch a worker or planner to compose the plan.
+   - You're rationalizing *"the planner does this better."*
+
+   <HARD-GATE>
+   Research subagent (`explorer`): allowed and encouraged.
+   Planning subagent: forbidden in this skill. Compose the plan yourself.
+   </HARD-GATE>
+
+   Do not wait for environment setup to finish.
+
+2. **Interview the user via `request_user_input` when available.** Identify every gating decision the implementation depends on — URLs, IDs, scope boundaries, copy text, what to delete vs keep, version pins, credentials. In Plan Mode, ask them as a single `request_user_input` call with multi-choice `options`, **not** as freeform numbered text in your assistant message.
+
+   If `request_user_input` is unavailable in the current mode, ask one concise direct question in assistant text. That fallback is for tool unavailability only, not convenience.
+
+   Schema: 1–3 questions per call, each with a `header` (≤12 chars), 2–3 mutually exclusive `options`. Recommended option goes first with `(Recommended)` suffix. The client adds an "Other" escape hatch automatically.
+
+   Worked example:
+   ```
+   request_user_input({
+     questions: [{
+       question: "Where should focus.json live?",
+       header: "Focus path",
+       options: [
+         {label: "~/.agent-dashboard/focus.json (Recommended)", description: "Co-located with agents/ state dir already watched."},
+         {label: "$XDG_RUNTIME_DIR/agent-dashboard/focus.json", description: "Tmpfs-backed, cleared on reboot."},
+       ],
+     }]
+   })
+   ```
+
+   The plan you submit in step 4 must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body. If a user answer changes scope, return to this step and re-interview.
+
+   Symptoms you're about to violate:
+   - You're typing "1." "2." "3." numbered questions in assistant text.
+   - You're writing "Decisions needed before implementation" inside the plan.
+   - You're rationalizing "the user can answer these after approval."
+
+   <HARD-GATE>
+   Freeform numbered questions in assistant text are a violation when `request_user_input` is available. If you find yourself typing "1." "2." "3." to ask the user something — STOP, call `request_user_input` instead.
+   The plan is not ready for review until every decision it gates is answered.
+   </HARD-GATE>
+
+3. **Enter Codex Plan Mode via `/plan`, then draft the plan inline.** Now that research is done and decisions are resolved, use `/plan` / Plan Mode. This puts the session in the official planning surface while you write the plan as your own assistant text.
+
+   **Why this order:** drafting inside Plan Mode pairs the visible mode-flip with the actual planning work, and `<proposed_plan>` (step 4) is the review artifact the user approves.
+
+   Caveat: `update_plan` is a progress checklist tool, not a planning-mode substitute. Use it after approval to track implementation progress; do not use it to bypass Plan Mode.
+
+   <HARD-GATE>
+   No drafting the plan in assistant text until `/plan` / Plan Mode is active.
+   </HARD-GATE>
+
+   **Phase format for multi-phase plans.** If the plan has 3+ distinct work units, structure it with a `## Phases` checklist and matching `### Phase X:` headings. Step 4 reads this format to offer the dispatch probe; `$agent-dashboard:implement` parses it to drive the dispatch loop. Plans without it can't be dispatched.
+
+   ```markdown
+   ## Phases
+
+   - [ ] **Phase A: <short name>** — files: <globs>, deps: -
+   - [ ] **Phase B: <short name>** — files: <globs>, deps: A
+   - [ ] **Phase C: <short name>** — files: <globs>, deps: B
+
+   ### Phase A: <short name>
+
+   <10–50 lines: what files, what tests, what invariants, what to leave alone.>
+
+   ### Phase B: <short name>
+
+   <...>
+   ```
+
+   Rules:
+   - The `## Phases` block is the dispatch index. Phase names MUST match between checklist and `### Phase X:` headings (case-sensitive).
+   - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
+   - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
+   - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
+
+4. **Submit via `<proposed_plan>`. Wait for user approval.** Wrap the full plan markdown in `<proposed_plan>...</proposed_plan>`. This renders the plan through Codex's native plan-review flow for accept/reject.
+
+   **`<proposed_plan>` is the only acceptable submission.** Pasting the plan as ordinary assistant text is a violation, even if you also update a checklist afterwards. The user reviews and approves through the plan-review UI — nowhere else.
+
+   **No exceptions:**
+   - Don't start a "small" preparatory edit while waiting.
+   - Don't write the test file "to save time".
+   - Don't ask "should I proceed?" in assistant text — the plan-review UI's accept action is the approval.
+
+   **Post-approval actions** (immediately after the user accepts the plan, before Phase 3):
+
+   1. **Write the plan-path sentinel** (always). Save the approved plan markdown to a worktree-local file and record that absolute path so `$agent-dashboard:implement` can find it:
+      ```bash
+      echo "<absolute-plan-path>" > .feature-plan-path
+      ```
+
+   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 (inline TDD).
+
+   3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question:
+      - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
+      - Header: `"Dispatch"`
+      - Options (recommended first):
+        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run RED → GREEN → REFACTOR per phase in order.
+        - `"Hand off to $agent-dashboard:implement"` — Exit $agent-dashboard:feature. The user invokes `$agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
+
+      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
+
+      **If `Hand off to $agent-dashboard:implement`:** print the message below and exit cleanly. Do not start Phase 3.
+
+      ```
+      Plan saved to <plan-path>.
+      Worktree ready at <worktree-path>.
+      To continue, run:
+
+          $agent-dashboard:implement
+
+      (Recommended: open a fresh terminal session for max context isolation.)
+      ```
+
+**Gate:** Plan approved with no open decisions. `.feature-plan-path` written. Either Phase 3 begins (inline) or the skill exited with the handoff message (dispatch).
+
+---
+
+### Phase 3: Implement
+
+**Pre-gate:** Check for `.env-setup-done` in the worktree root.
+- If present: verify dependencies are installed (e.g. `node_modules/` exists, `pip list` succeeds, `go env GOPATH` works) and data symlinks resolve correctly.
+- If `.env-setup-failed` exists: surface the error and halt.
+- If neither file exists: the background agent is still running — wait for it to finish before proceeding.
+
+**Effort note:** When launched via the agent-dashboard's New Agent flow, this skill starts at implementation effort. Codex Plan Mode is the high-reasoning planning surface; once the approved plan is accepted, use `update_plan` for progress tracking and keep implementation effort proportional to the work.
+
+**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than implementing directly. If delegating, use `$agent-dashboard:implement` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
+
+Build the feature following strict RED → GREEN → REFACTOR:
+
+1. **RED.** Write the failing test. Run `make test`. Paste the failing output into the conversation. **Wrote implementation before test? Delete it. Start over.** No exceptions:
+   - Don't keep it as "reference"
+   - Don't write tests *for* the implementation you already wrote
+   - Don't claim "the test would obviously fail" — show it failing
+
+2. **GREEN.** Write the minimum implementation to make the failing test pass. Run `make test`. Paste the passing output. **Wrote more than the test demanded? Revert and re-do.** No "while I'm here" additions, no premature abstractions.
+
+3. **REFACTOR.** Clean up. Run `make test` after each meaningful edit. **Tests broke during refactor? Revert that edit and try a smaller step.** Refactor is structure-only — if behavior changed, you're back in RED.
+
+**Gate:** Environment ready. All tests pass via `make test`. Implementation matches the approved plan.
 
 ---
 
 ### Phase 4: Review
 
-Review the diff for correctness, security, convention adherence, and scope control. Address critical and high issues. Fix medium issues when cheap.
+Review all changes for correctness, security, and convention adherence. Apply all project rules and conventions that are in your context.
 
-**Gate:** No critical or high-severity review issues remain.
-
----
-
-### Phase 5: Commit And PR
-
-1. Run the full project test command, normally `make test`.
-2. Commit with a conventional `feat:` message.
-3. Open the PR through `$agent-dashboard:pr`. That skill owns cleanup, formatting, final tests, push, and PR creation.
-
-**Gate:** Tests pass, commit is clean, and the PR workflow owns publishing.
+**Gate:** No critical or high-severity issues remain.
 
 ---
 
-## Delegation
+### Phase 5: Deliver
 
-Use `spawn_agent` only when the user explicitly asks for subagents or when `$agent-dashboard:implement` is selected after plan approval. Use `explorer` for read-only codebase questions and `worker` for bounded implementation. Workers must receive exact file paths, the approved phase text, and a note that other agents may also be editing the codebase.
+1. Commit the feature changes with a `feat:` conventional commit message.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (`refactor-cleaner`), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+
+**Gate:** Clean commit history with conventional commit messages. PR opened via `$agent-dashboard:pr`.
+
+---
+
+### Phase 6: Cleanup (on merge)
+
+Triggered when the user indicates the feature has been merged upstream.
+
+1. Verify the branch is merged (warn if unmerged commits remain)
+2. Tear down environment resources: remove symlinks, stop dev servers or emulators, delete `.env-setup-done` / `.env-setup-failed` / `.feature-plan-path` sentinel files
+3. Remove worktree and delete branch
+4. Confirm cleanup is complete
+
+---
+
+## Red Flags — STOP
+
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+
+- "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
+- "I'll delegate the plan to a planning subagent" → Phase 2 step 1 violation. Research with `explorer`; plan inline. The dashboard can't surface delegated plans as the approved artifact.
+- "I'll just type the questions as numbered text" → Phase 2 step 2 violation when `request_user_input` is available. That tool exists for exactly this. Use it.
+- "I'll skip `/plan`, Plan Mode is overhead" → Phase 2 step 3 violation. After research and the `request_user_input` interview, you enter Plan Mode to draft the plan, then submit `<proposed_plan>` for approval. The visible planning ceremony is the point.
+- "I'll just paste the plan as text instead of using `<proposed_plan>`" → Phase 2 step 4 violation. `<proposed_plan>` is the only acceptable submission. Pasting in assistant text is not a fallback.
+- "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
+- "Tests pass on my reading of the code" → didn't run `make test`. Run it.
+- "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
+- "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
+- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `$agent-dashboard:pr`.
+- "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason (context). Don't second-guess.
+- "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `$agent-dashboard:implement` and resume can't find the plan without it.

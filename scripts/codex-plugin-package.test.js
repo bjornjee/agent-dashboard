@@ -119,7 +119,7 @@ describe('codex plugin package', () => {
       ['EnterPlanMode', /\bEnterPlanMode\b/],
       ['ExitPlanMode', /\bExitPlanMode\b/],
       ['AskUserQuestion', /\bAskUserQuestion\b/],
-      ['Agent() subagent calls', /\bAgent\(\)/],
+      ['Agent() subagent calls', /\bAgent\s*\(/],
       ['dangerouslyDisableSandbox', /\bdangerouslyDisableSandbox\b/],
       ['Claude plan directory', /~\/\.claude\/plans/],
       ['Claude Code plan approval', /\bCC'?s plan-mode|\bClaude Code\b.*\bplan\b/i],
