@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.0](https://github.com/bjornjee/agent-dashboard/compare/v0.25.0...v0.26.0) (2026-05-21)
+
+
+### Features
+
+* include codex adapter in release-please version bumps ([#303](https://github.com/bjornjee/agent-dashboard/issues/303)) ([d42e13c](https://github.com/bjornjee/agent-dashboard/commit/d42e13c7b5354600aed330f3c795b0e125fd3e37))
+* pin codex worktrees, force Plan Mode, and front-load codex_skill_must ([#301](https://github.com/bjornjee/agent-dashboard/issues/301)) ([9e3fa8c](https://github.com/bjornjee/agent-dashboard/commit/9e3fa8cda0f9cbbd95e9c85c841267c359939183))
+
 ## [0.25.0](https://github.com/bjornjee/agent-dashboard/compare/v0.24.0...v0.25.0) (2026-05-21)
 
 
