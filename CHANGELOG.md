@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.25.0](https://github.com/bjornjee/agent-dashboard/compare/v0.24.0...v0.25.0) (2026-05-21)
+
+
+### Features
+
+* bundle codex plugin adapter ([#297](https://github.com/bjornjee/agent-dashboard/issues/297)) ([6296e65](https://github.com/bjornjee/agent-dashboard/commit/6296e6514df0257a5e1818a8e94ef640e9542a42))
+* use codex's $ sigil when spawning skills ([#294](https://github.com/bjornjee/agent-dashboard/issues/294)) ([6191ee6](https://github.com/bjornjee/agent-dashboard/commit/6191ee6b4e673d235af64a23702d08d6a4390802))
+
+
+### Bug Fixes
+
+* namespace codex skill dispatch as $agent-dashboard:&lt;skill&gt; ([#298](https://github.com/bjornjee/agent-dashboard/issues/298)) ([4e16827](https://github.com/bjornjee/agent-dashboard/commit/4e168274dcc2299a1657c533c94f427a6040283f))
+* resolve codex plugin hook paths ([#299](https://github.com/bjornjee/agent-dashboard/issues/299)) ([bc0b152](https://github.com/bjornjee/agent-dashboard/commit/bc0b152ed7f2d6af35d6655544cc0e7f83524252))
+
 ## [0.24.0](https://github.com/bjornjee/agent-dashboard/compare/v0.23.0...v0.24.0) (2026-05-20)
 
 
