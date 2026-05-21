@@ -111,8 +111,7 @@ async function runWorkerFromEnv() {
 if (require.main === module) {
   if (process.argv[2] === '--worker') {
     runWorkerFromEnv()
-      .catch(() => {})
-      .finally(() => {});
+      .catch(() => {});
   } else {
     let data = '';
     process.stdin.setEncoding('utf8');
