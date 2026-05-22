@@ -298,19 +298,6 @@ func TmuxListSessions() ([]string, error) {
 	return lines, nil
 }
 
-// tmuxPaneCwd returns the current working directory of a tmux pane by its
-// pane ID (%N format). Returns "" if the pane doesn't exist or on error.
-func tmuxPaneCwd(paneID string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
-	defer cancel()
-	out, err := runner.Output(ctx, "display-message", "-p", "-t", paneID,
-		"#{pane_current_path}")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // TmuxListPanes returns both the pane → target map and the pane → cwd map
 // from a single `tmux list-panes -a` invocation. The dashboard's hot-path
 // state refresh used to issue two separate calls back-to-back; collapsing

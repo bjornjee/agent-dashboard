@@ -33,10 +33,6 @@ type dbDailyUsageMsg struct {
 	days      []db.DayUsage
 }
 type activityMsg struct{ entries []domain.ActivityEntry }
-type subagentsMsg struct {
-	parentTarget string
-	agents       []domain.SubagentInfo
-}
 
 // subagentsBatchMsg carries the full agent→subagents map produced by one
 // shared sessions-index lookup. Used by the periodic refresh to avoid

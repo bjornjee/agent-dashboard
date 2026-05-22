@@ -961,17 +961,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case subagentsMsg:
-		prevTarget2, prevSubID2 := m.selectedIdentity()
-		m.agentSubagents[msg.parentTarget] = msg.agents
-		if _, exists := m.collapsed[msg.parentTarget]; !exists {
-			m.collapsed[msg.parentTarget] = true
-		}
-		m.buildTree()
-		m.restoreSelection(prevTarget2, prevSubID2)
-		m.updateLeftContent()
-		return m, nil
-
 	case subagentsBatchMsg:
 		prevTarget, prevSubID := m.selectedIdentity()
 		for target, agents := range msg.byTarget {
