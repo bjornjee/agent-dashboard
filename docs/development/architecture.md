@@ -21,7 +21,7 @@ agent-dashboard/
 ├── LICENSE
 ├── SECURITY.md
 ├── release-please-config.json
-├── install.sh                         # binary installer plus Codex global hook sync
+├── install.sh                         # binary installer (plugins are registered separately via each host's marketplace)
 ├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
 ├── settings.example.toml              # default settings (copied by installer)
 ├── go.mod / go.sum

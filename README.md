@@ -25,7 +25,7 @@ Both interfaces read agent state from per-agent JSON files in `~/.agent-dashboar
 
 **How do I use codex / gpt-5.x models?** Pick `codex` in the New Agent harness step (TUI wizard or web form) to spawn the Codex CLI directly, with per-spawn flags from `[harness.codex]` in `~/.agent-dashboard/settings.toml`.
 
-**How do I see codex agents in the dashboard?** Codex sessions appear once the Codex adapter hooks are installed and approved. Install the packaged Codex adapter with `make install-codex-adapter`, or use `install.sh` to sync the global hook bundle to `~/.codex/hooks/agent-dashboard` for non-plugin installs. Then restart Codex and approve the `agent-dashboard` hooks prompt.
+**How do I see codex agents in the dashboard?** Codex sessions appear once the Codex plugin is installed, enabled, and its hooks approved. Run `codex plugin marketplace add bjornjee/agent-dashboard`, enable the plugin in `~/.codex/config.toml`, restart Codex, and approve the `agent-dashboard` hooks prompt. See the Codex CLI support section below for details.
 
 **Does this require a paid Claude account?** No — it uses whatever Claude Code itself requires (Pro, Max, or API). agent-dashboard does not call the Anthropic API directly; it reads the JSONL transcripts Claude Code writes locally.
 
@@ -117,7 +117,7 @@ Download the pre-built binary from the latest [GitHub Release](https://github.co
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. It also syncs the Codex global hook bundle to `~/.codex/hooks/agent-dashboard` for non-plugin Codex installs. No Go toolchain required.
+The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. Hooks and skills are delivered through each host's plugin marketplace (see Step 2 and the Codex section below); the installer does not write into `~/.codex`. No Go toolchain required.
 
 Or build from source (requires [Go 1.26+](https://go.dev/dl/)):
 
@@ -134,6 +134,7 @@ In any Claude Code session, run:
 ```
 /marketplace add bjornjee/agent-dashboard
 /plugin install agent-dashboard@agent-dashboard
+/plugin enable agent-dashboard@agent-dashboard
 ```
 
 Then restart Claude Code sessions for hooks and skills to take effect.
@@ -151,25 +152,22 @@ Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not
 
 ### Codex CLI support
 
-Codex support is packaged as a Codex plugin adapter in `adapters/codex/`. From a repo checkout, register the marketplace entry and then enable the plugin in `~/.codex/config.toml`:
+Codex support is packaged as a Codex plugin adapter in `adapters/codex/`. Register the marketplace entry with Codex:
 
 ```bash
-make install-codex-adapter
+codex plugin marketplace add bjornjee/agent-dashboard
 ```
 
-For non-plugin installs, `install.sh` also syncs the Codex global hook bundle to `~/.codex/hooks/agent-dashboard` and manages `~/.codex/hooks.json` when it matches a shipped version:
+Then enable the plugin by appending the following to `~/.codex/config.toml`:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
+```toml
+[plugins."agent-dashboard@agent-dashboard"]
+enabled = true
 ```
 
-After installing either path, restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
+Restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions just like Claude sessions — same state file, same conversation panel, same cost dashboard. Run `codex --model gpt-5.5` in a tmux pane and the agent appears in the dashboard's agent list.
 
-From a repo checkout, rerun the source installer after pulling changes:
-
-```bash
-./install.sh --build
-```
+From a repo checkout you can also run `make install-codex-adapter`, which performs the marketplace registration and prints the config snippet.
 
 Caveats specific to codex:
 
@@ -356,7 +354,7 @@ agent-dashboard/
 ├── LICENSE
 ├── SECURITY.md
 ├── release-please-config.json
-├── install.sh                         # binary installer plus Codex global hook sync
+├── install.sh                         # binary installer (plugins are registered separately via each host's marketplace)
 ├── agent-dashboard.tmux               # optional tmux keybinding (prefix + D)
 ├── settings.example.toml              # default settings (copied by install.sh)
 ├── go.mod / go.sum
