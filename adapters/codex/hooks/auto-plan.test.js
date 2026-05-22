@@ -39,7 +39,7 @@ describe('auto-plan hook helper', () => {
 
       assert.equal(result.status, 'done');
       assert.deepEqual(calls.map(call => call.args), [
-        ['send-keys', '-l', '-t', '%7', '/plan'],
+        ['send-keys', '-l', '-t', '%7', '/plan plan'],
         ['send-keys', '-t', '%7', 'Enter'],
         ['send-keys', '-l', '-t', '%7', '$agent-dashboard:feature fix plan mode'],
         ['send-keys', '-t', '%7', 'Enter'],
@@ -74,7 +74,7 @@ describe('auto-plan hook helper', () => {
     });
 
     assert.equal(result.status, 'done');
-    assert.deepEqual(sent, ['/plan', '$agent-dashboard:feature fix plan mode']);
+    assert.deepEqual(sent, ['/plan plan', '$agent-dashboard:feature fix plan mode']);
     assert.equal(writes.at(-1).auto_plan_status, 'done');
   });
 
@@ -119,7 +119,7 @@ describe('auto-plan hook helper', () => {
     });
 
     assert.equal(result.status, 'timeout');
-    assert.deepEqual(sent, ['/plan']);
+    assert.deepEqual(sent, ['/plan plan']);
     assert.equal(writes.at(-1).auto_plan_status, 'timeout');
   });
 });

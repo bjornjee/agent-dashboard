@@ -57,7 +57,7 @@ async function runAutoPlan({
   });
 
   await wait(initialDelayMs);
-  if (!send(tmuxPane, '/plan')) {
+  if (!send(tmuxPane, '/plan plan')) {
     write(sessionId, {
       auto_plan_status: 'send-plan-failed',
       auto_plan_error: 'failed to send /plan to tmux pane',
