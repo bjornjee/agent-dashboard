@@ -929,6 +929,31 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.hook_blocked, undefined, 'should not set hook_blocked when absent');
   });
 
+  it('codex: stale permission clears on normal shell PreToolUse', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'permission',
+      current_tool: '',
+      harness: 'codex',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'shell',
+        permission_mode: 'workspace-write',
+        model: 'gpt-5.4-codex',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'running');
+  });
+
   it('PostToolUse skips when existing state is idle_prompt (stop-state guard)', () => {
     const existing = {
       target: 'main:1.0',

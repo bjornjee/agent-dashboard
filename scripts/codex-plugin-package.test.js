@@ -92,6 +92,14 @@ describe('codex plugin package', () => {
     }
   });
 
+  it('registers plugin-local Codex PR skill detection', () => {
+    const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json'));
+    const entries = hooks.hooks.UserPromptSubmit || [];
+    const commands = entries.flatMap(entry => entry.hooks.map(hook => hook.command));
+
+    assert.deepEqual(commands, ['node "${PLUGIN_ROOT}/hooks/pr-skill-detect.js"']);
+  });
+
   it('registers Codex plugin subagent lifecycle events', () => {
     const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json')).hooks;
     assert.ok(hooks.SubagentStart, 'SubagentStart hook should be registered');

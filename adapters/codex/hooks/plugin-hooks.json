@@ -96,6 +96,19 @@
         ],
         "description": "Final Codex state sync for dashboard"
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/pr-skill-detect.js\"",
+            "timeout": 5000
+          }
+        ],
+        "description": "Detect $agent-dashboard:pr skill invocation and pin agent state to pr"
+      }
     ]
   }
 }

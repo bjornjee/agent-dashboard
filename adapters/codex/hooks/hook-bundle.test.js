@@ -37,6 +37,7 @@ describe('codex global hook bundle', () => {
         '$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh',
         '$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh',
         '$HOME/.codex/hooks/agent-dashboard/auto-plan.sh',
+        '$HOME/.codex/hooks/agent-dashboard/pr-skill-detect.sh',
       ]
     );
   });
@@ -52,9 +53,11 @@ describe('codex global hook bundle', () => {
       'agent-state-fast.sh',
       'agent-state-reporter.sh',
       'auto-plan.sh',
+      'pr-skill-detect.sh',
       'agent-state-fast.js',
       'agent-state-reporter.js',
       'auto-plan.js',
+      'pr-skill-detect.js',
       'effort-config.js',
       'packages/agent-state/index.js',
       'packages/tmux/index.js',
@@ -63,6 +66,14 @@ describe('codex global hook bundle', () => {
     ]) {
       assert.equal(fs.existsSync(path.join(ROOT, file)), true, file);
     }
+  });
+
+  it('registers PR skill detection on user prompt submit', () => {
+    const hooks = readJson(HOOKS_JSON);
+    const entries = hooks.hooks.UserPromptSubmit || [];
+    const hookCommands = entries.flatMap(entry => entry.hooks.map(hook => hook.command));
+
+    assert.deepEqual(hookCommands, ['$HOME/.codex/hooks/agent-dashboard/pr-skill-detect.sh']);
   });
 
   it('keeps the copied codex source folder flat', () => {
