@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/mocks"
 	"github.com/stretchr/testify/mock"
@@ -564,5 +565,141 @@ func TestPostMergeCleanup_AllSeedsDead_Refuses(t *testing.T) {
 	res, _ := cmd().(postMergeCleanupMsg)
 	if res.err == nil {
 		t.Fatal("expected error when topology cannot be resolved")
+	}
+}
+
+// hasClaudeRow returns true if any row exists in daily_usage for provider='claude'.
+// Tests use a non-zero CostUSD when they expect a row, so TotalCostForProvider
+// is a sufficient presence proxy.
+func hasClaudeRow(database *db.DB) bool {
+	return database.TotalCostForProvider("claude") > 0
+}
+
+func TestPersistUsage_WritesClaudeAgent(t *testing.T) {
+	database, err := db.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer database.Close()
+
+	agents := []domain.Agent{{
+		Target:    "%1",
+		SessionID: "sess-claude",
+		Harness:   "claude",
+		ProjDir:   "/some/projects/-Users-foo",
+	}}
+	perAgent := map[string]domain.Usage{
+		"%1": {InputTokens: 100, OutputTokens: 50, CostUSD: 1.50, Model: "claude-sonnet-4-6"},
+	}
+
+	_ = persistUsage(database, agents, perAgent)()
+
+	if !hasClaudeRow(database) {
+		t.Errorf("expected claude row written, found none")
+	}
+}
+
+func TestPersistUsage_SkipsCodexHarness(t *testing.T) {
+	database, _ := db.OpenDB(":memory:")
+	defer database.Close()
+
+	agents := []domain.Agent{{
+		Target:    "%1",
+		SessionID: "019e4eb3-aaa",
+		Harness:   "codex",
+		ProjDir:   "/some/projects",
+	}}
+	perAgent := map[string]domain.Usage{
+		"%1": {InputTokens: 100, OutputTokens: 50, CostUSD: 1.0, Model: "claude-opus-4-7"},
+	}
+
+	_ = persistUsage(database, agents, perAgent)()
+
+	if hasClaudeRow(database) {
+		t.Errorf("codex agent wrote a claude row")
+	}
+}
+
+func TestPersistUsage_SkipsEmptyProjDir(t *testing.T) {
+	database, _ := db.OpenDB(":memory:")
+	defer database.Close()
+
+	agents := []domain.Agent{{
+		Target:    "%1",
+		SessionID: "sess-no-projdir",
+		Harness:   "claude",
+		ProjDir:   "",
+	}}
+	perAgent := map[string]domain.Usage{
+		"%1": {InputTokens: 100, OutputTokens: 50, CostUSD: 1.0, Model: "claude-sonnet-4-6"},
+	}
+
+	_ = persistUsage(database, agents, perAgent)()
+
+	if hasClaudeRow(database) {
+		t.Errorf("empty ProjDir wrote a row")
+	}
+}
+
+func TestPersistUsage_SkipsEmptySessionID(t *testing.T) {
+	database, _ := db.OpenDB(":memory:")
+	defer database.Close()
+
+	agents := []domain.Agent{{
+		Target:    "%1",
+		SessionID: "",
+		Harness:   "claude",
+		ProjDir:   "/some/dir",
+	}}
+	perAgent := map[string]domain.Usage{
+		"%1": {InputTokens: 100, OutputTokens: 50, CostUSD: 1.0},
+	}
+
+	_ = persistUsage(database, agents, perAgent)()
+
+	if hasClaudeRow(database) {
+		t.Errorf("empty SessionID wrote a row")
+	}
+}
+
+func TestPersistUsage_SkipsZeroOutputTokens(t *testing.T) {
+	database, _ := db.OpenDB(":memory:")
+	defer database.Close()
+
+	agents := []domain.Agent{{
+		Target:    "%1",
+		SessionID: "sess-empty",
+		Harness:   "claude",
+		ProjDir:   "/some/dir",
+	}}
+	perAgent := map[string]domain.Usage{
+		"%1": {InputTokens: 100, OutputTokens: 0, CostUSD: 1.0},
+	}
+
+	_ = persistUsage(database, agents, perAgent)()
+
+	if hasClaudeRow(database) {
+		t.Errorf("zero-output wrote a row")
+	}
+}
+
+func TestPersistUsage_EmptyHarnessTreatedAsClaude(t *testing.T) {
+	database, _ := db.OpenDB(":memory:")
+	defer database.Close()
+
+	agents := []domain.Agent{{
+		Target:    "%1",
+		SessionID: "sess-legacy",
+		Harness:   "",
+		ProjDir:   "/some/dir",
+	}}
+	perAgent := map[string]domain.Usage{
+		"%1": {InputTokens: 100, OutputTokens: 50, CostUSD: 1.0, Model: "claude-sonnet-4-6"},
+	}
+
+	_ = persistUsage(database, agents, perAgent)()
+
+	if !hasClaudeRow(database) {
+		t.Errorf("empty-harness should default to claude and write")
 	}
 }
