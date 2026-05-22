@@ -796,6 +796,8 @@ func TestSubagentsEndpointCodex(t *testing.T) {
 	data, _ := json.Marshal(agent)
 	os.WriteFile(filepath.Join(agentsDir, parentID+".json"), data, 0600)
 	writeWebRollout(t, filepath.Join(homeDir, ".codex", "sessions"), childID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_nickname":"Nietzsche","agent_role":"explorer"}}},"thread_source":"subagent","agent_nickname":"Nietzsche","agent_role":"explorer"}}
+{"timestamp":"2026-05-21T14:44:04.000Z","type":"turn_context","payload":{"approval_policy":"on-request","sandbox_policy":{"type":"workspace-write"},"collaboration_mode":{"mode":"plan"}}}
+{"timestamp":"2026-05-21T14:44:05.000Z","type":"event_msg","payload":{"type":"user_message","message":"Inspect the Codex subagent display path."}}
 `)
 
 	srv := NewServer(cfg, nil, ServerOptions{})
@@ -819,6 +821,12 @@ func TestSubagentsEndpointCodex(t *testing.T) {
 	}
 	if got[0].AgentID != childID {
 		t.Errorf("AgentID = %q, want %q", got[0].AgentID, childID)
+	}
+	if got[0].InstructionHead != "Inspect the Codex subagent display path." {
+		t.Errorf("InstructionHead = %q, want rollout instruction", got[0].InstructionHead)
+	}
+	if got[0].Mode != "plan / on-request / workspace-write" {
+		t.Errorf("Mode = %q, want compact Codex context", got[0].Mode)
 	}
 }
 

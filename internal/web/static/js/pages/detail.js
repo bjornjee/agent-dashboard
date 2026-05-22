@@ -405,13 +405,15 @@ async function loadSubagentSummary(agentId) {
   for (const sub of visible) {
     const isDone = sub.Completed || sub.completed;
     const type = sub.AgentType || sub.agent_type || 'agent';
-    const desc = sub.Description || sub.description || '';
+    const desc = sub.InstructionHead || sub.instruction_head || sub.Description || sub.description || '';
+    const mode = sub.Mode || sub.mode || '';
     const startedAt = sub.StartedAt || sub.started_at || '';
     const dotClass = isDone ? 'status-dot--completed' : 'status-dot--running';
     html += `<div class="subagent-pill">`;
     html += `<span class="status-dot ${dotClass}"></span>`;
     html += `<span class="subagent-type">${escapeHtml(type)}</span>`;
     if (desc) html += `<span class="subagent-desc">${escapeHtml(desc)}</span>`;
+    if (mode) html += `<span class="subagent-mode">${escapeHtml(mode)}</span>`;
     if (startedAt) html += `<span class="subagent-time">${durationFromTimestamp(startedAt)}</span>`;
     html += '</div>';
   }

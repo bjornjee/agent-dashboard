@@ -929,6 +929,7 @@ body.view-detail { overflow: hidden; }
 .subagent-pill--muted { border-style: dashed; opacity: 0.6; }
 .subagent-type { font-weight: 500; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; }
 .subagent-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font-weight: 400; }
+.subagent-mode { color: var(--accent-blue); white-space: nowrap; font-family: var(--font-mono); font-size: 11px; flex-shrink: 0; }
 .subagent-time { color: var(--text-tertiary); white-space: nowrap; margin-left: auto; flex-shrink: 0; font-weight: 400; }
 
 /* ============================================
@@ -1795,6 +1796,10 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 .agent-card__subagent-task {
   flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 12px; color: var(--text-tertiary);
+}
+.agent-card__subagent-mode {
+  flex-shrink: 0; font-family: var(--font-mono);
+  font-size: 11px; color: var(--accent-blue);
 }
 .agent-card__subagent-duration {
   flex-shrink: 0; margin-left: auto; font-family: var(--font-mono);

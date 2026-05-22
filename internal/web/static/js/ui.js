@@ -140,11 +140,13 @@ export const UI = {
     const statusColor = sub.status === 'completed' ? 'completed' : sub.status === 'failed' ? 'failed' : 'running';
     const name = escapeHtml(sub.name || sub.type || 'subagent');
     const task = sub.task ? escapeHtml(sub.task) : '';
+    const mode = sub.mode ? escapeHtml(sub.mode) : '';
     const dur = sub.started_at ? durationFromTimestamp(sub.started_at) : '';
     return `<div class="agent-card__subagent-row">
       <span class="subagent-status-dot subagent-status-dot--${statusColor}"></span>
       <span class="agent-card__subagent-name">${name}</span>
       <span class="agent-card__subagent-task">${task}</span>
+      ${mode ? '<span class="agent-card__subagent-mode">' + mode + '</span>' : ''}
       <span class="agent-card__subagent-duration">${escapeHtml(dur)}</span>
     </div>`;
   },

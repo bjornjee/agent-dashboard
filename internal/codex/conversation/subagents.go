@@ -28,6 +28,12 @@ type subagentSessionMeta struct {
 	AgentRole     string `json:"agent_role"`
 }
 
+type subagentRolloutDetails struct {
+	InstructionHead string
+	Mode            string
+	Completed       bool
+}
+
 func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 	if parentSessionID == "" {
 		return nil
@@ -45,12 +51,18 @@ func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 		if meta.Source.Subagent.ThreadSpawn.ParentThreadID != parentSessionID {
 			return
 		}
+		agentType := firstNonEmpty(meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole)
+		fallback := firstNonEmpty(meta.AgentNickname, meta.Source.Subagent.ThreadSpawn.AgentNickname, meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole, meta.ID)
+		details := readSubagentRolloutDetails(path)
+		instructionHead := firstNonEmpty(details.InstructionHead, fallback)
 		agents = append(agents, domain.SubagentInfo{
-			AgentID:     meta.ID,
-			AgentType:   firstNonEmpty(meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole),
-			Description: firstNonEmpty(meta.AgentNickname, meta.Source.Subagent.ThreadSpawn.AgentNickname, meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole, meta.ID),
-			Completed:   rolloutCompleted(path),
-			StartedAt:   meta.Timestamp,
+			AgentID:         meta.ID,
+			AgentType:       agentType,
+			Description:     instructionHead,
+			InstructionHead: instructionHead,
+			Mode:            details.Mode,
+			Completed:       details.Completed,
+			StartedAt:       meta.Timestamp,
 		})
 	})
 
@@ -80,6 +92,85 @@ func ParentThreadID(sessionsRoot, sessionID string) string {
 	meta, _ := readSubagentSessionMeta(path)
 	pkgCache.putRollout(key, rolloutEntry{Path: path, Meta: meta, MetaRead: true})
 	return meta.Source.Subagent.ThreadSpawn.ParentThreadID
+}
+
+func readSubagentRolloutDetails(path string) subagentRolloutDetails {
+	f, err := os.Open(path)
+	if err != nil {
+		return subagentRolloutDetails{}
+	}
+	defer f.Close()
+
+	var details subagentRolloutDetails
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		var line struct {
+			Type    string          `json:"type"`
+			Payload json.RawMessage `json:"payload"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &line) != nil {
+			continue
+		}
+		switch line.Type {
+		case "event_msg":
+			var payload struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			}
+			if json.Unmarshal(line.Payload, &payload) != nil {
+				continue
+			}
+			if payload.Type == "user_message" && details.InstructionHead == "" {
+				details.InstructionHead = firstMeaningfulLine(payload.Message)
+			}
+			if payload.Type == "task_complete" {
+				details.Completed = true
+			}
+		case "turn_context":
+			if details.Mode == "" {
+				details.Mode = codexModeFromTurnContext(line.Payload)
+			}
+		}
+	}
+	return details
+}
+
+func firstMeaningfulLine(message string) string {
+	for _, line := range strings.Split(message, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func codexModeFromTurnContext(raw json.RawMessage) string {
+	var payload struct {
+		ApprovalPolicy string `json:"approval_policy"`
+		SandboxPolicy  struct {
+			Type string `json:"type"`
+		} `json:"sandbox_policy"`
+		CollaborationMode struct {
+			Mode string `json:"mode"`
+		} `json:"collaboration_mode"`
+	}
+	if json.Unmarshal(raw, &payload) != nil {
+		return ""
+	}
+	parts := []string{
+		payload.CollaborationMode.Mode,
+		payload.ApprovalPolicy,
+		payload.SandboxPolicy.Type,
+	}
+	nonEmpty := parts[:0]
+	for _, part := range parts {
+		if part != "" {
+			nonEmpty = append(nonEmpty, part)
+		}
+	}
+	return strings.Join(nonEmpty, " / ")
 }
 
 func walkSubagentSessionMetas(sessionsRoot string, visit func(string, subagentSessionMeta)) {
@@ -122,32 +213,6 @@ func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
 		return line.Payload, true
 	}
 	return subagentSessionMeta{}, false
-}
-
-func rolloutCompleted(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		var line struct {
-			Type    string `json:"type"`
-			Payload struct {
-				Type string `json:"type"`
-			} `json:"payload"`
-		}
-		if json.Unmarshal(scanner.Bytes(), &line) != nil {
-			continue
-		}
-		if line.Type == "event_msg" && line.Payload.Type == "task_complete" {
-			return true
-		}
-	}
-	return false
 }
 
 func firstNonEmpty(values ...string) string {
