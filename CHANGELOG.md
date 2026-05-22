@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.27.0](https://github.com/bjornjee/agent-dashboard/compare/v0.26.1...v0.27.0) (2026-05-22)
+
+
+### Features
+
+* auto-enter codex feature plan mode ([#306](https://github.com/bjornjee/agent-dashboard/issues/306)) ([2496f33](https://github.com/bjornjee/agent-dashboard/commit/2496f338049d0d1d9a781a729809622840bf1553))
+* detect codex pr skill state ([#309](https://github.com/bjornjee/agent-dashboard/issues/309)) ([449b1c3](https://github.com/bjornjee/agent-dashboard/commit/449b1c384df0f91bb21b5617cb77dc9473e6fc1e))
+* show codex subagents in dashboard ([#307](https://github.com/bjornjee/agent-dashboard/issues/307)) ([40b29fe](https://github.com/bjornjee/agent-dashboard/commit/40b29fe7c3481caa430c77b5b5ffe42599b9c06a))
+
+
+### Performance Improvements
+
+* cache codex subagent walks to fix dashboard input lag ([#310](https://github.com/bjornjee/agent-dashboard/issues/310)) ([ad58e11](https://github.com/bjornjee/agent-dashboard/commit/ad58e11556cbd9dd22932848aca6788a72bb72c7))
+
 ## [0.26.1](https://github.com/bjornjee/agent-dashboard/compare/v0.26.0...v0.26.1) (2026-05-21)
 
 
