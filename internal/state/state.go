@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
@@ -244,24 +245,49 @@ func stampWorktreeCwd(stateDir, sessionID, worktreeCwd string) error {
 // exist), Branch is cleared to "" so the dashboard does not display a
 // stale value.
 func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string) {
+	// First pass: backfill Cwd from tmux and figure out which dirs need a
+	// branch lookup. We hold dirs separately so the parallel pass below
+	// can ask git without touching sf.Agents concurrently.
+	dirs := make(map[string]string, len(sf.Agents)) // agentKey → dir
 	for key, agent := range sf.Agents {
-		// Backfill Cwd from tmux pane when the state file lacks it. Used by
-		// agentLabel/detail header — does not influence branch resolution.
 		if agent.Cwd == "" && agent.TmuxPaneID != "" && paneCwds != nil {
 			if pc, ok := paneCwds[agent.TmuxPaneID]; ok {
 				agent.Cwd = pc
+				sf.Agents[key] = agent
 			}
 		}
-
 		dir := agent.WorktreeCwd
 		if dir == "" {
 			dir = agent.Cwd
 		}
-		var branch string
 		if dir != "" {
-			branch = gitBranch(dir)
+			dirs[key] = dir
 		}
-		agent.Branch = branch
+	}
+
+	// gitBranch runs `git rev-parse` with a 500ms timeout per agent. With
+	// many agents that sequential cost stacks; cap concurrency to 8 so a
+	// dashboard refresh costs ceil(N/8) × 500ms in the worst case.
+	results := make(map[string]string, len(dirs))
+	var mu sync.Mutex
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for key, dir := range dirs {
+		wg.Add(1)
+		go func(key, dir string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			branch := gitBranch(dir)
+			mu.Lock()
+			results[key] = branch
+			mu.Unlock()
+		}(key, dir)
+	}
+	wg.Wait()
+
+	for key, agent := range sf.Agents {
+		agent.Branch = results[key] // zero value "" when dir == "" or git failed
 		sf.Agents[key] = agent
 	}
 }

@@ -5,98 +5,89 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"golang.org/x/sync/singleflight"
 )
 
-// codex rollout files are flat under sessionsRoot — the parent↔child link is
-// inside each file's session_meta. Discovering it requires walking the tree
-// and opening many files, which is too expensive to run on the TUI input
-// thread. This package-level cache absorbs repeated lookups within a short
-// TTL window so background polling and stateUpdated handling don't replay
-// the walk every few seconds.
+// Codex rollout files live flat under sessionsRoot/YYYY/MM/DD/. Parent↔child
+// edges and per-session metadata are buried inside each file's session_meta
+// line, so resolving any one session requires walking the tree and opening
+// many files. Doing that once per caller is too slow when the dashboard
+// renders many codex agents.
+//
+// This cache stores a single index per sessionsRoot, built by one walk:
+//   - rollouts maps sessionID → resolved rollout path + parsed meta.
+//   - children maps parentSessionID → []SubagentInfo, sorted newest-first.
+//
+// A singleflight.Group coalesces concurrent rebuilds, so N goroutines that
+// arrive together during a cold window share one walk. The index expires
+// as a unit; we never have a half-warm view.
 
-const defaultCacheTTL = 5 * time.Second
+const defaultCacheTTL = 15 * time.Second
 
 var nowFunc = time.Now
 
-type cacheKey struct {
-	root      string
-	sessionID string
-}
-
-// rolloutEntry has two valid shapes:
-//   - Path == ""                 → no rollout found for this sessionID
-//   - Path != "" && !MetaRead    → LocateRollout has resolved the path but
-//     ParentThreadID has not parsed session_meta yet
-//   - Path != "" && MetaRead     → meta read attempt complete (Meta may
-//     still be the zero value if the file had no session_meta line)
-//
-// The MetaRead flag is what lets ParentThreadID short-circuit a re-read
-// when LocateRollout warmed the entry first. Without it, Meta.ID == ""
-// would be ambiguous between "not read yet" and "read but no meta in
-// file" — the latter would re-open the file on every call.
+// rolloutEntry records what we learned about a single rollout file.
+//   - Path != "" → file exists; Meta is the parsed session_meta (zero value
+//     when the file had no session_meta line yet).
+//   - Path == "" → no rollout found for this sessionID in the current
+//     index build (negative result; valid until TTL expiry).
 type rolloutEntry struct {
-	Path     string
-	Meta     subagentSessionMeta
-	MetaRead bool
-	expires  time.Time
+	Path string
+	Meta subagentSessionMeta
 }
 
-type subagentListEntry struct {
-	subs    []domain.SubagentInfo
-	expires time.Time
+type sessionsIndex struct {
+	builtAt  time.Time
+	rollouts map[string]rolloutEntry          // sessionID → entry
+	children map[string][]domain.SubagentInfo // parentSessionID → subs
 }
 
 type cache struct {
-	mu                sync.Mutex
-	ttl               time.Duration
-	rollouts          map[cacheKey]rolloutEntry
-	subagentsByParent map[cacheKey]subagentListEntry
+	mu      sync.Mutex
+	ttl     time.Duration
+	indexes map[string]*sessionsIndex // sessionsRoot → index
+	// group is stored by pointer so InvalidateCacheForTest can swap it
+	// atomically under cache.mu without racing against an in-flight Do
+	// caller's internal mutex on the previous group value.
+	group *singleflight.Group
 }
 
 func newCache(ttl time.Duration) *cache {
 	return &cache{
-		ttl:               ttl,
-		rollouts:          map[cacheKey]rolloutEntry{},
-		subagentsByParent: map[cacheKey]subagentListEntry{},
+		ttl:     ttl,
+		indexes: map[string]*sessionsIndex{},
+		group:   &singleflight.Group{},
 	}
+}
+
+// callGroup returns the current singleflight group under the cache lock so
+// callers see a stable pointer even when a test invalidates the cache mid-flight.
+func (c *cache) callGroup() *singleflight.Group {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.group
 }
 
 var pkgCache = newCache(defaultCacheTTL)
 
-func (c *cache) getRollout(key cacheKey) (rolloutEntry, bool) {
+// getIndex returns the cached index for root if it is still within TTL.
+func (c *cache) getIndex(root string) (*sessionsIndex, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e, ok := c.rollouts[key]
-	if !ok || nowFunc().After(e.expires) {
-		return rolloutEntry{}, false
-	}
-	return e, true
-}
-
-func (c *cache) putRollout(key cacheKey, e rolloutEntry) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e.expires = nowFunc().Add(c.ttl)
-	c.rollouts[key] = e
-}
-
-func (c *cache) getSubagentList(key cacheKey) ([]domain.SubagentInfo, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.subagentsByParent[key]
-	if !ok || nowFunc().After(e.expires) {
+	idx, ok := c.indexes[root]
+	if !ok {
 		return nil, false
 	}
-	return e.subs, true
+	if nowFunc().Sub(idx.builtAt) > c.ttl {
+		return nil, false
+	}
+	return idx, true
 }
 
-func (c *cache) putSubagentList(key cacheKey, subs []domain.SubagentInfo) {
+func (c *cache) putIndex(root string, idx *sessionsIndex) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.subagentsByParent[key] = subagentListEntry{
-		subs:    subs,
-		expires: nowFunc().Add(c.ttl),
-	}
+	c.indexes[root] = idx
 }
 
 // InvalidateCacheForTest clears the package-level cache. Tests that exercise
@@ -105,6 +96,9 @@ func (c *cache) putSubagentList(key cacheKey, subs []domain.SubagentInfo) {
 func InvalidateCacheForTest() {
 	pkgCache.mu.Lock()
 	defer pkgCache.mu.Unlock()
-	pkgCache.rollouts = map[cacheKey]rolloutEntry{}
-	pkgCache.subagentsByParent = map[cacheKey]subagentListEntry{}
+	pkgCache.indexes = map[string]*sessionsIndex{}
+	// Pointer swap is race-safe even if a previous Do call is still
+	// in-flight on the old group — the old group keeps its own mutex
+	// alive until the goroutine finishes; new callers see the fresh one.
+	pkgCache.group = &singleflight.Group{}
 }

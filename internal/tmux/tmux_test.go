@@ -196,50 +196,67 @@ func TestParseTarget(t *testing.T) {
 	}
 }
 
-func Test_parsePaneTargetsOutput(t *testing.T) {
+func Test_parsePanesOutput(t *testing.T) {
 	tests := []struct {
-		name   string
-		output string
-		want   map[string]domain.PaneTarget
+		name        string
+		output      string
+		wantTargets map[string]domain.PaneTarget
+		wantCwds    map[string]string
 	}{
 		{
-			name:   "multiple panes",
-			output: "%85\ttomoro\t1\t1\n%87\ttomoro\t2\t1\n%90\ttomoro\t3\t2\n",
-			want: map[string]domain.PaneTarget{
+			name:   "targets and cwds",
+			output: "%85\ttomoro\t1\t1\t/home/a\n%87\ttomoro\t2\t1\t/home/b\n%90\ttomoro\t3\t2\t\n",
+			wantTargets: map[string]domain.PaneTarget{
 				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
 				"%87": {Session: "tomoro", Window: 2, Pane: 1, Target: "tomoro:2.1"},
 				"%90": {Session: "tomoro", Window: 3, Pane: 2, Target: "tomoro:3.2"},
 			},
+			wantCwds: map[string]string{
+				"%85": "/home/a",
+				"%87": "/home/b",
+			},
 		},
 		{
-			name:   "empty output",
-			output: "",
-			want:   map[string]domain.PaneTarget{},
+			name:        "empty output",
+			output:      "",
+			wantTargets: map[string]domain.PaneTarget{},
+			wantCwds:    map[string]string{},
 		},
 		{
-			name:   "malformed line skipped",
-			output: "%85\ttomoro\t1\t1\nbadline\n%87\ttomoro\t2\t0\n",
-			want: map[string]domain.PaneTarget{
+			name:   "malformed line skipped, missing cwd column tolerated for targets",
+			output: "%85\ttomoro\t1\t1\nbadline\n%87\ttomoro\t2\t0\t/x\n",
+			wantTargets: map[string]domain.PaneTarget{
 				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
 				"%87": {Session: "tomoro", Window: 2, Pane: 0, Target: "tomoro:2.0"},
+			},
+			wantCwds: map[string]string{
+				"%87": "/x",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parsePaneTargetsOutput(tt.output)
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %d entries, want %d", len(got), len(tt.want))
+			gotTargets, gotCwds := parsePanesOutput(tt.output)
+			if len(gotTargets) != len(tt.wantTargets) {
+				t.Fatalf("targets: got %d entries, want %d", len(gotTargets), len(tt.wantTargets))
 			}
-			for k, wantV := range tt.want {
-				gotV, ok := got[k]
+			for k, wantV := range tt.wantTargets {
+				gotV, ok := gotTargets[k]
 				if !ok {
-					t.Errorf("missing key %q", k)
+					t.Errorf("missing target key %q", k)
 					continue
 				}
 				if gotV != wantV {
-					t.Errorf("key %q: got %+v, want %+v", k, gotV, wantV)
+					t.Errorf("target %q: got %+v, want %+v", k, gotV, wantV)
+				}
+			}
+			if len(gotCwds) != len(tt.wantCwds) {
+				t.Fatalf("cwds: got %d entries (%+v), want %d (%+v)", len(gotCwds), gotCwds, len(tt.wantCwds), tt.wantCwds)
+			}
+			for k, wantV := range tt.wantCwds {
+				if gotCwds[k] != wantV {
+					t.Errorf("cwd %q: got %q, want %q", k, gotCwds[k], wantV)
 				}
 			}
 		})

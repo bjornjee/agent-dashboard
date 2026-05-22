@@ -178,8 +178,9 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 	sf := state.ReadState(s.cfg.Profile.StateDir)
 	var paneCwds map[string]string
 	if tmux.TmuxIsAvailable() {
-		state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
-		paneCwds = tmux.TmuxListPaneCwds()
+		targets, cwds := tmux.TmuxListPanes()
+		state.ResolveAgentTargets(&sf, targets)
+		paneCwds = cwds
 	}
 	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
 	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)

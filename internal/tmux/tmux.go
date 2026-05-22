@@ -311,27 +311,63 @@ func tmuxPaneCwd(paneID string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// TmuxListPaneCwds returns pane_id → current working directory for every live pane.
-// Used as a batch fallback when agent state files lack a cwd field.
-func TmuxListPaneCwds() map[string]string {
+// TmuxListPanes returns both the pane → target map and the pane → cwd map
+// from a single `tmux list-panes -a` invocation. The dashboard's hot-path
+// state refresh used to issue two separate calls back-to-back; collapsing
+// them halves the subprocess fanout per refresh tick.
+//
+// Returns (nil, nil) on tmux error — callers must handle nil gracefully
+// (ResolveAgentTargets / ResolveAgentBranches do).
+func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	out, err := runner.Output(ctx, "list-panes", "-a",
-		"-F", "#{pane_id}\t#{pane_current_path}")
+		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}")
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	result := make(map[string]string)
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	return parsePanesOutput(string(out))
+}
+
+// parsePanesOutput parses the tab-separated rows produced by the combined
+// list-panes format. Each row is:
+//
+//	pane_id<TAB>session<TAB>window_idx<TAB>pane_idx<TAB>pane_current_path
+//
+// Rows missing the cwd column are tolerated for the targets map; the cwd
+// map only gets entries whose path is non-empty.
+func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]string) {
+	targets := make(map[string]domain.PaneTarget)
+	cwds := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) == 2 && parts[1] != "" {
-			result[parts[0]] = parts[1]
+		parts := strings.SplitN(line, "\t", 5)
+		if len(parts) < 4 {
+			continue
+		}
+		paneID := parts[0]
+		session := parts[1]
+		w, err := strconv.Atoi(parts[2])
+		if err != nil {
+			continue
+		}
+		p, err := strconv.Atoi(parts[3])
+		if err != nil {
+			continue
+		}
+		targets[paneID] = domain.PaneTarget{
+			Session: session,
+			Window:  w,
+			Pane:    p,
+			Target:  fmt.Sprintf("%s:%d.%d", session, w, p),
+		}
+		if len(parts) == 5 && parts[4] != "" {
+			cwds[paneID] = parts[4]
 		}
 	}
-	return result
+	return targets, cwds
 }
 
 // TmuxListLivePaneIDs returns the set of all live tmux pane IDs (%N format).
@@ -492,53 +528,6 @@ func ParseTarget(target string) (session string, window, pane int, ok bool) {
 		return "", 0, 0, false
 	}
 	return session, w, p, true
-}
-
-// parsePaneTargetsOutput parses the output of:
-//
-//	tmux list-panes -a -F "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}"
-func parsePaneTargetsOutput(output string) map[string]domain.PaneTarget {
-	result := make(map[string]domain.PaneTarget)
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 4)
-		if len(parts) != 4 {
-			continue
-		}
-		paneID := parts[0]
-		session := parts[1]
-		w, err := strconv.Atoi(parts[2])
-		if err != nil {
-			continue
-		}
-		p, err := strconv.Atoi(parts[3])
-		if err != nil {
-			continue
-		}
-		result[paneID] = domain.PaneTarget{
-			Session: session,
-			Window:  w,
-			Pane:    p,
-			Target:  fmt.Sprintf("%s:%d.%d", session, w, p),
-		}
-	}
-	return result
-}
-
-// TmuxListPaneTargets returns the current target for every live tmux pane.
-// The map key is the pane ID (%N format). Returns nil on error (e.g. tmux
-// timeout); callers must handle nil gracefully (ResolveAgentTargets does).
-func TmuxListPaneTargets() map[string]domain.PaneTarget {
-	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
-	defer cancel()
-	out, err := runner.Output(ctx, "list-panes", "-a",
-		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}")
-	if err != nil {
-		return nil
-	}
-	return parsePaneTargetsOutput(string(out))
 }
 
 // ExtractSession returns the session name from a tmux target (session:window.pane → session).

@@ -37,6 +37,13 @@ type subagentsMsg struct {
 	parentTarget string
 	agents       []domain.SubagentInfo
 }
+
+// subagentsBatchMsg carries the full agent→subagents map produced by one
+// shared sessions-index lookup. Used by the periodic refresh to avoid
+// fanning out N independent tea.Cmds per tick.
+type subagentsBatchMsg struct {
+	byTarget map[string][]domain.SubagentInfo
+}
 type planMsg struct{ content string }
 type diagramsLoadedMsg struct {
 	sessionID string
