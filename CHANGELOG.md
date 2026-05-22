@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.28.0](https://github.com/bjornjee/agent-dashboard/compare/v0.27.0...v0.28.0) (2026-05-22)
+
+
+### Features
+
+* harden codex auto-plan enter submission ([#313](https://github.com/bjornjee/agent-dashboard/issues/313)) ([184e84d](https://github.com/bjornjee/agent-dashboard/commit/184e84df3cea385d14cfb7e4efd6d78de6b3bbd8))
+* show codex subagent context ([#312](https://github.com/bjornjee/agent-dashboard/issues/312)) ([8f2ddc9](https://github.com/bjornjee/agent-dashboard/commit/8f2ddc91331d44271a00bdf61d64fa674593d8b3))
+
+
+### Performance Improvements
+
+* coalesce codex sessions walk and dedupe state refresh ([#315](https://github.com/bjornjee/agent-dashboard/issues/315)) ([f833967](https://github.com/bjornjee/agent-dashboard/commit/f8339679b0e1e9079a37a055175a4a244b5faa98))
+
 ## [0.27.0](https://github.com/bjornjee/agent-dashboard/compare/v0.26.1...v0.27.0) (2026-05-22)
 
 
