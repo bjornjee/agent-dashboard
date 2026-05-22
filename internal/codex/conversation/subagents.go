@@ -32,6 +32,10 @@ func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 	if parentSessionID == "" {
 		return nil
 	}
+	key := cacheKey{root: sessionsRoot, sessionID: parentSessionID}
+	if subs, ok := pkgCache.getSubagentList(key); ok {
+		return subs
+	}
 	if _, err := os.Stat(sessionsRoot); err != nil {
 		return nil
 	}
@@ -53,33 +57,29 @@ func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 	sort.Slice(agents, func(i, j int) bool {
 		return agents[i].StartedAt > agents[j].StartedAt
 	})
+	pkgCache.putSubagentList(key, agents)
 	return agents
 }
 
 func ParentThreadID(sessionsRoot, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	key := cacheKey{root: sessionsRoot, sessionID: sessionID}
+	if entry, ok := pkgCache.getRollout(key); ok && entry.MetaRead {
+		return entry.Meta.Source.Subagent.ThreadSpawn.ParentThreadID
+	}
+
 	path, err := LocateRollout(sessionsRoot, sessionID)
 	if err != nil || path == "" {
 		return ""
 	}
-	meta, ok := readSubagentSessionMeta(path)
-	if !ok {
-		return ""
-	}
+	// Cache the result of the meta read regardless of success — a file
+	// that doesn't yet have a session_meta line shouldn't be re-opened
+	// every poll until it does.
+	meta, _ := readSubagentSessionMeta(path)
+	pkgCache.putRollout(key, rolloutEntry{Path: path, Meta: meta, MetaRead: true})
 	return meta.Source.Subagent.ThreadSpawn.ParentThreadID
-}
-
-func SubagentSessionIDs(sessionsRoot string) map[string]bool {
-	if _, err := os.Stat(sessionsRoot); err != nil {
-		return nil
-	}
-
-	ids := make(map[string]bool)
-	walkSubagentSessionMetas(sessionsRoot, func(_ string, meta subagentSessionMeta) {
-		if meta.Source.Subagent.ThreadSpawn.ParentThreadID != "" {
-			ids[meta.ID] = true
-		}
-	})
-	return ids
 }
 
 func walkSubagentSessionMetas(sessionsRoot string, visit func(string, subagentSessionMeta)) {
