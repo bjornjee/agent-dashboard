@@ -13,7 +13,7 @@ The project ships two adapters:
 - `adapters/claude-code/` — Claude Code plugin adapter with hooks, skills, shared hook packages, and Claude subagent definitions.
 - `adapters/codex/` — Codex plugin adapter with a `.codex-plugin` manifest, plugin-local hooks, and Codex-flavored workflow skills.
 
-`install.sh` also syncs the Codex global hook bundle from `adapters/codex/hooks/` to `~/.codex/hooks/agent-dashboard` for non-plugin installs and upgrades.
+Hooks ship inside the plugin bundles themselves — `install.sh` installs the binary only and does not write into `~/.codex`. Register each adapter via its host's plugin marketplace (see below).
 
 ---
 
@@ -75,7 +75,7 @@ The Codex adapter lives in `adapters/codex/` and consists of three plugin-facing
 - `hooks/plugin-hooks.json` — plugin-local hook definitions that run the bundled hook scripts through `${PLUGIN_ROOT}`.
 - `skills/` — Codex-flavored workflow skills that invoke agent-dashboard skills with `$agent-dashboard:<skill>` syntax.
 
-The `adapters/codex/hooks/` directory also contains the global hook bundle that `install.sh --sync-adapters` can sync for non-plugin installs.
+The `adapters/codex/hooks/` directory holds the same hook bundle the plugin ships to Codex when installed via `codex plugin marketplace add bjornjee/agent-dashboard`.
 
 ## Agent state schema
 
@@ -92,14 +92,22 @@ Each agent's state is stored as a JSON file conforming to the schema at `schema/
 ```
 /marketplace add bjornjee/agent-dashboard
 /plugin install agent-dashboard@agent-dashboard
+/plugin enable agent-dashboard@agent-dashboard
 ```
 
 ## Installing the Codex adapter
 
-```
-make install-codex-adapter
+```bash
+codex plugin marketplace add bjornjee/agent-dashboard
 ```
 
-The target registers `.agents/plugins/marketplace.json`, whose `agent-dashboard` entry points at `./adapters/codex`. Enable `agent-dashboard@agent-dashboard` in `~/.codex/config.toml`, then restart Codex and approve the hooks prompt.
+Then enable the plugin by appending the following to `~/.codex/config.toml` and restarting Codex:
+
+```toml
+[plugins."agent-dashboard@agent-dashboard"]
+enabled = true
+```
+
+From a repo checkout, `make install-codex-adapter` runs the marketplace add step and prints the same config snippet.
 
 See [Getting Started](../../getting-started/) for the full installation walkthrough.

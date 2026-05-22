@@ -5,8 +5,8 @@ set -eu
 # agent-dashboard installer
 #
 # Downloads the pre-built binary, verifies its checksum, and installs it.
-# Also installs the Codex global hook bundle used by the dashboard.
-# Plugin registration is handled separately via Claude Code's /plugin command.
+# Plugin registration (Claude Code and Codex) is handled separately via each
+# host's plugin marketplace; this installer no longer writes into ~/.codex.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
@@ -17,23 +17,16 @@ set -eu
 REPO="bjornjee/agent-dashboard"
 BIN_DIR="$HOME/.local/bin"
 STATE_DIR="${AGENT_DASHBOARD_DIR:-$HOME/.agent-dashboard}"
-CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
-CODEX_HOOKS_DIR="$CODEX_DIR/hooks/agent-dashboard"
-CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
-CODEX_STAMP_NAME=".agent-dashboard-installed"
 BUILD_FROM_SOURCE=false
-SYNC_ADAPTERS_ONLY=false
 WORK_DIR=""
-CODEX_HOOKS_SOURCE=""
 
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
-    --build)          BUILD_FROM_SOURCE=true; shift ;;
-    --sync-adapters)  SYNC_ADAPTERS_ONLY=true; shift ;;
-    *)                shift ;;
+    --build)  BUILD_FROM_SOURCE=true; shift ;;
+    *)        shift ;;
   esac
 done
 
@@ -166,7 +159,7 @@ resolve_version() {
 # ---------------------------------------------------------------------------
 
 install_binary_download() {
-  step "1/3" "Downloading agent-dashboard v$VERSION ($OS/$ARCH)..."
+  step "1/2" "Downloading agent-dashboard v$VERSION ($OS/$ARCH)..."
 
   asset="agent-dashboard_${VERSION}_${OS}_${ARCH}.tar.gz"
   url="https://github.com/$REPO/releases/download/v${VERSION}/$asset"
@@ -227,7 +220,7 @@ install_binary_download() {
 
 install_binary_build() {
   REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-  step "1/3" "Building agent-dashboard from source..."
+  step "1/2" "Building agent-dashboard from source..."
   cd "$REPO_DIR"
   make build
   mkdir -p "$BIN_DIR"
@@ -237,197 +230,11 @@ install_binary_build() {
 }
 
 # ---------------------------------------------------------------------------
-# Install Codex hooks
-# ---------------------------------------------------------------------------
-
-resolve_codex_hooks_source() {
-  repo_dir="$(cd "$(dirname "$0")" && pwd)"
-  if [ -f "$repo_dir/adapters/codex/hooks/hooks.json" ]; then
-    CODEX_HOOKS_SOURCE="$repo_dir/adapters/codex/hooks"
-    return
-  fi
-
-  if [ -z "${VERSION:-}" ]; then
-    err "Could not locate adapters/codex/hooks in this checkout."
-    exit 1
-  fi
-
-  source_archive="$WORK_DIR/source.tar.gz"
-  source_dir="$WORK_DIR/source"
-  source_url="https://github.com/$REPO/archive/refs/tags/v${VERSION}.tar.gz"
-
-  mkdir -p "$source_dir"
-  if ! curl -fsSL "$source_url" -o "$source_archive"; then
-    err "Failed to download source archive from $source_url"
-    exit 1
-  fi
-
-  tar -xzf "$source_archive" -C "$source_dir"
-  hooks_json=$(find "$source_dir" -path "*/adapters/codex/hooks/hooks.json" -print | head -n 1)
-  if [ -z "$hooks_json" ]; then
-    err "adapters/codex/hooks/hooks.json not found in source archive."
-    exit 1
-  fi
-
-  CODEX_HOOKS_SOURCE="$(dirname "$hooks_json")"
-}
-
-# ---------------------------------------------------------------------------
-# Hashing helpers (portable across darwin/linux)
-# ---------------------------------------------------------------------------
-
-sha256_stdin() {
-  if check_cmd sha256sum; then
-    sha256sum | awk '{print $1}'
-  elif check_cmd shasum; then
-    shasum -a 256 | awk '{print $1}'
-  else
-    err "Neither sha256sum nor shasum is available; cannot compute hash."
-    exit 1
-  fi
-}
-
-sha256_file() {
-  if check_cmd sha256sum; then
-    sha256sum "$1" | awk '{print $1}'
-  elif check_cmd shasum; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    err "Neither sha256sum nor shasum is available; cannot compute hash."
-    exit 1
-  fi
-}
-
-# bundle_hash <dir> — deterministic sha256 over file paths + contents in the
-# directory, excluding the version-stamp file itself. Stable across darwin
-# and linux because find output is fixed with LC_ALL=C sort.
-bundle_hash() {
-  dir="$1"
-  (
-    cd "$dir" || exit 1
-    find . -type f ! -name "$CODEX_STAMP_NAME" | LC_ALL=C sort | while IFS= read -r f; do
-      printf '%s ' "$f"
-      sha256_file "$f"
-    done
-  ) | sha256_stdin
-}
-
-# is_shipped_hooks_json — returns 0 if the installed CODEX_HOOKS_FILE has a
-# sha256 listed in the .shipped-hashes allowlist (a known prior release).
-is_shipped_hooks_json() {
-  if [ ! -f "$CODEX_HOOKS_FILE" ]; then
-    return 1
-  fi
-  manifest="${AGENT_DASHBOARD_SHIPPED_HASHES:-$CODEX_HOOKS_SOURCE/.shipped-hashes}"
-  if [ ! -f "$manifest" ]; then
-    return 1
-  fi
-  installed_hash=$(sha256_file "$CODEX_HOOKS_FILE")
-  # Strip blank/comment lines, exact-match against the digest.
-  grep -E '^[a-f0-9]{64}$' "$manifest" | grep -qx "$installed_hash"
-}
-
-# ---------------------------------------------------------------------------
-# Codex adapter sync (replaces copy-if-missing semantics so new releases
-# actually land on existing installs).
-# ---------------------------------------------------------------------------
-
-sync_codex_bundle() {
-  source_hash=$(bundle_hash "$CODEX_HOOKS_SOURCE")
-  stamp_path="$CODEX_HOOKS_DIR/$CODEX_STAMP_NAME"
-
-  if [ -d "$CODEX_HOOKS_DIR" ] && [ -f "$stamp_path" ]; then
-    installed_hash=$(head -n1 "$stamp_path" | awk '{print $1}')
-    if [ "$installed_hash" = "$source_hash" ]; then
-      info "Codex hook bundle is up to date."
-      return 0
-    fi
-    info "Codex hook bundle drift detected; upgrading."
-  elif [ -d "$CODEX_HOOKS_DIR" ]; then
-    info "Codex hook bundle missing version stamp; upgrading."
-  else
-    info "Installing Codex hook bundle."
-  fi
-
-  rm -rf "$CODEX_HOOKS_DIR"
-  mkdir -p "$(dirname "$CODEX_HOOKS_DIR")"
-  cp -R "$CODEX_HOOKS_SOURCE" "$CODEX_HOOKS_DIR"
-  # The shipped-hashes manifest lives in the source dir but is not a runtime
-  # asset — drop it from the installed copy to keep the install minimal.
-  rm -f "$CODEX_HOOKS_DIR/.shipped-hashes"
-  chmod +x "$CODEX_HOOKS_DIR/agent-state-fast.sh" "$CODEX_HOOKS_DIR/agent-state-reporter.sh" "$CODEX_HOOKS_DIR/pr-skill-detect.sh"
-  printf '%s\n' "$source_hash" > "$stamp_path"
-}
-
-sync_codex_hooks_json() {
-  if [ ! -f "$CODEX_HOOKS_FILE" ]; then
-    info "Installing Codex hooks.json."
-    mkdir -p "$(dirname "$CODEX_HOOKS_FILE")"
-    cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
-    return 0
-  fi
-
-  source_hash=$(sha256_file "$CODEX_HOOKS_SOURCE/hooks.json")
-  installed_hash=$(sha256_file "$CODEX_HOOKS_FILE")
-  if [ "$installed_hash" = "$source_hash" ]; then
-    info "Codex hooks.json is up to date."
-    return 0
-  fi
-
-  if is_shipped_hooks_json; then
-    info "Upgrading Codex hooks.json from a previously shipped version."
-    cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
-    return 0
-  fi
-
-  if [ "${AGENT_DASHBOARD_ASSUME_YES:-}" = "1" ]; then
-    info "Overwriting locally-modified Codex hooks.json (AGENT_DASHBOARD_ASSUME_YES=1)."
-    cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
-    return 0
-  fi
-
-  if [ "${AGENT_DASHBOARD_NONINTERACTIVE:-}" = "1" ] || ! [ -t 0 ]; then
-    info "Codex hooks.json appears locally modified (stdin is not a TTY); skipping."
-    info "  Installed: $CODEX_HOOKS_FILE"
-    info "  Source:    $CODEX_HOOKS_SOURCE/hooks.json"
-    info "  Re-run with AGENT_DASHBOARD_ASSUME_YES=1 to overwrite."
-    return 0
-  fi
-
-  printf '\n'
-  printf 'Codex hooks.json appears locally modified.\n'
-  printf '  Installed: %s\n' "$CODEX_HOOKS_FILE"
-  printf '  Source:    %s\n' "$CODEX_HOOKS_SOURCE/hooks.json"
-  printf 'Overwrite %s? [y/N] ' "$CODEX_HOOKS_FILE"
-  read answer || answer=""
-  case "$answer" in
-    y|Y|yes|YES)
-      cp "$CODEX_HOOKS_SOURCE/hooks.json" "$CODEX_HOOKS_FILE"
-      info "Overwrote $CODEX_HOOKS_FILE."
-      ;;
-    *)
-      info "Left $CODEX_HOOKS_FILE in place."
-      ;;
-  esac
-}
-
-install_codex_hooks() {
-  step "3/3" "Installing Codex dashboard hooks..."
-  resolve_codex_hooks_source
-
-  sync_codex_bundle
-  sync_codex_hooks_json
-
-  info "Codex hook runtime: $CODEX_HOOKS_DIR"
-  info "Codex hook config: $CODEX_HOOKS_FILE"
-}
-
-# ---------------------------------------------------------------------------
 # Bootstrap settings
 # ---------------------------------------------------------------------------
 
 bootstrap_settings() {
-  step "2/3" "Bootstrapping settings..."
+  step "2/2" "Bootstrapping settings..."
   settings_file="$STATE_DIR/settings.toml"
   if [ ! -f "$settings_file" ]; then
     example=""
@@ -468,23 +275,6 @@ check_path() {
 echo "=== agent-dashboard installer ==="
 echo ""
 
-if [ "$SYNC_ADAPTERS_ONLY" = true ]; then
-  # Adapter-only sync: no binary install, no settings bootstrap. Used by
-  # `make sync-adapters` from a checkout. For curl-pipe upgrades the user
-  # would still re-run the full installer, so resolve_version + source-archive
-  # fetch only kick in when this script isn't sitting beside a checkout.
-  echo "Syncing codex adapter..."
-  if [ ! -f "$(dirname "$0")/adapters/codex/hooks/hooks.json" ]; then
-    resolve_version
-    WORK_DIR=$(mktemp -d)
-    trap cleanup EXIT
-  fi
-  install_codex_hooks
-  echo ""
-  echo "Adapter sync complete."
-  exit 0
-fi
-
 check_prerequisites
 
 if [ "$BUILD_FROM_SOURCE" = true ]; then
@@ -500,28 +290,29 @@ else
 fi
 
 bootstrap_settings
-install_codex_hooks
 check_path
 
 echo ""
 echo "=== Next steps ==="
 echo ""
-echo "  1. Add the marketplace (run in any Claude Code session):"
+echo "  Claude Code:"
 echo ""
 echo "     /marketplace add bjornjee/agent-dashboard"
-echo ""
-echo "  2. Install the plugin:"
-echo ""
 echo "     /plugin install agent-dashboard@agent-dashboard"
+echo "     /plugin enable agent-dashboard@agent-dashboard"
 echo ""
-echo "  3. Restart Claude Code sessions for hooks and skills to take effect."
+echo "     Then restart Claude Code sessions for hooks and skills to take effect."
 echo ""
-echo "  4. Restart Codex sessions and approve the agent-dashboard hooks prompt."
+echo "  Codex:"
 echo ""
-echo "     Hooks: $CODEX_HOOKS_FILE"
-echo "     Runtime: $CODEX_HOOKS_DIR"
+echo "     codex plugin marketplace add bjornjee/agent-dashboard"
 echo ""
-echo "  5. Run the dashboard in a tmux pane:"
+echo "     Then append to ~/.codex/config.toml and restart codex:"
+echo ""
+echo "       [plugins.\"agent-dashboard@agent-dashboard\"]"
+echo "       enabled = true"
+echo ""
+echo "  Run the dashboard in a tmux pane:"
 echo ""
 echo "     agent-dashboard"
 echo ""

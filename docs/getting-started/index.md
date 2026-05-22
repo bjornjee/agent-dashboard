@@ -31,7 +31,7 @@ Download the pre-built binary from the latest [GitHub Release](https://github.co
 curl -fsSL https://raw.githubusercontent.com/bjornjee/agent-dashboard/main/install.sh | sh
 ```
 
-The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. It also copies Codex dashboard hooks to `~/.codex/hooks/agent-dashboard` and copies `~/.codex/hooks.json` when that file does not already exist. No Go toolchain required.
+The installer downloads the binary for your platform, verifies its SHA256 checksum, and installs it to `~/.local/bin/agent-dashboard`. Hooks and skills are delivered through each host's plugin marketplace (see Step 2 and Step 3 below); the installer does not write into `~/.codex`. No Go toolchain required.
 
 ### Build from source
 
@@ -50,6 +50,7 @@ In any Claude Code session, run:
 ```
 /marketplace add bjornjee/agent-dashboard
 /plugin install agent-dashboard@agent-dashboard
+/plugin enable agent-dashboard@agent-dashboard
 ```
 
 Then restart Claude Code sessions for hooks and skills to take effect.
@@ -67,11 +68,20 @@ Without it, skill-gated session types (feature, fix, chore, refactor, investigat
 
 ## Step 3: Codex CLI support
 
-Codex support is installed by `install.sh`, not by editing the managed plugin cache. The installer only performs copy-if-missing actions: it copies the Codex hook bundle to `~/.codex/hooks/agent-dashboard` and copies the global hook template to `~/.codex/hooks.json` only when that file is absent.
+Codex support is packaged as a Codex plugin adapter in `adapters/codex/`. Register the marketplace entry with Codex:
 
-After installing, restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions like Claude sessions — same state file, same conversation panel, same cost dashboard.
+```bash
+codex plugin marketplace add bjornjee/agent-dashboard
+```
 
-If `~/.codex/hooks.json` already exists, the installer leaves it untouched. Review the template at `~/.codex/hooks/agent-dashboard/hooks.json` and reconcile it with your existing Codex hooks before restarting Codex.
+Then enable the plugin by appending the following to `~/.codex/config.toml`:
+
+```toml
+[plugins."agent-dashboard@agent-dashboard"]
+enabled = true
+```
+
+Restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once approved, the dashboard sees Codex sessions like Claude sessions — same state file, same conversation panel, same cost dashboard.
 
 ## Step 4: Launch
 
