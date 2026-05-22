@@ -26,8 +26,8 @@ func TestRunMigrations_FreshDB(t *testing.T) {
 	// Verify schema_version has 2 entries
 	var count int
 	conn.Get(&count, "SELECT COUNT(*) FROM schema_version")
-	if count != 2 {
-		t.Errorf("schema_version count = %d, want 2", count)
+	if count != 3 {
+		t.Errorf("schema_version count = %d, want 3", count)
 	}
 
 	// Verify provider column exists
@@ -58,8 +58,8 @@ func TestRunMigrations_Idempotent(t *testing.T) {
 
 	var count int
 	conn.Get(&count, "SELECT COUNT(*) FROM schema_version")
-	if count != 2 {
-		t.Errorf("schema_version count = %d after 2 runs, want 2", count)
+	if count != 3 {
+		t.Errorf("schema_version count = %d after 2 runs, want 3", count)
 	}
 }
 
@@ -85,8 +85,8 @@ func TestRunMigrations_BootstrapV1(t *testing.T) {
 	// Should have detected V1 and only run migration 002.
 	var version int
 	conn.Get(&version, "SELECT MAX(version) FROM schema_version")
-	if version != 2 {
-		t.Errorf("max version = %d, want 2", version)
+	if version != 3 {
+		t.Errorf("max version = %d, want 3", version)
 	}
 
 	// Provider column should exist.
@@ -128,8 +128,8 @@ func TestRunMigrations_BootstrapV2(t *testing.T) {
 	// Should detect V2 and skip all migrations.
 	var version int
 	conn.Get(&version, "SELECT MAX(version) FROM schema_version")
-	if version != 2 {
-		t.Errorf("max version = %d, want 2", version)
+	if version != 3 {
+		t.Errorf("max version = %d, want 3", version)
 	}
 
 	// Existing data should be untouched.

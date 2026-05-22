@@ -34,6 +34,7 @@ func lookupPricing(model string) domain.ModelPricing {
 // usageEntry is the minimal structure we need from assistant JSONL entries.
 type usageEntry struct {
 	Message struct {
+		ID    string `json:"id"`
 		Model string `json:"model"`
 		Usage struct {
 			InputTokens              int `json:"input_tokens"`
@@ -57,6 +58,11 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
 
+	// Dedup by message.id: Claude Code emits one JSONL line per content block
+	// (text + each tool_use) of an assistant turn, all carrying the same
+	// Anthropic API usage payload. Counting every line multi-counts each turn.
+	seenIDs := make(map[string]struct{})
+
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -71,6 +77,13 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 		tok := entry.Message.Usage
 		if tok.InputTokens == 0 && tok.OutputTokens == 0 {
 			continue
+		}
+
+		if id := entry.Message.ID; id != "" {
+			if _, dup := seenIDs[id]; dup {
+				continue
+			}
+			seenIDs[id] = struct{}{}
 		}
 
 		u.InputTokens += tok.InputTokens

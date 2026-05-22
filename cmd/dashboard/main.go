@@ -11,9 +11,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
+	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/lock"
 	"github.com/bjornjee/agent-dashboard/internal/tui"
+	"github.com/bjornjee/agent-dashboard/internal/usage"
 )
 
 // Version is set at build time via -ldflags "-X main.Version=..."
@@ -60,6 +62,11 @@ func main() {
 	}
 	if database != nil {
 		defer database.Close()
+		// One-time fixup for the message.id double-counting bug. Idempotent
+		// after first success via the meta marker.
+		if err := usage.RecomputeClaudeUsageOnce(database, cfg.Profile.ProjectsDir, conversation.FindProjDirByScan); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: claude usage recompute failed: %v\n", err)
+		}
 	}
 
 	m := tui.NewModel(cfg, database)

@@ -231,6 +231,58 @@ func (d *DB) CostForDateAndProvider(date, provider string) float64 {
 	return total
 }
 
+// SessionInfo identifies a (session_id, model) pair stored in daily_usage.
+type SessionInfo struct {
+	SessionID string `db:"session_id"`
+	Model     string `db:"model"`
+}
+
+// SessionDayRow is one (date, session, provider) row from daily_usage.
+type SessionDayRow struct {
+	Date             string  `db:"date"`
+	InputTokens      int     `db:"input_tokens"`
+	OutputTokens     int     `db:"output_tokens"`
+	CacheReadTokens  int     `db:"cache_read_tokens"`
+	CacheWriteTokens int     `db:"cache_write_tokens"`
+	CostUSD          float64 `db:"cost_usd"`
+}
+
+// DistinctSessionsForProvider returns the unique (session_id, model) pairs
+// recorded for the given provider.
+func (d *DB) DistinctSessionsForProvider(provider string) []SessionInfo {
+	var rows []SessionInfo
+	_ = d.conn.Select(&rows, `
+		SELECT DISTINCT session_id, COALESCE(model, '') AS model
+		FROM daily_usage
+		WHERE provider = ?`, provider)
+	return rows
+}
+
+// SessionDaysForProvider returns every per-date row stored for the given
+// (session_id, provider) pair, ordered by date ascending.
+func (d *DB) SessionDaysForProvider(sessionID, provider string) []SessionDayRow {
+	var rows []SessionDayRow
+	_ = d.conn.Select(&rows, `
+		SELECT date, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
+		FROM daily_usage
+		WHERE session_id = ? AND provider = ?
+		ORDER BY date`, sessionID, provider)
+	return rows
+}
+
+// MetaGet returns the value stored under key in the meta table, or "" if absent.
+func (d *DB) MetaGet(key string) string {
+	var val string
+	_ = d.conn.Get(&val, "SELECT value FROM meta WHERE key = ?", key)
+	return val
+}
+
+// MetaSet stores a key/value pair in the meta table (insert or replace).
+func (d *DB) MetaSet(key, value string) error {
+	_, err := d.conn.Exec("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", key, value)
+	return err
+}
+
 // CostByDay returns daily aggregated cost since the given time, ordered by date.
 func (d *DB) CostByDay(since time.Time) []DayCost {
 	var days []DayCost

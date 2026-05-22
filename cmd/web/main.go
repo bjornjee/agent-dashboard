@@ -8,7 +8,9 @@ import (
 	"os"
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
+	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
+	"github.com/bjornjee/agent-dashboard/internal/usage"
 	"github.com/bjornjee/agent-dashboard/internal/web"
 )
 
@@ -28,6 +30,9 @@ func main() {
 	}
 	if database != nil {
 		defer database.Close()
+		if err := usage.RecomputeClaudeUsageOnce(database, cfg.Profile.ProjectsDir, conversation.FindProjDirByScan); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: claude usage recompute failed: %v\n", err)
+		}
 	}
 
 	// Build auth options from flags and env vars

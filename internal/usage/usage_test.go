@@ -68,6 +68,36 @@ func TestReadUsage_ParsesTokens(t *testing.T) {
 	}
 }
 
+func TestReadUsage_DedupsByMessageID(t *testing.T) {
+	tmp := t.TempDir()
+	// Claude Code emits one JSONL line per content block in an assistant turn
+	// (text + each tool_use). All those lines share the same message.id and
+	// carry the same Anthropic API usage payload. Dedup by message.id so a
+	// single turn is counted once.
+	data := `{"type":"assistant","message":{"id":"msg_x","model":"claude-opus-4-6","role":"assistant","content":[],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"id":"msg_x","model":"claude-opus-4-6","role":"assistant","content":[],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"id":"msg_x","model":"claude-opus-4-6","role":"assistant","content":[],"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"id":"msg_y","model":"claude-opus-4-6","role":"assistant","content":[],"usage":{"input_tokens":200,"output_tokens":100,"cache_read_input_tokens":2000,"cache_creation_input_tokens":300}},"timestamp":"2026-03-28T10:01:00Z"}
+`
+	if err := os.WriteFile(filepath.Join(tmp, "dedup.jsonl"), []byte(data), 0644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	u := ReadUsage(tmp, "dedup")
+	if u.InputTokens != 300 {
+		t.Errorf("InputTokens: got %d, want 300 (msg_x=100 + msg_y=200, not 4 lines)", u.InputTokens)
+	}
+	if u.OutputTokens != 150 {
+		t.Errorf("OutputTokens: got %d, want 150", u.OutputTokens)
+	}
+	if u.CacheReadTokens != 3000 {
+		t.Errorf("CacheReadTokens: got %d, want 3000", u.CacheReadTokens)
+	}
+	if u.CacheWriteTokens != 500 {
+		t.Errorf("CacheWriteTokens: got %d, want 500", u.CacheWriteTokens)
+	}
+}
+
 func TestReadUsage_MissingFile(t *testing.T) {
 	u := ReadUsage("/nonexistent", "nosession")
 	if u.InputTokens != 0 || u.CostUSD != 0 {
