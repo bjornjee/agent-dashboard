@@ -87,7 +87,8 @@ async function loadSubagentRows() {
         html += UI.subagentRow({
           status: sub.Completed ? 'completed' : 'running',
           name: sub.AgentType || 'subagent',
-          task: sub.Description || '',
+          task: sub.InstructionHead || sub.Description || '',
+          mode: sub.Mode || '',
           started_at: sub.StartedAt,
         });
       }

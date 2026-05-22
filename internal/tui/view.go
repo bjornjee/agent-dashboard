@@ -383,13 +383,31 @@ func (m model) agentListContentWithLine() (string, int) {
 				subIcon = lipgloss.NewStyle().Foreground(runningColor).Render("▶")
 			}
 			subLabel := node.Sub.AgentType
-			if node.Sub.Description != "" {
-				maxDesc := m.leftWidth - 9 - len(subLabel)
-				desc := node.Sub.Description
-				if maxDesc > 0 && len(desc) > maxDesc {
-					desc = desc[:maxDesc-1] + "…"
+			modeSuffix := ""
+			modeWidth := 0
+			if node.Sub.Mode != "" {
+				modeSuffix = " " + permissionModeStyle(node.Sub.Mode)
+				modeWidth = 1 + len([]rune(node.Sub.Mode))
+			}
+			desc := node.Sub.InstructionHead
+			if desc == "" {
+				desc = node.Sub.Description
+			}
+			if desc != "" {
+				maxDesc := m.leftWidth - 11 - len([]rune(subLabel)) - modeWidth
+				descRunes := []rune(desc)
+				switch {
+				case maxDesc <= 0:
+					desc = ""
+				case len(descRunes) > maxDesc:
+					desc = string(descRunes[:maxDesc-1]) + "…"
 				}
-				subLabel += ": " + desc
+				if desc != "" {
+					subLabel += ": " + desc
+				}
+			}
+			if modeSuffix != "" {
+				subLabel += modeSuffix
 			}
 
 			if nodeIdx == m.selected {

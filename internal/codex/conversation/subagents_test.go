@@ -74,6 +74,56 @@ func TestFindSubagents_DescriptionFallsBackToThreadRole(t *testing.T) {
 	}
 }
 
+func TestFindSubagents_InstructionHeadPrefersUserInstruction(t *testing.T) {
+	root := t.TempDir()
+	parentID := "parent"
+	writeRollout(t, root, "2026", "05", "21", "child", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","agent_nickname":"Kant","agent_role":"explorer"}}},"thread_source":"subagent","agent_nickname":"Kant","agent_role":"explorer"}}
+{"timestamp":"2026-05-21T14:44:04.000Z","type":"event_msg","payload":{"type":"user_message","message":"\n\nResearch the parser path for Codex subagents.\nReturn exact files and tests."}}
+`)
+
+	got := conversation.FindSubagents(root, parentID)
+	if len(got) != 1 {
+		t.Fatalf("got %d subagents, want 1", len(got))
+	}
+	if got[0].InstructionHead != "Research the parser path for Codex subagents." {
+		t.Errorf("InstructionHead = %q, want first meaningful instruction line", got[0].InstructionHead)
+	}
+	if got[0].Description != got[0].InstructionHead {
+		t.Errorf("Description = %q, want instruction head for backward-compatible display", got[0].Description)
+	}
+}
+
+func TestFindSubagents_InstructionHeadFallsBackWhenNoUserMessage(t *testing.T) {
+	root := t.TempDir()
+	parentID := "parent"
+	writeRollout(t, root, "2026", "05", "21", "child", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","agent_role":"worker"}}},"thread_source":"subagent"}}
+`)
+
+	got := conversation.FindSubagents(root, parentID)
+	if len(got) != 1 {
+		t.Fatalf("got %d subagents, want 1", len(got))
+	}
+	if got[0].InstructionHead != "worker" {
+		t.Errorf("InstructionHead = %q, want role fallback", got[0].InstructionHead)
+	}
+}
+
+func TestFindSubagents_ModeFromTurnContext(t *testing.T) {
+	root := t.TempDir()
+	parentID := "parent"
+	writeRollout(t, root, "2026", "05", "21", "child", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","agent_role":"explorer"}}},"thread_source":"subagent"}}
+{"timestamp":"2026-05-21T14:44:04.000Z","type":"turn_context","payload":{"approval_policy":"on-request","sandbox_policy":{"type":"workspace-write"},"collaboration_mode":{"mode":"plan"}}}
+`)
+
+	got := conversation.FindSubagents(root, parentID)
+	if len(got) != 1 {
+		t.Fatalf("got %d subagents, want 1", len(got))
+	}
+	if got[0].Mode != "plan / on-request / workspace-write" {
+		t.Errorf("Mode = %q, want compact Codex context", got[0].Mode)
+	}
+}
+
 func TestParentThreadID_ReturnsParentForSubagentSession(t *testing.T) {
 	root := t.TempDir()
 	writeRollout(t, root, "2026", "05", "21", "child", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","agent_role":"worker"}}},"thread_source":"subagent"}}
