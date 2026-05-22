@@ -31,7 +31,7 @@ agent-dashboard/
 │   └── populate-quotes/main.go        # bulk quote fetcher for SQLite cache
 ├── internal/                          # core packages (see below)
 ├── adapters/claude-code/                   # Claude Code plugin adapter (see Adapter reference)
-├── adapters/codex/                    # Codex plugin adapter plus global hook bundle
+├── adapters/codex/                    # Codex plugin adapter (hooks ship inside the plugin bundle)
 └── schema/
     └── agent-state.schema.json        # JSON Schema for agent state files
 ```
