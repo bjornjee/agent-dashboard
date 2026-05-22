@@ -11,6 +11,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/fsnotify/fsnotify"
+	"golang.org/x/sync/singleflight"
 )
 
 // sseHub manages SSE client connections and broadcasts state updates.
@@ -81,7 +82,12 @@ func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 					if debounce != nil {
 						debounce.Stop()
 					}
-					debounce = time.AfterFunc(100*time.Millisecond, func() {
+					// 100ms was too eager when several codex agents wrote
+					// state files concurrently — the timer kept resetting
+					// then fired a burst of resolutions. 300ms still feels
+					// instant in an SSE feed but lets a single tick absorb
+					// the burst.
+					debounce = time.AfterFunc(300*time.Millisecond, func() {
 						agents := s.readAgentState()
 						data, err := json.Marshal(agents)
 						if err != nil {
@@ -101,21 +107,31 @@ func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 	return watcher, nil
 }
 
-// readAgentState reads and resolves the current agent state.
+// readAgentState reads and resolves the current agent state. Concurrent
+// callers (debounced fsnotify firings + ad-hoc REST handlers) coalesce
+// via singleflight so a burst of state writes only triggers one tmux +
+// git resolution pass.
 func (s *Server) readAgentState() []domain.Agent {
-	sf := state.ReadState(s.cfg.Profile.StateDir)
-	var paneCwds map[string]string
-	if tmux.TmuxIsAvailable() {
-		state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
-		paneCwds = tmux.TmuxListPaneCwds()
-	}
-	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
-	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
-	state.ResolveAgentBranches(&sf, paneCwds)
-	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf)
-	return conversation.TopLevelAgents(
-		state.SortedAgents(sf, ""),
-		conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
-	)
+	v, _, _ := readAgentStateGroup.Do("readAgentState", func() (any, error) {
+		sf := state.ReadState(s.cfg.Profile.StateDir)
+		var paneCwds map[string]string
+		if tmux.TmuxIsAvailable() {
+			targets, cwds := tmux.TmuxListPanes()
+			state.ResolveAgentTargets(&sf, targets)
+			paneCwds = cwds
+		}
+		state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
+		state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
+		state.ResolveAgentBranches(&sf, paneCwds)
+		state.ApplyPinnedStates(&sf)
+		state.ApplyIdleOverrides(&sf)
+		return conversation.TopLevelAgents(
+			state.SortedAgents(sf, ""),
+			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
+		), nil
+	})
+	agents, _ := v.([]domain.Agent)
+	return agents
 }
+
+var readAgentStateGroup singleflight.Group

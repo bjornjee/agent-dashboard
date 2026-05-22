@@ -27,19 +27,14 @@ func withMockTmuxRunner(t *testing.T) *mocks.MockRunner {
 }
 
 // mockReadAgentState sets up the tmux mock expectations needed by
-// readAgentState: TmuxIsAvailable, TmuxListPaneTargets, TmuxListPaneCwds.
+// readAgentState: TmuxIsAvailable + the combined TmuxListPanes call.
 func mockReadAgentState(m *mocks.MockRunner) {
 	// TmuxIsAvailable (Run: list-sessions)
 	m.On("Run", mock.Anything, "list-sessions").Return(nil)
 
-	// TmuxListPaneTargets (Output: list-panes -a -F ...)
+	// TmuxListPanes (Output: list-panes -a -F ...)
 	m.On("Output", mock.Anything,
-		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}",
-	).Return([]byte(""), nil)
-
-	// TmuxListPaneCwds (Output: list-panes -a -F ...)
-	m.On("Output", mock.Anything,
-		"list-panes", "-a", "-F", "#{pane_id}\t#{pane_current_path}",
+		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}",
 	).Return([]byte(""), nil)
 }
 

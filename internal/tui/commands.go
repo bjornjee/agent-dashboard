@@ -27,6 +27,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/usage"
 	"github.com/fsnotify/fsnotify"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 )
 
 // -- Deferred startup commands --
@@ -304,9 +305,19 @@ func conversationEntriesToActivity(entries []domain.ConversationEntry) []domain.
 	return activity
 }
 
-// loadAllSubagents loads subagent info for all agents.
-func (m model) loadAllSubagents() []tea.Cmd {
-	var cmds []tea.Cmd
+// loadAllSubagents returns a single tea.Cmd that resolves subagents for
+// every visible agent in one pass. The codex side reads from the shared
+// sessions index (one walk for all parents); the claude side still does
+// per-agent FindSubagents but is bounded by claude's per-project layout.
+//
+// One Cmd → one subagentsBatchMsg keeps bubbletea loop pressure constant
+// regardless of agent count, vs. the previous N-Cmd / N-message fanout.
+func (m model) loadAllSubagents() tea.Cmd {
+	type target struct {
+		agent     domain.Agent
+		codexRoot string
+	}
+	targets := make([]target, 0, len(m.agents))
 	for _, agent := range m.agents {
 		if agent.SessionID == "" {
 			continue
@@ -314,14 +325,19 @@ func (m model) loadAllSubagents() []tea.Cmd {
 		if agent.Harness != "codex" && agent.ProjDir == "" {
 			continue
 		}
-		a := agent // copy for closure
-		codexRoot := m.codexSessionsDir
-		cmds = append(cmds, func() tea.Msg {
-			subs := conversation.ReadSubagents(a, conversation.Roots{CodexSessionsRoot: codexRoot})
-			return subagentsMsg{parentTarget: a.Target, agents: subs}
-		})
+		targets = append(targets, target{agent: agent, codexRoot: m.codexSessionsDir})
 	}
-	return cmds
+	if len(targets) == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		byTarget := make(map[string][]domain.SubagentInfo, len(targets))
+		for _, t := range targets {
+			subs := conversation.ReadSubagents(t.agent, conversation.Roots{CodexSessionsRoot: t.codexRoot})
+			byTarget[t.agent.Target] = subs
+		}
+		return subagentsBatchMsg{byTarget: byTarget}
+	}
 }
 
 func pruneDead(statePath string) tea.Cmd {
@@ -489,19 +505,30 @@ func loadCodexDBUsage(database *db.DB) tea.Cmd {
 
 func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool) tea.Cmd {
 	return func() tea.Msg {
-		sf := state.ReadState(path)
-		var paneCwds map[string]string
-		if tmuxAvailable {
-			state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
-			paneCwds = tmux.TmuxListPaneCwds()
-		}
-		state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
-		state.ResolveAgentWorktree(&sf, path)
-		state.ResolveAgentBranches(&sf, paneCwds)
-		state.ApplyPinnedStates(&sf)
+		v, _, _ := loadStateGroup.Do(path, func() (any, error) {
+			sf := state.ReadState(path)
+			var paneCwds map[string]string
+			if tmuxAvailable {
+				targets, cwds := tmux.TmuxListPanes()
+				state.ResolveAgentTargets(&sf, targets)
+				paneCwds = cwds
+			}
+			state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+			state.ResolveAgentWorktree(&sf, path)
+			state.ResolveAgentBranches(&sf, paneCwds)
+			state.ApplyPinnedStates(&sf)
+			return sf, nil
+		})
+		sf, _ := v.(domain.StateFile)
 		return stateUpdatedMsg{state: sf}
 	}
 }
+
+// loadStateGroup deduplicates concurrent loadState calls. The TUI tick
+// fires loadState every 30s, but fsnotify can drive other refreshes
+// faster; coalescing in-flight work prevents N rapid agent state writes
+// from queueing N back-to-back tmux + git fanouts.
+var loadStateGroup singleflight.Group
 
 func tickEvery() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -1061,12 +1088,11 @@ func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxRea
 							}
 						}()
 						sf := state.ReadState(dir)
-						if tmuxReady.Load() {
-							state.ResolveAgentTargets(&sf, tmux.TmuxListPaneTargets())
-						}
 						var pc map[string]string
 						if tmuxReady.Load() {
-							pc = tmux.TmuxListPaneCwds()
+							targets, cwds := tmux.TmuxListPanes()
+							state.ResolveAgentTargets(&sf, targets)
+							pc = cwds
 						}
 						state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
 						state.ResolveAgentWorktree(&sf, dir)

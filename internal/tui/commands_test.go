@@ -288,22 +288,23 @@ func TestLoadAllSubagents_RoutesCodexAgentToRolloutDiscovery(t *testing.T) {
 		codexSessionsDir: root,
 	}
 
-	cmds := m.loadAllSubagents()
-	if len(cmds) != 1 {
-		t.Fatalf("got %d cmds, want 1", len(cmds))
+	cmd := m.loadAllSubagents()
+	if cmd == nil {
+		t.Fatal("loadAllSubagents returned nil, want batch cmd")
 	}
-	msg, ok := cmds[0]().(subagentsMsg)
+	msg, ok := cmd().(subagentsBatchMsg)
 	if !ok {
-		t.Fatalf("got %T, want subagentsMsg", cmds[0]())
+		t.Fatalf("got %T, want subagentsBatchMsg", cmd())
 	}
-	if msg.parentTarget != "main:1.0" {
-		t.Errorf("parentTarget = %q, want main:1.0", msg.parentTarget)
+	subs, ok := msg.byTarget["main:1.0"]
+	if !ok {
+		t.Fatalf("byTarget missing main:1.0: %+v", msg.byTarget)
 	}
-	if len(msg.agents) != 1 {
-		t.Fatalf("got %d subagents, want 1: %+v", len(msg.agents), msg.agents)
+	if len(subs) != 1 {
+		t.Fatalf("got %d subagents, want 1: %+v", len(subs), subs)
 	}
-	if msg.agents[0].AgentID != childID {
-		t.Errorf("AgentID = %q, want %q", msg.agents[0].AgentID, childID)
+	if subs[0].AgentID != childID {
+		t.Errorf("AgentID = %q, want %q", subs[0].AgentID, childID)
 	}
 }
 

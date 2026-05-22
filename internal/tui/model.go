@@ -738,7 +738,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateLeftContent()
 		m.updateRightContent()
 		cmds := []tea.Cmd{m.captureSelected(), m.loadConversation(), loadUsage(m.agents), m.loadPlan(), m.loadDiagrams()}
-		cmds = append(cmds, m.loadAllSubagents()...)
+		// Subagent refresh moved to the 5-tick background loop. Firing on
+		// every stateUpdatedMsg multiplied work by the number of fsnotify
+		// events during bursts of concurrent agent state writes.
 		return m, tea.Batch(cmds...)
 
 	case conversationMsg:
@@ -850,7 +852,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.loadSubagentActivity())
 		}
 		if m.tickCount%5 == 0 {
-			cmds = append(cmds, m.loadAllSubagents()...)
+			if c := m.loadAllSubagents(); c != nil {
+				cmds = append(cmds, c)
+			}
 			cmds = append(cmds, m.loadPlan())
 			cmds = append(cmds, m.loadDiagrams())
 		}
@@ -957,14 +961,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case subagentsMsg:
-		prevTarget2, prevSubID2 := m.selectedIdentity()
-		m.agentSubagents[msg.parentTarget] = msg.agents
-		if _, exists := m.collapsed[msg.parentTarget]; !exists {
-			m.collapsed[msg.parentTarget] = true
+	case subagentsBatchMsg:
+		prevTarget, prevSubID := m.selectedIdentity()
+		for target, agents := range msg.byTarget {
+			m.agentSubagents[target] = agents
+			if _, exists := m.collapsed[target]; !exists {
+				m.collapsed[target] = true
+			}
 		}
 		m.buildTree()
-		m.restoreSelection(prevTarget2, prevSubID2)
+		m.restoreSelection(prevTarget, prevSubID)
 		m.updateLeftContent()
 		return m, nil
 
