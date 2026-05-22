@@ -374,7 +374,7 @@ func TestCreate_CodexAllowsSupportedSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	want := "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature hi' codex"
+	want := "codex '$agent-dashboard:feature hi'"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}

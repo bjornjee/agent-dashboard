@@ -1,9 +1,16 @@
 // Package codex adapts the OpenAI codex CLI as an agent-dashboard harness.
 //
-// Spawn-command construction targets codex CLI 0.130.0 surface:
+// Spawn-command construction targets codex CLI 0.130.0+ surface:
 //
-//	codex [-c model_reasoning_effort=<E>] [--model <M>] [-a <APPROVAL>] [-s <SANDBOX>] <prompt>
+//	codex [-c model_reasoning_effort=<E>] [--model <M>] [-a <APPROVAL>] [-s <SANDBOX>] [PROMPT]
 //	codex resume <session-id>
+//
+// The initial message is passed as codex's documented `[PROMPT]` positional
+// arg — codex auto-submits it on TUI startup. This is the same mechanism
+// every skill uses; there is no env-var/hook fallback path. (An earlier
+// "deferred prompt" route piggy-backed on the SessionStart hook for the
+// feature skill, but it silently dropped the user's message when the hook
+// chain failed to fire — see git history for the removal.)
 //
 // Effort flag uses the `-c model_reasoning_effort=<level>` config-override
 // form because codex 0.130.0 has no top-level `--effort` flag (cf.
@@ -11,10 +18,9 @@
 // ReasoningEffort enum tops at `high` (codex-rs/protocol/src/config_types.rs).
 // We map `max` → `high` so opt-in skills work uniformly across harnesses.
 //
-// Plan-mode, permission-mode, and tool-use signaling come over codex's
-// native hook protocol (1:1 with Claude's; see internal/codex/ readers and
-// adapters/claude-code/scripts/hooks/*.js). The harness itself only
-// composes spawn strings.
+// Permission-mode and tool-use signaling come over codex's native hook
+// protocol (1:1 with Claude's; see internal/codex/ readers and
+// adapters/codex/hooks/*.js). The harness itself only composes spawn strings.
 package codex
 
 import (
@@ -72,9 +78,6 @@ func (c *Codex) SpawnCommand(skill, message string, opts domain.SpawnOpts) strin
 	}
 
 	prompt := buildPrompt(skill, message)
-	if skill == "feature" && prompt != "" {
-		return "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT=" + shellQuote(prompt) + " " + cmd
-	}
 	if prompt != "" {
 		cmd += " " + shellQuote(prompt)
 	}
