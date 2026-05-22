@@ -7,6 +7,49 @@ const assert = require('node:assert/strict');
 const { runAutoPlan } = require('./auto-plan');
 
 describe('auto-plan hook helper', () => {
+  it('types prompt text literally before sending Enter', async () => {
+    const cp = require('child_process');
+    const origSpawnSync = cp.spawnSync;
+    const modulePath = require.resolve('./auto-plan');
+    const calls = [];
+
+    cp.spawnSync = (cmd, args) => {
+      calls.push({ cmd, args });
+      return { status: 0 };
+    };
+    delete require.cache[modulePath];
+
+    try {
+      const { runAutoPlan: runWithDefaultSendLine } = require('./auto-plan');
+      const states = [
+        {},
+        { permission_mode: 'plan' },
+      ];
+
+      const result = await runWithDefaultSendLine({
+        sessionId: 'session-1',
+        tmuxPane: '%7',
+        deferredPrompt: '$agent-dashboard:feature fix plan mode',
+        readAgentState: () => states.shift() || { permission_mode: 'plan' },
+        writeState: () => {},
+        sleep: async () => {},
+        maxAttempts: 1,
+        initialDelayMs: 0,
+      });
+
+      assert.equal(result.status, 'done');
+      assert.deepEqual(calls.map(call => call.args), [
+        ['send-keys', '-l', '-t', '%7', '/plan'],
+        ['send-keys', '-t', '%7', 'Enter'],
+        ['send-keys', '-l', '-t', '%7', '$agent-dashboard:feature fix plan mode'],
+        ['send-keys', '-t', '%7', 'Enter'],
+      ]);
+    } finally {
+      cp.spawnSync = origSpawnSync;
+      delete require.cache[modulePath];
+    }
+  });
+
   it('sends /plan first, waits for plan mode, then sends the deferred prompt', async () => {
     const sent = [];
     const states = [

@@ -16,11 +16,17 @@ function sleep(ms) {
 }
 
 function sendLine(tmuxPane, text) {
-  const result = spawnSync('tmux', ['send-keys', '-t', tmuxPane, text, 'Enter'], {
+  const textResult = spawnSync('tmux', ['send-keys', '-l', '-t', tmuxPane, text], {
     timeout: 1000,
     stdio: 'ignore',
   });
-  return result.status === 0;
+  if (textResult.status !== 0) return false;
+
+  const enterResult = spawnSync('tmux', ['send-keys', '-t', tmuxPane, 'Enter'], {
+    timeout: 1000,
+    stdio: 'ignore',
+  });
+  return enterResult.status === 0;
 }
 
 async function runAutoPlan({
