@@ -1348,6 +1348,71 @@ func TestCodexSubagents_RenderRunningAndCompletedIndicators(t *testing.T) {
 	}
 }
 
+func TestCodexSubagents_RenderInstructionHeadAndMode(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 160
+	m.height = 40
+	m.resizeViewports()
+	m.leftWidth = 120
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Harness: "codex"},
+	}
+	m.agentSubagents = map[string][]domain.SubagentInfo{
+		"main:1.0": {
+			{
+				AgentID:         "child-running",
+				AgentType:       "explorer",
+				Description:     "Kant",
+				InstructionHead: "Research the parser path for Codex subagents.",
+				Mode:            "plan / on-request / workspace-write",
+			},
+		},
+	}
+	m.buildTree()
+
+	content := stripANSI(m.agentListContent())
+	if !strings.Contains(content, "Research the parser path for Codex subagents.") {
+		t.Errorf("codex subagent should render instruction head, got:\n%s", content)
+	}
+	if !strings.Contains(content, "plan / on-request / workspace-write") {
+		t.Errorf("codex subagent should render mode, got:\n%s", content)
+	}
+	if strings.Contains(content, "Kant") {
+		t.Errorf("codex subagent should not render arbitrary nickname when instruction head exists, got:\n%s", content)
+	}
+}
+
+func TestCodexSubagents_ReservesWidthForMode(t *testing.T) {
+	t.Setenv("COLORTERM", "truecolor")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 100
+	m.height = 40
+	m.resizeViewports()
+	m.leftWidth = 70
+	m.agents = []domain.Agent{
+		{Target: "main:1.0", Window: 1, Pane: 0, State: "running", Harness: "codex"},
+	}
+	m.agentSubagents = map[string][]domain.SubagentInfo{
+		"main:1.0": {
+			{
+				AgentID:         "child-running",
+				AgentType:       "explorer",
+				InstructionHead: "Research the parser path for Codex subagents and summarize every affected display surface.",
+				Mode:            "plan / on-request / workspace-write",
+			},
+		},
+	}
+	m.buildTree()
+
+	content := stripANSI(m.agentListContent())
+	if !strings.Contains(content, "plan / on-request / workspace-write") {
+		t.Errorf("codex subagent mode should remain visible in narrower panels, got:\n%s", content)
+	}
+}
+
 func TestStateUpdated_FiltersCodexSubagentTopLevelRows(t *testing.T) {
 	root := t.TempDir()
 	writeModelRollout(t, root, "child-codex", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_role":"explorer"}}},"thread_source":"subagent"}}

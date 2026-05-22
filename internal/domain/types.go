@@ -128,11 +128,13 @@ type ActivityEntry struct {
 
 // SubagentInfo describes a discovered subagent.
 type SubagentInfo struct {
-	AgentID     string
-	AgentType   string
-	Description string
-	Completed   bool   // true if the subagent has finished
-	StartedAt   string // ISO8601 timestamp from first JSONL entry
+	AgentID         string
+	AgentType       string
+	Description     string
+	InstructionHead string
+	Mode            string
+	Completed       bool   // true if the subagent has finished
+	StartedAt       string // ISO8601 timestamp from first JSONL entry
 }
 
 // RateLimitStatus holds the most recent rate limit info from a session JSONL.

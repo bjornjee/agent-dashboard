@@ -29,6 +29,16 @@ type subagentSessionMeta struct {
 	AgentRole     string `json:"agent_role"`
 }
 
+// subagentRolloutDetails carries the per-rollout signals we extract in a
+// single pass while building the sessions index — completion status, the
+// first meaningful instruction line for the description, and the
+// collaboration/sandbox mode summary.
+type subagentRolloutDetails struct {
+	InstructionHead string
+	Mode            string
+	Completed       bool
+}
+
 // FindSubagents returns the subagents whose session_meta names parentSessionID
 // as their parent_thread_id. Results come from the shared sessions index,
 // so the first cold call within a TTL window walks the tree once and all
@@ -131,14 +141,19 @@ func buildSessionsIndex(sessionsRoot string) *sessionsIndex {
 		if parentID == "" || idByMeta == "" {
 			return
 		}
-		info := domain.SubagentInfo{
-			AgentID:     idByMeta,
-			AgentType:   firstNonEmpty(meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole),
-			Description: firstNonEmpty(meta.AgentNickname, meta.Source.Subagent.ThreadSpawn.AgentNickname, meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole, idByMeta),
-			Completed:   rolloutCompleted(path),
-			StartedAt:   meta.Timestamp,
-		}
-		idx.children[parentID] = append(idx.children[parentID], info)
+		agentType := firstNonEmpty(meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole)
+		fallback := firstNonEmpty(meta.AgentNickname, meta.Source.Subagent.ThreadSpawn.AgentNickname, meta.AgentRole, meta.Source.Subagent.ThreadSpawn.AgentRole, idByMeta)
+		details := readSubagentRolloutDetails(path)
+		instructionHead := firstNonEmpty(details.InstructionHead, fallback)
+		idx.children[parentID] = append(idx.children[parentID], domain.SubagentInfo{
+			AgentID:         idByMeta,
+			AgentType:       agentType,
+			Description:     instructionHead,
+			InstructionHead: instructionHead,
+			Mode:            details.Mode,
+			Completed:       details.Completed,
+			StartedAt:       meta.Timestamp,
+		})
 	})
 
 	for parentID, subs := range idx.children {
@@ -218,30 +233,92 @@ func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
 	return subagentSessionMeta{}, false
 }
 
-func rolloutCompleted(path string) bool {
+// readSubagentRolloutDetails scans the rollout JSONL once and extracts:
+//   - InstructionHead: the first meaningful line of the first user_message
+//     event (the prompt codex received), used as the subagent description.
+//   - Mode: a short summary derived from the first turn_context payload
+//     (collaboration mode / approval policy / sandbox type).
+//   - Completed: true if any event_msg/task_complete line is present.
+//
+// One file open per rollout — buildSessionsIndex was previously calling
+// rolloutCompleted (a second open) on top of readSubagentSessionMeta.
+func readSubagentRolloutDetails(path string) subagentRolloutDetails {
 	f, err := os.Open(path)
 	if err != nil {
-		return false
+		return subagentRolloutDetails{}
 	}
 	defer f.Close()
 
+	var details subagentRolloutDetails
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		var line struct {
-			Type    string `json:"type"`
-			Payload struct {
-				Type string `json:"type"`
-			} `json:"payload"`
+			Type    string          `json:"type"`
+			Payload json.RawMessage `json:"payload"`
 		}
 		if json.Unmarshal(scanner.Bytes(), &line) != nil {
 			continue
 		}
-		if line.Type == "event_msg" && line.Payload.Type == "task_complete" {
-			return true
+		switch line.Type {
+		case "event_msg":
+			var payload struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			}
+			if json.Unmarshal(line.Payload, &payload) != nil {
+				continue
+			}
+			if payload.Type == "user_message" && details.InstructionHead == "" {
+				details.InstructionHead = firstMeaningfulLine(payload.Message)
+			}
+			if payload.Type == "task_complete" {
+				details.Completed = true
+			}
+		case "turn_context":
+			if details.Mode == "" {
+				details.Mode = codexModeFromTurnContext(line.Payload)
+			}
 		}
 	}
-	return false
+	return details
+}
+
+func firstMeaningfulLine(message string) string {
+	for _, line := range strings.Split(message, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func codexModeFromTurnContext(raw json.RawMessage) string {
+	var payload struct {
+		ApprovalPolicy string `json:"approval_policy"`
+		SandboxPolicy  struct {
+			Type string `json:"type"`
+		} `json:"sandbox_policy"`
+		CollaborationMode struct {
+			Mode string `json:"mode"`
+		} `json:"collaboration_mode"`
+	}
+	if json.Unmarshal(raw, &payload) != nil {
+		return ""
+	}
+	parts := []string{
+		payload.CollaborationMode.Mode,
+		payload.ApprovalPolicy,
+		payload.SandboxPolicy.Type,
+	}
+	nonEmpty := parts[:0]
+	for _, part := range parts {
+		if part != "" {
+			nonEmpty = append(nonEmpty, part)
+		}
+	}
+	return strings.Join(nonEmpty, " / ")
 }
 
 func firstNonEmpty(values ...string) string {
