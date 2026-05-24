@@ -7,10 +7,7 @@
 //
 // The initial message is passed as codex's documented `[PROMPT]` positional
 // arg — codex auto-submits it on TUI startup. This is the same mechanism
-// every skill uses; there is no env-var/hook fallback path. (An earlier
-// "deferred prompt" route piggy-backed on the SessionStart hook for the
-// feature skill, but it silently dropped the user's message when the hook
-// chain failed to fire — see git history for the removal.)
+// every skill uses.
 //
 // Effort flag uses the `-c model_reasoning_effort=<level>` config-override
 // form because codex 0.130.0 has no top-level `--effort` flag (cf.
