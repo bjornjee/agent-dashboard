@@ -148,37 +148,35 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
 /**
  * Resolve the state to write for Stop and SubagentStop events. Pure function.
  *
- * The previous implementation called detectState() unconditionally on every
- * SubagentStop where subagent_count reached 0. detectState is heuristic
- * (regex on last_assistant_message + tmux pane buffer for the ❯ glyph), so
- * it misclassifies the parent as idle/question while the parent is still
- * actively running between turns — producing visible state flicker and
- * spurious "Finished" notifications.
+ * detectState is heuristic (regex on last_assistant_message + tmux pane buffer
+ * for the ❯ glyph), so it can misclassify the parent as idle/question while
+ * the parent is still actively running between turns. We gate it on two
+ * deterministic checks:
+ *   - hasPendingTool=true → parent JSONL has an in-flight tool_use; parent is
+ *     definitively still working; preserve existing state.
+ *   - subagentCount > 0  → other subagents are still running; the parent is
+ *     orchestrating; preserve existing state.
  *
- * The fix: gate the heuristic on a deterministic JSONL truth check. If the
- * parent transcript shows a tool_use without a matching tool_result, the
- * parent is definitively still working — preserve the existing state.
+ * For SubagentStop with subagentCount==0 and !hasPendingTool, run detectState
+ * the same way Stop does — codex CLI sometimes lands at last_hook_event=
+ * SubagentStop without a matching Stop write, leaving the dashboard stuck on
+ * state=running for an idle agent. Both deterministic checks must pass before
+ * detectState is allowed to decide.
  *
  * @param {object} params
  * @param {string} params.hookEvent - 'Stop' or 'SubagentStop'
  * @param {object} params.existing - current on-disk agent state
  * @param {boolean} params.hasPendingTool - parent JSONL has an in-flight tool_use
+ * @param {number} [params.subagentCount=0] - post-decrement subagent_count
  * @param {string|null} params.lastMessage - input.last_assistant_message
  * @param {string[]} params.paneBuffer - tmux capture-pane lines
  * @returns {string} resolved state
  */
-function resolveStopState({ hookEvent, existing, hasPendingTool, lastMessage, paneBuffer }) {
-  if (hookEvent === 'SubagentStop') {
-    // Subagent events never decide the main agent's state. When one of N
-    // parallel subagents stops, the parent is still actively orchestrating —
-    // running detectState() here would flip the parent into a stop-state
-    // (idle_prompt/done/question, bucketed as REVIEW in the dashboard) just
-    // because a single subagent completed. State transitions to stop-states
-    // are owned by the parent's own Stop event.
+function resolveStopState({ hookEvent, existing, hasPendingTool, subagentCount = 0, lastMessage, paneBuffer }) {
+  if (hasPendingTool) {
     return existing.state || 'running';
   }
-  // Stop event — only run heuristic when JSONL says no tool is in flight.
-  if (hasPendingTool) {
+  if (hookEvent === 'SubagentStop' && subagentCount > 0) {
     return existing.state || 'running';
   }
   return detectState(lastMessage, paneBuffer);
@@ -240,17 +238,22 @@ function report(input) {
   if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart') {
     state = 'running';
   } else {
-    // SubagentStop / Stop: gate the heuristic detectState() on a deterministic
-    // JSONL check. A pending parent tool_use means the agent is still working.
+    // SubagentStop / Stop: gate the heuristic detectState() on deterministic
+    // checks. A pending parent tool_use means the agent is still working;
+    // remaining subagents (post-decrement count > 0) mean the parent is still
+    // orchestrating.
     hasPendingTool = hasPendingParentToolUse(input.transcript_path);
     const lastMessage = input.last_assistant_message || null;
-    // detectState() runs only on Stop (SubagentStop returns existing.state),
-    // and only when no parent tool is in flight. Skip the tmux capture
-    // otherwise — it's the most expensive call in this hook.
-    const willDetect = hookEvent === 'Stop' && !hasPendingTool;
+    const postDecrementCount = hookEvent === 'SubagentStop'
+      ? Math.max(0, (existing.subagent_count || 0) - 1)
+      : (existing.subagent_count || 0);
+    // Skip the tmux capture (most expensive call in this hook) unless
+    // detectState will actually run.
+    const willDetect = !hasPendingTool
+      && (hookEvent === 'Stop' || postDecrementCount === 0);
     const paneBuffer = willDetect ? capture(target, 15) : [];
     state = resolveStopState({
-      hookEvent, existing, hasPendingTool, lastMessage, paneBuffer,
+      hookEvent, existing, hasPendingTool, subagentCount: postDecrementCount, lastMessage, paneBuffer,
     });
   }
 
