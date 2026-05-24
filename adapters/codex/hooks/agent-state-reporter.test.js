@@ -447,35 +447,19 @@ describe('resolveStopState (JSONL-gated detect)', () => {
     assert.equal(state, 'running', 'pending parent tool means parent is still working');
   });
 
-  it('SubagentStop never runs detectState — subagent events do not decide parent state', () => {
-    // Previously, when the last counted subagent stopped and no parent tool
-    // was pending, this branch fell through to detectState() — which uses a
-    // tmux pane heuristic and would flip the parent to idle_prompt/done/
-    // question (bucketed as REVIEW). For a parent orchestrating multiple
-    // workstreams (e.g. /fix's env-setup completing while other work is in
-    // flight) this misclassified the parent as done while it was still
-    // running. Subagent events now only move subagent_count + last_hook_event;
-    // state transitions to stop-states are owned by the parent's Stop event.
-    const state = resolveStopState({
-      hookEvent: 'SubagentStop',
-      existing: { state: 'running', subagent_count: 1 },
-      hasPendingTool: false,
-      lastMessage: MSG_PLAIN,
-      paneBuffer: PANE_IDLE,
-    });
-    assert.equal(state, 'running',
-      'SubagentStop must preserve existing parent state, even when count would decrement to 0');
-  });
-
-  it('SubagentStop preserves existing stop state regardless of pending', () => {
+  it('SubagentStop preserves existing stop state when pane heuristic would re-detect it', () => {
+    // detectState on PANE_IDLE + MSG_PLAIN returns idle_prompt, which matches
+    // the existing state — so the write is a no-op either way. The invariant
+    // we want: existing stop states are never overwritten with a worse state.
     const state = resolveStopState({
       hookEvent: 'SubagentStop',
       existing: { state: 'idle_prompt', subagent_count: 1 },
       hasPendingTool: false,
+      subagentCount: 0,
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'idle_prompt', 'existing stop state must not be overwritten');
+    assert.equal(state, 'idle_prompt');
   });
 
   it('SubagentStop preserves running when subagents remain active', () => {
@@ -483,10 +467,11 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       hookEvent: 'SubagentStop',
       existing: { state: 'running', subagent_count: 3 },
       hasPendingTool: false,
+      subagentCount: 2,
       lastMessage: MSG_PLAIN,
       paneBuffer: PANE_IDLE,
     });
-    assert.equal(state, 'running', 'subagent_count > 0 after decrement → still active');
+    assert.equal(state, 'running', 'subagent_count > 0 after decrement → still orchestrating');
   });
 
   it('Stop preserves running when parent has a pending tool_use', () => {
@@ -520,6 +505,24 @@ describe('resolveStopState (JSONL-gated detect)', () => {
       paneBuffer: PANE_IDLE,
     });
     assert.equal(state, 'running');
+  });
+
+  it('SubagentStop runs detectState when no subagents remain and no pending tool', () => {
+    // codex CLI sometimes lands at last_hook_event=SubagentStop without a
+    // matching Stop write — leaving the dashboard stuck on state=running for
+    // an idle agent. When the post-decrement subagent_count reaches 0 and no
+    // parent tool is in flight, treat SubagentStop like Stop and let
+    // detectState resolve the actual UI state from the pane buffer.
+    const state = resolveStopState({
+      hookEvent: 'SubagentStop',
+      existing: { state: 'running' },
+      hasPendingTool: false,
+      subagentCount: 0,
+      lastMessage: MSG_PLAIN,
+      paneBuffer: PANE_IDLE,
+    });
+    assert.equal(state, 'idle_prompt',
+      'count==0 + no pending tool → detectState should run and return idle_prompt');
   });
 });
 
