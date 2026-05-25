@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.28.1](https://github.com/bjornjee/agent-dashboard/compare/v0.28.0...v0.28.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* codex feature-skill prompt drop + stuck-running after SubagentStop ([#318](https://github.com/bjornjee/agent-dashboard/issues/318)) ([396a5b9](https://github.com/bjornjee/agent-dashboard/commit/396a5b96af7ca00a7aaa4947986d6363d1dd6ff0))
+* dedupe Claude usage by message.id, recompute past rows ([#316](https://github.com/bjornjee/agent-dashboard/issues/316)) ([6f4fb60](https://github.com/bjornjee/agent-dashboard/commit/6f4fb60c178d5ba65ca51e4e8c3a34f61a4af388))
+* prevent symlinking build caches and over-broad PNG deletion ([#320](https://github.com/bjornjee/agent-dashboard/issues/320)) ([c81eee0](https://github.com/bjornjee/agent-dashboard/commit/c81eee02b310b61832340e47b6d1dc52a3900065))
+* stop writing orphan claude usage rows; add prune tooling ([#319](https://github.com/bjornjee/agent-dashboard/issues/319)) ([772e995](https://github.com/bjornjee/agent-dashboard/commit/772e995dd435eba764655c6a610f95bbaeaccd36))
+
 ## [0.28.0](https://github.com/bjornjee/agent-dashboard/compare/v0.27.0...v0.28.0) (2026-05-22)
 
 
