@@ -360,6 +360,17 @@ func persistUsage(database *db.DB, agents []domain.Agent, perAgent map[string]do
 	}
 	var entries []entry
 	for _, agent := range agents {
+		// Skip non-claude harness; codex usage is tracked separately via
+		// persistCodexUsage. Empty harness defaults to claude (pre-codex state files).
+		if agent.Harness != "" && agent.Harness != "claude" {
+			continue
+		}
+		// Skip agents whose JSONL can't be located. Otherwise an agent whose ProjDir
+		// resolution failed but whose SessionID happens to match an old file in some
+		// slug could write a row that's never overwriteable later (orphan row bug).
+		if agent.ProjDir == "" {
+			continue
+		}
 		u, ok := perAgent[agent.Target]
 		if !ok || u.OutputTokens == 0 {
 			continue
