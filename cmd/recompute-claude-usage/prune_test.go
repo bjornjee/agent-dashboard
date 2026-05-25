@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -41,104 +40,159 @@ func insertRow(t *testing.T, conn *sqlx.DB, date, sessionID, provider string, co
 	}
 }
 
-func countRows(t *testing.T, conn *sqlx.DB, sessionID, provider string) int {
+func countSession(t *testing.T, conn *sqlx.DB, sessionID string) int {
 	t.Helper()
 	var n int
-	err := conn.Get(&n, "SELECT COUNT(*) FROM daily_usage WHERE session_id=? AND provider=?", sessionID, provider)
-	if err != nil {
+	if err := conn.Get(&n, "SELECT COUNT(*) FROM daily_usage WHERE session_id=?", sessionID); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	return n
 }
 
-// writeClaudeJSONL creates an empty JSONL at <projectsDir>/<slug>/<sid>.jsonl
-// so FindProjDirByScan can locate the session.
-func writeClaudeJSONL(t *testing.T, projectsDir, slug, sessionID string) {
-	t.Helper()
-	dir := filepath.Join(projectsDir, slug)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+// ---- Tier 1: --prune-duplicates ----
+
+func TestRunPruneDuplicates_KeepsMaxPerCluster(t *testing.T) {
+	conn, _ := setupDB(t)
+	// Cluster: 3 rows under prefix '019aaaaa-bbbb' on same date.
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7111-aaaa-111111111111", "claude", 100.0)
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7222-aaaa-222222222222", "claude", 200.0)
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7333-aaaa-333333333333", "claude", 300.0)
+
+	var buf bytes.Buffer
+	deleted, reclaimed, err := runPruneDuplicates(conn, false, &buf)
+	if err != nil {
+		t.Fatalf("runPruneDuplicates: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, sessionID+".jsonl"), []byte(""), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
+	if deleted != 2 {
+		t.Errorf("deleted: got %d, want 2", deleted)
+	}
+	if reclaimed < 299.99 || reclaimed > 300.01 {
+		t.Errorf("reclaimed: got %f, want ~300", reclaimed)
+	}
+	// Only the $300 row should survive.
+	if got := countSession(t, conn, "019aaaaa-bbbb-7333-aaaa-333333333333"); got != 1 {
+		t.Errorf("max-cost row deleted: %d remaining", got)
+	}
+	if got := countSession(t, conn, "019aaaaa-bbbb-7111-aaaa-111111111111"); got != 0 {
+		t.Errorf("smaller row still present")
 	}
 }
 
-func TestRunPrune_DeletesOrphan(t *testing.T) {
+func TestRunPruneDuplicates_IgnoresSingleton(t *testing.T) {
 	conn, _ := setupDB(t)
-	projects := t.TempDir() // empty: no JSONL anywhere
-	insertRow(t, conn, "2026-05-22", "orphan-no-jsonl", "claude", 99.99)
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7111-aaaa-111111111111", "claude", 100.0)
 
 	var buf bytes.Buffer
-	count, reclaimed, err := runPrune(conn, projects, false, &buf)
+	deleted, _, err := runPruneDuplicates(conn, false, &buf)
 	if err != nil {
-		t.Fatalf("runPrune: %v", err)
+		t.Fatalf("err: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("pruned count: got %d, want 1", count)
+	if deleted != 0 {
+		t.Errorf("singleton pruned: %d", deleted)
 	}
-	if reclaimed < 99.98 || reclaimed > 100.0 {
-		t.Errorf("reclaimed: got %f, want ~99.99", reclaimed)
-	}
-	if got := countRows(t, conn, "orphan-no-jsonl", "claude"); got != 0 {
-		t.Errorf("orphan still present: %d rows", got)
+	if got := countSession(t, conn, "019aaaaa-bbbb-7111-aaaa-111111111111"); got != 1 {
+		t.Errorf("singleton deleted")
 	}
 }
 
-func TestRunPrune_PreservesResolvable(t *testing.T) {
+func TestRunPruneDuplicates_ScopedByDate(t *testing.T) {
 	conn, _ := setupDB(t)
-	projects := t.TempDir()
-	writeClaudeJSONL(t, projects, "-Users-foo", "real-sess")
-	insertRow(t, conn, "2026-05-22", "real-sess", "claude", 12.34)
+	// Same prefix, different dates → not a cluster.
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7111-aaaa-111111111111", "claude", 100.0)
+	insertRow(t, conn, "2026-05-23", "019aaaaa-bbbb-7222-aaaa-222222222222", "claude", 200.0)
 
 	var buf bytes.Buffer
-	count, _, err := runPrune(conn, projects, false, &buf)
+	deleted, _, err := runPruneDuplicates(conn, false, &buf)
 	if err != nil {
-		t.Fatalf("runPrune: %v", err)
+		t.Fatalf("err: %v", err)
 	}
-	if count != 0 {
-		t.Errorf("resolvable session pruned: count=%d", count)
-	}
-	if got := countRows(t, conn, "real-sess", "claude"); got != 1 {
-		t.Errorf("resolvable row deleted: %d rows", got)
+	if deleted != 0 {
+		t.Errorf("cross-date prune occurred: %d", deleted)
 	}
 }
 
-func TestRunPrune_IgnoresCodexProvider(t *testing.T) {
+func TestRunPruneDuplicates_IgnoresUUIDv4(t *testing.T) {
 	conn, _ := setupDB(t)
-	projects := t.TempDir()
-	insertRow(t, conn, "2026-05-22", "codex-daily", "codex", 50.0)
+	// UUIDv4 rows must never be pruned by cluster rule.
+	insertRow(t, conn, "2026-05-22", "abcdef12-3456-4789-9abc-def012345678", "claude", 100.0)
+	insertRow(t, conn, "2026-05-22", "abcdef12-3456-4111-9abc-def012345001", "claude", 200.0)
 
 	var buf bytes.Buffer
-	count, _, err := runPrune(conn, projects, false, &buf)
+	deleted, _, err := runPruneDuplicates(conn, false, &buf)
 	if err != nil {
-		t.Fatalf("runPrune: %v", err)
+		t.Fatalf("err: %v", err)
 	}
-	if count != 0 {
-		t.Errorf("codex row pruned: count=%d", count)
-	}
-	if got := countRows(t, conn, "codex-daily", "codex"); got != 1 {
-		t.Errorf("codex row deleted: %d rows", got)
+	if deleted != 0 {
+		t.Errorf("UUIDv4 pruned: %d", deleted)
 	}
 }
 
-func TestRunPrune_DryRunNoDelete(t *testing.T) {
+func TestRunPruneDuplicates_DryRun(t *testing.T) {
 	conn, _ := setupDB(t)
-	projects := t.TempDir()
-	insertRow(t, conn, "2026-05-22", "orphan-dry", "claude", 7.0)
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7111-aaaa-111111111111", "claude", 100.0)
+	insertRow(t, conn, "2026-05-22", "019aaaaa-bbbb-7222-aaaa-222222222222", "claude", 200.0)
 
 	var buf bytes.Buffer
-	count, reclaimed, err := runPrune(conn, projects, true, &buf)
+	deleted, reclaimed, err := runPruneDuplicates(conn, true, &buf)
 	if err != nil {
-		t.Fatalf("runPrune: %v", err)
+		t.Fatalf("err: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("dry-run count: got %d, want 1", count)
+	if deleted != 1 {
+		t.Errorf("dry-run reported wrong delete count: %d", deleted)
 	}
-	if reclaimed < 6.99 || reclaimed > 7.01 {
-		t.Errorf("dry-run reclaimed: got %f, want ~7.0", reclaimed)
+	if reclaimed < 99.99 || reclaimed > 100.01 {
+		t.Errorf("dry-run reclaimed: %f", reclaimed)
 	}
-	if got := countRows(t, conn, "orphan-dry", "claude"); got != 1 {
-		t.Errorf("dry-run deleted row: %d remaining", got)
+	// Nothing actually deleted.
+	var n int
+	conn.Get(&n, "SELECT COUNT(*) FROM daily_usage WHERE session_id LIKE '019%'")
+	if n != 2 {
+		t.Errorf("dry-run deleted rows: %d remaining (want 2)", n)
+	}
+}
+
+// ---- Tier 2: --prune-tests ----
+
+func TestRunPruneTests_DeletesKnownNames(t *testing.T) {
+	conn, _ := setupDB(t)
+	insertRow(t, conn, "2026-05-22", "evidence-test", "claude", 61.73)
+	insertRow(t, conn, "2026-05-22", "test-codex-session", "claude", 9.17)
+	insertRow(t, conn, "2026-05-22", "test-codex-debug", "claude", 2.51)
+	insertRow(t, conn, "2026-05-22", "real-session-keep", "claude", 100.0)
+
+	var buf bytes.Buffer
+	deleted, reclaimed, err := runPruneTests(conn, false, &buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if deleted != 3 {
+		t.Errorf("deleted: got %d, want 3", deleted)
+	}
+	want := 61.73 + 9.17 + 2.51
+	if reclaimed < want-0.01 || reclaimed > want+0.01 {
+		t.Errorf("reclaimed: got %f, want %f", reclaimed, want)
+	}
+	if got := countSession(t, conn, "real-session-keep"); got != 1 {
+		t.Errorf("real session deleted")
+	}
+	if got := countSession(t, conn, "evidence-test"); got != 0 {
+		t.Errorf("test row still present")
+	}
+}
+
+func TestRunPruneTests_DryRun(t *testing.T) {
+	conn, _ := setupDB(t)
+	insertRow(t, conn, "2026-05-22", "evidence-test", "claude", 61.73)
+
+	var buf bytes.Buffer
+	deleted, _, err := runPruneTests(conn, true, &buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("dry-run delete count: %d", deleted)
+	}
+	if got := countSession(t, conn, "evidence-test"); got != 1 {
+		t.Errorf("dry-run deleted row")
 	}
 }

@@ -1,21 +1,27 @@
 // Command recompute-claude-usage is a one-shot fixup for claude usage rows in
-// daily_usage. Two modes:
+// daily_usage. Three modes:
 //
-//	default            : re-read every claude session's JSONL with the deduped
-//	                     parser and rewrite per-date rows preserving the existing
-//	                     per-date ratio. Sessions whose JSONL is no longer locatable
-//	                     under ~/.claude/projects are left untouched.
+//	default              : re-read every claude session's JSONL with the deduped
+//	                       parser and rewrite per-date rows preserving the
+//	                       existing per-date ratio. Sessions whose JSONL is no
+//	                       longer locatable under ~/.claude/projects are left
+//	                       untouched.
 //
-//	--prune-orphans    : delete every provider='claude' row whose session_id no
-//	                     longer resolves to a JSONL under ~/.claude/projects.
-//	                     These rows are unrecoverable noise (stale renames,
-//	                     deleted sessions) — pruning them gives the dashboard
-//	                     an honest total.
+//	--prune-duplicates   : within UUIDv7 clusters (rows sharing the same 13-char
+//	                       session_id prefix on the same date), keep the max-cost
+//	                       row and delete the rest. These are non-canonical
+//	                       snapshots of one in-progress session captured under
+//	                       multiple ephemeral IDs.
+//
+//	--prune-tests        : delete rows whose session_id matches known synthetic
+//	                       test names (evidence-test, test-codex-session,
+//	                       test-codex-debug).
 //
 // Usage:
 //
 //	go run ./cmd/recompute-claude-usage [--db PATH] [--projects DIR] [--dry-run]
-//	go run ./cmd/recompute-claude-usage --prune-orphans [--db PATH] [--projects DIR] [--dry-run]
+//	go run ./cmd/recompute-claude-usage --prune-duplicates [--dry-run]
+//	go run ./cmd/recompute-claude-usage --prune-tests [--dry-run]
 package main
 
 import (
@@ -42,6 +48,15 @@ type dayRow struct {
 	CostUSD float64 `db:"cost_usd"`
 }
 
+// knownTestSessionIDs is the closed set of synthetic session names left in
+// daily_usage from earlier debugging. Listed explicitly so we don't accidentally
+// nuke a real session whose ID happens to contain "test".
+var knownTestSessionIDs = []string{
+	"evidence-test",
+	"test-codex-session",
+	"test-codex-debug",
+}
+
 func main() {
 	home, _ := os.UserHomeDir()
 	defaultDB := home + "/.agent-dashboard/usage.db"
@@ -50,7 +65,8 @@ func main() {
 	dbPath := flag.String("db", defaultDB, "path to usage.db")
 	projectsDir := flag.String("projects", defaultProj, "Claude Code projects dir")
 	dryRun := flag.Bool("dry-run", false, "report what would change but do not write")
-	prune := flag.Bool("prune-orphans", false, "delete claude rows whose session_id can't be resolved to a JSONL (mutually exclusive with default recompute)")
+	pruneDuplicates := flag.Bool("prune-duplicates", false, "within UUIDv7 clusters (same 13-char prefix on same date), keep max-cost row, delete rest")
+	pruneTests := flag.Bool("prune-tests", false, "delete rows whose session_id matches known synthetic test names")
 	flag.Parse()
 
 	conn, err := sqlx.Open("sqlite", *dbPath)
@@ -61,84 +77,143 @@ func main() {
 	defer conn.Close()
 	conn.MustExec("PRAGMA journal_mode=WAL")
 
-	if *prune {
-		count, reclaimed, err := runPrune(conn, *projectsDir, *dryRun, os.Stdout)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "prune: %v\n", err)
-			os.Exit(1)
-		}
-		suffix := ""
-		if *dryRun {
-			suffix = "   [DRY RUN — no rows deleted]"
-		}
-		fmt.Printf("pruned: %d sessions, $%.2f reclaimed%s\n", count, reclaimed, suffix)
-		return
+	// Modes are mutually exclusive.
+	modes := 0
+	if *pruneDuplicates {
+		modes++
+	}
+	if *pruneTests {
+		modes++
+	}
+	if modes > 1 {
+		fmt.Fprintln(os.Stderr, "pick at most one of --prune-duplicates, --prune-tests")
+		os.Exit(2)
 	}
 
-	if err := runRecompute(conn, *projectsDir, *dryRun, os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "recompute: %v\n", err)
-		os.Exit(1)
+	switch {
+	case *pruneDuplicates:
+		deleted, reclaimed, err := runPruneDuplicates(conn, *dryRun, os.Stdout)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prune-duplicates: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("pruned %d duplicate rows, $%.2f reclaimed%s\n",
+			deleted, reclaimed, dryRunSuffix(*dryRun))
+	case *pruneTests:
+		deleted, reclaimed, err := runPruneTests(conn, *dryRun, os.Stdout)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prune-tests: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("pruned %d test rows, $%.2f reclaimed%s\n",
+			deleted, reclaimed, dryRunSuffix(*dryRun))
+	default:
+		if err := runRecompute(conn, *projectsDir, *dryRun, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "recompute: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
-// runPrune deletes provider='claude' rows whose session_id can't be resolved
-// to a JSONL under projectsDir. Returns the number of pruned sessions and the
-// total reclaimed cost.
-func runPrune(conn *sqlx.DB, projectsDir string, dryRun bool, w io.Writer) (int, float64, error) {
-	var sessions []sessionInfo
-	if err := conn.Select(&sessions, `
-		SELECT DISTINCT session_id, COALESCE(model, '') AS model
+func dryRunSuffix(dryRun bool) string {
+	if dryRun {
+		return "   [DRY RUN — no rows deleted]"
+	}
+	return ""
+}
+
+// runPruneDuplicates removes non-canonical rows from UUIDv7 clusters. Within
+// each (13-char prefix, date) group of two-or-more provider='claude' rows
+// whose session_id starts with "019", the highest-cost row is kept and the
+// rest are deleted. Returns the count of deleted rows and total reclaimed cost.
+func runPruneDuplicates(conn *sqlx.DB, dryRun bool, w io.Writer) (int, float64, error) {
+	type row struct {
+		Prefix    string  `db:"prefix"`
+		Date      string  `db:"date"`
+		SessionID string  `db:"session_id"`
+		CostUSD   float64 `db:"cost_usd"`
+	}
+	var rows []row
+	if err := conn.Select(&rows, `
+		SELECT substr(session_id, 1, 13) AS prefix, date, session_id, cost_usd
 		FROM daily_usage
-		WHERE provider = 'claude'`); err != nil {
-		return 0, 0, fmt.Errorf("list sessions: %w", err)
+		WHERE provider = 'claude' AND session_id LIKE '019%'
+		ORDER BY prefix, date, cost_usd DESC`); err != nil {
+		return 0, 0, fmt.Errorf("list candidates: %w", err)
 	}
 
-	var count int
+	// Group by (prefix, date). The first row of each group is the highest-cost
+	// row (kept); all subsequent rows in the group are duplicates (deleted).
+	type key struct{ prefix, date string }
+	groupSize := make(map[key]int)
+	for _, r := range rows {
+		groupSize[key{r.Prefix, r.Date}]++
+	}
+
+	seen := make(map[key]bool)
+	var deleted int
 	var reclaimed float64
-
-	for _, sess := range sessions {
-		if sess.SessionID == "" {
+	for _, r := range rows {
+		k := key{r.Prefix, r.Date}
+		if groupSize[k] < 2 {
+			continue // singleton — not a cluster
+		}
+		if !seen[k] {
+			seen[k] = true // first (highest-cost) → keep
 			continue
 		}
-		if conversation.FindProjDirByScan(projectsDir, sess.SessionID) != "" {
-			continue
-		}
-
-		var (
-			rows int
-			cost float64
-		)
-		if err := conn.Get(&rows, `
-			SELECT COUNT(*) FROM daily_usage WHERE provider='claude' AND session_id=?`,
-			sess.SessionID); err != nil {
-			return count, reclaimed, fmt.Errorf("count rows for %s: %w", sess.SessionID, err)
-		}
-		if err := conn.Get(&cost, `
-			SELECT COALESCE(SUM(cost_usd), 0) FROM daily_usage WHERE provider='claude' AND session_id=?`,
-			sess.SessionID); err != nil {
-			return count, reclaimed, fmt.Errorf("sum cost for %s: %w", sess.SessionID, err)
-		}
-		if rows == 0 {
-			continue
-		}
-
-		tag := ""
-		if dryRun {
-			tag = " [dry-run]"
-		}
-		fmt.Fprintf(w, "[prune]%s %s  -$%.2f  (%d rows)\n", tag, sess.SessionID, cost, rows)
-
+		fmt.Fprintf(w, "[prune-dup]%s %s  -$%.2f  (cluster %s on %s)\n",
+			dryRunTag(dryRun), r.SessionID, r.CostUSD, r.Prefix, r.Date)
 		if !dryRun {
-			if _, err := conn.Exec(`
-				DELETE FROM daily_usage WHERE provider='claude' AND session_id=?`,
-				sess.SessionID); err != nil {
-				return count, reclaimed, fmt.Errorf("delete %s: %w", sess.SessionID, err)
+			if _, err := conn.Exec(
+				`DELETE FROM daily_usage WHERE provider='claude' AND session_id=?`,
+				r.SessionID); err != nil {
+				return deleted, reclaimed, fmt.Errorf("delete %s: %w", r.SessionID, err)
 			}
 		}
-		count++
+		deleted++
+		reclaimed += r.CostUSD
+	}
+	return deleted, reclaimed, nil
+}
+
+// runPruneTests deletes rows whose session_id matches a closed list of known
+// synthetic test names left over from debugging.
+func runPruneTests(conn *sqlx.DB, dryRun bool, w io.Writer) (int, float64, error) {
+	var deleted int
+	var reclaimed float64
+	for _, sid := range knownTestSessionIDs {
+		var cost float64
+		if err := conn.Get(&cost, `
+			SELECT COALESCE(SUM(cost_usd), 0) FROM daily_usage
+			WHERE session_id=?`, sid); err != nil {
+			return deleted, reclaimed, fmt.Errorf("sum %s: %w", sid, err)
+		}
+		var count int
+		if err := conn.Get(&count, `SELECT COUNT(*) FROM daily_usage WHERE session_id=?`, sid); err != nil {
+			return deleted, reclaimed, fmt.Errorf("count %s: %w", sid, err)
+		}
+		if count == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "[prune-test]%s %s  -$%.2f  (%d rows)\n",
+			dryRunTag(dryRun), sid, cost, count)
+		if !dryRun {
+			if _, err := conn.Exec(`DELETE FROM daily_usage WHERE session_id=?`, sid); err != nil {
+				return deleted, reclaimed, fmt.Errorf("delete %s: %w", sid, err)
+			}
+		}
+		deleted += count
 		reclaimed += cost
 	}
-	return count, reclaimed, nil
+	return deleted, reclaimed, nil
+}
+
+func dryRunTag(dryRun bool) string {
+	if dryRun {
+		return " [dry-run]"
+	}
+	return ""
 }
 
 // runRecompute walks every claude session in daily_usage, re-reads its JSONL
