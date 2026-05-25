@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -193,6 +194,97 @@ func TestRunPruneTests_DryRun(t *testing.T) {
 		t.Errorf("dry-run delete count: %d", deleted)
 	}
 	if got := countSession(t, conn, "evidence-test"); got != 1 {
+		t.Errorf("dry-run deleted row")
+	}
+}
+
+// ---- Strict-accuracy: --prune-orphans (delete any unverifiable claude row) ----
+
+// writeClaudeJSONL creates an empty JSONL at <projectsDir>/<slug>/<sid>.jsonl
+// so FindProjDirByScan locates the session.
+func writeClaudeJSONL(t *testing.T, projectsDir, slug, sessionID string) {
+	t.Helper()
+	dir := filepath.Join(projectsDir, slug)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, sessionID+".jsonl"), []byte(""), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+}
+
+func TestRunPruneOrphans_DeletesUnverifiable(t *testing.T) {
+	conn, _ := setupDB(t)
+	projects := t.TempDir()
+	insertRow(t, conn, "2026-05-22", "no-jsonl-anywhere", "claude", 99.99)
+
+	var buf bytes.Buffer
+	deleted, reclaimed, err := runPruneOrphans(conn, projects, false, &buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("deleted: got %d, want 1", deleted)
+	}
+	if reclaimed < 99.98 || reclaimed > 100.0 {
+		t.Errorf("reclaimed: got %f, want ~99.99", reclaimed)
+	}
+	if got := countSession(t, conn, "no-jsonl-anywhere"); got != 0 {
+		t.Errorf("orphan still present")
+	}
+}
+
+func TestRunPruneOrphans_PreservesResolvable(t *testing.T) {
+	conn, _ := setupDB(t)
+	projects := t.TempDir()
+	writeClaudeJSONL(t, projects, "-Users-foo", "verified-sess")
+	insertRow(t, conn, "2026-05-22", "verified-sess", "claude", 12.34)
+
+	var buf bytes.Buffer
+	deleted, _, err := runPruneOrphans(conn, projects, false, &buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if deleted != 0 {
+		t.Errorf("verified row deleted: %d", deleted)
+	}
+	if got := countSession(t, conn, "verified-sess"); got != 1 {
+		t.Errorf("verified row missing")
+	}
+}
+
+func TestRunPruneOrphans_IgnoresCodexProvider(t *testing.T) {
+	conn, _ := setupDB(t)
+	projects := t.TempDir()
+	insertRow(t, conn, "2026-05-22", "codex-daily", "codex", 50.0)
+
+	var buf bytes.Buffer
+	deleted, _, err := runPruneOrphans(conn, projects, false, &buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if deleted != 0 {
+		t.Errorf("codex row pruned: %d", deleted)
+	}
+	if got := countSession(t, conn, "codex-daily"); got != 1 {
+		t.Errorf("codex row missing")
+	}
+}
+
+func TestRunPruneOrphans_DryRun(t *testing.T) {
+	conn, _ := setupDB(t)
+	projects := t.TempDir()
+	insertRow(t, conn, "2026-05-22", "no-jsonl-anywhere", "claude", 99.99)
+
+	var buf bytes.Buffer
+	deleted, _, err := runPruneOrphans(conn, projects, true, &buf)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("dry-run count: %d", deleted)
+	}
+	if got := countSession(t, conn, "no-jsonl-anywhere"); got != 1 {
 		t.Errorf("dry-run deleted row")
 	}
 }
