@@ -40,7 +40,7 @@ inspects the diff. **Untracked only.** Never touch tracked or staged files.
 1. Identify untracked artifacts. Use `git ls-files --others --exclude-standard`
    for unignored untracked files, and `git ls-files --others --ignored
    --exclude-standard` for ignored untracked files. Filter for these patterns:
-   - `*.png` (anywhere)
+   - `*.png` at the repo root only — these are typically Playwright/visual-audit screenshots. PNGs inside subdirectories (build outputs `out/`, `dist/`, `build/`, asset dirs `public/`, `static/`, source dirs `src/`, etc.) are legitimate and must NOT be deleted.
    - `.playwright-mcp/` (directory)
    - `*.tmp` (anywhere)
    - `tmp/` (directory, when at repo root or inside a subproject root)
