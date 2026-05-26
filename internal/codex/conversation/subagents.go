@@ -172,7 +172,6 @@ func getOrBuildIndex(sessionsRoot string) *sessionsIndex {
 func buildSessionsIndex(sessionsRoot string) *sessionsIndex {
 	idx := &sessionsIndex{
 		builtAt:  nowFunc(),
-		rollouts: map[string]rolloutEntry{},
 		children: map[string][]domain.SubagentInfo{},
 	}
 	if _, err := os.Stat(sessionsRoot); err != nil {
@@ -183,32 +182,7 @@ func buildSessionsIndex(sessionsRoot string) *sessionsIndex {
 	}
 
 	walkSessionsRootFn(sessionsRoot, func(path string, meta subagentSessionMeta) {
-		// Two sessionID sources: the filename (always present) and the
-		// parsed session_meta (only present once codex has written a meta
-		// line). Both can disagree in theory; in practice they don't, but
-		// indexing by the filename ensures LocateRollout works for brand
-		// new rollouts whose session_meta hasn't been flushed yet.
-		idByFile := sessionIDFromFilename(path)
 		idByMeta := meta.ID
-
-		// LocateRollout invariant: when `codex resume <sid>` produces a
-		// second rollout for the same sessionID, keep the lexicographically
-		// greatest path (== newest by ISO8601 prefix). Apply both to the
-		// rollouts map and to subagent placement.
-		recordRollout := func(id string) {
-			if id == "" {
-				return
-			}
-			if existing, ok := idx.rollouts[id]; ok && existing.Path >= path {
-				return
-			}
-			idx.rollouts[id] = rolloutEntry{Path: path, Meta: meta}
-		}
-		recordRollout(idByFile)
-		if idByMeta != "" && idByMeta != idByFile {
-			recordRollout(idByMeta)
-		}
-
 		parentID := meta.Source.Subagent.ThreadSpawn.ParentThreadID
 		if parentID == "" || idByMeta == "" {
 			return
@@ -249,35 +223,10 @@ func walkSessionsRootImpl(sessionsRoot string, visit func(string, subagentSessio
 		if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
 			return nil
 		}
-		// Report every rollout, even ones that don't yet have a session_meta
-		// line — LocateRollout still needs to find them by sessionID.
 		meta, _ := readSubagentSessionMeta(path)
 		visit(path, meta)
 		return nil
 	})
-}
-
-// sessionIDFromFilename extracts the trailing UUID from a rollout filename
-// like `rollout-YYYY-MM-DDTHH-MM-SS-<sessionID>.jsonl`. The "session ID"
-// itself can be a UUID with hyphens, so we strip the fixed-length ISO8601
-// prefix rather than splitting on hyphens.
-//
-// Returns "" for any filename that doesn't match the expected shape.
-func sessionIDFromFilename(path string) string {
-	name := filepath.Base(path)
-	const prefix = "rollout-"
-	const suffix = ".jsonl"
-	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
-		return ""
-	}
-	core := name[len(prefix) : len(name)-len(suffix)]
-	// ISO8601 prefix codex uses: YYYY-MM-DDTHH-MM-SS = 19 chars plus a
-	// trailing "-" → 20 chars.
-	const isoLen = len("2026-05-21T14-44-03") + 1 // 20
-	if len(core) <= isoLen {
-		return ""
-	}
-	return core[isoLen:]
 }
 
 func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {

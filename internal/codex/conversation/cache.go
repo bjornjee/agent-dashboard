@@ -27,6 +27,8 @@ import (
 //     the duration of the walk on every TTL expiry. Per-session lookups
 //     locate the rollout by directory entries only (no file opens for
 //     unrelated rollouts) and open exactly the matching file.
+//     The sessions cache is independent of the sessionsIndex: ParentThreadID
+//     and LocateRollout do not touch the index.
 //
 // Both caches share a TTL so behaviour stays consistent — within the
 // window, repeated lookups for the same sessionID hit in O(1).
@@ -35,19 +37,8 @@ const defaultCacheTTL = 15 * time.Second
 
 var nowFunc = time.Now
 
-// rolloutEntry records what we learned about a single rollout file.
-//   - Path != "" → file exists; Meta is the parsed session_meta (zero value
-//     when the file had no session_meta line yet).
-//   - Path == "" → no rollout found for this sessionID in the current
-//     index build (negative result; valid until TTL expiry).
-type rolloutEntry struct {
-	Path string
-	Meta subagentSessionMeta
-}
-
 type sessionsIndex struct {
 	builtAt  time.Time
-	rollouts map[string]rolloutEntry          // sessionID → entry
 	children map[string][]domain.SubagentInfo // parentSessionID → subs
 }
 
