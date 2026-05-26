@@ -666,7 +666,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// (claude --effort, codex --model/-a/-s) are added consistently
 		// across UIs.
 		opts := harness.SpawnOptsFor(h.Name(), settings)
-		if h.Name() == "codex" && harness.InitialPrompt(h.Name(), skill, message) != "" {
+		if h.Name() == "codex" && (skill != "" || message != "") {
 			opts.DeferPrompt = true
 		}
 		cmd := h.SpawnCommand(skill, message, opts)
@@ -1062,15 +1062,6 @@ func sendRawKey(paneID, key, label string) tea.Cmd {
 			return rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", paneID), label: label}
 		}
 		return rawKeySentMsg{err: tmux.TmuxSendRaw(target, key), label: label}
-	}
-}
-
-func sendPendingSpawnPrompt(target, text, kind string) tea.Cmd {
-	return func() tea.Msg {
-		return pendingSpawnPromptSentMsg{
-			err:  tmux.TmuxPasteKeysClearingInput(target, text, "Enter"),
-			kind: kind,
-		}
 	}
 }
 

@@ -87,10 +87,6 @@ type spawningCaptureMsg struct {
 	lines  []string
 	target string
 }
-type pendingSpawnPromptSentMsg struct {
-	err  error
-	kind string
-}
 type rateLimitMsg struct {
 	rateLimit *domain.RateLimit
 }

@@ -40,6 +40,7 @@ async function runAutoPlan({
   maxAttempts = defaultMaxAttempts,
   initialDelayMs = defaultInitialDelayMs,
   pollDelayMs = defaultPollDelayMs,
+  autoPlan = false,
   now = () => new Date().toISOString(),
 }) {
   if (!sessionId || !tmuxPane || !deferredPrompt) {
@@ -57,6 +58,18 @@ async function runAutoPlan({
   });
 
   await wait(initialDelayMs);
+  if (!autoPlan) {
+    if (!send(tmuxPane, deferredPrompt)) {
+      write(sessionId, {
+        auto_plan_status: 'send-prompt-failed',
+        auto_plan_error: 'failed to send deferred prompt to tmux pane',
+      });
+      return { status: 'send-prompt-failed' };
+    }
+    write(sessionId, { auto_plan_status: 'done' });
+    return { status: 'done' };
+  }
+
   if (!send(tmuxPane, '/plan plan')) {
     write(sessionId, {
       auto_plan_status: 'send-plan-failed',
@@ -89,7 +102,6 @@ async function runAutoPlan({
 }
 
 function spawnWorker(input) {
-  if (process.env.AGENT_DASHBOARD_AUTO_PLAN !== '1') return;
   const sessionId = input.session_id || '';
   const deferredPrompt = process.env.AGENT_DASHBOARD_DEFERRED_PROMPT || '';
   const tmuxPane = process.env.TMUX_PANE || '';
@@ -111,6 +123,7 @@ async function runWorkerFromEnv() {
     sessionId: process.env.AGENT_DASHBOARD_AUTO_PLAN_SESSION_ID || '',
     tmuxPane: process.env.TMUX_PANE || '',
     deferredPrompt: process.env.AGENT_DASHBOARD_DEFERRED_PROMPT || '',
+    autoPlan: process.env.AGENT_DASHBOARD_AUTO_PLAN === '1',
   });
 }
 
