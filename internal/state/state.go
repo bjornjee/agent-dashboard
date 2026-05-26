@@ -232,7 +232,7 @@ func stampAgentFields(stateDir, sessionID string, updates map[string]any) error 
 	if err != nil {
 		return err
 	}
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
