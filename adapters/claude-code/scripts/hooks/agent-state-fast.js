@@ -218,6 +218,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   const worktreeCwd = (!existing.worktree_cwd && (bashWorktreePath || isMainWorktree))
     ? (bashWorktreePath || liveCwd)
     : null;
+  const hookEvent = input.hook_event_name;
   // Pin branch alongside worktree_cwd so ResolveAgentBranches never has to
   // live-read against this dir. Priority (first-write-wins, same as
   // worktree_cwd):
@@ -225,13 +226,16 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   //   Fallback: getBranch against the worktree (either the newly stamped
   //             one this hook event, or the already-pinned worktree_cwd
   //             when only the branch was missing).
-  // Skipped entirely when existing.branch is already set.
-  const worktreeBranch = !existing.branch
+  // Skipped entirely when existing.branch is already set, or when this
+  // event will be dropped by the PostToolUse + STOP_STATE guard below —
+  // the getBranch fallback spawns `git branch --show-current` and the
+  // guard discards the result anyway.
+  const inStopGuard = hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state);
+  const worktreeBranch = (!existing.branch && !inStopGuard)
     ? (existing.worktree_cwd
       ? getBranch(existing.worktree_cwd)
       : ((bashWorktree && bashWorktree.branch) || getBranch(worktreeCwd)))
     : null;
-  const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
   const toolInput = input.tool_input || {};

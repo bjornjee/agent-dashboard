@@ -504,6 +504,40 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.branch, 'feat/x');
   });
 
+  it('skips getBranch when PostToolUse will be dropped by the stop-state guard', () => {
+    // Perf guard: agents with worktree_cwd but no pinned branch (the
+    // migration window) must not pay a `git branch --show-current`
+    // subprocess on every stop-state PostToolUse — the guarded early-return
+    // discards everything except hook_blocked / effort anyway.
+    const pinned = path.join(tmpDir, 'wt-stop-state');
+    initGitRepo(pinned, 'feat/should-not-be-read');
+
+    const existing = {
+      target: 'main:1.0',
+      state: 'done', // STOP_STATE
+      current_tool: '',
+      worktree_cwd: pinned,
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hello' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, false,
+      'stop-state PostToolUse with nothing else to update must report no change');
+    assert.equal(update, null,
+      'stop-state PostToolUse must not leak branch into the guarded update');
+  });
+
   it('fills missing branch from existing worktree_cwd', () => {
     // Agent was stamped with worktree_cwd by an earlier hook but branch never
     // got filled (legacy state file, or worktree_cwd came via the

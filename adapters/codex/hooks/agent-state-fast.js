@@ -215,12 +215,18 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   const worktreeCwd = (!existing.worktree_cwd && (shellWorktreePath || isMainWorktree))
     ? (shellWorktreePath || liveCwd)
     : null;
-  const worktreeBranch = !existing.branch
+  const hookEvent = input.hook_event_name;
+  // Skip the getBranch subprocess when the PostToolUse + STOP_STATE guard
+  // below will discard the result anyway. Otherwise every claude/codex
+  // agent with a pinned worktree_cwd but no branch yet (the migration
+  // window) pays one wasted `git branch --show-current` per stop-state
+  // PostToolUse.
+  const inStopGuard = hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state);
+  const worktreeBranch = (!existing.branch && !inStopGuard)
     ? (existing.worktree_cwd
       ? getBranch(existing.worktree_cwd)
       : ((shellWorktree && shellWorktree.branch) || getBranch(worktreeCwd)))
     : null;
-  const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
   const toolInput = input.tool_input || {};
