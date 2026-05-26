@@ -447,7 +447,7 @@ func PinAgentState(dir, sessionID, pinnedState string) error {
 	if err != nil {
 		return err
 	}
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
