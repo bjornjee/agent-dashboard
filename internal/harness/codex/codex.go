@@ -75,7 +75,10 @@ func (c *Codex) SpawnCommand(skill, message string, opts domain.SpawnOpts) strin
 	}
 
 	prompt := buildPrompt(skill, message)
-	if prompt != "" {
+	if prompt != "" && opts.DeferPrompt {
+		prefix := "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT=" + shellQuote(prompt)
+		cmd = prefix + " " + cmd
+	} else if prompt != "" {
 		cmd += " " + shellQuote(prompt)
 	}
 	return cmd

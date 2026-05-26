@@ -35,6 +35,7 @@ describe('auto-plan hook helper', () => {
         sleep: async () => {},
         maxAttempts: 1,
         initialDelayMs: 0,
+        autoPlan: true,
       });
 
       assert.equal(result.status, 'done');
@@ -71,6 +72,7 @@ describe('auto-plan hook helper', () => {
       sleep: async () => {},
       maxAttempts: 3,
       initialDelayMs: 0,
+      autoPlan: true,
     });
 
     assert.equal(result.status, 'done');
@@ -116,6 +118,7 @@ describe('auto-plan hook helper', () => {
       sleep: async () => {},
       maxAttempts: 2,
       initialDelayMs: 0,
+      autoPlan: true,
     });
 
     assert.equal(result.status, 'timeout');

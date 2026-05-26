@@ -677,7 +677,11 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// Build the spawn command via the harness so per-harness flags
 		// (claude --effort, codex --model/-a/-s) are added consistently
 		// across UIs.
-		cmd := h.SpawnCommand(skill, message, harness.SpawnOptsFor(h.Name(), settings))
+		opts := harness.SpawnOptsFor(h.Name(), settings)
+		if h.Name() == "codex" && skill == "feature" {
+			opts.DeferPrompt = true
+		}
+		cmd := h.SpawnCommand(skill, message, opts)
 
 		if found {
 			// Check pane limit; if the window no longer exists (stale agent

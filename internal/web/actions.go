@@ -338,7 +338,11 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings))
+	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings)
+	if activeHarness.Name() == "codex" && req.Skill == "feature" {
+		spawnOpts.DeferPrompt = true
+	}
+	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOpts)
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
@@ -389,7 +393,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
 }
 
