@@ -140,9 +140,14 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 // repo as the agent's cwd. On a successful match, the candidate is stamped
 // in-memory and persisted to the agent's state file so subsequent loads —
 // and downstream features keyed off worktree_cwd (diff, PR, cleanup) — see
-// the recovered value. Failures (no JSONL match, candidate gone, different
-// source repo) leave WorktreeCwd empty; ResolveAgentBranches then clears
-// Branch the same way it does for any unresolvable agent.
+// the recovered value. The branch the worktree is currently on is stamped
+// in the same write, so ResolveAgentBranches can short-circuit the live
+// read on the next refresh. Branch stamping is best-effort: a failed
+// lookup (detached HEAD, deleted dir) leaves Branch empty for the backfill
+// path. Failures of the worktree validation itself (no JSONL match,
+// candidate gone, different source repo) leave WorktreeCwd empty;
+// ResolveAgentBranches then clears Branch the same way it does for any
+// unresolvable agent.
 //
 // Must run AFTER ResolveAgentProjDir (needs agent.ProjDir) and BEFORE
 // ResolveAgentBranches (so the recovered WorktreeCwd is the source of truth
@@ -165,9 +170,17 @@ func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 		if !validateWorktreeCandidate(agent.Cwd, candidate) {
 			continue
 		}
+		branch := gitBranch(candidate)
 		agent.WorktreeCwd = candidate
+		if branch != "" {
+			agent.Branch = branch
+		}
 		sf.Agents[key] = agent
-		_ = stampWorktreeCwd(stateDir, agent.SessionID, candidate)
+		updates := map[string]any{"worktree_cwd": candidate}
+		if branch != "" {
+			updates["branch"] = branch
+		}
+		_ = stampAgentFields(stateDir, agent.SessionID, updates)
 	}
 }
 
@@ -205,9 +218,11 @@ func validateWorktreeCandidate(agentCwd, candidate string) bool {
 	return filepath.Clean(agentTop.Source) == filepath.Clean(candTop.Source)
 }
 
-// stampWorktreeCwd persists the recovered worktree path to the agent's
-// state JSON file. Mirrors PinAgentState: read → set field → write atomic.
-func stampWorktreeCwd(stateDir, sessionID, worktreeCwd string) error {
+// stampAgentFields merges a set of field updates into the agent's state JSON.
+// Mirrors PinAgentState: read → merge → atomic write. Callers ignore the
+// error: a missing or malformed agent file just means the in-memory update
+// stands until the hook writes a clean file on the next event.
+func stampAgentFields(stateDir, sessionID string, updates map[string]any) error {
 	files := agentFileMap(stateDir)
 	path, ok := files[sessionID]
 	if !ok {
@@ -217,11 +232,13 @@ func stampWorktreeCwd(stateDir, sessionID, worktreeCwd string) error {
 	if err != nil {
 		return err
 	}
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	raw["worktree_cwd"] = worktreeCwd
+	for k, v := range updates {
+		raw[k] = v
+	}
 	out, err := json.MarshalIndent(raw, "", "  ")
 	if err != nil {
 		return err
@@ -229,26 +246,34 @@ func stampWorktreeCwd(stateDir, sessionID, worktreeCwd string) error {
 	return os.WriteFile(path, out, 0600)
 }
 
-// ResolveAgentBranches overwrites each agent's Branch with the live value
-// from git, using the agent's static project directory:
-//  1. WorktreeCwd if set — stamped once by the hook from input.cwd and
-//     trusted as the agent's home for diff/PR/cleanup features.
-//  2. Cwd otherwise — the launch directory from the state file.
+// ResolveAgentBranches sets each agent's Branch field, with branch-pinning
+// semantics tied to whether the agent has a WorktreeCwd:
 //
-// Branch is read live (gitBranch reflects whatever's currently checked out)
-// but the directory itself is intentionally static: features that key off
-// it should not see it shifting as the agent cd's around.
+//  1. WorktreeCwd != "" && Branch != "": PINNED. The stored branch is
+//     authoritative — no git call, no overwrite. This is the steady state
+//     for agents created via a worktree-aware skill (or recovered by
+//     ResolveAgentWorktree). The pin survives the agent's own `git checkout
+//     main` and sibling-agent cleanups that switch the source repo.
 //
-// When an agent has no Cwd but a tmux pane cwd is available, Cwd is
-// backfilled so that agentLabel() and the detail header can display it.
-// When resolution fails (worktree deleted, git timed out, dir doesn't
-// exist), Branch is cleared to "" so the dashboard does not display a
-// stale value.
-func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string) {
-	// First pass: backfill Cwd from tmux and figure out which dirs need a
-	// branch lookup. We hold dirs separately so the parallel pass below
-	// can ask git without touching sf.Agents concurrently.
-	dirs := make(map[string]string, len(sf.Agents)) // agentKey → dir
+//  2. WorktreeCwd != "" && Branch == "": ONE-SHOT BACKFILL. Legacy state
+//     files (or agents whose stamp landed without a branch signal) get one
+//     live read against WorktreeCwd. The result is written back to disk
+//     when stateDir is non-empty, so the next refresh skips the git call.
+//
+//  3. WorktreeCwd == "" && Cwd != "": LIVE. Vanilla source-repo agents
+//     have no pin to anchor to — Branch reflects whatever the source
+//     repo's HEAD is on each refresh. Pre-existing behavior; documented
+//     in the PR as the unfixable drift case for unpinned agents.
+//
+//  4. both empty: Branch cleared to "".
+//
+// Pane cwds backfill empty agent.Cwd before dir selection (display only —
+// never used to resolve branches, since the agent's project dir is
+// intentionally static).
+//
+// stateDir is optional: when "", backfill happens in memory only.
+func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string, stateDir string) {
+	// First pass: backfill Cwd from tmux pane cwd (display-only).
 	for key, agent := range sf.Agents {
 		if agent.Cwd == "" && agent.TmuxPaneID != "" && paneCwds != nil {
 			if pc, ok := paneCwds[agent.TmuxPaneID]; ok {
@@ -256,39 +281,68 @@ func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string) {
 				sf.Agents[key] = agent
 			}
 		}
-		dir := agent.WorktreeCwd
-		if dir == "" {
-			dir = agent.Cwd
+	}
+
+	// Plan the git lookups. Pinned agents (case 1) contribute nothing.
+	// Backfill candidates (case 2) carry persist=true; live-only agents
+	// (case 3) carry persist=false.
+	type lookup struct {
+		dir     string
+		persist bool
+	}
+	lookups := make(map[string]lookup, len(sf.Agents))
+	for key, agent := range sf.Agents {
+		if agent.WorktreeCwd != "" {
+			if agent.Branch != "" {
+				continue // pinned
+			}
+			lookups[key] = lookup{dir: agent.WorktreeCwd, persist: true}
+			continue
 		}
-		if dir != "" {
-			dirs[key] = dir
+		if agent.Cwd != "" {
+			lookups[key] = lookup{dir: agent.Cwd, persist: false}
 		}
 	}
 
 	// gitBranch runs `git rev-parse` with a 500ms timeout per agent. With
 	// many agents that sequential cost stacks; cap concurrency to 8 so a
 	// dashboard refresh costs ceil(N/8) × 500ms in the worst case.
-	results := make(map[string]string, len(dirs))
+	type result struct {
+		branch  string
+		persist bool
+	}
+	results := make(map[string]result, len(lookups))
 	var mu sync.Mutex
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
-	for key, dir := range dirs {
+	for key, lk := range lookups {
 		wg.Add(1)
-		go func(key, dir string) {
+		go func(key string, lk lookup) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			branch := gitBranch(dir)
+			branch := gitBranch(lk.dir)
 			mu.Lock()
-			results[key] = branch
+			results[key] = result{branch: branch, persist: lk.persist}
 			mu.Unlock()
-		}(key, dir)
+		}(key, lk)
 	}
 	wg.Wait()
 
 	for key, agent := range sf.Agents {
-		agent.Branch = results[key] // zero value "" when dir == "" or git failed
+		// Pinned agents: skip — Branch already authoritative.
+		if agent.WorktreeCwd != "" && agent.Branch != "" {
+			continue
+		}
+		r := results[key] // zero value "" when no lookup or git failed
+		agent.Branch = r.branch
 		sf.Agents[key] = agent
+		// Persist the backfilled branch so the next refresh hits case 1.
+		// Skip the write when the branch is empty (nothing useful to
+		// pin) or when no stateDir was provided.
+		if r.persist && r.branch != "" && stateDir != "" && agent.SessionID != "" {
+			_ = stampAgentFields(stateDir, agent.SessionID, map[string]any{"branch": r.branch})
+		}
 	}
 }
 
@@ -393,7 +447,7 @@ func PinAgentState(dir, sessionID, pinnedState string) error {
 	if err != nil {
 		return err
 	}
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}

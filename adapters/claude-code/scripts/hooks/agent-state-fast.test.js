@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawnSync } = require('child_process');
 
 // Import the module under test
 const { resolveState, buildUpdate, detectHarness } = require('./agent-state-fast');
@@ -25,6 +26,12 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+function initGitRepo(dir, branch) {
+  fs.mkdirSync(dir, { recursive: true });
+  const init = spawnSync('git', ['init', '-b', branch], { cwd: dir, encoding: 'utf8' });
+  assert.equal(init.status, 0, init.stderr);
+}
 
 describe('resolveState', () => {
   it('returns "permission" for PermissionRequest', () => {
@@ -268,7 +275,7 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(result.current_tool, 'Bash');
   });
 
-  it('buildUpdate does not include cwd or branch in update', () => {
+  it('buildUpdate does not set cwd (cwd is owned by the slow reporter)', () => {
     const existing = {
       target: 'main:1.0',
       state: 'running',
@@ -288,7 +295,10 @@ describe('fast hook state updates (per-agent files)', () => {
     });
 
     assert.equal(update.cwd, undefined, 'fast hook should not set cwd');
-    assert.equal(update.branch, undefined, 'fast hook should not set branch');
+    // Branch is stamped only when worktree_cwd is being stamped in the same
+    // update — vanilla source-repo events (this case) leave branch alone.
+    assert.equal(update.branch, undefined,
+      'fast hook should not set branch outside of a worktree_cwd stamp');
   });
 
   it('sets worktree_cwd when input.cwd is a worktree path', () => {
@@ -465,6 +475,133 @@ describe('fast hook state updates (per-agent files)', () => {
 
     assert.equal(update.worktree_cwd, '/abs/path/wt',
       'must not stamp the -b branch name as the path');
+  });
+
+  it('git worktree add -b <branch> <path>: stamps branch with path', () => {
+    // Pin at creation time: the explicit `-b <branch>` argument is the
+    // authoritative signal — strictly more specific than running getBranch
+    // against a worktree that may not yet exist on disk when the hook fires.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/x /abs/path/wt main' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, '/abs/path/wt');
+    assert.equal(update.branch, 'feat/x');
+  });
+
+  it('skips getBranch when PostToolUse will be dropped by the stop-state guard', () => {
+    // Perf guard: agents with worktree_cwd but no pinned branch (the
+    // migration window) must not pay a `git branch --show-current`
+    // subprocess on every stop-state PostToolUse — the guarded early-return
+    // discards everything except hook_blocked / effort anyway.
+    const pinned = path.join(tmpDir, 'wt-stop-state');
+    initGitRepo(pinned, 'feat/should-not-be-read');
+
+    const existing = {
+      target: 'main:1.0',
+      state: 'done', // STOP_STATE
+      current_tool: '',
+      worktree_cwd: pinned,
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hello' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, false,
+      'stop-state PostToolUse with nothing else to update must report no change');
+    assert.equal(update, null,
+      'stop-state PostToolUse must not leak branch into the guarded update');
+  });
+
+  it('fills missing branch from existing worktree_cwd', () => {
+    // Agent was stamped with worktree_cwd by an earlier hook but branch never
+    // got filled (legacy state file, or worktree_cwd came via the
+    // /worktrees/ path heuristic without an explicit `git worktree add -b`).
+    // The next hook event opportunistically fills branch by reading the
+    // worktree's current HEAD.
+    const pinned = path.join(tmpDir, 'pinned-wt');
+    initGitRepo(pinned, 'feat/pinned');
+
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      worktree_cwd: pinned,
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'echo hello' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    // worktree_cwd is not in the update because it didn't change.
+    assert.equal(update.worktree_cwd, undefined);
+    assert.equal(update.branch, 'feat/pinned');
+  });
+
+  it('preserves existing branch (first-write-wins)', () => {
+    // Once branch is stamped it stays. Even when a `git worktree add -b
+    // feat/new` happens later in the session (e.g. agent created a SECOND
+    // worktree but the original one is still the pin), the recorded branch
+    // matches the recorded worktree_cwd — never the freshly-added one.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      worktree_cwd: '/already/stamped',
+      branch: 'feat/original',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git worktree add -b feat/new /abs/other/wt' },
+        cwd: '/anywhere',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.worktree_cwd, undefined,
+      'existing worktree_cwd must not be overwritten');
+    assert.equal(update.branch, undefined,
+      'existing branch must not be overwritten by a later git worktree add');
   });
 
   it('git worktree add with relative path resolves against input.cwd', () => {
