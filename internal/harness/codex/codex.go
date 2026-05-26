@@ -75,7 +75,7 @@ func (c *Codex) SpawnCommand(skill, message string, opts domain.SpawnOpts) strin
 	}
 
 	prompt := buildPrompt(skill, message)
-	if prompt != "" {
+	if prompt != "" && !opts.DeferPrompt {
 		cmd += " " + shellQuote(prompt)
 	}
 	return cmd

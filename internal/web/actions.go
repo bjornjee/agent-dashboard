@@ -338,7 +338,17 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings))
+	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings)
+	deferredPrompt := ""
+	deferredRequiresPlan := false
+	if activeHarness.Name() == "codex" {
+		deferredPrompt = harness.InitialPrompt(activeHarness.Name(), req.Skill, req.Message)
+		if deferredPrompt != "" {
+			spawnOpts.DeferPrompt = true
+			deferredRequiresPlan = req.Skill == "feature"
+		}
+	}
+	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOpts)
 
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
@@ -389,8 +399,65 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if deferredPrompt != "" {
+		scheduleDeferredCodexPrompt(s, target, deferredPrompt, deferredRequiresPlan)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
+}
+
+var scheduleDeferredCodexPrompt = func(s *Server, target, prompt string, requiresPlan bool) {
+	go s.sendDeferredCodexPrompt(target, prompt, requiresPlan)
+}
+
+func (s *Server) sendDeferredCodexPrompt(target, prompt string, requiresPlan bool) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.After(30 * time.Second)
+	planRequested := false
+
+	for {
+		select {
+		case <-timeout:
+			return
+		case <-ticker.C:
+			lines, err := tmux.TmuxCapture(target, 30)
+			if err != nil || containsCodexTrustPrompt(lines) {
+				continue
+			}
+			if requiresPlan {
+				if !planRequested {
+					_ = tmux.TmuxPasteKeysClearingInput(target, "/plan plan", "Enter")
+					planRequested = true
+					continue
+				}
+				if !s.targetInPlanMode(target) {
+					continue
+				}
+			}
+			_ = tmux.TmuxPasteKeysClearingInput(target, prompt, "Enter")
+			return
+		}
+	}
+}
+
+func containsCodexTrustPrompt(lines []string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, "Do you trust the contents of this directory?") ||
+			strings.Contains(line, "Yes, I trust this folder") {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) targetInPlanMode(target string) bool {
+	for _, agent := range s.readAgentState() {
+		if agent.Target == target && agent.PermissionMode == "plan" {
+			return true
+		}
+	}
+	return false
 }
 
 // firstTmuxSession returns the name of the first available tmux session.

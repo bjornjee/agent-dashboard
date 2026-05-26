@@ -718,6 +718,31 @@ func TestCreateWizard_MessageLaunch(t *testing.T) {
 	}
 }
 
+func TestCreateWizard_CodexMessageLaunchStoresPendingPrompt(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateMessage
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "codex"
+	m.createSkillName = "feature"
+	m.textInput.SetValue("add login page")
+
+	result, cmd := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+
+	if cmd == nil {
+		t.Fatal("expected command batch for createSessionWithPrompt")
+	}
+	if rm.pendingSpawnPrompt != "$agent-dashboard:feature add login page" {
+		t.Errorf("pendingSpawnPrompt = %q", rm.pendingSpawnPrompt)
+	}
+	if !rm.pendingSpawnRequiresPlan {
+		t.Error("feature skill should request plan mode before sending prompt")
+	}
+	if rm.textInput.Value() != "" {
+		t.Errorf("visible input should be cleared, got %q", rm.textInput.Value())
+	}
+}
+
 func TestCreateWizard_MessageEmptyLaunch(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateMessage

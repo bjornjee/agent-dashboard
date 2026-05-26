@@ -2666,6 +2666,136 @@ func TestSpawningCaptureMsg_DetectsTrustPrompt(t *testing.T) {
 	}
 }
 
+func TestSpawningCaptureMsg_TrustPromptDoesNotSendPendingPrompt(t *testing.T) {
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.pendingSpawnPrompt = "hello"
+
+	updated, cmd := m.Update(spawningCaptureMsg{
+		lines:  []string{"Do you trust the contents of this directory?"},
+		target: "main:2.0",
+	})
+	um := updated.(model)
+
+	if !um.trustDetected {
+		t.Error("expected trustDetected to be true")
+	}
+	if um.pendingSpawnPrompt != "hello" {
+		t.Errorf("pending prompt changed to %q", um.pendingSpawnPrompt)
+	}
+	if cmd != nil {
+		t.Fatal("trust prompt should not send pending prompt")
+	}
+}
+
+func TestSpawningCaptureMsg_SendsPendingPromptOnce(t *testing.T) {
+	runner := &recordingTmuxRunner{}
+	restore := tmux.SetTestRunner(runner)
+	t.Cleanup(restore)
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.pendingSpawnPrompt = "hello"
+
+	updated, cmd := m.Update(spawningCaptureMsg{
+		lines:  []string{"OpenAI Codex", "›"},
+		target: "main:2.0",
+	})
+	um := updated.(model)
+
+	if um.pendingSpawnPrompt != "" {
+		t.Errorf("expected pending prompt to clear before send, got %q", um.pendingSpawnPrompt)
+	}
+	if cmd == nil {
+		t.Fatal("expected pending prompt send command")
+	}
+	cmd()
+
+	want := [][]string{
+		{"send-keys", "-t", "main:2.0", "C-u"},
+		{"set-buffer", "-b", "agent-dashboard-reply", "--", "hello"},
+		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.0"},
+		{"send-keys", "-t", "main:2.0", "Enter"},
+	}
+	if fmt.Sprint(runner.runs) != fmt.Sprint(want) {
+		t.Fatalf("tmux calls = %#v, want %#v", runner.runs, want)
+	}
+
+	updated, cmd = um.Update(spawningCaptureMsg{
+		lines:  []string{"OpenAI Codex", "›"},
+		target: "main:2.0",
+	})
+	if cmd != nil {
+		t.Fatal("pending prompt should send only once")
+	}
+}
+
+func TestSpawningCaptureMsg_FeaturePromptWaitsForPlanMode(t *testing.T) {
+	runner := &recordingTmuxRunner{}
+	restore := tmux.SetTestRunner(runner)
+	t.Cleanup(restore)
+
+	m := NewModel(testConfig(t.TempDir()), nil)
+	m.tmuxAvailable = true
+	m.spawningFolder = "/tmp/new-repo"
+	m.spawningTarget = "main:2.0"
+	m.pendingSpawnPrompt = "$agent-dashboard:feature add login"
+	m.pendingSpawnRequiresPlan = true
+
+	updated, cmd := m.Update(spawningCaptureMsg{
+		lines:  []string{"OpenAI Codex", "›"},
+		target: "main:2.0",
+	})
+	um := updated.(model)
+
+	if !um.pendingSpawnPlanRequested {
+		t.Error("expected /plan request to be marked sent")
+	}
+	if um.pendingSpawnPrompt == "" {
+		t.Error("feature prompt should remain pending until plan mode")
+	}
+	if cmd == nil {
+		t.Fatal("expected /plan send command")
+	}
+	cmd()
+
+	wantPlan := [][]string{
+		{"send-keys", "-t", "main:2.0", "C-u"},
+		{"set-buffer", "-b", "agent-dashboard-reply", "--", "/plan plan"},
+		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.0"},
+		{"send-keys", "-t", "main:2.0", "Enter"},
+	}
+	if fmt.Sprint(runner.runs) != fmt.Sprint(wantPlan) {
+		t.Fatalf("tmux calls = %#v, want %#v", runner.runs, wantPlan)
+	}
+
+	updated, cmd = um.Update(spawningCaptureMsg{
+		lines:  []string{"OpenAI Codex", "›"},
+		target: "main:2.0",
+	})
+	if cmd != nil {
+		t.Fatal("feature prompt should wait until state reports plan mode")
+	}
+
+	um = updated.(model)
+	um.agents = []domain.Agent{{Target: "main:2.0", PermissionMode: "plan"}}
+	updated, cmd = um.Update(spawningCaptureMsg{
+		lines:  []string{"OpenAI Codex", "›"},
+		target: "main:2.0",
+	})
+	um = updated.(model)
+	if um.pendingSpawnPrompt != "" {
+		t.Errorf("expected feature prompt to clear, got %q", um.pendingSpawnPrompt)
+	}
+	if cmd == nil {
+		t.Fatal("expected feature prompt send command once plan mode is active")
+	}
+}
+
 func TestSpawningCaptureMsg_NoTrustPrompt(t *testing.T) {
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true

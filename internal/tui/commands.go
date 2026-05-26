@@ -665,7 +665,11 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// Build the spawn command via the harness so per-harness flags
 		// (claude --effort, codex --model/-a/-s) are added consistently
 		// across UIs.
-		cmd := h.SpawnCommand(skill, message, harness.SpawnOptsFor(h.Name(), settings))
+		opts := harness.SpawnOptsFor(h.Name(), settings)
+		if h.Name() == "codex" && harness.InitialPrompt(h.Name(), skill, message) != "" {
+			opts.DeferPrompt = true
+		}
+		cmd := h.SpawnCommand(skill, message, opts)
 
 		if found {
 			// Check pane limit; if the window no longer exists (stale agent
@@ -1058,6 +1062,15 @@ func sendRawKey(paneID, key, label string) tea.Cmd {
 			return rawKeySentMsg{err: fmt.Errorf("pane %s no longer exists", paneID), label: label}
 		}
 		return rawKeySentMsg{err: tmux.TmuxSendRaw(target, key), label: label}
+	}
+}
+
+func sendPendingSpawnPrompt(target, text, kind string) tea.Cmd {
+	return func() tea.Msg {
+		return pendingSpawnPromptSentMsg{
+			err:  tmux.TmuxPasteKeysClearingInput(target, text, "Enter"),
+			kind: kind,
+		}
 	}
 }
 

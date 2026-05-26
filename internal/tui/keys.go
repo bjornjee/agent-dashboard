@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
 
@@ -418,6 +419,16 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.spawningFolder = folder
 			m.spawningTick = m.tickCount
 			harnessName := m.createHarness
+			pendingPrompt := harness.InitialPrompt(harnessName, skill, message)
+			if harnessName == "codex" && pendingPrompt != "" {
+				m.pendingSpawnPrompt = pendingPrompt
+				m.pendingSpawnRequiresPlan = skill == "feature"
+				m.pendingSpawnPlanRequested = false
+			} else {
+				m.pendingSpawnPrompt = ""
+				m.pendingSpawnRequiresPlan = false
+				m.pendingSpawnPlanRequested = false
+			}
 			settings := m.cfg.Settings
 			// Reset harness state too — message is the final step.
 			m.createHarness = ""

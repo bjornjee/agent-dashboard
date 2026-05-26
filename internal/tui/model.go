@@ -225,6 +225,10 @@ type model struct {
 	spawningTarget string // tmux target for spawning pane
 	trustDetected  bool   // true once trust prompt detected in spawning pane
 
+	pendingSpawnPrompt        string // codex prompt to inject once spawn is input-ready
+	pendingSpawnRequiresPlan  bool   // feature skill must enter /plan before prompt injection
+	pendingSpawnPlanRequested bool   // /plan has already been sent for this pending prompt
+
 	// Banner
 	quote       string           // random quote text selected at startup
 	quoteAuthor string           // quote author (empty for fallback quotes)
@@ -601,6 +605,24 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (m *model) clearSpawning() {
+	m.spawningFolder = ""
+	m.spawningTarget = ""
+	m.trustDetected = false
+	m.pendingSpawnPrompt = ""
+	m.pendingSpawnRequiresPlan = false
+	m.pendingSpawnPlanRequested = false
+}
+
+func (m model) spawningAgentInPlanMode() bool {
+	for _, agent := range m.agents {
+		if agent.Target == m.spawningTarget && agent.PermissionMode == "plan" {
+			return true
+		}
+	}
+	return false
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
@@ -655,15 +677,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		// Clear spawning status once the real agent appears on disk
+		// Clear spawning status once the real agent appears on disk and any
+		// deferred Codex prompt has been injected.
 		if m.spawningFolder != "" {
 			for _, a := range m.agents {
 				if a.Cwd == m.spawningFolder || a.WorktreeCwd == m.spawningFolder {
-					m.spawningFolder = ""
-					m.spawningTarget = ""
-					m.trustDetected = false
-					if m.statusMsg == "spawning" {
-						m.clearStatus()
+					if m.pendingSpawnPrompt == "" && !m.pendingSpawnPlanRequested {
+						m.clearSpawning()
+						if m.statusMsg == "spawning" {
+							m.clearStatus()
+						}
 					}
 					break
 				}
@@ -830,9 +853,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Safety expiry for spawning status (30s)
 		if m.spawningFolder != "" && m.tickCount-m.spawningTick >= 30 {
 			wasTrust := m.trustDetected
-			m.spawningFolder = ""
-			m.spawningTarget = ""
-			m.trustDetected = false
+			m.clearSpawning()
 			if m.statusMsg == "spawning" || wasTrust {
 				m.clearStatus()
 			}
@@ -976,7 +997,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case createSessionMsg:
 		if msg.err != nil {
-			m.spawningFolder = ""
+			m.clearSpawning()
 			m.setStatus(fmt.Sprintf("Create failed: %v", msg.err), true)
 			m.mode = modeNormal
 			return m, nil
@@ -1034,14 +1055,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), selectPane(msg.target))
 
 	case spawningCaptureMsg:
-		if msg.target != m.spawningTarget || m.trustDetected || !containsTrustPrompt(msg.lines) {
+		if msg.target != m.spawningTarget {
 			return m, nil
 		}
-		m.trustDetected = true
-		m.statusMsg = "Trust prompt — press Enter to accept"
-		m.statusIsError = false
-		m.statusMsgTick = -1 // persistent
-		return m, nil
+		if containsTrustPrompt(msg.lines) {
+			if m.trustDetected {
+				return m, nil
+			}
+			m.trustDetected = true
+			m.statusMsg = "Trust prompt — press Enter to accept"
+			m.statusIsError = false
+			m.statusMsgTick = -1 // persistent
+			return m, nil
+		}
+		if m.trustDetected || m.pendingSpawnPrompt == "" {
+			return m, nil
+		}
+		if m.pendingSpawnRequiresPlan {
+			if !m.pendingSpawnPlanRequested {
+				m.pendingSpawnPlanRequested = true
+				return m, sendPendingSpawnPrompt(msg.target, "/plan plan", "plan")
+			}
+			if !m.spawningAgentInPlanMode() {
+				return m, nil
+			}
+		}
+		prompt := m.pendingSpawnPrompt
+		m.pendingSpawnPrompt = ""
+		m.pendingSpawnRequiresPlan = false
+		m.pendingSpawnPlanRequested = false
+		return m, sendPendingSpawnPrompt(msg.target, prompt, "prompt")
 
 	case closeResultMsg:
 		if msg.err != nil {
@@ -1073,8 +1116,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			if m.trustDetected {
 				m.trustDetected = false
-				m.spawningTarget = ""
-				m.clearStatus()
+				if m.pendingSpawnPrompt == "" {
+					m.spawningTarget = ""
+					m.clearStatus()
+				} else {
+					m.statusMsg = "spawning"
+					m.statusMsgTick = -1
+					m.statusIsError = false
+				}
 			} else {
 				m.setStatus("Jumped — switch back to this window for dashboard", false)
 			}
@@ -1184,6 +1233,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus(fmt.Sprintf("Reply failed: %v", msg.err), true)
 		} else {
 			m.setStatus("Reply sent", false)
+		}
+		return m, nil
+
+	case pendingSpawnPromptSentMsg:
+		if msg.err != nil {
+			m.setStatus(fmt.Sprintf("Initial prompt failed: %v", msg.err), true)
+		} else if msg.kind == "prompt" {
+			m.setStatus("Initial prompt sent", false)
 		}
 		return m, nil
 

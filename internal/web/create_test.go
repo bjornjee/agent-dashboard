@@ -343,9 +343,59 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	want := "codex --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' 'hi'"
+	want := "codex --model 'gpt-5.5' -a 'on-request' -s 'workspace-write'"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
+	}
+}
+
+func TestCreate_HarnessOverrideCodexDefersInitialPrompt(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+
+	folder := t.TempDir()
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+	ts, _ := createTestServer(t, existingAgent)
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
+	var deferredTarget, deferredPrompt string
+	var deferredRequiresPlan bool
+	orig := scheduleDeferredCodexPrompt
+	scheduleDeferredCodexPrompt = func(_ *Server, target, prompt string, requiresPlan bool) {
+		deferredTarget = target
+		deferredPrompt = prompt
+		deferredRequiresPlan = requiresPlan
+	}
+	t.Cleanup(func() { scheduleDeferredCodexPrompt = orig })
+
+	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"feature","message":"hi"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	if capturedCmd != "codex" {
+		t.Errorf("captured cmd = %q, want deferred codex command without prompt", capturedCmd)
+	}
+	if deferredTarget != "main:0.1" {
+		t.Errorf("deferred target = %q", deferredTarget)
+	}
+	if deferredPrompt != "$agent-dashboard:feature hi" {
+		t.Errorf("deferred prompt = %q", deferredPrompt)
+	}
+	if !deferredRequiresPlan {
+		t.Error("feature skill should require plan mode")
 	}
 }
 
@@ -374,7 +424,7 @@ func TestCreate_CodexAllowsSupportedSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	want := "codex '$agent-dashboard:feature hi'"
+	want := "codex"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
@@ -405,8 +455,8 @@ func TestCreate_CodexAllowsCustomSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	if capturedCmd != "codex '$agent-dashboard:custom-maintained hi'" {
-		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex '$agent-dashboard:custom-maintained hi'")
+	if capturedCmd != "codex" {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, "codex")
 	}
 }
 
