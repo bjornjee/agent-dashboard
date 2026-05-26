@@ -35,18 +35,23 @@ func TestCodex_SpawnCommand(t *testing.T) {
 		// plugin dispatch — bare `$feature` is treated as prompt text and
 		// the plugin is never invoked. All dashboard-discovered skills live
 		// under the `agent-dashboard` plugin (internal/skills/skills.go).
-		{"feature opted-in pins effort", "feature", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex -c model_reasoning_effort=high '$agent-dashboard:feature'"},
+		//
+		// Plan-mode skills (codex.RequiresPlanMode) omit the positional arg
+		// entirely — the dashboard's plan injector types the slash command
+		// and the user's prompt into the pane post-spawn (see
+		// internal/dispatch/plan_injector.go).
+		{"feature is plan-mode, no positional arg", "feature", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex -c model_reasoning_effort=high"},
 		{"fix opted-in pins effort", "fix", "", domain.SpawnOpts{DefaultEffort: "medium"}, "codex -c model_reasoning_effort=medium '$agent-dashboard:fix'"},
 		{"refactor opted-in pins effort", "refactor", "", domain.SpawnOpts{DefaultEffort: "low"}, "codex -c model_reasoning_effort=low '$agent-dashboard:refactor'"},
 		// Claude has a `max` level; codex's enum tops out at `high`
 		// (codex-rs/protocol/src/config_types.rs ReasoningEffort). Map max → high.
-		{"max effort maps to high", "feature", "", domain.SpawnOpts{DefaultEffort: "max"}, "codex -c model_reasoning_effort=high '$agent-dashboard:feature'"},
+		{"max effort maps to high on plan-mode feature", "feature", "", domain.SpawnOpts{DefaultEffort: "max"}, "codex -c model_reasoning_effort=high"},
 		{"chore not opted-in", "chore", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex '$agent-dashboard:chore'"},
 		{"model flag", "", "", domain.SpawnOpts{Model: "gpt-5.5"}, "codex --model 'gpt-5.5'"},
 		{"approval flag", "", "", domain.SpawnOpts{Approval: "on-request"}, "codex -a 'on-request'"},
 		{"sandbox flag", "", "", domain.SpawnOpts{Sandbox: "workspace-write"}, "codex -s 'workspace-write'"},
-		{"all flags + prompt", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' '$agent-dashboard:feature add login'"},
-		{"deferred feature prompt uses auto-plan env", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write", DeferPrompt: true}, "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature add login' codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write'"},
+		{"plan-mode skill omits positional even with message + flags", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write'"},
+		{"non-plan skill keeps prompt + flags", "fix", "fix the thing", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' '$agent-dashboard:fix fix the thing'"},
 	}
 
 	h := codex.New(codex.Config{Command: "codex"})

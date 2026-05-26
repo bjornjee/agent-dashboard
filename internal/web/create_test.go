@@ -349,7 +349,10 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	}
 }
 
-func TestCreate_HarnessOverrideCodexDefersInitialPrompt(t *testing.T) {
+func TestCreate_HarnessOverrideCodexFeatureSkill_NoPositionalArg(t *testing.T) {
+	// codex + feature is a plan-mode skill: the spawn command must NOT
+	// include a positional arg or env-var prefix. The dashboard's plan
+	// injector (internal/dispatch) delivers the prompt post-spawn.
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
 
@@ -375,7 +378,7 @@ func TestCreate_HarnessOverrideCodexDefersInitialPrompt(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	want := "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature hi' codex"
+	want := "codex"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
@@ -406,7 +409,9 @@ func TestCreate_CodexAllowsSupportedSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	want := "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature hi' codex"
+	// codex + feature is plan-mode; the spawn command omits the positional
+	// arg. The plan injector handles prompt delivery post-spawn.
+	want := "codex"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}

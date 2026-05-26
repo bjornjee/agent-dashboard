@@ -17,6 +17,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
+	"github.com/bjornjee/agent-dashboard/internal/dispatch"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -91,6 +92,12 @@ type model struct {
 	codexTotalCost   float64
 	codexTodayCost   float64
 	codexSessionsDir string
+
+	// PlanInjector drives post-spawn /plan plan + prompt delivery for
+	// codex skills that require plan mode (see internal/dispatch).
+	// nil-safe — leaving it unset (e.g. in tests) is acceptable. Set by
+	// cmd/dashboard after model construction.
+	PlanInjector *dispatch.PlanInjector
 
 	// History render cache (Layers 2+3)
 	renderedHistory   string // cached output of historyContent()

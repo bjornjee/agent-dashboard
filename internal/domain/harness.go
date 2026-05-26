@@ -34,7 +34,6 @@ type SpawnOpts struct {
 	Model         string // codex: e.g. "gpt-5.5"
 	Approval      string // codex only: "never" | "untrusted" | "on-request"
 	Sandbox       string // codex only: "danger-full-access" | "workspace-write" | ...
-	DeferPrompt   bool   // codex only: dashboard will inject the initial prompt after spawn readiness
 
 	// ResumeSessionID, when non-empty, switches codex's spawn to
 	// `codex resume <sid>` and drops other per-session flags (codex

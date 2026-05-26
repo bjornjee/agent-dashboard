@@ -106,15 +106,17 @@ describe('codex plugin package', () => {
     assert.ok(hooks.SubagentStop, 'SubagentStop hook should be registered');
   });
 
-  it('registers the Codex auto-plan helper on SessionStart', () => {
+  it('does not register the removed auto-plan hook on SessionStart', () => {
+    // The plan injector now lives in the Go dashboard (internal/dispatch),
+    // not in a codex hook. SessionStart should not reference auto-plan.js.
     const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json'));
     const sessionStartCommands = hooks.hooks.SessionStart
       .flatMap(entry => entry.hooks)
       .map(hook => hook.command);
 
     assert.ok(
-      sessionStartCommands.some(command => /auto-plan\.js/.test(command)),
-      'SessionStart must invoke auto-plan.js',
+      !sessionStartCommands.some(command => /auto-plan/.test(command)),
+      'SessionStart must not reference auto-plan',
     );
   });
 

@@ -36,7 +36,6 @@ describe('codex global hook bundle', () => {
       [
         '$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh',
         '$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh',
-        '$HOME/.codex/hooks/agent-dashboard/auto-plan.sh',
         '$HOME/.codex/hooks/agent-dashboard/pr-skill-detect.sh',
       ]
     );
@@ -52,11 +51,9 @@ describe('codex global hook bundle', () => {
     for (const file of [
       'agent-state-fast.sh',
       'agent-state-reporter.sh',
-      'auto-plan.sh',
       'pr-skill-detect.sh',
       'agent-state-fast.js',
       'agent-state-reporter.js',
-      'auto-plan.js',
       'pr-skill-detect.js',
       'effort-config.js',
       'packages/agent-state/index.js',

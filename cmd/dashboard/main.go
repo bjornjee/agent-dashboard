@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/db"
+	"github.com/bjornjee/agent-dashboard/internal/dispatch"
 	"github.com/bjornjee/agent-dashboard/internal/lock"
 	"github.com/bjornjee/agent-dashboard/internal/tui"
 )
@@ -64,6 +66,15 @@ func main() {
 
 	m := tui.NewModel(cfg, database)
 
+	// Plan injector: orchestrates post-spawn /plan plan + prompt delivery
+	// for codex skills that require plan mode. Owned by main so its
+	// sweeper goroutine's lifetime is the dashboard's.
+	planCtx, planCancel := context.WithCancel(context.Background())
+	defer planCancel()
+	planInjector := dispatch.NewPlanInjector()
+	planInjector.Start(planCtx)
+	m.PlanInjector = planInjector
+
 	// Debug key log — writes raw key/mouse events for diagnosing phantom keystrokes.
 	// Enable with [debug] key_log = true in settings.toml.
 	if cfg.Settings.Debug.KeyLog {
@@ -81,7 +92,7 @@ func main() {
 	// m.TmuxReady is an atomic.Bool updated by deferredStartup once the
 	// real TmuxIsAvailable() check completes; the watcher reads it on
 	// each event to decide whether to call tmux for target resolution.
-	watcher, err := tui.WatchStateDir(stateDir, cfg.Profile.ProjectsDir, cfg.Profile.SessionsDir, p, m.TmuxReady, m.SelfPaneID, m.CodexSessionsDir())
+	watcher, err := tui.WatchStateDir(stateDir, cfg.Profile.ProjectsDir, cfg.Profile.SessionsDir, p, m.TmuxReady, m.SelfPaneID, m.CodexSessionsDir(), planInjector.OnStateChange)
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)
