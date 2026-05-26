@@ -10,17 +10,17 @@ package conversation
 // A single session ID can map to multiple rollout files when the user
 // runs `codex resume <sid>` across day boundaries (codex writes a new
 // rollout under the resume day's YYYY/MM/DD dir, not the original).
-// buildSessionsIndex applies the "lexicographically greatest path wins"
-// rule when both files appear in the same walk — since the path embeds
-// YYYY/MM/DD and the rollout filename embeds ISO8601, the greatest path
-// is always the most recent.
+// locateRolloutFile applies the "lexicographically greatest path wins"
+// rule — since the path embeds YYYY/MM/DD and the rollout filename embeds
+// ISO8601, the greatest path is always the most recent.
+//
+// Resolution goes through the per-session cache so the result is shared
+// with ParentThreadID; the underlying walk inspects only directory
+// entries (no rollout file is opened), keeping each cold call cheap.
 func LocateRollout(sessionsRoot, sessionID string) (string, error) {
 	if sessionID == "" {
 		return "", nil
 	}
-	idx := getOrBuildIndex(sessionsRoot)
-	if idx == nil {
-		return "", nil
-	}
-	return idx.rollouts[sessionID].Path, nil
+	entry, _ := resolveSessionEntry(sessionsRoot, sessionID, false)
+	return entry.Path, nil
 }

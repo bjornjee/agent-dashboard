@@ -23,8 +23,7 @@ func TestCache_PutThenGet_WithinTTL_ReturnsHit(t *testing.T) {
 	c := newCache(5 * time.Second)
 	idx := &sessionsIndex{
 		builtAt:  *clock,
-		rollouts: map[string]rolloutEntry{"sid-1": {Path: "/tmp/root/a.jsonl"}},
-		children: map[string][]domain.SubagentInfo{},
+		children: map[string][]domain.SubagentInfo{"p": {{AgentID: "c"}}},
 	}
 	c.putIndex("/tmp/root", idx)
 
@@ -34,8 +33,8 @@ func TestCache_PutThenGet_WithinTTL_ReturnsHit(t *testing.T) {
 	if !ok {
 		t.Fatal("expected cache hit within TTL, got miss")
 	}
-	if got.rollouts["sid-1"].Path != "/tmp/root/a.jsonl" {
-		t.Errorf("Path = %q, want %q", got.rollouts["sid-1"].Path, "/tmp/root/a.jsonl")
+	if len(got.children["p"]) != 1 {
+		t.Errorf("children[p] len = %d, want 1", len(got.children["p"]))
 	}
 }
 
@@ -46,7 +45,7 @@ func TestCache_PutThenGet_PastTTL_ReturnsMiss(t *testing.T) {
 	c := newCache(5 * time.Second)
 	idx := &sessionsIndex{
 		builtAt:  *clock,
-		rollouts: map[string]rolloutEntry{"sid-1": {Path: "/tmp/root/a.jsonl"}},
+		children: map[string][]domain.SubagentInfo{},
 	}
 	c.putIndex("/tmp/root", idx)
 
@@ -58,16 +57,14 @@ func TestCache_PutThenGet_PastTTL_ReturnsMiss(t *testing.T) {
 }
 
 func TestCache_NegativeEntry_Cached(t *testing.T) {
-	// Locating a missing session is represented as an empty rolloutEntry in
-	// the index — the index itself is still cached, so the next lookup
-	// hits without re-walking.
+	// An empty children map still caches — the next FindSubagents call hits
+	// without re-walking (negative result within TTL).
 	t.Cleanup(InvalidateCacheForTest)
 	withFrozenClock(t, time.Unix(1_700_000_000, 0))
 
 	c := newCache(5 * time.Second)
 	idx := &sessionsIndex{
 		builtAt:  nowFunc(),
-		rollouts: map[string]rolloutEntry{},
 		children: map[string][]domain.SubagentInfo{},
 	}
 	c.putIndex("/tmp/root", idx)
@@ -76,8 +73,8 @@ func TestCache_NegativeEntry_Cached(t *testing.T) {
 	if !ok {
 		t.Fatal("expected hit on empty index within TTL, got miss")
 	}
-	if got.rollouts["missing-sid"].Path != "" {
-		t.Errorf("Path = %q, want empty", got.rollouts["missing-sid"].Path)
+	if got.children["missing-parent"] != nil {
+		t.Errorf("children[missing-parent] = %v, want nil", got.children["missing-parent"])
 	}
 }
 
@@ -87,7 +84,6 @@ func TestCache_InvalidateForTest_ClearsAll(t *testing.T) {
 
 	idx := &sessionsIndex{
 		builtAt:  nowFunc(),
-		rollouts: map[string]rolloutEntry{"sid-1": {Path: "x"}},
 		children: map[string][]domain.SubagentInfo{"p": {{AgentID: "y"}}},
 	}
 	pkgCache.putIndex("/tmp/root", idx)

@@ -14,9 +14,25 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
+	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
+
+// stateUpdate builds a stateUpdatedMsg the way production does: the same
+// ApplyPinnedStates → ApplyIdleOverrides → SortedAgents → TopLevelAgents
+// chain that resolveAgents runs off the main goroutine. Tests should use
+// this helper instead of constructing the message directly so they cover
+// the codex filter alongside the message wiring.
+func stateUpdate(m model, sf domain.StateFile) stateUpdatedMsg {
+	state.ApplyPinnedStates(&sf)
+	state.ApplyIdleOverrides(&sf)
+	agents := conversation.TopLevelAgents(
+		state.SortedAgents(sf, m.selfPaneID),
+		conversation.Roots{CodexSessionsRoot: m.codexSessionsDir},
+	)
+	return stateUpdatedMsg{agents: agents}
+}
 
 func TestBuildTree_DismissedSubagentsHidden(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
@@ -729,7 +745,7 @@ func TestStateUpdate_PrunesAllMaps(t *testing.T) {
 			"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 		},
 	}
-	result, _ := m.Update(stateUpdatedMsg{state: sf})
+	result, _ := m.Update(stateUpdate(m, sf))
 	rm := result.(model)
 
 	// main:1.0 maps should survive
@@ -940,11 +956,11 @@ func TestPlanVisible_AutoDismissOnStateChange(t *testing.T) {
 		m.renderedPlan = "rendered"
 
 		// Agent transitions to running
-		result, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		result, _ := m.Update(stateUpdate(m, domain.StateFile{
 			Agents: map[string]domain.Agent{
 				"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running", Cwd: "/tmp"},
 			},
-		}})
+		}))
 		rm := result.(model)
 		if rm.planVisible {
 			t.Error("planVisible should be auto-cleared when agent leaves plan state")
@@ -965,11 +981,11 @@ func TestPlanVisible_AutoDismissOnStateChange(t *testing.T) {
 		m.planContent = "# My Plan"
 		m.renderedPlan = "rendered"
 
-		result, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		result, _ := m.Update(stateUpdate(m, domain.StateFile{
 			Agents: map[string]domain.Agent{
 				"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "plan", Cwd: "/tmp"},
 			},
-		}})
+		}))
 		rm := result.(model)
 		if !rm.planVisible {
 			t.Error("planVisible should be preserved when agent is still in plan state")
@@ -989,9 +1005,9 @@ func TestPlanVisible_AutoDismissOnStateChange(t *testing.T) {
 		m.planContent = "# My Plan"
 
 		// State update with no agents
-		result, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+		result, _ := m.Update(stateUpdate(m, domain.StateFile{
 			Agents: map[string]domain.Agent{},
-		}})
+		}))
 		rm := result.(model)
 		if rm.planVisible {
 			t.Error("planVisible should be cleared when selected agent disappears")
@@ -1413,6 +1429,33 @@ func TestCodexSubagents_ReservesWidthForMode(t *testing.T) {
 	}
 }
 
+// TestStateUpdated_HandlerPropagatesAgentsVerbatim pins the new contract:
+// the stateUpdatedMsg handler must not re-resolve codex parent_thread_id —
+// that work now lives in loadState/WatchStateDir goroutines so the main
+// bubbletea goroutine never walks ~/.codex/sessions.
+//
+// We prove the handler is filter-free by handing it a list that includes
+// what would normally be a subagent and asserting it survives. A handler
+// that quietly ran TopLevelAgents would drop the second entry; this test
+// guards against that regression.
+func TestStateUpdated_HandlerPropagatesAgentsVerbatim(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+
+	agents := []domain.Agent{
+		{SessionID: "parent", Harness: "codex", Target: "main:1.0", State: "running"},
+		{SessionID: "child", Harness: "codex", Target: "main:2.0", State: "running"},
+	}
+	updated, _ := m.Update(stateUpdatedMsg{agents: agents})
+	rm := updated.(model)
+
+	if len(rm.agents) != 2 {
+		t.Fatalf("got %d agents, want 2 (handler must not re-filter): %+v", len(rm.agents), rm.agents)
+	}
+}
+
 func TestStateUpdated_FiltersCodexSubagentTopLevelRows(t *testing.T) {
 	root := t.TempDir()
 	writeModelRollout(t, root, "child-codex", `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"child-codex","timestamp":"2026-05-21T14:44:03.645Z","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent-codex","agent_role":"explorer"}}},"thread_source":"subagent"}}
@@ -1420,12 +1463,12 @@ func TestStateUpdated_FiltersCodexSubagentTopLevelRows(t *testing.T) {
 	m := NewModel(testConfig(""), nil)
 	m.codexSessionsDir = root
 
-	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+	updated, _ := m.Update(stateUpdate(m, domain.StateFile{
 		Agents: map[string]domain.Agent{
 			"parent-codex": {SessionID: "parent-codex", Harness: "codex", Target: "main:1.0", State: "running"},
 			"child-codex":  {SessionID: "child-codex", Harness: "codex", Target: "main:2.0", State: "running"},
 		},
-	}})
+	}))
 	rm := updated.(model)
 
 	if len(rm.agents) != 1 {
@@ -1655,7 +1698,7 @@ func TestAgentCachePruned_OnStateUpdate(t *testing.T) {
 	newState := domain.StateFile{Agents: map[string]domain.Agent{
 		"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}}
-	result, _ := m.Update(stateUpdatedMsg{state: newState})
+	result, _ := m.Update(stateUpdate(m, newState))
 	rm := result.(model)
 
 	if len(rm.agentCaches) != 1 {
@@ -1872,7 +1915,7 @@ func TestDismissedSubagentCachePruned(t *testing.T) {
 		"main:1.0": {Target: "main:1.0", Window: 1, Pane: 0, State: "running"},
 	}}
 	m.selected = 1 // parent agent (index 0 is group header)
-	result, _ := m.Update(stateUpdatedMsg{state: newState})
+	result, _ := m.Update(stateUpdate(m, newState))
 	rm := result.(model)
 
 	if _, ok := rm.agentCaches[subKey]; ok {
@@ -2324,11 +2367,11 @@ func TestSpawningFolder_ClearedOnStateUpdateWithMatchingAgent(t *testing.T) {
 	m.tmuxAvailable = true
 	m.startupDone = true
 
-	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+	updated, _ := m.Update(stateUpdate(m, domain.StateFile{
 		Agents: map[string]domain.Agent{
 			"sess1": {Target: "main:1.0", State: "running", Cwd: "/Users/someone/Code/my-project"},
 		},
-	}})
+	}))
 	um := updated.(model)
 
 	if um.spawningFolder != "" {
@@ -2342,11 +2385,11 @@ func TestSpawningFolder_PersistsOnStateUpdateWithoutMatch(t *testing.T) {
 	m.tmuxAvailable = true
 	m.startupDone = true
 
-	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+	updated, _ := m.Update(stateUpdate(m, domain.StateFile{
 		Agents: map[string]domain.Agent{
 			"sess1": {Target: "main:1.0", State: "running", Cwd: "/Users/someone/Code/other-project"},
 		},
-	}})
+	}))
 	um := updated.(model)
 
 	if um.spawningFolder == "" {
@@ -2747,11 +2790,11 @@ func TestSpawningTarget_ClearedOnStateUpdateMatch(t *testing.T) {
 	m.tmuxAvailable = true
 	m.startupDone = true
 
-	updated, _ := m.Update(stateUpdatedMsg{state: domain.StateFile{
+	updated, _ := m.Update(stateUpdate(m, domain.StateFile{
 		Agents: map[string]domain.Agent{
 			"sess1": {Target: "main:2.0", State: "running", Cwd: "/tmp/new-repo"},
 		},
-	}})
+	}))
 	um := updated.(model)
 
 	if um.spawningTarget != "" {
