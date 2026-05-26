@@ -19,7 +19,6 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
-	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
@@ -62,13 +61,14 @@ type model struct {
 	textInput        textinput.Model
 	tmuxAvailable    bool
 	ghAvailable      bool
-	deps             []depStatus  // cached deps for modeDepsStatus, refreshed on entry / 'r'
-	openPRSessionID  string       // stored for deferred pin in openPRMsg handler
-	mergeSessionID   string       // stored for async merge callback
-	mergePaneID      string       // stored for async merge callback
-	mergeAgent       domain.Agent // full agent passed through merge → cleanup
-	mergeBranch      string       // branch name for cleanup after merge
-	TmuxReady        *atomic.Bool // shared with watcher goroutine
+	deps             []depStatus             // cached deps for modeDepsStatus, refreshed on entry / 'r'
+	openPRSessionID  string                  // stored for deferred pin in openPRMsg handler
+	mergeSessionID   string                  // stored for async merge callback
+	mergePaneID      string                  // stored for async merge callback
+	mergeAgent       domain.Agent            // full agent passed through merge → cleanup
+	mergeBranch      string                  // branch name for cleanup after merge
+	TmuxReady        *atomic.Bool            // shared with watcher goroutine
+	SelfPaneID       *atomic.Pointer[string] // shared with watcher goroutine; populated by startupMsg
 	statePath        string
 	selfPaneID       string
 	statusMsg        string
@@ -240,6 +240,13 @@ type model struct {
 	// Dino game (experimental)
 	dino        dinoGameModel
 	dinoEnabled bool
+}
+
+// CodexSessionsDir returns the resolved $CODEX_HOME/sessions root for this
+// dashboard, exposed so cmd/dashboard can hand it to WatchStateDir — the
+// watcher resolves codex parent_thread_id off the main goroutine.
+func (m model) CodexSessionsDir() string {
+	return m.codexSessionsDir
 }
 
 // setStatus sets a timed status message. isError controls the display color.
@@ -553,6 +560,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		startupSpinner:        ss,
 		startupDone:           false,
 		mode:                  modeNormal,
+		SelfPaneID:            &atomic.Pointer[string]{},
 		db:                    database,
 		agentListVP:           viewport.New(),
 		filesVP:               viewport.New(),
@@ -609,8 +617,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tmuxAvailable = msg.tmuxAvailable
 		m.selfPaneID = msg.selfPaneID
 		m.TmuxReady.Store(msg.tmuxAvailable)
+		// Publish selfPaneID to the watcher goroutine so it can apply
+		// the same dashboard-pane filter as the main-goroutine resolver.
+		selfPaneID := msg.selfPaneID
+		m.SelfPaneID.Store(&selfPaneID)
 		cmds := []tea.Cmd{
-			loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable),
+			loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir),
 			m.captureSelected(),
 		}
 		if m.db != nil {
@@ -631,7 +643,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateUpdatedMsg:
-		state.ApplyIdleOverrides(&msg.state)
 		prevTarget, prevSubID := m.selectedIdentity()
 		// Track previous diagram counts to detect increases.
 		prevDiagramCounts := make(map[string]int, len(m.agents))
@@ -640,10 +651,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				prevDiagramCounts[a.SessionID] = a.DiagramCount
 			}
 		}
-		m.agents = conversation.TopLevelAgents(
-			state.SortedAgents(msg.state, m.selfPaneID),
-			conversation.Roots{CodexSessionsRoot: m.codexSessionsDir},
-		)
+		// Agents arrive pre-resolved (sort + idle-override + codex filter all
+		// done in the goroutine that produced this message), so the handler
+		// pays no filesystem cost — no walk of ~/.codex/sessions on the main
+		// bubbletea goroutine.
+		m.agents = msg.agents
 		// Flash status when any agent gains a new diagram while panel is closed.
 		for _, a := range m.agents {
 			if a.SessionID == "" || a.DiagramCount == 0 {
@@ -865,7 +877,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, loadRateLimit())
 		}
 		if m.tickCount%30 == 0 {
-			cmds = append(cmds, loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable))
+			cmds = append(cmds, loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir))
 			cmds = append(cmds, loadCodexUsage(m.codexSessionsDir))
 		}
 		return m, tea.Batch(cmds...)
@@ -1031,7 +1043,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.updateRightContent()
-		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), selectPane(msg.target))
+		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir), selectPane(msg.target))
 
 	case spawningCaptureMsg:
 		if msg.target != m.spawningTarget || m.trustDetected || !containsTrustPrompt(msg.lines) {
@@ -1049,11 +1061,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.setStatus("Pane closed", false)
 		}
-		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), pruneDead(m.statePath))
+		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir), pruneDead(m.statePath))
 
 	case pruneDeadMsg:
 		if msg.removed > 0 {
-			return m, loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable)
+			return m, loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir)
 		}
 		return m, nil
 
@@ -1163,7 +1175,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = diagrams.CleanupSession(m.cfg.Profile.StateDir, m.cleanupSessionID)
 		}
 		m.setStatus("Cleaned up", false)
-		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable), pruneDead(m.statePath))
+		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir), pruneDead(m.statePath))
 
 	case rawKeySentMsg:
 		if msg.err != nil {

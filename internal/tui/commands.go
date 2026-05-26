@@ -514,25 +514,37 @@ func loadCodexDBUsage(database *db.DB) tea.Cmd {
 	}
 }
 
-func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool) tea.Cmd {
+func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) tea.Cmd {
 	return func() tea.Msg {
 		v, _, _ := loadStateGroup.Do(path, func() (any, error) {
-			sf := state.ReadState(path)
-			var paneCwds map[string]string
-			if tmuxAvailable {
-				targets, cwds := tmux.TmuxListPanes()
-				state.ResolveAgentTargets(&sf, targets)
-				paneCwds = cwds
-			}
-			state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
-			state.ResolveAgentWorktree(&sf, path)
-			state.ResolveAgentBranches(&sf, paneCwds)
-			state.ApplyPinnedStates(&sf)
-			return sf, nil
+			return resolveAgents(path, projectsDir, sessionsDir, tmuxAvailable, selfPaneID, codexSessionsDir), nil
 		})
-		sf, _ := v.(domain.StateFile)
-		return stateUpdatedMsg{state: sf}
+		agents, _ := v.([]domain.Agent)
+		return stateUpdatedMsg{agents: agents}
 	}
+}
+
+// resolveAgents runs the full read-and-filter chain off the bubbletea main
+// goroutine — including the codex ParentThreadID lookups that previously
+// blocked keystrokes inside the stateUpdatedMsg handler whenever the
+// codex sessions cache expired.
+func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) []domain.Agent {
+	sf := state.ReadState(path)
+	var paneCwds map[string]string
+	if tmuxAvailable {
+		targets, cwds := tmux.TmuxListPanes()
+		state.ResolveAgentTargets(&sf, targets)
+		paneCwds = cwds
+	}
+	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+	state.ResolveAgentWorktree(&sf, path)
+	state.ResolveAgentBranches(&sf, paneCwds)
+	state.ApplyPinnedStates(&sf)
+	state.ApplyIdleOverrides(&sf)
+	return conversation.TopLevelAgents(
+		state.SortedAgents(sf, selfPaneID),
+		conversation.Roots{CodexSessionsRoot: codexSessionsDir},
+	)
 }
 
 // loadStateGroup deduplicates concurrent loadState calls. The TUI tick
@@ -1065,7 +1077,7 @@ func sendRawKey(paneID, key, label string) tea.Cmd {
 	}
 }
 
-func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxReady *atomic.Bool) (*fsnotify.Watcher, error) {
+func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxReady *atomic.Bool, selfPaneID *atomic.Pointer[string], codexSessionsDir string) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -1102,18 +1114,16 @@ func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxRea
 								fmt.Fprintf(os.Stderr, "panic in watcher callback: %v\n", r)
 							}
 						}()
-						sf := state.ReadState(dir)
-						var pc map[string]string
-						if tmuxReady.Load() {
-							targets, cwds := tmux.TmuxListPanes()
-							state.ResolveAgentTargets(&sf, targets)
-							pc = cwds
+						// Watcher fires before startupMsg lands the dashboard's
+						// own pane ID. Until then the self-pane filter is a
+						// no-op (selfPaneID == "") and the dashboard's row will
+						// drop out on the next refresh after startup completes.
+						var pane string
+						if ptr := selfPaneID.Load(); ptr != nil {
+							pane = *ptr
 						}
-						state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
-						state.ResolveAgentWorktree(&sf, dir)
-						state.ResolveAgentBranches(&sf, pc)
-						state.ApplyPinnedStates(&sf)
-						p.Send(stateUpdatedMsg{state: sf})
+						agents := resolveAgents(dir, projectsDir, sessionsDir, tmuxReady.Load(), pane, codexSessionsDir)
+						p.Send(stateUpdatedMsg{agents: agents})
 					})
 				}
 			case _, ok := <-watcher.Errors:
