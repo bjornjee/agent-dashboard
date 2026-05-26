@@ -58,15 +58,87 @@ func FindSubagents(sessionsRoot, parentSessionID string) []domain.SubagentInfo {
 // rollout file, or "" when the session has no parent (a top-level agent),
 // has no session_meta line yet, or doesn't have a rollout file under
 // sessionsRoot.
+//
+// Resolution goes through the per-session cache to avoid the
+// session-tree-wide index build on the main bubbletea goroutine —
+// TopLevelAgents calls this once per codex agent on every stateUpdatedMsg.
+// On a cache miss the lookup walks directory entries by filename only
+// (no rollout opens) to find the matching file, then opens that single
+// file to read its first session_meta line.
 func ParentThreadID(sessionsRoot, sessionID string) string {
 	if sessionID == "" {
 		return ""
 	}
-	idx := getOrBuildIndex(sessionsRoot)
-	if idx == nil {
+	entry, _ := resolveSessionEntry(sessionsRoot, sessionID, true)
+	return entry.Parent
+}
+
+// resolveSessionEntry returns the per-session cache entry for
+// (sessionsRoot, sessionID), populating fields lazily:
+//   - Path: located by directory-only walk (no rollout file opens).
+//   - Parent/MetaRead: populated only when readMeta is true.
+//
+// The entry is cached under the package cache's TTL so subsequent callers
+// (LocateRollout, ParentThreadID, or repeat calls) share the work.
+func resolveSessionEntry(sessionsRoot, sessionID string, readMeta bool) (sessionEntry, bool) {
+	if sessionID == "" {
+		return sessionEntry{}, false
+	}
+	if entry, ok := pkgCache.getSession(sessionsRoot, sessionID); ok {
+		if !readMeta || entry.MetaRead {
+			return entry, true
+		}
+		// Cached path is still good; we just need the meta on top of it.
+		if entry.Path != "" {
+			meta, _ := readSubagentSessionMeta(entry.Path)
+			entry.Parent = meta.Source.Subagent.ThreadSpawn.ParentThreadID
+			entry.MetaRead = true
+			pkgCache.putSession(sessionsRoot, sessionID, entry)
+			return entry, true
+		}
+	}
+
+	entry := sessionEntry{Path: locateRolloutFile(sessionsRoot, sessionID)}
+	if readMeta && entry.Path != "" {
+		meta, _ := readSubagentSessionMeta(entry.Path)
+		entry.Parent = meta.Source.Subagent.ThreadSpawn.ParentThreadID
+		entry.MetaRead = true
+	}
+	pkgCache.putSession(sessionsRoot, sessionID, entry)
+	return entry, true
+}
+
+// locateRolloutFile walks sessionsRoot's directory tree and returns the
+// path of the rollout file whose filename trails with `-<sessionID>.jsonl`.
+// Crucially it inspects only directory entries (d.Name()) — no rollout
+// JSONL is opened — so the per-session lookup is cheap enough to run on
+// the bubbletea main goroutine even for sessions trees with thousands of
+// files. Empty string when nothing matches or the root doesn't exist.
+//
+// Applies the same "lexicographically greatest path wins" rule as
+// buildSessionsIndex: when `codex resume <sid>` produces a second rollout
+// for the same sessionID under a later YYYY/MM/DD directory, the greatest
+// path (== newest by ISO8601 prefix) is returned.
+func locateRolloutFile(sessionsRoot, sessionID string) string {
+	if sessionsRoot == "" || sessionID == "" {
 		return ""
 	}
-	return idx.rollouts[sessionID].Meta.Source.Subagent.ThreadSpawn.ParentThreadID
+	suffix := "-" + sessionID + ".jsonl"
+	var found string
+	_ = filepath.WalkDir(sessionsRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, suffix) {
+			return nil
+		}
+		if path > found {
+			found = path
+		}
+		return nil
+	})
+	return found
 }
 
 // getOrBuildIndex returns the cached sessions index for sessionsRoot or,

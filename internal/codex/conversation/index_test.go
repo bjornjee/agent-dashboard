@@ -76,6 +76,34 @@ func TestSessionsIndex_OneBuildSharedAcrossLookupKinds(t *testing.T) {
 	}
 }
 
+// TestParentThreadID_NoIndexBuild asserts that ParentThreadID does NOT
+// trigger the full sessions-index build (filepath.WalkDir + per-file
+// readSubagentSessionMeta/readSubagentRolloutDetails opens). The full
+// build runs synchronously inside Update() on the main bubbletea
+// goroutine when stateUpdatedMsg arrives — every 15s TTL expiry blocks
+// keystrokes for the duration of the walk. The fix routes ParentThreadID
+// through a per-session lookup that opens only the target rollout file.
+func TestParentThreadID_NoIndexBuild(t *testing.T) {
+	t.Cleanup(InvalidateCacheForTest)
+	root := mkRolloutRoot(t)
+
+	var walks int64
+	orig := walkSessionsRootFn
+	walkSessionsRootFn = func(r string, visit func(string, subagentSessionMeta)) {
+		atomic.AddInt64(&walks, 1)
+		orig(r, visit)
+	}
+	t.Cleanup(func() { walkSessionsRootFn = orig })
+
+	if got := ParentThreadID(root, "child"); got != "parent" {
+		t.Errorf("ParentThreadID = %q, want %q", got, "parent")
+	}
+
+	if got := atomic.LoadInt64(&walks); got != 0 {
+		t.Errorf("walkSessionsRootFn calls = %d, want 0 (ParentThreadID must not build the full index)", got)
+	}
+}
+
 func mkRolloutRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
