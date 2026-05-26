@@ -524,13 +524,15 @@ func TestResolveAgentBranches(t *testing.T) {
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
+			// No WorktreeCwd → live read every refresh, even when Branch is
+			// pre-populated. Vanilla source-repo agents have no pin.
 			"with-cwd": {Cwd: "/valid/repo", Branch: "stale-branch", State: "running"},
 			"no-cwd":   {Cwd: "", Branch: "stale", State: "running"},
 			"bad-cwd":  {Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil)
+	ResolveAgentBranches(&sf, nil, "")
 
 	if sf.Agents["with-cwd"].Branch != "feat/mock-branch" {
 		t.Errorf("expected branch feat/mock-branch, got %q", sf.Agents["with-cwd"].Branch)
@@ -543,35 +545,137 @@ func TestResolveAgentBranches(t *testing.T) {
 	}
 }
 
-func TestResolveAgentBranches_WorktreeCwd(t *testing.T) {
+func TestResolveAgentBranches_PinnedBranchPreserved(t *testing.T) {
+	// Pin semantic: when WorktreeCwd is set and Branch is already on file, the
+	// stored Branch is authoritative. ResolveAgentBranches must NOT run git —
+	// the recorded branch reflects what the worktree was created with, and the
+	// dashboard should not flap to whatever HEAD a `git checkout` moves to.
 	m := withMockBranchRunner(t)
-	mockGitBranch(m, "/valid/repo", "feat/from-cwd")
-	mockGitBranch(m, "/valid/worktree", "feat/from-worktree")
+	// Intentionally no mockGitBranch expectations. If git is called, the mock
+	// fails the test via AssertExpectations.
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"pinned":           {WorktreeCwd: "/valid/worktree", Cwd: "/nonexistent/path", Branch: "feat/pinned", State: "running"},
+			"pinned-wt-broken": {WorktreeCwd: "/deleted/wt", Cwd: "/valid/repo", Branch: "feat/already-pinned", State: "running"},
+		},
+	}
+
+	ResolveAgentBranches(&sf, nil, "")
+
+	if got := sf.Agents["pinned"].Branch; got != "feat/pinned" {
+		t.Errorf("pinned: expected branch preserved as feat/pinned, got %q", got)
+	}
+	// Even when the worktree dir is gone, the pinned branch is still the right
+	// label — the agent's task didn't change.
+	if got := sf.Agents["pinned-wt-broken"].Branch; got != "feat/already-pinned" {
+		t.Errorf("pinned-wt-broken: expected branch preserved as feat/already-pinned, got %q", got)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestResolveAgentBranches_BackfillFromWorktree_Persists(t *testing.T) {
+	// One-shot backfill: agent has WorktreeCwd set but Branch empty (legacy
+	// state file written before the pin landed, or an agent stamped by the
+	// fast hook that hasn't yet seen `git worktree add -b`). The next refresh
+	// performs one live read against WorktreeCwd, stamps the result in
+	// memory, AND persists it to the agent's JSON file so subsequent refreshes
+	// skip the git call.
+	m := withMockBranchRunner(t)
+	worktreeDir := "/valid/worktree"
+	mockGitBranch(m, worktreeDir, "feat/backfilled")
+
+	stateDir := t.TempDir()
+	sessionID := "sess-backfill"
+	agent := domain.Agent{
+		SessionID:   sessionID,
+		WorktreeCwd: worktreeDir,
+		Cwd:         "/repo",
+		State:       "running",
+	}
+	seedAgentJSON(t, stateDir, agent)
+
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+	ResolveAgentBranches(&sf, nil, stateDir)
+
+	if got := sf.Agents[sessionID].Branch; got != "feat/backfilled" {
+		t.Errorf("in-memory Branch = %q, want feat/backfilled", got)
+	}
+
+	data, err := os.ReadFile(filepath.Join(stateDir, "agents", sessionID+".json"))
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if raw["branch"] != "feat/backfilled" {
+		t.Errorf("persisted branch = %v, want feat/backfilled", raw["branch"])
+	}
+}
+
+func TestResolveAgentBranches_BackfillNoStateDir_InMemoryOnly(t *testing.T) {
+	// When stateDir is empty (callers without a write path, e.g. unit tests),
+	// backfill happens in memory but is not persisted. Acceptable: next
+	// refresh just re-reads.
+	m := withMockBranchRunner(t)
+	mockGitBranch(m, "/valid/worktree", "feat/in-mem")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"a": {SessionID: "a", WorktreeCwd: "/valid/worktree", State: "running"},
+		},
+	}
+
+	ResolveAgentBranches(&sf, nil, "")
+
+	if got := sf.Agents["a"].Branch; got != "feat/in-mem" {
+		t.Errorf("Branch = %q, want feat/in-mem", got)
+	}
+}
+
+func TestResolveAgentBranches_NoWorktree_LiveReadEveryRefresh(t *testing.T) {
+	// Vanilla source-repo agents (no WorktreeCwd) keep live-read behavior:
+	// Branch reflects the source repo's current HEAD on every refresh.
+	m := withMockBranchRunner(t)
+	mockGitBranch(m, "/valid/repo", "main")
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			"vanilla": {Cwd: "/valid/repo", Branch: "feat/stale", State: "running"},
+		},
+	}
+
+	ResolveAgentBranches(&sf, nil, "")
+
+	// "feat/stale" was wrong (source repo is actually on main) and the live
+	// read clobbers it. This is the pre-existing semantic for unpinned agents
+	// and is preserved.
+	if got := sf.Agents["vanilla"].Branch; got != "main" {
+		t.Errorf("vanilla: expected live branch main, got %q", got)
+	}
+	m.AssertExpectations(t)
+}
+
+func TestResolveAgentBranches_BrokenWorktree_EmptyBranch_ClearsBranch(t *testing.T) {
+	// WorktreeCwd set but git fails (dir deleted post-merge) AND Branch is
+	// empty: there's no pin to preserve and no live answer. Branch ends up "".
+	// Crucially, we do NOT fall back to Cwd — that would surface the source
+	// repo's branch (almost always "main") and reintroduce the original bug.
+	m := withMockBranchRunner(t)
 	mockGitBranch(m, "/bad/wt", "")
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			// WorktreeCwd is the agent's static home; Cwd is irrelevant when it's set.
-			"worktree":         {WorktreeCwd: "/valid/worktree", Cwd: "/nonexistent/path", Branch: "stale", State: "running"},
-			"no-worktree":      {Cwd: "/valid/repo", Branch: "stale", State: "running"},
-			"worktree-deleted": {WorktreeCwd: "/bad/wt", Cwd: "/valid/repo", Branch: "feat/old-stale", State: "running"},
+			"broken": {WorktreeCwd: "/bad/wt", Cwd: "/valid/repo", State: "running"},
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil)
+	ResolveAgentBranches(&sf, nil, "")
 
-	if sf.Agents["worktree"].Branch != "feat/from-worktree" {
-		t.Errorf("worktree: expected feat/from-worktree, got %q", sf.Agents["worktree"].Branch)
-	}
-	if sf.Agents["no-worktree"].Branch != "feat/from-cwd" {
-		t.Errorf("no-worktree: expected feat/from-cwd, got %q", sf.Agents["no-worktree"].Branch)
-	}
-	// Static-dir semantic: when WorktreeCwd is set but unresolvable, do NOT
-	// fall back to Cwd. The agent's home is broken, so branch is unknown —
-	// surfacing the source-repo branch instead would be misleading.
-	if sf.Agents["worktree-deleted"].Branch != "" {
-		t.Errorf("worktree-deleted: expected branch cleared (no fallback to Cwd), got %q",
-			sf.Agents["worktree-deleted"].Branch)
+	if got := sf.Agents["broken"].Branch; got != "" {
+		t.Errorf("broken: expected empty branch (no fallback to Cwd), got %q", got)
 	}
 }
 
@@ -595,7 +699,7 @@ func TestResolveAgentBranches_PaneCwdFallback(t *testing.T) {
 		"%11": "/should/not/be/used",
 	}
 
-	ResolveAgentBranches(&sf, paneCwds)
+	ResolveAgentBranches(&sf, paneCwds, "")
 
 	if sf.Agents["no-cwd"].Cwd != "/pane/cwd" {
 		t.Errorf("no-cwd: expected Cwd backfilled to /pane/cwd, got %q", sf.Agents["no-cwd"].Cwd)
@@ -1284,6 +1388,11 @@ func TestResolveAgentWorktree_StampsAndWritesBack(t *testing.T) {
 	// repo.Resolve(candidate) — seed is candidate, source matches.
 	mockRepoResolve(m, candidate, candidate, source)
 
+	// Self-heal also stamps branch alongside the recovered worktree_cwd, so
+	// the agent doesn't have to wait for ResolveAgentBranches' backfill on a
+	// later refresh. One git call, same atomic write.
+	mockGitBranch(m, candidate, "feat/recovered")
+
 	stateDir := t.TempDir()
 	agent := domain.Agent{
 		SessionID: sessionID,
@@ -1299,8 +1408,11 @@ func TestResolveAgentWorktree_StampsAndWritesBack(t *testing.T) {
 	if got := sf.Agents[sessionID].WorktreeCwd; got != candidate {
 		t.Errorf("in-memory WorktreeCwd = %q, want %q", got, candidate)
 	}
+	if got := sf.Agents[sessionID].Branch; got != "feat/recovered" {
+		t.Errorf("in-memory Branch = %q, want feat/recovered", got)
+	}
 
-	// Verify on-disk persistence.
+	// Verify on-disk persistence — both fields written in the same update.
 	data, err := os.ReadFile(filepath.Join(stateDir, "agents", sessionID+".json"))
 	if err != nil {
 		t.Fatalf("read back: %v", err)
@@ -1311,6 +1423,47 @@ func TestResolveAgentWorktree_StampsAndWritesBack(t *testing.T) {
 	}
 	if raw["worktree_cwd"] != candidate {
 		t.Errorf("persisted worktree_cwd = %v, want %q", raw["worktree_cwd"], candidate)
+	}
+	if raw["branch"] != "feat/recovered" {
+		t.Errorf("persisted branch = %v, want feat/recovered", raw["branch"])
+	}
+}
+
+func TestResolveAgentWorktree_StampsWorktreeButBranchEmpty_WhenGitFails(t *testing.T) {
+	// Self-heal recovers worktree_cwd even when the branch lookup fails (e.g.
+	// detached HEAD on the freshly-added worktree). Branch stamping is
+	// best-effort: worktree_cwd is the primary pin, branch fills in later.
+	m := withMockBranchRunner(t)
+	sessionID := "sess-stamp-no-branch"
+	candidate := "/wt/feat"
+	cwd := "/repo/src"
+	source := "/repo/src"
+
+	projDir := writeWorktreeAddJSONL(t, sessionID, "git worktree add "+candidate)
+
+	m.On("Output", mock.Anything, "git", "-C", candidate, "rev-parse", "--show-toplevel").
+		Return([]byte(candidate+"\n"), nil)
+	mockRepoResolve(m, cwd, source, source)
+	mockRepoResolve(m, candidate, candidate, source)
+	mockGitBranch(m, candidate, "") // branch lookup fails (mock returns error)
+
+	stateDir := t.TempDir()
+	agent := domain.Agent{
+		SessionID: sessionID,
+		Cwd:       cwd,
+		ProjDir:   projDir,
+		State:     "running",
+	}
+	seedAgentJSON(t, stateDir, agent)
+
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+	ResolveAgentWorktree(&sf, stateDir)
+
+	if got := sf.Agents[sessionID].WorktreeCwd; got != candidate {
+		t.Errorf("in-memory WorktreeCwd = %q, want %q (worktree should still stamp)", got, candidate)
+	}
+	if got := sf.Agents[sessionID].Branch; got != "" {
+		t.Errorf("in-memory Branch = %q, want empty (branch lookup failed)", got)
 	}
 }
 
@@ -1467,6 +1620,7 @@ func TestResolveAgentWorktree_RelativePath_ResolvedAgainstCwd(t *testing.T) {
 		Return([]byte(resolved+"\n"), nil)
 	mockRepoResolve(m, cwd, "/repo/src", "/repo/src")
 	mockRepoResolve(m, resolved, resolved, "/repo/src")
+	mockGitBranch(m, resolved, "feat/rel")
 
 	stateDir := t.TempDir()
 	agent := domain.Agent{

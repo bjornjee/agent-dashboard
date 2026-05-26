@@ -538,7 +538,7 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	}
 	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
 	state.ResolveAgentWorktree(&sf, path)
-	state.ResolveAgentBranches(&sf, paneCwds)
+	state.ResolveAgentBranches(&sf, paneCwds, path)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
 	return conversation.TopLevelAgents(

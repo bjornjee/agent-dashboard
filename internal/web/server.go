@@ -184,7 +184,7 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 	}
 	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
 	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
-	state.ResolveAgentBranches(&sf, paneCwds)
+	state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
 	agent, ok := sf.Agents[id]

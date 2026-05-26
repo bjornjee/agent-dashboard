@@ -21,6 +21,7 @@ const { spawnSync } = require('child_process');
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const { getBranch } = require(path.join(pluginRoot, 'packages', 'git-status'));
 const { readEffortConfig } = require('./effort-config');
 
 // dispatchEffortKeys types `/effort <level>\r` into the agent's tmux pane.
@@ -144,6 +145,14 @@ function effortTransition(existingMode, newMode) {
   return null;
 }
 
+// detectWorktreeFromBash extracts both the worktree path and the explicit
+// -b/-B branch name (when present) from a PostToolUse Bash `git worktree add`
+// command. The -b argument is captured so worktree_cwd and branch can be
+// stamped in the same update — strictly more specific than later running
+// getBranch against a path that may not be on disk when the hook fires.
+//
+// Returns { path, branch } on a match, or null when not a worktree add.
+// branch is null when no -b/-B flag was given.
 function detectWorktreeFromBash(input) {
   if (input.hook_event_name !== 'PostToolUse') return null;
   if ((input.tool_name || '') !== 'Bash') return null;
@@ -152,15 +161,22 @@ function detectWorktreeFromBash(input) {
   if (!m) return null;
   const tokens = m[1].trim().split(/\s+/).filter(Boolean);
   const flagsWithArg = new Set(['-b', '-B', '--reason']);
+  let branch = null;
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (flagsWithArg.has(t)) { i++; continue; }
+    if (flagsWithArg.has(t)) {
+      if ((t === '-b' || t === '-B') && tokens[i + 1]) {
+        branch = tokens[i + 1];
+      }
+      i++;
+      continue;
+    }
     if (t.startsWith('-')) continue;
     let candidate = t;
     if (!candidate.startsWith('/') && input.cwd) {
       candidate = path.resolve(input.cwd, candidate);
     }
-    return candidate;
+    return { path: candidate, branch };
   }
   return null;
 }
@@ -198,8 +214,22 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     && /\/worktrees\//.test(liveCwd)
     && !/\/\.claude\/worktrees\//.test(liveCwd);
   const bashWorktree = detectWorktreeFromBash(input);
-  const worktreeCwd = (!existing.worktree_cwd && (bashWorktree || isMainWorktree))
-    ? (bashWorktree || liveCwd)
+  const bashWorktreePath = bashWorktree && bashWorktree.path;
+  const worktreeCwd = (!existing.worktree_cwd && (bashWorktreePath || isMainWorktree))
+    ? (bashWorktreePath || liveCwd)
+    : null;
+  // Pin branch alongside worktree_cwd so ResolveAgentBranches never has to
+  // live-read against this dir. Priority (first-write-wins, same as
+  // worktree_cwd):
+  //   Primary: explicit `-b <branch>` from the `git worktree add` command.
+  //   Fallback: getBranch against the worktree (either the newly stamped
+  //             one this hook event, or the already-pinned worktree_cwd
+  //             when only the branch was missing).
+  // Skipped entirely when existing.branch is already set.
+  const worktreeBranch = !existing.branch
+    ? (existing.worktree_cwd
+      ? getBranch(existing.worktree_cwd)
+      : ((bashWorktree && bashWorktree.branch) || getBranch(worktreeCwd)))
     : null;
   const hookEvent = input.hook_event_name;
   const toolName = input.tool_name || '';
@@ -261,6 +291,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
     || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
+    || !!worktreeBranch
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
@@ -284,6 +315,9 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 
   if (worktreeCwd) {
     update.worktree_cwd = worktreeCwd;
+  }
+  if (worktreeBranch) {
+    update.branch = worktreeBranch;
   }
 
   if (stampDelegatedPlanId) {
