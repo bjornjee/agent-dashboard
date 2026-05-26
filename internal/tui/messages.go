@@ -11,7 +11,14 @@ import (
 
 // -- Messages --
 
-type stateUpdatedMsg struct{ state domain.StateFile }
+// stateUpdatedMsg carries the agent list resolved entirely off the
+// bubbletea main goroutine. loadState and WatchStateDir do the full
+// resolve chain (ReadState → ResolveAgent* → ApplyPinnedStates →
+// ApplyIdleOverrides → SortedAgents → TopLevelAgents) inside their own
+// goroutines, so the Update handler does not block on any filesystem
+// walk — including the codex sessions tree walk that previously froze
+// keystrokes whenever the per-session cache expired.
+type stateUpdatedMsg struct{ agents []domain.Agent }
 type tickMsg time.Time
 type jumpResultMsg struct{ err error }
 type sendResultMsg struct{ err error }
