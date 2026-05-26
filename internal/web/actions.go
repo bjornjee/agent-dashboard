@@ -339,7 +339,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings)
-	if activeHarness.Name() == "codex" && (req.Skill != "" || req.Message != "") {
+	if activeHarness.Name() == "codex" && req.Skill == "feature" {
 		spawnOpts.DeferPrompt = true
 	}
 	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOpts)

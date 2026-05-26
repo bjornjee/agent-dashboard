@@ -343,7 +343,7 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	want := "AGENT_DASHBOARD_DEFERRED_PROMPT='hi' codex --model 'gpt-5.5' -a 'on-request' -s 'workspace-write'"
+	want := "codex --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' 'hi'"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
@@ -437,7 +437,7 @@ func TestCreate_CodexAllowsCustomSkill(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	want := "AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:custom-maintained hi' codex"
+	want := "codex '$agent-dashboard:custom-maintained hi'"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}

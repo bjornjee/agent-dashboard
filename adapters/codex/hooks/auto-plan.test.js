@@ -101,29 +101,6 @@ describe('auto-plan hook helper', () => {
     assert.deepEqual(sent, []);
   });
 
-  it('sends the deferred prompt directly when auto-plan is disabled', async () => {
-    const sent = [];
-    const writes = [];
-
-    const result = await runAutoPlan({
-      sessionId: 'session-1',
-      tmuxPane: '%7',
-      deferredPrompt: 'plain prompt',
-      readAgentState: () => ({}),
-      writeState: (_sessionId, update) => writes.push(update),
-      sendLine: (_pane, text) => {
-        sent.push(text);
-        return true;
-      },
-      sleep: async () => {},
-      initialDelayMs: 0,
-    });
-
-    assert.equal(result.status, 'done');
-    assert.deepEqual(sent, ['plain prompt']);
-    assert.equal(writes.at(-1).auto_plan_status, 'done');
-  });
-
   it('times out without sending the deferred prompt when plan mode is never observed', async () => {
     const sent = [];
     const writes = [];

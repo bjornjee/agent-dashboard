@@ -666,7 +666,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// (claude --effort, codex --model/-a/-s) are added consistently
 		// across UIs.
 		opts := harness.SpawnOptsFor(h.Name(), settings)
-		if h.Name() == "codex" && (skill != "" || message != "") {
+		if h.Name() == "codex" && skill == "feature" {
 			opts.DeferPrompt = true
 		}
 		cmd := h.SpawnCommand(skill, message, opts)

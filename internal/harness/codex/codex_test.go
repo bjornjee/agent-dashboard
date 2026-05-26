@@ -47,7 +47,6 @@ func TestCodex_SpawnCommand(t *testing.T) {
 		{"sandbox flag", "", "", domain.SpawnOpts{Sandbox: "workspace-write"}, "codex -s 'workspace-write'"},
 		{"all flags + prompt", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' '$agent-dashboard:feature add login'"},
 		{"deferred feature prompt uses auto-plan env", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write", DeferPrompt: true}, "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature add login' codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write'"},
-		{"deferred plain prompt uses deferred env", "", "hello", domain.SpawnOpts{DeferPrompt: true}, "AGENT_DASHBOARD_DEFERRED_PROMPT='hello' codex"},
 	}
 
 	h := codex.New(codex.Config{Command: "codex"})
