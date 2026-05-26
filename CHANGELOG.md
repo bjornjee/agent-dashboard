@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.28.2](https://github.com/bjornjee/agent-dashboard/compare/v0.28.1...v0.28.2) (2026-05-26)
+
+
+### Bug Fixes
+
+* pin worktree branch at creation, stop drift to main ([#323](https://github.com/bjornjee/agent-dashboard/issues/323)) ([21129af](https://github.com/bjornjee/agent-dashboard/commit/21129afde0540c7ef48500c30d36f9683fb98d9f))
+* preserve codex prompt through trust ([#321](https://github.com/bjornjee/agent-dashboard/issues/321)) ([ef00bf5](https://github.com/bjornjee/agent-dashboard/commit/ef00bf5fb613379a160afa052ec500e2d546a7c9))
+
+
+### Performance Improvements
+
+* resolve codex agents off the bubbletea main goroutine ([#322](https://github.com/bjornjee/agent-dashboard/issues/322)) ([929407f](https://github.com/bjornjee/agent-dashboard/commit/929407f2534a91f36bed75f37087ed19e46a075f))
+
 ## [0.28.1](https://github.com/bjornjee/agent-dashboard/compare/v0.28.0...v0.28.1) (2026-05-25)
 
 
