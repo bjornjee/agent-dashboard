@@ -51,7 +51,6 @@ func newTestInjector(t *testing.T, sk *fakeSendKeys, now time.Time) *PlanInjecto
 	inj := NewPlanInjector()
 	inj.sendKeys = sk.send
 	inj.now = func() time.Time { return now }
-	inj.sleep = func(time.Duration) {}
 	inj.preRoll = time.Millisecond
 	inj.deadline = 100 * time.Millisecond
 	inj.sweepInterval = 5 * time.Millisecond
@@ -254,7 +253,6 @@ func TestSweeper_ExpiresStalePending(t *testing.T) {
 	t.Cleanup(cancel)
 	inj := NewPlanInjector()
 	inj.sendKeys = sk.send
-	inj.sleep = func(time.Duration) {}
 	inj.preRoll = time.Millisecond
 	inj.deadline = 50 * time.Millisecond
 	inj.sweepInterval = 5 * time.Millisecond
@@ -321,7 +319,6 @@ func TestOnStateChange_NoDuplicateFire_WhenSendKeysInFlight(t *testing.T) {
 	inj := NewPlanInjector()
 	inj.sendKeys = bk.send
 	inj.now = func() time.Time { return scheduledAt }
-	inj.sleep = func(time.Duration) {}
 	inj.preRoll = time.Millisecond
 	inj.deadline = 5 * time.Second
 	inj.sweepInterval = 50 * time.Millisecond
@@ -379,6 +376,76 @@ func TestOnStateChange_NoDuplicateFire_WhenSendKeysInFlight(t *testing.T) {
 	}
 	if promptSends != 1 {
 		t.Fatalf("expected exactly 1 prompt send, got %d (calls=%v)", promptSends, bk.snapshot())
+	}
+}
+
+// Regression test for the rapid-reschedule pre-roll leak. If MaybeSchedule
+// is called twice for the same target before the pre-roll completes, only
+// the most recent schedule's pre-roll goroutine should type /plan plan —
+// the earlier one must observe that its generation is stale and bail out.
+// Pre-fix: 2 /plan plan typings. Post-fix: exactly 1.
+func TestMaybeSchedule_RapidReschedule_OnlyLatestFires(t *testing.T) {
+	sk := &fakeSendKeys{}
+	inj := newTestInjector(t, sk, time.Now())
+	// Use a small but non-zero pre-roll so the second schedule lands while
+	// the first goroutine is still in its wait.
+	inj.preRoll = 50 * time.Millisecond
+
+	inj.MaybeSchedule("codex", "feature", "main:5.1", "first prompt")
+	inj.MaybeSchedule("codex", "feature", "main:5.1", "second prompt")
+
+	// Wait long enough for both goroutines to wake from their pre-rolls.
+	time.Sleep(200 * time.Millisecond)
+
+	planSends := 0
+	for _, c := range sk.snapshot() {
+		if c.text == codex.PlanModeCommand {
+			planSends++
+		}
+	}
+	if planSends != 1 {
+		t.Fatalf("expected exactly 1 /plan plan after rapid re-schedule, got %d (calls=%v)", planSends, sk.snapshot())
+	}
+	// The pending entry should hold the LATEST message.
+	pp, ok := inj.peek("main:5.1")
+	if !ok {
+		t.Fatal("expected pending entry after schedule")
+	}
+	if pp.message != "second prompt" {
+		t.Errorf("pending message = %q, want %q (latest wins)", pp.message, "second prompt")
+	}
+}
+
+// Regression test for pre-roll goroutine ignoring context cancellation.
+// On dashboard shutdown the pre-roll goroutine must observe Start's ctx
+// being cancelled and bail before typing /plan plan into a pane the
+// dashboard no longer owns. Pre-fix: typed anyway. Post-fix: skipped.
+func TestMaybeSchedule_ShutdownDuringPreRoll_BailsOut(t *testing.T) {
+	sk := &fakeSendKeys{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	inj := NewPlanInjector()
+	inj.sendKeys = sk.send
+	inj.now = time.Now
+	// Real, observable pre-roll — long enough for the test to cancel
+	// before it elapses.
+	inj.preRoll = 200 * time.Millisecond
+	inj.deadline = 5 * time.Second
+	inj.sweepInterval = 50 * time.Millisecond
+	inj.Start(ctx)
+
+	inj.MaybeSchedule("codex", "feature", "main:5.1", "prompt")
+	// Cancel the ctx before pre-roll completes.
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	// Wait past the original pre-roll deadline.
+	time.Sleep(300 * time.Millisecond)
+
+	for _, c := range sk.snapshot() {
+		if c.text == codex.PlanModeCommand {
+			t.Fatalf("expected no /plan plan after shutdown, got %v", sk.snapshot())
+		}
 	}
 }
 

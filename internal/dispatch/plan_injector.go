@@ -40,18 +40,31 @@ type PlanInjector struct {
 
 	// Injectable for tests.
 	now      func() time.Time
-	sleep    func(time.Duration)
 	sendKeys func(target, text string) error
 
 	preRoll       time.Duration
 	deadline      time.Duration
 	sweepInterval time.Duration
+
+	// stop is closed by Start when its ctx is cancelled. Pre-roll
+	// goroutines select on it so they bail out on dashboard shutdown
+	// instead of typing /plan plan into a pane the dashboard no longer
+	// owns. Initialized in NewPlanInjector; never re-assigned.
+	stop      chan struct{}
+	startOnce sync.Once
 }
 
 type pendingPrompt struct {
 	target      string
 	message     string
 	scheduledAt time.Time
+	// gen monotonically increments each time MaybeSchedule is called for
+	// the same target while a previous entry is still pending. The
+	// pre-roll goroutine captures the gen it scheduled with and checks
+	// against the current entry before typing — a stale gen means a
+	// newer MaybeSchedule has superseded this one, so the goroutine
+	// bails out instead of typing a redundant /plan plan.
+	gen uint64
 }
 
 // NewPlanInjector constructs an injector with production defaults but
@@ -62,17 +75,25 @@ func NewPlanInjector() *PlanInjector {
 	return &PlanInjector{
 		pending:       make(map[string]*pendingPrompt),
 		now:           time.Now,
-		sleep:         time.Sleep,
 		sendKeys:      tmux.TmuxSendKeys,
 		preRoll:       defaultPreRoll,
 		deadline:      defaultDeadline,
 		sweepInterval: defaultSweepInterval,
+		stop:          make(chan struct{}),
 	}
 }
 
-// Start launches the sweeper goroutine. It exits when ctx is cancelled.
+// Start launches the sweeper goroutine and wires ctx cancellation into
+// the injector's stop channel so in-flight pre-roll waits can bail out
+// on shutdown. Idempotent — subsequent calls are no-ops.
 func (p *PlanInjector) Start(ctx context.Context) {
-	go p.sweep(ctx)
+	p.startOnce.Do(func() {
+		go func() {
+			<-ctx.Done()
+			close(p.stop)
+		}()
+		go p.sweep(ctx)
+	})
 }
 
 // MaybeSchedule registers a pending plan-mode injection for the freshly
@@ -93,15 +114,42 @@ func (p *PlanInjector) MaybeSchedule(harnessName, skill, target, message string)
 		return
 	}
 	p.mu.Lock()
+	gen := uint64(0)
+	if existing, ok := p.pending[target]; ok {
+		gen = existing.gen + 1
+	}
 	p.pending[target] = &pendingPrompt{
 		target:      target,
 		message:     message,
 		scheduledAt: p.now(),
+		gen:         gen,
 	}
 	p.mu.Unlock()
 
 	go func() {
-		p.sleep(p.preRoll)
+		// Wait the pre-roll, but bail immediately if the dashboard is
+		// shutting down. p.stop is closed by Start's ctx-cancellation
+		// watcher; never re-assigned, so the read is race-free.
+		timer := time.NewTimer(p.preRoll)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-p.stop:
+			return
+		}
+
+		// A newer MaybeSchedule for the same target supersedes us. Bail
+		// instead of typing a redundant /plan plan — codex's plan-mode
+		// transition is idempotent but a second slash command produces
+		// a user-visible "already in plan mode" toast.
+		p.mu.Lock()
+		cur, ok := p.pending[target]
+		stale := !ok || cur.gen != gen
+		p.mu.Unlock()
+		if stale {
+			return
+		}
+
 		if err := p.sendKeys(target, codex.PlanModeCommand); err != nil {
 			log.Printf("plan injector: send /plan plan to %s: %v", target, err)
 		}
