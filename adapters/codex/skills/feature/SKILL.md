@@ -45,8 +45,6 @@ Before every action, identify the current phase and check its gate. If a gate is
    git worktree add -b feat/<name> ../worktrees/<app>/<name> main
    ```
    - If the branch already exists, ask the user whether to resume it or choose a new name.
-   - Register the worktree with the dashboard so branch/dir display correctly while the agent works:
-     `node "$PLUGIN_ROOT/scripts/stamp-worktree.js" "$(cd ../worktrees/<app>/<name> && pwd -P)"`
 6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
    - Find all env files recursively: `find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'`
    - For each file found, recreate its directory structure in the worktree and copy it. For example:

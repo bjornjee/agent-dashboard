@@ -33,14 +33,13 @@ import (
 
 // -- Deferred startup commands --
 
-// deferredStartup runs all blocking startup work (tmux probes, stale cleanup)
-// concurrently via errgroup so the TUI can render immediately.
-func deferredStartup(stateDir string, database *db.DB, cfg domain.Config) tea.Cmd {
+// deferredStartup runs blocking tmux probes concurrently via errgroup so the
+// TUI can render immediately.
+func deferredStartup() tea.Cmd {
 	return func() tea.Msg {
 		var (
-			tmuxAvail   bool
-			selfPane    string
-			livePaneIDs map[string]bool
+			tmuxAvail bool
+			selfPane  string
 		)
 
 		g := new(errgroup.Group)
@@ -55,14 +54,7 @@ func deferredStartup(stateDir string, database *db.DB, cfg domain.Config) tea.Cm
 			return nil
 		})
 
-		g.Go(func() error {
-			livePaneIDs = tmux.TmuxListLivePaneIDs()
-			return nil
-		})
-
 		_ = g.Wait()
-
-		state.CleanStale(stateDir, 10*60, livePaneIDs)
 
 		return startupMsg{tmuxAvailable: tmuxAvail, selfPaneID: selfPane}
 	}
