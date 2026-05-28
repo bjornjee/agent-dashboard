@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { validateAgent } = require('./schema');
 const { detectState } = require('./detect');
+const { withFileLock } = require('./filelock');
 
 const DEFAULT_AGENTS_DIR = path.join(
   process.env.AGENT_DASHBOARD_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.agent-dashboard'),
@@ -71,8 +72,14 @@ function readAllState(agentsDir = DEFAULT_AGENTS_DIR) {
 }
 
 /**
- * Write/merge an agent update into its per-agent file (atomic).
- * No cross-agent locking needed — each session writes only its own file.
+ * Write/merge an agent update into its per-agent file.
+ *
+ * Read → merge → atomic write inside a sidecar file lock so concurrent
+ * hook subprocesses and the Go dashboard pin/stamp paths don't overwrite
+ * each other's fields (lost-update race). The atomic rename keeps any
+ * unlucky reader (dashboard refresh, sibling hook) from seeing a torn
+ * intermediate state.
+ *
  * @param {string} sessionId - Claude session_id (UUID)
  * @param {Object} update - fields to merge into the agent entry
  * @param {string} [agentsDir] - directory containing per-agent files
@@ -81,30 +88,33 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
   fs.mkdirSync(agentsDir, { recursive: true });
 
   const filePath = agentFilePath(sessionId, agentsDir);
-  const existing = readAgentState(sessionId, agentsDir) || {};
 
-  // Guard: skip write if current on-disk state is protected.
-  // This eliminates the TOCTOU race where a caller checks stale state and then
-  // writeState re-reads fresh state — the guard now runs against the fresh read.
-  if (opts.guardStates && opts.guardStates.has(existing.state)) {
-    return;
-  }
+  withFileLock(filePath, () => {
+    const existing = readAgentState(sessionId, agentsDir) || {};
 
-  const merged = {
-    ...existing,
-    ...update,
-    updated_at: new Date().toISOString(),
-  };
+    // Guard: skip write if current on-disk state is protected. Runs INSIDE
+    // the lock so the check sees the same fresh read the merge will use —
+    // no TOCTOU window between guard and write.
+    if (opts.guardStates && opts.guardStates.has(existing.state)) {
+      return;
+    }
 
-  // Atomic write via tmp file + rename. Clean up tmp on failure.
-  const tmp = filePath + `.tmp.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(merged, null, 2));
-    fs.renameSync(tmp, filePath);
-  } catch (err) {
-    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
-    throw err;
-  }
+    const merged = {
+      ...existing,
+      ...update,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Atomic write via tmp file + rename. Clean up tmp on failure.
+    const tmp = filePath + `.tmp.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(merged, null, 2));
+      fs.renameSync(tmp, filePath);
+    } catch (err) {
+      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+      throw err;
+    }
+  });
 }
 
 /**

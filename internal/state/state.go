@@ -219,31 +219,33 @@ func validateWorktreeCandidate(agentCwd, candidate string) bool {
 }
 
 // stampAgentFields merges a set of field updates into the agent's state JSON.
-// Mirrors PinAgentState: read → merge → atomic write. Callers ignore the
-// error: a missing or malformed agent file just means the in-memory update
-// stands until the hook writes a clean file on the next event.
+// Read → merge → atomic write inside a sidecar file lock so concurrent
+// hook subprocesses and dashboard pins don't overwrite each other's fields
+// (lost-update race) or read torn content (non-atomic write race).
+//
+// Callers ignore the error: a missing or malformed agent file just means
+// the in-memory update stands until the hook writes a clean file on the
+// next event.
 func stampAgentFields(stateDir, sessionID string, updates map[string]any) error {
-	files := agentFileMap(stateDir)
-	path, ok := files[sessionID]
-	if !ok {
-		return fmt.Errorf("agent %s not found", sessionID)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	for k, v := range updates {
-		raw[k] = v
-	}
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, out, 0600)
+	path := filepath.Join(AgentsDir(stateDir), sessionID+".json")
+	return withFileLock(path, func() error {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("agent %s not found: %w", sessionID, err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		for k, v := range updates {
+			raw[k] = v
+		}
+		out, err := json.MarshalIndent(raw, "", "  ")
+		if err != nil {
+			return err
+		}
+		return writeJSONAtomic(path, out)
+	})
 }
 
 // ResolveAgentBranches sets each agent's Branch field, with branch-pinning
@@ -437,26 +439,28 @@ func ApplyIdleOverrides(sf *domain.StateFile) {
 // PinAgentState writes a pinned_state field to the agent's JSON file.
 // Hook updates merge into the file and preserve this field, so the
 // dashboard-driven state survives while the agent continues working.
+//
+// Wrapped in the same sidecar lock as stampAgentFields and the JS
+// writeState so concurrent writers cannot wipe pinned_state via the
+// lost-update race.
 func PinAgentState(dir, sessionID, pinnedState string) error {
-	files := agentFileMap(dir)
-	path, ok := files[sessionID]
-	if !ok {
-		return fmt.Errorf("agent %s not found", sessionID)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	raw["pinned_state"] = pinnedState
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, out, 0600)
+	path := filepath.Join(AgentsDir(dir), sessionID+".json")
+	return withFileLock(path, func() error {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("agent %s not found: %w", sessionID, err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		raw["pinned_state"] = pinnedState
+		out, err := json.MarshalIndent(raw, "", "  ")
+		if err != nil {
+			return err
+		}
+		return writeJSONAtomic(path, out)
+	})
 }
 
 // SortedAgents returns agents sorted by state priority, then by updated_at.

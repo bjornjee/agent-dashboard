@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -881,6 +882,83 @@ func TestPinAgentState_NonExistent(t *testing.T) {
 	err := PinAgentState(tmp, "nonexistent", "pr")
 	if err == nil {
 		t.Error("expected error for nonexistent session_id")
+	}
+}
+
+// TestStateFile_ConcurrentWrites_PreserveFields exercises the read-modify-write
+// race between PinAgentState and stampAgentFields on the same agent file.
+// Each goroutine writes a different field; with proper locking + atomic
+// rename, every field a writer set must be present in the final state.
+//
+// Without locking the writers stomp each other: A reads file, B reads file,
+// A writes (sets pinned_state), B writes (its stale snapshot lacks pinned_state
+// so the merge drops it). The same shape wipes branch and worktree_cwd in
+// production when the dashboard's Pin button races a hook subprocess.
+func TestStateFile_ConcurrentWrites_PreserveFields(t *testing.T) {
+	tmp := t.TempDir()
+	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{
+		SessionID: "sess-a",
+		Target:    "a:0.1",
+		State:     "running",
+	})
+
+	const iters = 200
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iters; i++ {
+			if err := PinAgentState(tmp, "sess-a", "review"); err != nil {
+				t.Errorf("PinAgentState: %v", err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iters; i++ {
+			if err := stampAgentFields(tmp, "sess-a", map[string]any{
+				"branch": fmt.Sprintf("br-%d", i),
+			}); err != nil {
+				t.Errorf("stampAgentFields branch: %v", err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iters; i++ {
+			if err := stampAgentFields(tmp, "sess-a", map[string]any{
+				"worktree_cwd": fmt.Sprintf("/wt/%d", i),
+			}); err != nil {
+				t.Errorf("stampAgentFields worktree_cwd: %v", err)
+				return
+			}
+		}
+	}()
+	wg.Wait()
+
+	sf := ReadState(tmp)
+	agent, ok := sf.Agents["sess-a"]
+	if !ok {
+		t.Fatalf("agent missing after concurrent writes")
+	}
+	if agent.PinnedState != "review" {
+		t.Errorf("pinned_state wiped: got %q want %q", agent.PinnedState, "review")
+	}
+	if agent.Branch == "" {
+		t.Errorf("branch wiped: got empty")
+	}
+	if agent.WorktreeCwd == "" {
+		t.Errorf("worktree_cwd wiped: got empty")
+	}
+	// Baseline fields must also survive.
+	if agent.SessionID != "sess-a" {
+		t.Errorf("session_id corrupted: got %q", agent.SessionID)
+	}
+	if agent.Target != "a:0.1" {
+		t.Errorf("target corrupted: got %q", agent.Target)
 	}
 }
 

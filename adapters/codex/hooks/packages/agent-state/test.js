@@ -328,6 +328,58 @@ describe('writeState concurrent (per-agent files)', () => {
       assert.equal(state.agents[sessionId].branch, `branch-${i}`);
     }
   });
+
+  it('preserves every field under concurrent writes to the SAME session_id', async () => {
+    // Regression: the dashboard pin button + claude hook + codex hook can all
+    // hit the same agent file in the same millisecond. Without the sidecar
+    // file lock each writer's stale snapshot overwrites the others, wiping
+    // pinned_state / branch / worktree_cwd at random.
+    const { execFile } = require('child_process');
+    const { promisify } = require('util');
+    const execFileP = promisify(execFile);
+
+    const sessionId = 'sess-shared';
+    // Seed with baseline so writers MERGE rather than create.
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'running' }, agentsDir);
+
+    const ITERS = 100;
+    const script = path.join(tmpDir, '_same-session-writer.js');
+    const indexPath = path.join(__dirname, 'index.js');
+    fs.writeFileSync(script, `
+      const { writeState } = require(${JSON.stringify(indexPath)});
+      const [sessionId, field, value, dir, iters] = process.argv.slice(2);
+      const N = parseInt(iters, 10);
+      for (let i = 0; i < N; i++) {
+        writeState(sessionId, { [field]: value + '-' + i }, dir);
+      }
+    `);
+
+    // Three workers each owning a distinct field, all hitting the same file.
+    const writers = [
+      ['pinned_state', 'review'],
+      ['branch', 'feat/x'],
+      ['worktree_cwd', '/wt'],
+    ];
+    await Promise.all(writers.map(([field, value]) =>
+      execFileP(process.execPath, [script, sessionId, field, value, agentsDir, String(ITERS)])
+    ));
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.ok(state, 'agent file gone after concurrent writes');
+    // The race manifests as a stale snapshot clobbering a more recent write.
+    // After every process returns, each field's LAST value (suffix N-1) must
+    // be on disk — anything less means another writer's stale merge wiped it.
+    const lastSuffix = `-${ITERS - 1}`;
+    assert.equal(state.pinned_state, 'review' + lastSuffix,
+      `pinned_state lost-update: got ${JSON.stringify(state.pinned_state)}`);
+    assert.equal(state.branch, 'feat/x' + lastSuffix,
+      `branch lost-update: got ${JSON.stringify(state.branch)}`);
+    assert.equal(state.worktree_cwd, '/wt' + lastSuffix,
+      `worktree_cwd lost-update: got ${JSON.stringify(state.worktree_cwd)}`);
+    // Baseline must also survive.
+    assert.equal(state.session_id, sessionId);
+    assert.equal(state.target, 'a:0.1');
+  });
 });
 
 describe('writeState guardStates', () => {
