@@ -663,6 +663,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pays no filesystem cost — no walk of ~/.codex/sessions on the main
 		// bubbletea goroutine.
 		m.agents = msg.agents
+		// Mirrors web's watcher (internal/web/watcher.go) — without this the
+		// injector's pending codex prompts never fire after permission_mode
+		// flips to "plan".
+		m.PlanInjector.OnStateChange(m.agents)
 		// Flash status when any agent gains a new diagram while panel is closed.
 		for _, a := range m.agents {
 			if a.SessionID == "" || a.DiagramCount == 0 {
