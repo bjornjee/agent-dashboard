@@ -111,15 +111,22 @@ func (p *PlanInjector) MaybeSchedule(harnessName, skill, target, message string)
 // OnStateChange is the watcher observer. For each pending pane that the
 // snapshot reports in plan mode (and whose UpdatedAt is not stale
 // relative to our scheduledAt), the user's prompt is typed and the
-// entry deleted. send-keys failures keep the entry so the sweeper can
-// expire it as a visible timeout.
+// entry deleted.
+//
+// The delete happens *inside* the locked queueing phase, before sendKeys
+// runs, so a second OnStateChange that arrives while sendKeys is still
+// in flight finds no pending entry and does not double-fire. On
+// sendKeys failure the entry is re-inserted so the sweeper can expire
+// it as a visible timeout — but only if a concurrent MaybeSchedule
+// hasn't already replaced it for the same target.
 func (p *PlanInjector) OnStateChange(agents []domain.Agent) {
 	if p == nil {
 		return
 	}
 	type fire struct {
-		target  string
-		message string
+		target      string
+		message     string
+		scheduledAt time.Time
 	}
 	p.mu.Lock()
 	var toFire []fire
@@ -137,18 +144,24 @@ func (p *PlanInjector) OnStateChange(agents []domain.Agent) {
 		if isStaleEvent(a.UpdatedAt, pp.scheduledAt) {
 			continue
 		}
-		toFire = append(toFire, fire{a.Target, pp.message})
+		toFire = append(toFire, fire{a.Target, pp.message, pp.scheduledAt})
+		delete(p.pending, a.Target) // optimistic delete — closes the duplicate race
 	}
 	p.mu.Unlock()
 
 	for _, f := range toFire {
 		if err := p.sendKeys(f.target, f.message); err != nil {
 			log.Printf("plan injector: send prompt to %s: %v", f.target, err)
-			continue
+			p.mu.Lock()
+			if _, exists := p.pending[f.target]; !exists {
+				p.pending[f.target] = &pendingPrompt{
+					target:      f.target,
+					message:     f.message,
+					scheduledAt: f.scheduledAt,
+				}
+			}
+			p.mu.Unlock()
 		}
-		p.mu.Lock()
-		delete(p.pending, f.target)
-		p.mu.Unlock()
 	}
 }
 

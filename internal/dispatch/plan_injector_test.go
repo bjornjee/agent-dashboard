@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
 )
 
 // fakeSendKeys records every (target, text) pair sent and lets the test
@@ -277,6 +278,108 @@ func TestSweeper_ExpiresStalePending(t *testing.T) {
 		_, ok := inj.peek("main:5.1")
 		return !ok
 	}, "sweeper should have expired pending entry")
+}
+
+// blockingSendKeys wraps fakeSendKeys with a gate that blocks any send-keys
+// matching blockText until the test closes release. Used to deterministically
+// hold a send-keys call in-flight while another goroutine runs OnStateChange.
+type blockingSendKeys struct {
+	fakeSendKeys
+	blockText string
+	entered   chan struct{}
+	release   chan struct{}
+	once      sync.Once
+}
+
+func (b *blockingSendKeys) send(target, text string) error {
+	b.mu.Lock()
+	b.calls = append(b.calls, sendCall{target, text})
+	b.mu.Unlock()
+	if text == b.blockText {
+		b.once.Do(func() { close(b.entered) })
+		<-b.release
+	}
+	return nil
+}
+
+// Regression test for the OnStateChange duplicate-fire race. If a second
+// OnStateChange arrives while the first one's send-keys is still running,
+// the pending entry must not be visible to the second call — otherwise the
+// user's prompt is typed into the codex pane twice. The fix is optimistic
+// delete inside the locked queueing phase (with re-insert on send-keys
+// failure).
+func TestOnStateChange_NoDuplicateFire_WhenSendKeysInFlight(t *testing.T) {
+	bk := &blockingSendKeys{
+		blockText: "user prompt",
+		entered:   make(chan struct{}),
+		release:   make(chan struct{}),
+	}
+	scheduledAt := time.Date(2026, 5, 28, 10, 0, 0, 0, time.UTC)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	inj := NewPlanInjector()
+	inj.sendKeys = bk.send
+	inj.now = func() time.Time { return scheduledAt }
+	inj.sleep = func(time.Duration) {}
+	inj.preRoll = time.Millisecond
+	inj.deadline = 5 * time.Second
+	inj.sweepInterval = 50 * time.Millisecond
+	inj.Start(ctx)
+
+	inj.MaybeSchedule("codex", "feature", "main:5.1", "user prompt")
+	// Wait for the pre-roll /plan plan to be recorded (it doesn't block —
+	// only the user prompt does). Otherwise the in-flight assertion is racy.
+	waitUntil(t, func() bool {
+		for _, c := range bk.snapshot() {
+			if c.text == codex.PlanModeCommand {
+				return true
+			}
+		}
+		return false
+	}, "/plan plan pre-roll recorded")
+
+	agent := domain.Agent{
+		Target:         "main:5.1",
+		PermissionMode: "plan",
+		UpdatedAt:      scheduledAt.Add(time.Second).Format(time.RFC3339Nano),
+	}
+
+	// OnStateChange #1 — runs in goroutine because the prompt send-keys
+	// will block until we close bk.release.
+	done1 := make(chan struct{})
+	go func() {
+		inj.OnStateChange([]domain.Agent{agent})
+		close(done1)
+	}()
+	<-bk.entered // confirm prompt send-keys is in-flight
+
+	// OnStateChange #2 — also in a goroutine because, in the unfixed
+	// code, it would queue a duplicate fire and block on sendKeys; the
+	// fixed code skips it (pending already deleted) and returns immediately.
+	done2 := make(chan struct{})
+	go func() {
+		inj.OnStateChange([]domain.Agent{agent})
+		close(done2)
+	}()
+
+	// Give #2 a tick to either return immediately (fixed) or block in
+	// sendKeys (buggy). Either outcome is observable post-release.
+	time.Sleep(50 * time.Millisecond)
+
+	close(bk.release) // release any in-flight send(s)
+	<-done1
+	<-done2
+
+	promptSends := 0
+	for _, c := range bk.snapshot() {
+		if c.text == "user prompt" {
+			promptSends++
+		}
+	}
+	if promptSends != 1 {
+		t.Fatalf("expected exactly 1 prompt send, got %d (calls=%v)", promptSends, bk.snapshot())
+	}
 }
 
 func TestMaybeSchedule_PreRollErrorLogged(t *testing.T) {
