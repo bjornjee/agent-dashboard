@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/db"
-	"github.com/bjornjee/agent-dashboard/internal/dispatch"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -42,21 +41,10 @@ type Server struct {
 	// get a stable value for the Server's lifetime.
 	codexSessionsRootDir string
 
-	// planInjector orchestrates post-spawn /plan plan + prompt delivery
-	// for codex skills that require plan-mode bootstrap. Nil in tests is
-	// fine — the methods are nil-safe.
-	planInjector *dispatch.PlanInjector
-
 	// Rate-limit cache (60s TTL to avoid per-request API calls)
 	rlMu        sync.Mutex
 	rlCache     *domain.RateLimit
 	rlFetchedAt time.Time
-}
-
-// SetPlanInjector wires the plan injector after construction. The boot
-// path calls this once; tests may leave it unset (the field is nil-safe).
-func (s *Server) SetPlanInjector(p *dispatch.PlanInjector) {
-	s.planInjector = p
 }
 
 // NewServer creates a new web dashboard server.

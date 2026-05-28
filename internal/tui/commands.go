@@ -16,7 +16,6 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
-	"github.com/bjornjee/agent-dashboard/internal/dispatch"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
@@ -636,7 +635,7 @@ func validateFolder(path string) (string, error) {
 // message, and harness override. The wizard picks the harness; per-harness
 // settings (Codex.Model/Approval/Sandbox/effort) flow
 // through harness.SpawnOptsFor exactly like the web spawn path does.
-func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings, harnessName, skill, message string, injector *dispatch.PlanInjector) tea.Cmd {
+func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings, harnessName, skill, message string) tea.Cmd {
 	return func() tea.Msg {
 		absFolder, err := validateFolder(folder)
 		if err != nil {
@@ -701,11 +700,6 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		if err != nil {
 			return createSessionMsg{err: err}
 		}
-
-		// Schedule post-spawn /plan plan + prompt injection for codex
-		// plan-mode skills. No-op for other harness/skill combinations
-		// and nil-safe if the model didn't wire an injector.
-		injector.MaybeSchedule(h.Name(), skill, newTarget, message)
 
 		return createSessionMsg{target: newTarget}
 	}
@@ -1082,12 +1076,8 @@ func sendRawKey(paneID, key, label string) tea.Cmd {
 }
 
 // WatchStateDir starts an fsnotify watcher on the agents-state directory.
-// onAgents, if non-nil, is invoked on the watcher's own goroutine for each
-// debounced refresh — before the stateUpdatedMsg is sent to the bubbletea
-// program. The dashboard's plan injector uses this hook to react to
-// permission_mode transitions without blocking the bubbletea main goroutine
-// on tmux send-keys.
-func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxReady *atomic.Bool, selfPaneID *atomic.Pointer[string], codexSessionsDir string, onAgents func([]domain.Agent)) (*fsnotify.Watcher, error) {
+// Debounced refreshes are sent to the bubbletea program as stateUpdatedMsg.
+func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxReady *atomic.Bool, selfPaneID *atomic.Pointer[string], codexSessionsDir string) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -1133,9 +1123,6 @@ func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxRea
 							pane = *ptr
 						}
 						agents := resolveAgents(dir, projectsDir, sessionsDir, tmuxReady.Load(), pane, codexSessionsDir)
-						if onAgents != nil {
-							onAgents(agents)
-						}
 						p.Send(stateUpdatedMsg{agents: agents})
 					})
 				}

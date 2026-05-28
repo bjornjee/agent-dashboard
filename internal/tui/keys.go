@@ -422,7 +422,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// Reset harness state too — message is the final step.
 			m.createHarness = ""
 			return m, tea.Batch(
-				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, settings, harnessName, skill, message, m.PlanInjector),
+				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, settings, harnessName, skill, message),
 				m.spawningSpinner.Tick,
 			)
 		case "esc":
