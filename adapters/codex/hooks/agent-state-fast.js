@@ -90,7 +90,7 @@ function resolveState(hookEvent, toolName, _permissionMode, toolInput) {
     return 'plan';
   }
   if ((hookEvent === 'PermissionRequest' || hookEvent === 'PreToolUse')
-      && toolName === 'AskUserQuestion') {
+      && (toolName === 'AskUserQuestion' || toolName === 'request_user_input')) {
     return 'question';
   }
   if (hookEvent === 'PermissionRequest') {
@@ -282,6 +282,25 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 
   const harness = detectHarness(input);
 
+  // Codex's PermissionRequest fires for every tool-call that crosses the
+  // approval surface — including ones that guardian_subagent auto-approves
+  // without user input. Mapping each one to state='permission' flapped the
+  // dashboard between BLOCKED and RUNNING. Instead, stamp pending_approval
+  // for codex and leave state at 'running' so the agent stays in its group.
+  // The next hook event (matching PostToolUse, or a PreToolUse for a new
+  // tool) clears the marker — the request/response pair drives the decision,
+  // not a clock.
+  let pendingApproval = existing.pending_approval || '';
+  if (harness === 'codex') {
+    if (hookEvent === 'PermissionRequest' && state === 'permission') {
+      pendingApproval = toolName;
+      state = 'running';
+    } else if (pendingApproval) {
+      pendingApproval = '';
+    }
+  }
+  const pendingApprovalChanged = (existing.pending_approval || '') !== pendingApproval;
+
   const changed = existing.state !== state
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
@@ -291,6 +310,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || stampDelegatedPlanId
     || clearDelegatedPlanId
     || !!newEffort
+    || pendingApprovalChanged
     || (existing.harness || '') !== harness;
 
   if (!changed && existing.state) {
@@ -328,6 +348,10 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 
   if (newEffort) {
     update.effort = newEffort;
+  }
+
+  if (pendingApprovalChanged) {
+    update.pending_approval = pendingApproval;
   }
 
   return { changed: true, update, dispatchEffort };

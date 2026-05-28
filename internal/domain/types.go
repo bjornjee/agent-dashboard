@@ -48,11 +48,18 @@ type Agent struct {
 	SubagentCount      int      `json:"subagent_count"`
 	LastHookEvent      string   `json:"last_hook_event"`
 	CurrentTool        string   `json:"current_tool"`
-	WorktreeCwd        string   `json:"worktree_cwd,omitempty"`
-	PRURL              string   `json:"pr_url,omitempty"`
-	PinnedState        string   `json:"pinned_state,omitempty"`
-	DiagramCount       int      `json:"diagram_count,omitempty"`
-	DiagramLatestTS    int64    `json:"diagram_latest_ts,omitempty"`
+	// PendingApproval is the name of a codex tool whose PermissionRequest is
+	// in flight (set on PermissionRequest, cleared on the matching PostToolUse
+	// or any PreToolUse for a different tool). Codex's guardian_subagent may
+	// auto-approve, so we do not flip State to "permission"; the UI uses this
+	// field to surface the in-flight approval inline without changing state
+	// grouping. Empty for Claude agents.
+	PendingApproval string `json:"pending_approval,omitempty"`
+	WorktreeCwd     string `json:"worktree_cwd,omitempty"`
+	PRURL           string `json:"pr_url,omitempty"`
+	PinnedState     string `json:"pinned_state,omitempty"`
+	DiagramCount    int    `json:"diagram_count,omitempty"`
+	DiagramLatestTS int64  `json:"diagram_latest_ts,omitempty"`
 	// DelegatedPlanToolUseID points at the Agent tool_use_id in the parent
 	// session's JSONL whose tool_result is the plan markdown produced by a
 	// delegated Plan subagent. Set by agent-state-fast.js on PreToolUse Agent+Plan;

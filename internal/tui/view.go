@@ -1237,6 +1237,10 @@ func (m model) renderRightPanel() string {
 			Render(fmt.Sprintf("%s %s", si.icon, stateLabel))
 
 		metaParts := []string{stateStr}
+		if agent.PendingApproval != "" {
+			metaParts = append(metaParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#F59E0B")).
+				Render(fmt.Sprintf("approving %s", agent.PendingApproval)))
+		}
 		if agent.Model != "" {
 			metaParts = append(metaParts, helpStyle.Render(agent.Model))
 		}

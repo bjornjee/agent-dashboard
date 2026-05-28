@@ -42,6 +42,7 @@ export function renderList(app, agents) {
         </div>
         <div class="agent-card__subagents" data-agent-id="${agent.session_id}" data-subagent-count="${agent.subagent_count || 0}"></div>
         <div class="agent-bottom-row">
+          ${agent.pending_approval ? '<span class="agent-pending-approval">approving ' + escapeHtml(agent.pending_approval) + '</span>' : ''}
           ${agent.current_tool ? '<span class="agent-current-tool">' + escapeHtml(agent.current_tool) + '</span>' : ''}
           <span class="agent-cost" data-agent-id="${agent.session_id}"></span>
         </div>

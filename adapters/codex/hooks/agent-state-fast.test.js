@@ -1676,3 +1676,155 @@ describe('effort dispatch gate (no inject while user is composing)', () => {
     assert.equal(result.dispatchEffort, false);
   });
 });
+
+describe('codex pending_approval (guardian auto-approval surfacing)', () => {
+  // Codex 0.134's `approvals_reviewer = "guardian_subagent"` fires
+  // PermissionRequest for every tool-call that crosses the approval surface,
+  // even when the guardian subagent auto-approves. Mapping each one to
+  // state='permission' flapped the dashboard between BLOCKED and RUNNING.
+  // The fix: stamp `pending_approval` for codex but leave state alone; the
+  // next hook event (PostToolUse for the same tool, or a new PreToolUse)
+  // clears it. request_user_input is the only PermissionRequest variant that
+  // is unambiguously a user wait — that one becomes 'question'.
+
+  it('codex PermissionRequest stamps pending_approval and keeps state running', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      harness: 'codex',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'sess-codex',
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'exec_command',
+        permission_mode: 'workspace-write',
+        model: 'gpt-5.5',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'running',
+      'codex PermissionRequest must not flip to permission — guardian may auto-approve');
+    assert.equal(update.pending_approval, 'exec_command',
+      'pending_approval must carry the tool name so the UI can surface it');
+  });
+
+  it('codex PermissionRequest for request_user_input maps to question', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      harness: 'codex',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'sess-codex',
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'request_user_input',
+        permission_mode: 'workspace-write',
+        model: 'gpt-5.5',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'question',
+      'request_user_input is codex\'s AskUserQuestion analog — genuine user wait');
+    assert.ok(!update.pending_approval,
+      'question state is the surfacing; pending_approval must not also be set');
+  });
+
+  it('codex PostToolUse clears pending_approval for the same tool', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'exec_command',
+      harness: 'codex',
+      pending_approval: 'exec_command',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'sess-codex',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'exec_command',
+        permission_mode: 'workspace-write',
+        model: 'gpt-5.5',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.ok(update, 'PostToolUse with pending_approval transition must write');
+    assert.equal(update.pending_approval, '',
+      'PostToolUse for the pending tool clears the approval marker');
+  });
+
+  it('codex PreToolUse for a different tool clears pending_approval', () => {
+    // Codex moved on to a new tool without a matching PostToolUse — clear
+    // the stale marker so the UI does not show approving X while Y is running.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      harness: 'codex',
+      pending_approval: 'exec_command',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'sess-codex',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'apply_patch',
+        permission_mode: 'workspace-write',
+        model: 'gpt-5.5',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.ok(update, 'PreToolUse on new tool with pending_approval must write');
+    assert.equal(update.pending_approval, '',
+      'a new tool starting means the old pending approval is no longer relevant');
+  });
+
+  it('claude PermissionRequest still maps to permission (regression guard)', () => {
+    // Claude's PermissionRequest semantics — user must approve y/n — are
+    // unchanged. Only the codex harness gets the pending_approval treatment.
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      // no harness, no codex model → detectHarness returns 'claude'
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'sess-claude',
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'Bash',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'permission',
+      'claude PermissionRequest must continue to surface as BLOCKED');
+    assert.ok(!update.pending_approval,
+      'pending_approval is codex-only — claude must not set it');
+  });
+});
