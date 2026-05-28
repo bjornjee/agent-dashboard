@@ -35,15 +35,61 @@ import (
 // If limit > 0, only the most recent limit entries are returned (with
 // the oldest of those first, matching domain.ConversationEntry ordering
 // elsewhere). limit == 0 returns everything.
+//
+// Read is a thin wrapper for ReadIncremental(path, limit, nil, 0) — use
+// ReadIncremental directly when you want to skip re-decoding bytes you've
+// already seen on a previous call to the same path.
 func Read(path string, limit int) ([]domain.ConversationEntry, error) {
+	entries, _, err := ReadIncremental(path, limit, nil, 0)
+	return entries, err
+}
+
+// ReadIncremental returns the codex rollout's conversation entries,
+// resuming from prevOffset when prev is non-nil. Codex rollouts are
+// append-only per session, so seeking past previously-decoded bytes is
+// safe: the caller passes back the previous entries and the byte offset
+// returned by the prior call, and only new bytes are decoded.
+//
+// On a file shrink (truncation/rewrite) the function falls back to a
+// full re-read from offset 0. Missing files return (nil, 0, nil) to
+// preserve Read's contract.
+func ReadIncremental(path string, limit int, prev []domain.ConversationEntry, prevOffset int64) ([]domain.ConversationEntry, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, 0, err
+	}
+	fileSize := stat.Size()
+
+	// File shrank (rotation/rewrite) or offset is corrupt — full re-read.
+	if prevOffset > fileSize || prevOffset < 0 {
+		prevOffset = 0
+		prev = nil
+	}
+
+	// Nothing new since the last call — return prev as-is.
+	if prevOffset > 0 && prevOffset == fileSize && prev != nil {
+		return prev, prevOffset, nil
+	}
+
+	if prevOffset > 0 {
+		if _, err := f.Seek(prevOffset, 0); err != nil {
+			// Seek failed — fall back to a full re-read.
+			prevOffset = 0
+			prev = nil
+			if _, err := f.Seek(0, 0); err != nil {
+				return nil, 0, err
+			}
+		}
+	}
 
 	type payload struct {
 		Type    string `json:"type"`
@@ -56,8 +102,13 @@ func Read(path string, limit int) ([]domain.ConversationEntry, error) {
 	}
 
 	var out []domain.ConversationEntry
+	if prevOffset > 0 && prev != nil {
+		out = make([]domain.ConversationEntry, len(prev))
+		copy(out, prev)
+	}
+
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 8*1024*1024)
 	for scanner.Scan() {
 		raw := scanner.Bytes()
 		if len(raw) == 0 {
@@ -89,11 +140,11 @@ func Read(path string, limit int) ([]domain.ConversationEntry, error) {
 		})
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if limit > 0 && len(out) > limit {
 		out = out[len(out)-limit:]
 	}
-	return out, nil
+	return out, fileSize, nil
 }
