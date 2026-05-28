@@ -1579,3 +1579,141 @@ func TestResolveAgentWorktree_PorcelainError_Skip(t *testing.T) {
 		t.Errorf("WorktreeCwd = %q, want empty (porcelain failed)", got)
 	}
 }
+
+// TestResolveAgentWorktree_NoMarker_ClaimsWhenCwdIsLinkedWorktree covers the
+// scan-on-init fallback: an unpinned agent whose Cwd IS a linked worktree
+// should get its marker atomically written by the Go reconciler so the pin
+// recovers without waiting for the next hook event. Models the upgrade-past-
+// #330 scenario where legacy state files exist but no marker was ever stamped.
+func TestResolveAgentWorktree_NoMarker_ClaimsWhenCwdIsLinkedWorktree(t *testing.T) {
+	m := withMockBranchRunner(t)
+	sessionID := "sess-claim"
+	stateDir := t.TempDir()
+
+	wtRoot := t.TempDir()
+	gitDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wtRoot, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o600); err != nil {
+		t.Fatalf("write .git pointer: %v", err)
+	}
+	wtPath, err := filepath.EvalSymlinks(wtRoot)
+	if err != nil {
+		t.Fatalf("evalsymlinks wt: %v", err)
+	}
+	cwd := wtPath
+
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: wtPath, Branch: "feat/x", GitDir: gitDir},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
+	ResolveAgentWorktree(&sf, stateDir)
+
+	if got := sf.Agents[sessionID].WorktreeCwd; got != wtPath {
+		t.Errorf("WorktreeCwd = %q, want %q", got, wtPath)
+	}
+	if got := sf.Agents[sessionID].Branch; got != "feat/x" {
+		t.Errorf("Branch = %q, want feat/x", got)
+	}
+	data, err := os.ReadFile(filepath.Join(gitDir, "agent-dashboard-session"))
+	if err != nil {
+		t.Fatalf("marker should have been claimed: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != sessionID {
+		t.Errorf("marker = %q, want %q", string(data), sessionID)
+	}
+	// Persisted to state file.
+	raw, _ := os.ReadFile(filepath.Join(stateDir, "agents", sessionID+".json"))
+	var got map[string]any
+	_ = json.Unmarshal(raw, &got)
+	if got["worktree_cwd"] != wtPath {
+		t.Errorf("persisted worktree_cwd = %v, want %q", got["worktree_cwd"], wtPath)
+	}
+	if got["branch"] != "feat/x" {
+		t.Errorf("persisted branch = %v, want feat/x", got["branch"])
+	}
+}
+
+// TestResolveAgentWorktree_NoMarker_NoClaimWhenCwdIsMainWorktree asserts the
+// Go reconciler still refuses to claim main worktrees. Attribution is too
+// ambiguous there — any agent could match the same source repo Cwd.
+func TestResolveAgentWorktree_NoMarker_NoClaimWhenCwdIsMainWorktree(t *testing.T) {
+	m := withMockBranchRunner(t)
+	sessionID := "sess-main"
+	stateDir := t.TempDir()
+
+	wtRoot := t.TempDir()
+	gitDir := filepath.Join(wtRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	wtPath, err := filepath.EvalSymlinks(wtRoot)
+	if err != nil {
+		t.Fatalf("evalsymlinks wt: %v", err)
+	}
+	canonicalGitDir, err := filepath.EvalSymlinks(gitDir)
+	if err != nil {
+		t.Fatalf("evalsymlinks git: %v", err)
+	}
+	cwd := wtPath
+
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: wtPath, Branch: "main", GitDir: canonicalGitDir},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
+	ResolveAgentWorktree(&sf, stateDir)
+
+	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
+		t.Errorf("WorktreeCwd = %q, want empty (main worktree must not be auto-claimed)", got)
+	}
+	if _, err := os.Stat(filepath.Join(canonicalGitDir, "agent-dashboard-session")); !os.IsNotExist(err) {
+		t.Errorf("Go must not write marker into main .git (stat err=%v)", err)
+	}
+}
+
+// TestResolveAgentWorktree_NoMarker_NoClaimWhenMarkerOwnedByOtherSession
+// guards against the Go reconciler overwriting a marker that the JS hook (or
+// another dashboard process) already claimed for a different session. The
+// existing marker-mismatch loop covers this for cwd=source-repo agents; this
+// case is the cwd=linked-worktree variant where the new fallback fires.
+func TestResolveAgentWorktree_NoMarker_NoClaimWhenMarkerOwnedByOtherSession(t *testing.T) {
+	m := withMockBranchRunner(t)
+	sessionID := "sess-mine"
+	stateDir := t.TempDir()
+
+	wtRoot := t.TempDir()
+	gitDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wtRoot, ".git"), []byte("gitdir: "+gitDir+"\n"), 0o600); err != nil {
+		t.Fatalf("write .git pointer: %v", err)
+	}
+	writeMarker(t, gitDir, "sess-other")
+	wtPath, err := filepath.EvalSymlinks(wtRoot)
+	if err != nil {
+		t.Fatalf("evalsymlinks wt: %v", err)
+	}
+	cwd := wtPath
+
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: wtPath, Branch: "feat/x", GitDir: gitDir},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
+	ResolveAgentWorktree(&sf, stateDir)
+
+	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
+		t.Errorf("WorktreeCwd = %q, want empty (marker belongs to another session)", got)
+	}
+	data, _ := os.ReadFile(filepath.Join(gitDir, "agent-dashboard-session"))
+	if strings.TrimSpace(string(data)) != "sess-other" {
+		t.Errorf("marker was overwritten: got %q, want sess-other", string(data))
+	}
+}

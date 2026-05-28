@@ -141,14 +141,19 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 // the JS hook at worktree-claim time. Match = byte-equal session id; no
 // regex, no command parsing.
 //
-// Read-only by design: this function does NOT create markers. Dropping a
-// marker for an unowned worktree is the JS hook's job at PostToolUse,
-// where the agent is actively running and the claim race resolves
-// deterministically via O_CREAT|O_EXCL. Go's reconcile pass only rescues
-// agents whose state file was torn down (e.g. PruneDead on a respawned
-// pane, manual deletion) — at refresh time we don't have a fresh "this
-// agent just did something" signal, so claiming on behalf of the agent
-// could misattribute someone else's worktree.
+// Two paths run per unpinned agent:
+//
+//  1. Marker scan (read-only): walk the porcelain list, pin the first
+//     worktree whose marker file equals the agent's session id. Steady
+//     state for any agent the JS hook has already claimed.
+//
+//  2. Scan-on-init fallback (claims the marker via O_CREAT|O_EXCL): only
+//     when the agent's Cwd IS a linked worktree path. This narrow signal
+//     is enough to disambiguate ownership — the agent is running there,
+//     no sibling agent can share that exact Cwd. Without this fallback,
+//     dashboards upgraded past PR #330 show empty pins for legacy agents
+//     until each agent fires its next hook event. Main-worktree agents
+//     remain unpinned: too many agents share that Cwd to attribute safely.
 //
 // Must run BEFORE ResolveAgentBranches (so the recovered WorktreeCwd is
 // the source of truth for branch lookup).
@@ -165,6 +170,7 @@ func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 			continue
 		}
 
+		pinned := false
 		for _, wt := range wts {
 			if wt.GitDir == "" {
 				continue
@@ -176,17 +182,106 @@ func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 			if strings.TrimSpace(string(data)) != agent.SessionID {
 				continue
 			}
-			agent.WorktreeCwd = wt.Path
-			agent.Branch = wt.Branch
-			sf.Agents[key] = agent
-			updates := map[string]any{"worktree_cwd": wt.Path}
-			if wt.Branch != "" {
-				updates["branch"] = wt.Branch
+			pinAgentToWorktree(sf, key, &agent, wt, stateDir)
+			pinned = true
+			break
+		}
+		if pinned {
+			continue
+		}
+
+		normCwd := canonicalPath(agent.Cwd)
+		if normCwd == "" {
+			continue
+		}
+		for _, wt := range wts {
+			if wt.GitDir == "" || canonicalPath(wt.Path) != normCwd {
+				continue
 			}
-			_ = stampAgentFields(stateDir, agent.SessionID, updates)
+			if !isLinkedWorktree(wt.Path) {
+				break
+			}
+			if !claimMarker(wt.GitDir, agent.SessionID) {
+				break
+			}
+			pinAgentToWorktree(sf, key, &agent, wt, stateDir)
 			break
 		}
 	}
+}
+
+// pinAgentToWorktree updates the in-memory state and persists worktree_cwd /
+// branch to the agent's state file. Mutates *agent and sf.Agents[key].
+func pinAgentToWorktree(sf *domain.StateFile, key string, agent *domain.Agent, wt git.Worktree, stateDir string) {
+	agent.WorktreeCwd = wt.Path
+	agent.Branch = wt.Branch
+	sf.Agents[key] = *agent
+	updates := map[string]any{"worktree_cwd": wt.Path}
+	if wt.Branch != "" {
+		updates["branch"] = wt.Branch
+	}
+	_ = stampAgentFields(stateDir, agent.SessionID, updates)
+}
+
+// canonicalPath returns the absolute, symlink-resolved form of p. Falls
+// back to filepath.Abs when EvalSymlinks fails (typical on paths whose
+// last segment doesn't exist), and finally to p itself.
+func canonicalPath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
+}
+
+// isLinkedWorktree reports whether `wtPath/.git` is a regular file — git's
+// signal for a linked worktree (the file contains `gitdir: <per-wt-dir>`).
+// Main worktrees have `.git` as a directory; missing or anything else
+// returns false so the caller never claims on weak evidence.
+func isLinkedWorktree(wtPath string) bool {
+	info, err := os.Lstat(filepath.Join(wtPath, ".git"))
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
+}
+
+// claimMarker atomically creates <gitDir>/agent-dashboard-session and writes
+// sessionID, mirroring the JS hook's claim semantics so concurrent claims
+// from either side resolve deterministically — first writer wins.
+//
+// Returns true when this call wrote the marker (including the race-recovery
+// case where the marker appeared between our read and write but turns out to
+// hold our own sessionID). Returns false on EEXIST with a different owner
+// or any other IO failure.
+func claimMarker(gitDir, sessionID string) bool {
+	marker := filepath.Join(gitDir, "agent-dashboard-session")
+	f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		_, writeErr := f.WriteString(sessionID)
+		_ = f.Close()
+		if writeErr != nil {
+			// Remove the empty/partial marker so it doesn't permanently
+			// shadow a future legitimate claim — an empty marker reads as
+			// "owned by no one" and would block this code path forever.
+			_ = os.Remove(marker)
+			return false
+		}
+		return true
+	}
+	if !os.IsExist(err) {
+		return false
+	}
+	data, readErr := os.ReadFile(marker)
+	if readErr != nil {
+		return false
+	}
+	return strings.TrimSpace(string(data)) == sessionID
 }
 
 // stampAgentFields merges a set of field updates into the agent's state JSON.
