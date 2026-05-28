@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.29.0](https://github.com/bjornjee/agent-dashboard/compare/v0.28.2...v0.29.0) (2026-05-28)
+
+
+### Features
+
+* deterministic worktree pinning via marker file + git porcelain ([#330](https://github.com/bjornjee/agent-dashboard/issues/330)) ([aa13f27](https://github.com/bjornjee/agent-dashboard/commit/aa13f2747fa2b950063f30ae2b8507100d00afff))
+* move codex plan-mode prompt injection into the dashboard ([#325](https://github.com/bjornjee/agent-dashboard/issues/325)) ([3626058](https://github.com/bjornjee/agent-dashboard/commit/3626058470a1224c86a1e0c9cd34612211159670))
+
+
+### Bug Fixes
+
+* lock agent state file writes so pin/branch/worktree fields stop getting wiped ([#328](https://github.com/bjornjee/agent-dashboard/issues/328)) ([d8952c1](https://github.com/bjornjee/agent-dashboard/commit/d8952c11c55fb104df102abd8b553261db1a0a5c))
+
+
+### Performance Improvements
+
+* cache pprof-derived session-walk hotspots ([#329](https://github.com/bjornjee/agent-dashboard/issues/329)) ([9a1c0e6](https://github.com/bjornjee/agent-dashboard/commit/9a1c0e6ed662e2fe6dfffa771b0730599c803d12))
+
 ## [0.28.2](https://github.com/bjornjee/agent-dashboard/compare/v0.28.1...v0.28.2) (2026-05-26)
 
 
