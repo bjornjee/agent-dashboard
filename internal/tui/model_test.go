@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
+	"github.com/bjornjee/agent-dashboard/internal/dispatch"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -2826,5 +2828,52 @@ func TestSpawningTarget_ClearedOnSafetyExpiry(t *testing.T) {
 	}
 	if um.statusMsg != "" {
 		t.Errorf("expected trust status to be cleared on expiry, got %q", um.statusMsg)
+	}
+}
+
+// Regression: when the TUI handles a stateUpdatedMsg, it must invoke the
+// wired PlanInjector.OnStateChange so codex plan-mode prompts pending
+// since spawn get delivered once the agent reports permission_mode=="plan".
+// Without this wiring (see internal/web/watcher.go:96 for the analogue),
+// the pre-roll types /plan plan and nothing follows — the original prompt
+// expires silently after the injector's deadline.
+func TestStateUpdatedMsg_InvokesPlanInjector(t *testing.T) {
+	inj := dispatch.NewPlanInjector()
+	inj.SetPreRollForTest(time.Hour) // keep the spawn-time goroutine quiet
+
+	type sendCall struct{ target, text string }
+	calls := make(chan sendCall, 4)
+	inj.SetSendKeysForTest(func(target, text string) error {
+		calls <- sendCall{target, text}
+		return nil
+	})
+
+	const target = "main:4.1"
+	inj.MaybeSchedule("codex", "feature", target, "user prompt")
+
+	m := NewModel(testConfig(""), nil)
+	m.PlanInjector = inj
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			target: {
+				Target:         target,
+				Window:         4,
+				Pane:           1,
+				Harness:        "codex",
+				PermissionMode: "plan",
+				State:          "plan",
+			},
+		},
+	}
+	m.Update(stateUpdate(m, sf))
+
+	select {
+	case got := <-calls:
+		if got.target != target || got.text != "user prompt" {
+			t.Errorf("unexpected send: target=%q text=%q", got.target, got.text)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stateUpdatedMsg did not invoke PlanInjector.OnStateChange — pending codex prompt was dropped")
 	}
 }

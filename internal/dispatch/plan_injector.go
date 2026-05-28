@@ -222,6 +222,23 @@ func (p *PlanInjector) peek(target string) (*pendingPrompt, bool) {
 	return pp, ok
 }
 
+// SetSendKeysForTest replaces the tmux send-keys function. Cross-package
+// tests use this to observe injector deliveries without stubbing the real
+// tmux runner. Must be called before MaybeSchedule and Start — readers at
+// lines 133/153/201 access p.sendKeys without holding p.mu, mirroring the
+// in-package newTestInjector contract.
+func (p *PlanInjector) SetSendKeysForTest(fn func(target, text string) error) {
+	p.sendKeys = fn
+}
+
+// SetPreRollForTest replaces the /plan plan pre-roll delay. Cross-package
+// tests set this large to keep the pre-roll goroutine quiet while they
+// drive OnStateChange directly. Must be called before MaybeSchedule —
+// the spawned goroutine reads p.preRoll without holding p.mu.
+func (p *PlanInjector) SetPreRollForTest(d time.Duration) {
+	p.preRoll = d
+}
+
 func (p *PlanInjector) sweep(ctx context.Context) {
 	ticker := time.NewTicker(p.sweepInterval)
 	defer ticker.Stop()
