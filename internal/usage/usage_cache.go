@@ -62,8 +62,16 @@ func (c *usageCacheT) get(key string, currentSize int64, currentMtime time.Time)
 		// File shrank (truncate / rewrite) — cache is stale; force full rescan.
 		return usageCacheEntry{}, usageCacheMiss
 	}
-	if currentSize == entry.size && entry.mtime.Equal(currentMtime) {
-		return cloneUsageEntry(entry), usageCacheFull
+	if currentSize == entry.size {
+		if entry.mtime.Equal(currentMtime) {
+			return cloneUsageEntry(entry), usageCacheFull
+		}
+		// Same byte count but different mtime: the file was rewritten in
+		// place (rotation / manual edit / coincidental same length).
+		// Returning Resume would seek to cached.offset == cached.size ==
+		// currentSize and scan zero bytes, silently keeping the stale
+		// totals. Force a full rescan.
+		return usageCacheEntry{}, usageCacheMiss
 	}
 	return cloneUsageEntry(entry), usageCacheResume
 }

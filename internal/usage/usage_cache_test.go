@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
@@ -117,6 +118,67 @@ func TestReadUsage_FullRescanOnShrink(t *testing.T) {
 	if second.OutputTokens != 3 {
 		t.Errorf("after shrink OutputTokens = %d, want 3", second.OutputTokens)
 	}
+}
+
+func TestReadUsage_SameSizeNewMtime_TriggersFullRescan(t *testing.T) {
+	t.Cleanup(InvalidateUsageCacheForTest)
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "sess.jsonl")
+
+	// Write the original two-line content (sums to 300 input).
+	if err := os.WriteFile(path, []byte(twoLineUsage), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if u := ReadUsage(tmp, "sess"); u.InputTokens != 300 {
+		t.Fatalf("first read InputTokens = %d, want 300", u.InputTokens)
+	}
+
+	// Replace with different content of the same byte count (rotation /
+	// in-place rewrite). Verify length matches before bumping mtime —
+	// otherwise the test isn't exercising the same-size code path.
+	replacement := makeUsageOfSameLength(t, twoLineUsage)
+	if len(replacement) != len(twoLineUsage) {
+		t.Fatalf("replacement length = %d, want %d (test setup bug)", len(replacement), len(twoLineUsage))
+	}
+	if err := os.WriteFile(path, []byte(replacement), 0o644); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	// Force a different mtime (Go on macOS gives nanosecond resolution but
+	// back-to-back writes can still collide).
+	future := time.Now().Add(24 * time.Hour)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	got := ReadUsage(tmp, "sess")
+	// The replacement is a single 7-input-token entry repeated as needed
+	// to fill the original byte count — exact count comes from
+	// makeUsageOfSameLength. We assert NOT the stale 300.
+	if got.InputTokens == 300 {
+		t.Errorf("InputTokens = 300 (stale cached value) — same-size/different-mtime did NOT trigger full rescan")
+	}
+}
+
+// makeUsageOfSameLength returns JSONL content with a different token
+// payload than twoLineUsage but the same total byte count, so the
+// usage cache cannot distinguish on size alone.
+func makeUsageOfSameLength(t *testing.T, ref string) string {
+	t.Helper()
+	// One short line shaped to be padded with whitespace to reach the
+	// target length. The padding goes inside the message.id (claude
+	// accepts any string), so the JSON stays valid.
+	const prefix = `{"type":"assistant","message":{"id":"`
+	const suffix = `","model":"claude-haiku-4-5","role":"assistant","content":[],"usage":{"input_tokens":7,"output_tokens":3,"cache_read_input_tokens":11,"cache_creation_input_tokens":13}},"timestamp":"2026-03-28T11:00:00Z"}` + "\n"
+	target := len(ref)
+	padLen := target - len(prefix) - len(suffix)
+	if padLen < 0 {
+		t.Fatalf("ref too short for padding scheme: %d chars", target)
+	}
+	pad := make([]byte, padLen)
+	for i := range pad {
+		pad[i] = 'x'
+	}
+	return prefix + string(pad) + suffix
 }
 
 func TestReadUsage_DedupSurvivesIncrementalResume(t *testing.T) {
