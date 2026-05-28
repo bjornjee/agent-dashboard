@@ -237,7 +237,7 @@ func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 1024*1024)
 	for scanner.Scan() {
 		var line struct {
 			Type    string              `json:"type"`
@@ -272,7 +272,7 @@ func readSubagentRolloutDetails(path string) subagentRolloutDetails {
 
 	var details subagentRolloutDetails
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 1024*1024)
 	for scanner.Scan() {
 		var line struct {
 			Type    string          `json:"type"`

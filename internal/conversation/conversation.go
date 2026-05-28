@@ -91,7 +91,7 @@ func LastGitWorktreeAdd(projDir, sessionID string) string {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 10*1024*1024)
 
 	type bashInput struct {
 		Command string `json:"command"`
