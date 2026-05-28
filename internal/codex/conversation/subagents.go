@@ -230,6 +230,15 @@ func walkSessionsRootImpl(sessionsRoot string, visit func(string, subagentSessio
 }
 
 func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return subagentSessionMeta{}, false
+	}
+	mtime := info.ModTime()
+	if meta, ok, hit := pkgCache.getMetaForPath(path, mtime); hit {
+		return meta, ok
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return subagentSessionMeta{}, false
@@ -237,7 +246,7 @@ func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 1024*1024)
 	for scanner.Scan() {
 		var line struct {
 			Type    string              `json:"type"`
@@ -247,10 +256,13 @@ func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
 			continue
 		}
 		if line.Payload.ID == "" {
+			pkgCache.putMetaForPath(path, mtime, subagentSessionMeta{}, false)
 			return subagentSessionMeta{}, false
 		}
+		pkgCache.putMetaForPath(path, mtime, line.Payload, true)
 		return line.Payload, true
 	}
+	pkgCache.putMetaForPath(path, mtime, subagentSessionMeta{}, false)
 	return subagentSessionMeta{}, false
 }
 
@@ -264,6 +276,15 @@ func readSubagentSessionMeta(path string) (subagentSessionMeta, bool) {
 // One file open per rollout — buildSessionsIndex was previously calling
 // rolloutCompleted (a second open) on top of readSubagentSessionMeta.
 func readSubagentRolloutDetails(path string) subagentRolloutDetails {
+	info, err := os.Stat(path)
+	if err != nil {
+		return subagentRolloutDetails{}
+	}
+	mtime := info.ModTime()
+	if details, hit := pkgCache.getDetailsForPath(path, mtime); hit {
+		return details
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return subagentRolloutDetails{}
@@ -272,7 +293,7 @@ func readSubagentRolloutDetails(path string) subagentRolloutDetails {
 
 	var details subagentRolloutDetails
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 1024*1024)
 	for scanner.Scan() {
 		var line struct {
 			Type    string          `json:"type"`
@@ -302,6 +323,7 @@ func readSubagentRolloutDetails(path string) subagentRolloutDetails {
 			}
 		}
 	}
+	pkgCache.putDetailsForPath(path, mtime, details)
 	return details
 }
 

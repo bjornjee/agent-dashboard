@@ -150,16 +150,25 @@ func (m model) loadConversation() tea.Cmd {
 
 	// Codex agents have no ProjDir (codex doesn't slug projects); route
 	// through the harness-aware reader which finds the rollout file under
-	// ~/.codex/sessions/YYYY/MM/DD/. Incremental offset tracking is
-	// claude-only for now — codex re-reads the full rollout per tick
-	// (typical sizes 30–80KB, cost is negligible vs. parser allocation).
+	// ~/.codex/sessions/YYYY/MM/DD/. The sessionKey includes the rollout
+	// path (not just sessionID) so that a `codex resume <sid>` — which
+	// codex writes to a brand-new rollout under a later date directory —
+	// trips the key-mismatch branch below and triggers a full re-read.
 	if agent.Harness == "codex" {
 		codexRoot := m.codexSessionsDir
-		sessionKey := "codex:" + sessionID
+		path, _ := codexconv.LocateRollout(codexRoot, sessionID)
+		sessionKey := "codex:" + path
+		prevOffset := m.convFileOffset
+		var prevEntries []domain.ConversationEntry
+		if m.convSessionKey == sessionKey {
+			prevEntries = m.conversation
+		} else {
+			prevOffset = 0
+		}
 		a := *agent
 		return func() tea.Msg {
-			entries := conversation.Read(a, conversation.Roots{CodexSessionsRoot: codexRoot}, 50)
-			return conversationMsg{entries: entries, fileOffset: 0, sessionKey: sessionKey}
+			entries, newOffset := conversation.ReadIncremental(a, conversation.Roots{CodexSessionsRoot: codexRoot}, 50, prevEntries, prevOffset)
+			return conversationMsg{entries: entries, fileOffset: newOffset, sessionKey: sessionKey}
 		}
 	}
 

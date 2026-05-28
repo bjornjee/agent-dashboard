@@ -66,11 +66,31 @@ type sessionKey struct {
 	sessionID string
 }
 
+// metaCacheEntry caches one rollout's session_meta keyed by file mtime.
+// session_meta is the first line of a codex rollout, written once at
+// session creation, so an mtime match means the cached value is still
+// correct. ok=false is also cached so we don't re-read malformed files.
+type metaCacheEntry struct {
+	mtime time.Time
+	meta  subagentSessionMeta
+	ok    bool
+}
+
+// detailsCacheEntry caches one rollout's parsed details keyed by mtime.
+// Rollouts are append-only, so any meaningful change shows up as an
+// mtime bump.
+type detailsCacheEntry struct {
+	mtime   time.Time
+	details subagentRolloutDetails
+}
+
 type cache struct {
 	mu       sync.Mutex
 	ttl      time.Duration
 	indexes  map[string]*sessionsIndex // sessionsRoot → index
 	sessions map[sessionKey]sessionEntry
+	metas    map[string]metaCacheEntry    // rollout path → session_meta
+	details  map[string]detailsCacheEntry // rollout path → rollout details
 	// group is stored by pointer so InvalidateCacheForTest can swap it
 	// atomically under cache.mu without racing against an in-flight Do
 	// caller's internal mutex on the previous group value.
@@ -82,6 +102,8 @@ func newCache(ttl time.Duration) *cache {
 		ttl:      ttl,
 		indexes:  map[string]*sessionsIndex{},
 		sessions: map[sessionKey]sessionEntry{},
+		metas:    map[string]metaCacheEntry{},
+		details:  map[string]detailsCacheEntry{},
 		group:    &singleflight.Group{},
 	}
 }
@@ -141,6 +163,45 @@ func (c *cache) putSession(root, sessionID string, entry sessionEntry) {
 	c.sessions[sessionKey{root: root, sessionID: sessionID}] = entry
 }
 
+// getMetaForPath returns the cached session_meta for path when mtime
+// matches the cached value exactly. Mismatch or absence returns ok=false.
+// Mtime is the invalidation signal — there is no TTL because session_meta
+// is the first line of a rollout and codex never rewrites it.
+func (c *cache) getMetaForPath(path string, mtime time.Time) (subagentSessionMeta, bool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.metas[path]
+	if !ok || !entry.mtime.Equal(mtime) {
+		return subagentSessionMeta{}, false, false
+	}
+	return entry.meta, entry.ok, true
+}
+
+func (c *cache) putMetaForPath(path string, mtime time.Time, meta subagentSessionMeta, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.metas[path] = metaCacheEntry{mtime: mtime, meta: meta, ok: ok}
+}
+
+// getDetailsForPath returns the cached rollout details when mtime matches.
+// An mtime bump means the rollout has been appended to and details
+// (completion flag, instruction head, mode) need to be re-derived.
+func (c *cache) getDetailsForPath(path string, mtime time.Time) (subagentRolloutDetails, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.details[path]
+	if !ok || !entry.mtime.Equal(mtime) {
+		return subagentRolloutDetails{}, false
+	}
+	return entry.details, true
+}
+
+func (c *cache) putDetailsForPath(path string, mtime time.Time, details subagentRolloutDetails) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.details[path] = detailsCacheEntry{mtime: mtime, details: details}
+}
+
 // InvalidateCacheForTest clears the package-level cache. Tests that exercise
 // real codex sessions must call this in t.Cleanup to avoid leaking state
 // between subtests.
@@ -149,6 +210,8 @@ func InvalidateCacheForTest() {
 	defer pkgCache.mu.Unlock()
 	pkgCache.indexes = map[string]*sessionsIndex{}
 	pkgCache.sessions = map[sessionKey]sessionEntry{}
+	pkgCache.metas = map[string]metaCacheEntry{}
+	pkgCache.details = map[string]detailsCacheEntry{}
 	// Pointer swap is race-safe even if a previous Do call is still
 	// in-flight on the old group — the old group keeps its own mutex
 	// alive until the goroutine finishes; new callers see the fresh one.
