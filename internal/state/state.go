@@ -190,7 +190,6 @@ func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 			continue
 		}
 
-		// Scan-on-init fallback: agent.Cwd is a linked worktree → claim it.
 		normCwd := canonicalPath(agent.Cwd)
 		if normCwd == "" {
 			continue
@@ -226,8 +225,7 @@ func pinAgentToWorktree(sf *domain.StateFile, key string, agent *domain.Agent, w
 
 // canonicalPath returns the absolute, symlink-resolved form of p. Falls
 // back to filepath.Abs when EvalSymlinks fails (typical on paths whose
-// last segment doesn't exist), and finally to p itself. Returns "" only
-// when both Abs and the raw string are empty.
+// last segment doesn't exist), and finally to p itself.
 func canonicalPath(p string) string {
 	if p == "" {
 		return ""
@@ -253,10 +251,9 @@ func isLinkedWorktree(wtPath string) bool {
 	return info.Mode().IsRegular()
 }
 
-// claimMarker atomically writes sessionID to <gitDir>/agent-dashboard-session
-// via O_CREATE|O_EXCL|O_WRONLY (0o600). Mirrors the JS hook's claim semantics
-// in adapters/claude-code/packages/worktree-reconcile/index.js so concurrent
-// claims from either side resolve deterministically — first writer wins.
+// claimMarker atomically creates <gitDir>/agent-dashboard-session and writes
+// sessionID, mirroring the JS hook's claim semantics so concurrent claims
+// from either side resolve deterministically — first writer wins.
 //
 // Returns true when this call wrote the marker (including the race-recovery
 // case where the marker appeared between our read and write but turns out to
