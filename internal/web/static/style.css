@@ -743,24 +743,17 @@ body {
   margin-right: var(--space-1);
 }
 
-.agent-current-tool {
+.agent-current-tool,
+.agent-pending-approval {
   background: var(--code-bg);
-  color: var(--code-text);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   font-size: 11px;
   font-family: var(--font-mono);
 }
 
-.agent-pending-approval {
-  background: var(--code-bg);
-  color: var(--accent-amber);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  margin-right: var(--space-1);
-}
+.agent-current-tool { color: var(--code-text); }
+.agent-pending-approval { color: var(--accent-amber); }
 
 .agent-preview {
   font-size: 13px;
