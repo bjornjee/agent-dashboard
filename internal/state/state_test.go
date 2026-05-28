@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -735,76 +736,6 @@ func TestGitBranch(t *testing.T) {
 	}
 }
 
-func TestCleanStale_SkipsLivePanes(t *testing.T) {
-	dir := t.TempDir()
-	staleTime := "2020-01-01T00:00:00Z" // very old
-
-	// domain.Agent with a live tmux pane — should NOT be cleaned even if stale
-	writeAgentFile(t, dir, "live-agent.json", domain.Agent{
-		SessionID:  "live-agent",
-		TmuxPaneID: "%42",
-		State:      "input",
-		UpdatedAt:  staleTime,
-	})
-
-	// domain.Agent with a dead tmux pane — SHOULD be cleaned because stale + dead
-	writeAgentFile(t, dir, "dead-agent.json", domain.Agent{
-		SessionID:  "dead-agent",
-		TmuxPaneID: "%99",
-		State:      "input",
-		UpdatedAt:  staleTime,
-	})
-
-	livePaneIDs := map[string]bool{"%42": true}
-	CleanStale(dir, 10*60, livePaneIDs)
-
-	// Live agent should survive
-	agentsPath := filepath.Join(dir, "agents")
-	if _, err := os.Stat(filepath.Join(agentsPath, "live-agent.json")); err != nil {
-		t.Error("live agent was incorrectly cleaned: pane is still alive")
-	}
-
-	// Dead agent should be removed
-	if _, err := os.Stat(filepath.Join(agentsPath, "dead-agent.json")); err == nil {
-		t.Error("dead stale agent was not cleaned")
-	}
-}
-
-func TestCleanStale_DedupSamePane(t *testing.T) {
-	dir := t.TempDir()
-	staleTime := "2020-01-01T00:00:00Z"
-	recentTime := time.Now().UTC().Format(time.RFC3339)
-
-	// Two agents sharing pane %42 — only the newest should survive.
-	writeAgentFile(t, dir, "old-session.json", domain.Agent{
-		SessionID:  "old-session",
-		TmuxPaneID: "%42",
-		State:      "running",
-		UpdatedAt:  staleTime,
-	})
-	writeAgentFile(t, dir, "new-session.json", domain.Agent{
-		SessionID:  "new-session",
-		TmuxPaneID: "%42",
-		State:      "running",
-		UpdatedAt:  recentTime,
-	})
-
-	livePaneIDs := map[string]bool{"%42": true}
-	CleanStale(dir, 10*60, livePaneIDs)
-
-	agentsPath := filepath.Join(dir, "agents")
-
-	// Old session should be removed (duplicate pane, older)
-	if _, err := os.Stat(filepath.Join(agentsPath, "old-session.json")); err == nil {
-		t.Error("old duplicate-pane agent was not cleaned")
-	}
-
-	// New session should survive (newest for this pane + pane alive)
-	if _, err := os.Stat(filepath.Join(agentsPath, "new-session.json")); err != nil {
-		t.Error("newest agent for live pane was incorrectly cleaned")
-	}
-}
-
 func TestFormatDuration(t *testing.T) {
 	if FormatDuration("") != "" {
 		t.Error("expected empty for empty input")
@@ -1400,37 +1331,6 @@ func TestResolveAgentProjDir_DeletedWorktree_FallsBackToScan(t *testing.T) {
 	}
 }
 
-// writeWorktreeAddJSONL writes a minimal JSONL file containing one
-// `git worktree add <path>` assistant Bash tool_use entry, mirroring
-// conversation.LastGitWorktreeAdd's expected schema. Returns projDir.
-func writeWorktreeAddJSONL(t *testing.T, sessionID, cmd string) string {
-	t.Helper()
-	projDir := t.TempDir()
-	line := fmt.Sprintf(
-		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":%q}}]}}`,
-		cmd,
-	)
-	path := filepath.Join(projDir, sessionID+".jsonl")
-	if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
-		t.Fatalf("write jsonl: %v", err)
-	}
-	return projDir
-}
-
-// mockRepoResolve sets up the three git calls that repo.Resolve makes for
-// a seed path: rev-parse --show-toplevel, --git-common-dir, and
-// --show-superproject-working-tree.
-func mockRepoResolve(m *mocks.MockBranchRunner, seed, worktree, source string) {
-	m.On("Output", mock.Anything, "git", "-C", seed, "rev-parse", "--show-toplevel").
-		Return([]byte(worktree+"\n"), nil)
-	m.On("Output", mock.Anything, "git", "-C", seed, "rev-parse",
-		"--path-format=absolute", "--git-common-dir").
-		Return([]byte(filepath.Join(source, ".git")+"\n"), nil)
-	m.On("Output", mock.Anything, "git", "-C", seed, "rev-parse",
-		"--show-superproject-working-tree").
-		Return([]byte("\n"), nil)
-}
-
 // seedAgentJSON writes a minimal agent state file to stateDir/agents/<id>.json
 // containing all required fields for round-trip read/write.
 func seedAgentJSON(t *testing.T, stateDir string, agent domain.Agent) {
@@ -1448,127 +1348,162 @@ func seedAgentJSON(t *testing.T, stateDir string, agent domain.Agent) {
 	}
 }
 
-func TestResolveAgentWorktree_StampsAndWritesBack(t *testing.T) {
-	m := withMockBranchRunner(t)
-	sessionID := "sess-stamp"
-	candidate := "/wt/feat"
-	cwd := "/repo/src"
-	source := "/repo/src"
-
-	projDir := writeWorktreeAddJSONL(t, sessionID, "git worktree add "+candidate)
-
-	// Validation: rev-parse --show-toplevel returns the candidate itself.
-	m.On("Output", mock.Anything, "git", "-C", candidate, "rev-parse", "--show-toplevel").
-		Return([]byte(candidate+"\n"), nil)
-
-	// repo.Resolve(agent.Cwd) — seed is cwd.
-	mockRepoResolve(m, cwd, source, source)
-	// repo.Resolve(candidate) — seed is candidate, source matches.
-	mockRepoResolve(m, candidate, candidate, source)
-
-	// Self-heal also stamps branch alongside the recovered worktree_cwd, so
-	// the agent doesn't have to wait for ResolveAgentBranches' backfill on a
-	// later refresh. One git call, same atomic write.
-	mockGitBranch(m, candidate, "feat/recovered")
-
-	stateDir := t.TempDir()
-	agent := domain.Agent{
-		SessionID: sessionID,
-		Cwd:       cwd,
-		ProjDir:   projDir,
-		State:     "running",
+// writeMarker writes the agent-dashboard-session marker file at gitDir/agent-dashboard-session.
+func writeMarker(t *testing.T, gitDir, sessionID string) {
+	t.Helper()
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("mkdir git dir: %v", err)
 	}
-	seedAgentJSON(t, stateDir, agent)
+	if err := os.WriteFile(filepath.Join(gitDir, "agent-dashboard-session"), []byte(sessionID), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+}
 
+// mockWorktreeList sets up the git.ListWorktrees expectations: porcelain
+// output + one rev-parse --absolute-git-dir per worktree.
+func mockWorktreeList(m *mocks.MockBranchRunner, cwd string, wts []struct{ Path, Branch, GitDir string }) {
+	var sb strings.Builder
+	for i, wt := range wts {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("worktree " + wt.Path + "\n")
+		sb.WriteString("HEAD abc123\n")
+		if wt.Branch != "" {
+			sb.WriteString("branch refs/heads/" + wt.Branch + "\n")
+		} else {
+			sb.WriteString("detached\n")
+		}
+	}
+	m.On("Output", mock.Anything, "git", "-C", cwd, "worktree", "list", "--porcelain").
+		Return([]byte(sb.String()), nil)
+	for _, wt := range wts {
+		m.On("Output", mock.Anything, "git", "-C", wt.Path, "rev-parse", "--absolute-git-dir").
+			Return([]byte(wt.GitDir+"\n"), nil)
+	}
+}
+
+func TestResolveAgentWorktree_MarkerMatches_PinsFromPorcelain(t *testing.T) {
+	m := withMockBranchRunner(t)
+	sessionID := "sess-marker-match"
+	cwd := "/repo/src"
+	stateDir := t.TempDir()
+
+	// Two worktrees in the porcelain output. The linked one has our marker.
+	mainGit := filepath.Join(t.TempDir(), "main.git")
+	linkedGit := filepath.Join(t.TempDir(), "linked.git")
+	writeMarker(t, linkedGit, sessionID)
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: cwd, Branch: "main", GitDir: mainGit},
+		{Path: "/repo/wt/feat", Branch: "feat/x", GitDir: linkedGit},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
 	ResolveAgentWorktree(&sf, stateDir)
 
-	if got := sf.Agents[sessionID].WorktreeCwd; got != candidate {
-		t.Errorf("in-memory WorktreeCwd = %q, want %q", got, candidate)
+	if got := sf.Agents[sessionID].WorktreeCwd; got != "/repo/wt/feat" {
+		t.Errorf("WorktreeCwd = %q, want /repo/wt/feat", got)
 	}
-	if got := sf.Agents[sessionID].Branch; got != "feat/recovered" {
-		t.Errorf("in-memory Branch = %q, want feat/recovered", got)
+	if got := sf.Agents[sessionID].Branch; got != "feat/x" {
+		t.Errorf("Branch = %q, want feat/x", got)
 	}
 
-	// Verify on-disk persistence — both fields written in the same update.
-	data, err := os.ReadFile(filepath.Join(stateDir, "agents", sessionID+".json"))
-	if err != nil {
-		t.Fatalf("read back: %v", err)
-	}
+	// Persisted to disk.
+	data, _ := os.ReadFile(filepath.Join(stateDir, "agents", sessionID+".json"))
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	_ = json.Unmarshal(data, &raw)
+	if raw["worktree_cwd"] != "/repo/wt/feat" {
+		t.Errorf("persisted worktree_cwd = %v", raw["worktree_cwd"])
 	}
-	if raw["worktree_cwd"] != candidate {
-		t.Errorf("persisted worktree_cwd = %v, want %q", raw["worktree_cwd"], candidate)
-	}
-	if raw["branch"] != "feat/recovered" {
-		t.Errorf("persisted branch = %v, want feat/recovered", raw["branch"])
+	if raw["branch"] != "feat/x" {
+		t.Errorf("persisted branch = %v", raw["branch"])
 	}
 }
 
-func TestResolveAgentWorktree_StampsWorktreeButBranchEmpty_WhenGitFails(t *testing.T) {
-	// Self-heal recovers worktree_cwd even when the branch lookup fails (e.g.
-	// detached HEAD on the freshly-added worktree). Branch stamping is
-	// best-effort: worktree_cwd is the primary pin, branch fills in later.
+func TestResolveAgentWorktree_MarkerMismatches_NoPin(t *testing.T) {
 	m := withMockBranchRunner(t)
-	sessionID := "sess-stamp-no-branch"
-	candidate := "/wt/feat"
+	sessionID := "sess-mine"
 	cwd := "/repo/src"
-	source := "/repo/src"
-
-	projDir := writeWorktreeAddJSONL(t, sessionID, "git worktree add "+candidate)
-
-	m.On("Output", mock.Anything, "git", "-C", candidate, "rev-parse", "--show-toplevel").
-		Return([]byte(candidate+"\n"), nil)
-	mockRepoResolve(m, cwd, source, source)
-	mockRepoResolve(m, candidate, candidate, source)
-	mockGitBranch(m, candidate, "") // branch lookup fails (mock returns error)
-
 	stateDir := t.TempDir()
-	agent := domain.Agent{
-		SessionID: sessionID,
-		Cwd:       cwd,
-		ProjDir:   projDir,
-		State:     "running",
-	}
+
+	linkedGit := filepath.Join(t.TempDir(), "linked.git")
+	writeMarker(t, linkedGit, "sess-someone-else")
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: "/repo/wt/feat", Branch: "feat/x", GitDir: linkedGit},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
 	seedAgentJSON(t, stateDir, agent)
-
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
-	ResolveAgentWorktree(&sf, stateDir)
 
-	if got := sf.Agents[sessionID].WorktreeCwd; got != candidate {
-		t.Errorf("in-memory WorktreeCwd = %q, want %q (worktree should still stamp)", got, candidate)
-	}
-	if got := sf.Agents[sessionID].Branch; got != "" {
-		t.Errorf("in-memory Branch = %q, want empty (branch lookup failed)", got)
-	}
-}
-
-func TestResolveAgentWorktree_NoJSONLMatch_NoOp(t *testing.T) {
-	m := withMockBranchRunner(t)
-	sessionID := "sess-no-jsonl"
-
-	// projDir exists but has no matching command.
-	projDir := writeWorktreeAddJSONL(t, sessionID, "git status")
-
-	stateDir := t.TempDir()
-	agent := domain.Agent{
-		SessionID: sessionID,
-		Cwd:       "/repo",
-		ProjDir:   projDir,
-		State:     "running",
-	}
-	seedAgentJSON(t, stateDir, agent)
-
-	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 	ResolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
-		t.Errorf("WorktreeCwd = %q, want empty (no JSONL match)", got)
+		t.Errorf("WorktreeCwd = %q, want empty (marker belongs to other session)", got)
 	}
-	// Verify mock had no unexpected calls.
-	m.AssertExpectations(t)
+}
+
+func TestResolveAgentWorktree_NoMarker_DoesNotClaim(t *testing.T) {
+	// Go reconciler is read-only: never drops a marker. Claiming is the JS
+	// hook's job at PostToolUse, where the agent is actively running.
+	m := withMockBranchRunner(t)
+	sessionID := "sess-no-marker"
+	cwd := "/repo/src"
+	stateDir := t.TempDir()
+
+	linkedGit := filepath.Join(t.TempDir(), "linked.git")
+	if err := os.MkdirAll(linkedGit, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: "/repo/wt/feat", Branch: "feat/x", GitDir: linkedGit},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
+	ResolveAgentWorktree(&sf, stateDir)
+
+	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
+		t.Errorf("WorktreeCwd = %q, want empty (no marker, Go must not claim)", got)
+	}
+	// Marker must NOT be created by the Go reconciler.
+	if _, err := os.Stat(filepath.Join(linkedGit, "agent-dashboard-session")); !os.IsNotExist(err) {
+		t.Errorf("Go reconciler should not have written a marker file (err=%v)", err)
+	}
+}
+
+func TestResolveAgentWorktree_MultipleWorktrees_OnlyMatchingOnePinned(t *testing.T) {
+	m := withMockBranchRunner(t)
+	sessionID := "sess-multi"
+	cwd := "/repo/src"
+	stateDir := t.TempDir()
+
+	mineGit := filepath.Join(t.TempDir(), "mine.git")
+	otherGit := filepath.Join(t.TempDir(), "other.git")
+	writeMarker(t, mineGit, sessionID)
+	writeMarker(t, otherGit, "different-sess")
+	mockWorktreeList(m, cwd, []struct{ Path, Branch, GitDir string }{
+		{Path: "/repo/wt/other", Branch: "feat/other", GitDir: otherGit},
+		{Path: "/repo/wt/mine", Branch: "feat/mine", GitDir: mineGit},
+	})
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
+	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
+	ResolveAgentWorktree(&sf, stateDir)
+
+	if got := sf.Agents[sessionID].WorktreeCwd; got != "/repo/wt/mine" {
+		t.Errorf("WorktreeCwd = %q, want /repo/wt/mine", got)
+	}
+	if got := sf.Agents[sessionID].Branch; got != "feat/mine" {
+		t.Errorf("Branch = %q, want feat/mine", got)
+	}
 }
 
 func TestResolveAgentWorktree_PreStamped_FastPath(t *testing.T) {
@@ -1580,7 +1515,6 @@ func TestResolveAgentWorktree_PreStamped_FastPath(t *testing.T) {
 		SessionID:   sessionID,
 		Cwd:         "/repo",
 		WorktreeCwd: "/already/stamped",
-		ProjDir:     "/tmp/proj",
 		State:       "running",
 	}
 	seedAgentJSON(t, stateDir, agent)
@@ -1594,72 +1528,12 @@ func TestResolveAgentWorktree_PreStamped_FastPath(t *testing.T) {
 	m.AssertExpectations(t) // no git calls expected
 }
 
-func TestResolveAgentWorktree_SourceRepoMismatch_NoStamp(t *testing.T) {
-	m := withMockBranchRunner(t)
-	sessionID := "sess-mismatch"
-	candidate := "/other/wt"
-	cwd := "/repo/src"
-
-	projDir := writeWorktreeAddJSONL(t, sessionID, "git worktree add "+candidate)
-
-	m.On("Output", mock.Anything, "git", "-C", candidate, "rev-parse", "--show-toplevel").
-		Return([]byte(candidate+"\n"), nil)
-
-	// agent's source is /repo/src.
-	mockRepoResolve(m, cwd, "/repo/src", "/repo/src")
-	// candidate's source is /other (different repo).
-	mockRepoResolve(m, candidate, candidate, "/other")
-
-	stateDir := t.TempDir()
-	agent := domain.Agent{
-		SessionID: sessionID,
-		Cwd:       cwd,
-		ProjDir:   projDir,
-		State:     "running",
-	}
-	seedAgentJSON(t, stateDir, agent)
-
-	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
-	ResolveAgentWorktree(&sf, stateDir)
-
-	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
-		t.Errorf("WorktreeCwd = %q, want empty (source repos differ)", got)
-	}
-}
-
-func TestResolveAgentWorktree_RevParseFails_NoStamp(t *testing.T) {
-	m := withMockBranchRunner(t)
-	sessionID := "sess-revparse-fail"
-	candidate := "/deleted/wt"
-
-	projDir := writeWorktreeAddJSONL(t, sessionID, "git worktree add "+candidate)
-
-	m.On("Output", mock.Anything, "git", "-C", candidate, "rev-parse", "--show-toplevel").
-		Return(nil, fmt.Errorf("not a git repo"))
-
-	stateDir := t.TempDir()
-	agent := domain.Agent{
-		SessionID: sessionID,
-		Cwd:       "/repo",
-		ProjDir:   projDir,
-		State:     "running",
-	}
-	seedAgentJSON(t, stateDir, agent)
-
-	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
-	ResolveAgentWorktree(&sf, stateDir)
-
-	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
-		t.Errorf("WorktreeCwd = %q, want empty (rev-parse failed)", got)
-	}
-}
-
 func TestResolveAgentWorktree_EmptySessionID_Skip(t *testing.T) {
 	m := withMockBranchRunner(t)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			"no-sess": {Cwd: "/repo", ProjDir: "/proj", State: "running"},
+			"no-sess": {Cwd: "/repo", State: "running"},
 		},
 	}
 	ResolveAgentWorktree(&sf, t.TempDir())
@@ -1667,52 +1541,41 @@ func TestResolveAgentWorktree_EmptySessionID_Skip(t *testing.T) {
 	if got := sf.Agents["no-sess"].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (no session id)", got)
 	}
-	m.AssertExpectations(t) // no git calls expected
+	m.AssertExpectations(t)
 }
 
-func TestResolveAgentWorktree_EmptyProjDir_Skip(t *testing.T) {
+func TestResolveAgentWorktree_EmptyCwd_Skip(t *testing.T) {
 	m := withMockBranchRunner(t)
 
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{
-			"sess-1": {SessionID: "sess-1", Cwd: "/repo", State: "running"},
+			"sess-1": {SessionID: "sess-1", State: "running"},
 		},
 	}
 	ResolveAgentWorktree(&sf, t.TempDir())
 
 	if got := sf.Agents["sess-1"].WorktreeCwd; got != "" {
-		t.Errorf("WorktreeCwd = %q, want empty (no proj dir)", got)
+		t.Errorf("WorktreeCwd = %q, want empty (no cwd)", got)
 	}
-	m.AssertExpectations(t) // no git calls expected
+	m.AssertExpectations(t)
 }
 
-func TestResolveAgentWorktree_RelativePath_ResolvedAgainstCwd(t *testing.T) {
+func TestResolveAgentWorktree_PorcelainError_Skip(t *testing.T) {
 	m := withMockBranchRunner(t)
-	sessionID := "sess-rel"
+	sessionID := "sess-porcelain-err"
 	cwd := "/repo/src"
-	resolved := "/repo/worktrees/feat"
-
-	projDir := writeWorktreeAddJSONL(t, sessionID, "git worktree add ../worktrees/feat")
-
-	m.On("Output", mock.Anything, "git", "-C", resolved, "rev-parse", "--show-toplevel").
-		Return([]byte(resolved+"\n"), nil)
-	mockRepoResolve(m, cwd, "/repo/src", "/repo/src")
-	mockRepoResolve(m, resolved, resolved, "/repo/src")
-	mockGitBranch(m, resolved, "feat/rel")
-
 	stateDir := t.TempDir()
-	agent := domain.Agent{
-		SessionID: sessionID,
-		Cwd:       cwd,
-		ProjDir:   projDir,
-		State:     "running",
-	}
-	seedAgentJSON(t, stateDir, agent)
 
+	m.On("Output", mock.Anything, "git", "-C", cwd, "worktree", "list", "--porcelain").
+		Return(nil, fmt.Errorf("not a git repo"))
+
+	agent := domain.Agent{SessionID: sessionID, Cwd: cwd, State: "running"}
+	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
+
 	ResolveAgentWorktree(&sf, stateDir)
 
-	if got := sf.Agents[sessionID].WorktreeCwd; got != resolved {
-		t.Errorf("WorktreeCwd = %q, want %q (relative resolved against cwd)", got, resolved)
+	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
+		t.Errorf("WorktreeCwd = %q, want empty (porcelain failed)", got)
 	}
 }

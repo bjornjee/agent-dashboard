@@ -14,6 +14,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/git"
 	"github.com/bjornjee/agent-dashboard/internal/repo"
 )
 
@@ -134,88 +135,58 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 	}
 }
 
-// ResolveAgentWorktree self-heals empty `agent.WorktreeCwd` by scanning the
-// agent's JSONL for the most recent `git worktree add <path>` command and
-// validating that the candidate path is a real worktree of the same source
-// repo as the agent's cwd. On a successful match, the candidate is stamped
-// in-memory and persisted to the agent's state file so subsequent loads —
-// and downstream features keyed off worktree_cwd (diff, PR, cleanup) — see
-// the recovered value. The branch the worktree is currently on is stamped
-// in the same write, so ResolveAgentBranches can short-circuit the live
-// read on the next refresh. Branch stamping is best-effort: a failed
-// lookup (detached HEAD, deleted dir) leaves Branch empty for the backfill
-// path. Failures of the worktree validation itself (no JSONL match,
-// candidate gone, different source repo) leave WorktreeCwd empty;
-// ResolveAgentBranches then clears Branch the same way it does for any
-// unresolvable agent.
+// ResolveAgentWorktree self-heals empty `agent.WorktreeCwd` by asking git
+// which worktrees exist under the agent's source repo, then matching each
+// against a marker file (`<git-dir>/agent-dashboard-session`) dropped by
+// the JS hook at worktree-claim time. Match = byte-equal session id; no
+// regex, no command parsing.
 //
-// Must run AFTER ResolveAgentProjDir (needs agent.ProjDir) and BEFORE
-// ResolveAgentBranches (so the recovered WorktreeCwd is the source of truth
-// for branch lookup).
+// Read-only by design: this function does NOT create markers. Dropping a
+// marker for an unowned worktree is the JS hook's job at PostToolUse,
+// where the agent is actively running and the claim race resolves
+// deterministically via O_CREAT|O_EXCL. Go's reconcile pass only rescues
+// agents whose state file was torn down (e.g. PruneDead on a respawned
+// pane, manual deletion) — at refresh time we don't have a fresh "this
+// agent just did something" signal, so claiming on behalf of the agent
+// could misattribute someone else's worktree.
+//
+// Must run BEFORE ResolveAgentBranches (so the recovered WorktreeCwd is
+// the source of truth for branch lookup).
 func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 	for key, agent := range sf.Agents {
-		if agent.WorktreeCwd != "" {
+		if agent.WorktreeCwd != "" || agent.SessionID == "" || agent.Cwd == "" {
 			continue
 		}
-		if agent.SessionID == "" || agent.ProjDir == "" {
-			continue
-		}
-		candidate := conversation.LastGitWorktreeAdd(agent.ProjDir, agent.SessionID)
-		if candidate == "" {
-			continue
-		}
-		if !filepath.IsAbs(candidate) && agent.Cwd != "" {
-			candidate = filepath.Clean(filepath.Join(agent.Cwd, candidate))
-		}
-		if !validateWorktreeCandidate(agent.Cwd, candidate) {
-			continue
-		}
-		branch := gitBranch(candidate)
-		agent.WorktreeCwd = candidate
-		if branch != "" {
-			agent.Branch = branch
-		}
-		sf.Agents[key] = agent
-		updates := map[string]any{"worktree_cwd": candidate}
-		if branch != "" {
-			updates["branch"] = branch
-		}
-		_ = stampAgentFields(stateDir, agent.SessionID, updates)
-	}
-}
 
-// validateWorktreeCandidate returns true when candidate is a real worktree
-// whose source repo matches the agent's source repo.
-func validateWorktreeCandidate(agentCwd, candidate string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		wts, err := git.ListWorktrees(ctx, branchRunner, agent.Cwd)
+		cancel()
+		if err != nil {
+			continue
+		}
 
-	out, err := branchRunner.Output(ctx, "git", "-C", candidate, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return false
+		for _, wt := range wts {
+			if wt.GitDir == "" {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(wt.GitDir, "agent-dashboard-session"))
+			if err != nil {
+				continue
+			}
+			if strings.TrimSpace(string(data)) != agent.SessionID {
+				continue
+			}
+			agent.WorktreeCwd = wt.Path
+			agent.Branch = wt.Branch
+			sf.Agents[key] = agent
+			updates := map[string]any{"worktree_cwd": wt.Path}
+			if wt.Branch != "" {
+				updates["branch"] = wt.Branch
+			}
+			_ = stampAgentFields(stateDir, agent.SessionID, updates)
+			break
+		}
 	}
-	top := strings.TrimSpace(string(out))
-	normTop, err := filepath.EvalSymlinks(top)
-	if err != nil {
-		normTop = top
-	}
-	normCandidate, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		normCandidate = candidate
-	}
-	if normTop != normCandidate {
-		return false
-	}
-
-	agentTop, err := repo.Resolve(ctx, branchRunner, agentCwd)
-	if err != nil {
-		return false
-	}
-	candTop, err := repo.Resolve(ctx, branchRunner, candidate)
-	if err != nil {
-		return false
-	}
-	return filepath.Clean(agentTop.Source) == filepath.Clean(candTop.Source)
 }
 
 // stampAgentFields merges a set of field updates into the agent's state JSON.
@@ -499,73 +470,6 @@ func SortedAgents(sf domain.StateFile, selfPaneID string) []domain.Agent {
 	return agents
 }
 
-// CleanStale removes agent files that haven't been updated within maxAgeSecs.
-// Agents whose tmux panes are still alive (present in livePaneIDs) are kept
-// regardless of age — an idle agent waiting for input generates no hook events
-// but should not be evicted from the dashboard.
-//
-// When multiple agents share the same pane ID (e.g. a pane was reused for a
-// different process), only the most recently updated agent is kept; older
-// duplicates are removed regardless of pane liveness.
-func CleanStale(dir string, maxAgeSecs int, livePaneIDs map[string]bool) {
-	now := time.Now()
-	entries, err := os.ReadDir(AgentsDir(dir))
-	if err != nil {
-		return
-	}
-
-	type agentFile struct {
-		path      string
-		agent     domain.Agent
-		updatedAt time.Time
-	}
-
-	// First pass: read all agent files and track the newest per pane.
-	var files []agentFile
-	newestPerPane := make(map[string]time.Time) // paneID -> newest updatedAt
-
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		path := filepath.Join(AgentsDir(dir), entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var agent domain.Agent
-		if err := json.Unmarshal(data, &agent); err != nil || agent.UpdatedAt == "" {
-			_ = os.Remove(path)
-			continue
-		}
-		t, err := time.Parse(time.RFC3339, agent.UpdatedAt)
-		if err != nil {
-			_ = os.Remove(path)
-			continue
-		}
-		files = append(files, agentFile{path: path, agent: agent, updatedAt: t})
-		if agent.TmuxPaneID != "" && t.After(newestPerPane[agent.TmuxPaneID]) {
-			newestPerPane[agent.TmuxPaneID] = t
-		}
-	}
-
-	// Second pass: remove stale and duplicate-pane agents.
-	for _, f := range files {
-		// When multiple agents share a pane, remove all but the newest.
-		if f.agent.TmuxPaneID != "" && f.updatedAt.Before(newestPerPane[f.agent.TmuxPaneID]) {
-			_ = os.Remove(f.path)
-			continue
-		}
-		// Keep agents whose tmux pane is still alive
-		if f.agent.TmuxPaneID != "" && livePaneIDs[f.agent.TmuxPaneID] {
-			continue
-		}
-		if now.Sub(f.updatedAt).Seconds() > float64(maxAgeSecs) {
-			_ = os.Remove(f.path)
-		}
-	}
-}
-
 // PruneDead removes agent files whose tmux panes no longer exist and
 // deduplicates agents sharing the same live pane (keeps only the newest).
 // livePaneIDs is the set of currently live tmux pane IDs (%N format).
@@ -626,7 +530,7 @@ func PruneDead(dir string, livePaneIDs map[string]bool) int {
 	}
 
 	// Safety net: refuse to wipe all agents at once — almost certainly
-	// a transient tmux issue. CleanStale handles truly dead agents.
+	// a transient tmux issue (empty livePaneIDs from a failed list-panes).
 	// Only dead-pane removals are gated; dedup removals are always applied.
 	applyDead := true
 	if len(deadPaths)+len(dedupPaths) == len(files) && len(files) > 0 && len(deadPaths) > 0 {

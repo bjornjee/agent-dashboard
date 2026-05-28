@@ -602,7 +602,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		deferredStartup(m.statePath, m.db, m.cfg),
+		deferredStartup(),
 		deferredQuote(m.db, m.cfg.Settings.Banner.ShowQuote),
 		tickEvery(),
 		checkGHAvailable(),

@@ -20,7 +20,7 @@ const { spawnSync } = require('child_process');
 
 const hookRoot = __dirname;
 const { readAgentState, writeState } = require(path.join(hookRoot, 'packages', 'agent-state'));
-const { getBranch } = require(path.join(hookRoot, 'packages', 'git-status'));
+const { reconcileWorktree } = require(path.join(hookRoot, 'packages', 'worktree-reconcile'));
 const { getTarget, getPaneId } = require(path.join(hookRoot, 'packages', 'tmux'));
 const { readEffortConfig } = require('./effort-config');
 
@@ -150,34 +150,6 @@ function effortTransition(existingMode, newMode) {
   return null;
 }
 
-function detectWorktreeFromShell(input) {
-  if (input.hook_event_name !== 'PostToolUse') return null;
-  if (!['Bash', 'shell'].includes(input.tool_name || '')) return null;
-  const cmd = ((input.tool_input || {}).command || '').trim();
-  const m = cmd.match(/^git\s+worktree\s+add\b(.*)$/);
-  if (!m) return null;
-  const tokens = m[1].trim().split(/\s+/).filter(Boolean);
-  const flagsWithArg = new Set(['-b', '-B', '--reason']);
-  let branch = null;
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (flagsWithArg.has(t)) {
-      if ((t === '-b' || t === '-B') && tokens[i + 1]) {
-        branch = tokens[i + 1];
-      }
-      i++;
-      continue;
-    }
-    if (t.startsWith('-')) continue;
-    let candidate = t;
-    if (!candidate.startsWith('/') && input.cwd) {
-      candidate = path.resolve(input.cwd, candidate);
-    }
-    return { path: candidate, branch };
-  }
-  return null;
-}
-
 /**
  * Build the state update object from hook input and existing state.
  * Pure logic — no I/O. Returns { changed, update } where update is the
@@ -191,42 +163,17 @@ function detectWorktreeFromShell(input) {
  * @returns {{ changed: boolean, update: object|null }}
  */
 function buildUpdate({ input, existing, target, tmuxPane }) {
-  // Stamp worktree_cwd when the main agent observes its session running in a
-  // user worktree path. Treated as static for the agent's lifetime — downstream
-  // features (diff viewer, PR creation, cleanup) trust this dir and shouldn't
-  // have it shifting as the agent cd's around.
-  //
-  // Signal priority (first-write-wins across both):
-  //   Primary:  `git worktree add <path>` from PostToolUse Bash — explicit
-  //             user/skill action, strictly more specific than path matching.
-  //   Fallback: input.cwd matching /worktrees/ (and not the Claude Code
-  //             subagent isolation dir .claude/worktrees/agent-*) — covers
-  //             agents launched directly into a worktree.
-  //
-  // Only the MAIN agent can write worktree_cwd. A subagent's hook fires with
-  // input.cwd under `.claude/worktrees/agent-<id>/`, which is not a user
-  // worktree — drop those observations so they cannot poison the stamp.
-  const liveCwd = input.cwd || null;
-  const isMainWorktree = liveCwd
-    && /\/worktrees\//.test(liveCwd)
-    && !/\/\.claude\/worktrees\//.test(liveCwd);
-  const shellWorktree = detectWorktreeFromShell(input);
-  const shellWorktreePath = shellWorktree && shellWorktree.path;
-  const worktreeCwd = (!existing.worktree_cwd && (shellWorktreePath || isMainWorktree))
-    ? (shellWorktreePath || liveCwd)
-    : null;
+  // Worktree pinning is delegated to a deterministic helper that reads
+  // git + a marker file at <git-dir>/agent-dashboard-session. No regex
+  // on agent commands; no path mangling. The helper short-circuits to
+  // null without syscalls when worktree_cwd + branch are already set.
+  // Skip entirely on the PostToolUse stop-state guard path — the
+  // returned update would be discarded below anyway.
   const hookEvent = input.hook_event_name;
-  // Skip the getBranch subprocess when the PostToolUse + STOP_STATE guard
-  // below will discard the result anyway. Otherwise every claude/codex
-  // agent with a pinned worktree_cwd but no branch yet (the migration
-  // window) pays one wasted `git branch --show-current` per stop-state
-  // PostToolUse.
   const inStopGuard = hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state);
-  const worktreeBranch = (!existing.branch && !inStopGuard)
-    ? (existing.worktree_cwd
-      ? getBranch(existing.worktree_cwd)
-      : ((shellWorktree && shellWorktree.branch) || getBranch(worktreeCwd)))
-    : null;
+  const worktreePin = inStopGuard
+    ? null
+    : reconcileWorktree({ input, existing, sessionId: input.session_id });
   const toolName = input.tool_name || '';
   const permissionMode = input.permission_mode || '';
   const toolInput = input.tool_input || {};
@@ -285,8 +232,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   const changed = existing.state !== state
     || existing.current_tool !== currentTool
     || existing.permission_mode !== permissionMode
-    || (worktreeCwd && existing.worktree_cwd !== worktreeCwd)
-    || !!worktreeBranch
+    || !!worktreePin
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
@@ -308,11 +254,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     harness,
   };
 
-  if (worktreeCwd) {
-    update.worktree_cwd = worktreeCwd;
-  }
-  if (worktreeBranch) {
-    update.branch = worktreeBranch;
+  if (worktreePin) {
+    Object.assign(update, worktreePin);
   }
 
   if (stampDelegatedPlanId) {
