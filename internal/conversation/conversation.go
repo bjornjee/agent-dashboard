@@ -40,7 +40,7 @@ func LastGitBranch(projDir, sessionID string) string {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 10*1024*1024)
 
 	type branchOnly struct {
 		GitBranch string `json:"gitBranch"`
@@ -296,7 +296,7 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 	}
 
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max line
+	scanner.Buffer(make([]byte, 0, 4096), 10*1024*1024)
 
 	// For incremental reads, start with previous entries
 	var all []domain.ConversationEntry
@@ -536,7 +536,7 @@ func ReadActivityLog(jsonlPath string, limit int) []domain.ActivityEntry {
 
 	var all []domain.ActivityEntry
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
+	scanner.Buffer(make([]byte, 0, 4096), 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
