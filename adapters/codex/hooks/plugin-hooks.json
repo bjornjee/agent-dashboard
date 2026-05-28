@@ -9,11 +9,6 @@
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-reporter.js\"",
             "timeout": 5000
-          },
-          {
-            "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/hooks/auto-plan.js\"",
-            "timeout": 5000
           }
         ],
         "description": "Register Codex agent in dashboard on session start"

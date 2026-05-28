@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/db"
+	"github.com/bjornjee/agent-dashboard/internal/dispatch"
 	"github.com/bjornjee/agent-dashboard/internal/web"
 )
 
@@ -55,6 +57,22 @@ func main() {
 	}
 
 	srv := web.NewServer(cfg, database, opts)
+
+	// Plan injector: orchestrates post-spawn /plan plan + prompt delivery
+	// for codex skills that require plan mode.
+	planCtx, planCancel := context.WithCancel(context.Background())
+	defer planCancel()
+	planInjector := dispatch.NewPlanInjector()
+	planInjector.Start(planCtx)
+	srv.SetPlanInjector(planInjector)
+
+	// Watch state files so plan-mode transitions trigger the injector.
+	if watcher, err := srv.StartWatcher(); err != nil {
+		log.Printf("warning: state watcher not available: %v", err)
+	} else if watcher != nil {
+		defer watcher.Close()
+	}
+
 	addr := fmt.Sprintf("%s:%d", *bind, *port)
 	log.Printf("Agent Dashboard web UI: http://%s", addr)
 	if opts.GoogleClientID != "" {

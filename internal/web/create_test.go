@@ -349,7 +349,10 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	}
 }
 
-func TestCreate_HarnessOverrideCodexDefersInitialPrompt(t *testing.T) {
+func TestCreate_HarnessOverrideCodexFeatureSkill_NoPositionalArg(t *testing.T) {
+	// codex + feature is a plan-mode skill: the spawn command must NOT
+	// include a positional arg or env-var prefix. The dashboard's plan
+	// injector (internal/dispatch) delivers the prompt post-spawn.
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
 
@@ -375,38 +378,7 @@ func TestCreate_HarnessOverrideCodexDefersInitialPrompt(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	want := "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature hi' codex"
-	if capturedCmd != want {
-		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
-	}
-}
-
-func TestCreate_CodexAllowsSupportedSkill(t *testing.T) {
-	m := withMockTmuxRunner(t)
-	mockReadAgentState(m)
-
-	folder := t.TempDir()
-	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
-	ts, _ := createTestServer(t, existingAgent)
-
-	m.On("Output", mock.Anything,
-		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
-	).Return([]byte("0\n"), nil)
-
-	var capturedCmd string
-	m.On("Output", mock.Anything,
-		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
-	).Return([]byte("main:0.1\n"), nil)
-	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
-
-	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"feature","message":"hi"}`)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	want := "AGENT_DASHBOARD_AUTO_PLAN=1 AGENT_DASHBOARD_DEFERRED_PROMPT='$agent-dashboard:feature hi' codex"
+	want := "codex"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
