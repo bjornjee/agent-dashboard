@@ -46,8 +46,28 @@ type usageEntry struct {
 }
 
 // ReadUsage reads a Claude session JSONL and sums token usage + estimated cost.
+//
+// Results are cached by (path, size, mtime). Subsequent calls on an
+// unchanged file return the cached value without opening; on an
+// append-only growth the call seeks to the cached offset and scans only
+// new bytes, merging into the cached running totals. A file shrink
+// (truncate/rewrite) falls back to a full rescan from offset 0.
 func ReadUsage(projDir, sessionID string) domain.Usage {
 	path := filepath.Join(projDir, sessionID+".jsonl")
+	key := projDir + ":" + sessionID
+
+	info, err := statFn(path)
+	if err != nil {
+		return domain.Usage{}
+	}
+	size := info.Size()
+	mtime := info.ModTime()
+
+	cached, hit := usageCache.get(key, size, mtime)
+	if hit == usageCacheFull {
+		return cached.usage
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return domain.Usage{}
@@ -55,13 +75,29 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 	defer f.Close()
 
 	var u domain.Usage
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
-
 	// Dedup by message.id: Claude Code emits one JSONL line per content block
 	// (text + each tool_use) of an assistant turn, all carrying the same
 	// Anthropic API usage payload. Counting every line multi-counts each turn.
 	seenIDs := make(map[string]struct{})
+	var startOffset int64
+
+	if hit == usageCacheResume {
+		u = cached.usage
+		seenIDs = cached.seenIDs
+		startOffset = cached.offset
+		if _, err := f.Seek(startOffset, 0); err != nil {
+			// Seek failed — fall back to a full rescan from the start.
+			u = domain.Usage{}
+			seenIDs = make(map[string]struct{})
+			startOffset = 0
+			if _, err := f.Seek(0, 0); err != nil {
+				return domain.Usage{}
+			}
+		}
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 4096), 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -69,17 +105,17 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 			continue
 		}
 
-		var entry usageEntry
-		if err := json.Unmarshal(line, &entry); err != nil {
+		var e usageEntry
+		if err := json.Unmarshal(line, &e); err != nil {
 			continue
 		}
 
-		tok := entry.Message.Usage
+		tok := e.Message.Usage
 		if tok.InputTokens == 0 && tok.OutputTokens == 0 {
 			continue
 		}
 
-		if id := entry.Message.ID; id != "" {
+		if id := e.Message.ID; id != "" {
 			if _, dup := seenIDs[id]; dup {
 				continue
 			}
@@ -91,9 +127,9 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 		u.CacheReadTokens += tok.CacheReadInputTokens
 		u.CacheWriteTokens += tok.CacheCreationInputTokens
 
-		if entry.Message.Model != "" {
-			u.Model = entry.Message.Model
-			pricing := lookupPricing(entry.Message.Model)
+		if e.Message.Model != "" {
+			u.Model = e.Message.Model
+			pricing := lookupPricing(e.Message.Model)
 			u.CostUSD += float64(tok.InputTokens) / 1_000_000 * pricing.Input
 			u.CostUSD += float64(tok.OutputTokens) / 1_000_000 * pricing.Output
 			u.CostUSD += float64(tok.CacheReadInputTokens) / 1_000_000 * pricing.CacheRead
@@ -101,6 +137,14 @@ func ReadUsage(projDir, sessionID string) domain.Usage {
 		}
 	}
 	// scanner.Err() intentionally ignored — partial usage is acceptable for dashboard display
+
+	usageCache.put(key, usageCacheEntry{
+		usage:   u,
+		seenIDs: seenIDs,
+		offset:  size,
+		size:    size,
+		mtime:   mtime,
+	})
 
 	return u
 }
