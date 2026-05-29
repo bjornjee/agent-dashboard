@@ -390,7 +390,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_ = paneID // wired in Phase B for spawn-pin staging
+	// Stage the worktree/branch pin keyed by the new pane_id so the dashboard
+	// renders correctly *before* the agent's first hook event fires.
+	_ = state.StageSpawnPin(s.cfg.Profile.StateDir, folder, paneID, target)
 	// For codex skills that require plan mode (feature today), schedule the
 	// post-spawn /plan plan + prompt injection. No-op for other harnesses
 	// and other skills. nil-safe if planInjector isn't wired.

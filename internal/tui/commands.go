@@ -702,6 +702,13 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			return createSessionMsg{err: err}
 		}
 
+		// Stage the worktree/branch pin keyed by the new pane_id so the
+		// dashboard renders correctly *before* the agent's first hook event
+		// fires. Best-effort: a non-worktree absFolder yields an empty
+		// WorktreeCwd/Branch which is itself useful (tells consumers
+		// "no pin expected").
+		_ = state.StageSpawnPin(profile.StateDir, absFolder, newPaneID, newTarget)
+
 		// Schedule post-spawn /plan plan + prompt injection for codex
 		// plan-mode skills. No-op for other harness/skill combinations
 		// and nil-safe if the model didn't wire an injector.
