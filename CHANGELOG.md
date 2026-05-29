@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.0](https://github.com/bjornjee/agent-dashboard/compare/v0.29.0...v0.30.0) (2026-05-28)
+
+
+### Features
+
+* scan-on-init worktree pin recovery ([#331](https://github.com/bjornjee/agent-dashboard/issues/331)) ([5c0c88e](https://github.com/bjornjee/agent-dashboard/commit/5c0c88efbc83ae7c9e1d6fc7299988a73c31d6ef))
+
+
+### Bug Fixes
+
+* wire PlanInjector.OnStateChange in TUI so codex prompts are delivered ([#333](https://github.com/bjornjee/agent-dashboard/issues/333)) ([ac32723](https://github.com/bjornjee/agent-dashboard/commit/ac32723a38a7bce8c37b2b2302d32eebcac11b28))
+
 ## [0.29.0](https://github.com/bjornjee/agent-dashboard/compare/v0.28.2...v0.29.0) (2026-05-28)
 
 
