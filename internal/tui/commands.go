@@ -719,7 +719,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// and nil-safe if the model didn't wire an injector.
 		injector.MaybeSchedule(h.Name(), skill, newTarget, message)
 
-		return createSessionMsg{target: newTarget, paneID: newPaneID}
+		return createSessionMsg{target: newTarget}
 	}
 }
 

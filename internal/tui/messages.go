@@ -88,7 +88,6 @@ type closeResultMsg struct {
 }
 type createSessionMsg struct {
 	target string
-	paneID string
 	err    error
 }
 type spawningCaptureMsg struct {
