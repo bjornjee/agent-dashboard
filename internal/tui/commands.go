@@ -539,8 +539,13 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 		paneCwds = cwds
 	}
 	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+	// Apply spawn-pins BEFORE marker-scan / scan-on-init so freshly-spawned
+	// agents render with the dashboard-staged pin even when the JS hook
+	// hasn't fired yet.
+	state.ApplySpawnPins(&sf, path)
 	state.ResolveAgentWorktree(&sf, path)
 	state.ResolveAgentBranches(&sf, paneCwds, path)
+	state.GCSpawnPins(path, 10*time.Minute)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
 	return conversation.TopLevelAgents(

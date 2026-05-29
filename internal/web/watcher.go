@@ -126,8 +126,12 @@ func (s *Server) readAgentState() []domain.Agent {
 			paneCwds = cwds
 		}
 		state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
+		// Apply spawn-pins BEFORE marker-scan so freshly-spawned agents
+		// render with the dashboard-staged pin before the JS hook fires.
+		state.ApplySpawnPins(&sf, s.cfg.Profile.StateDir)
 		state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
 		state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
+		state.GCSpawnPins(s.cfg.Profile.StateDir, 10*time.Minute)
 		state.ApplyPinnedStates(&sf)
 		state.ApplyIdleOverrides(&sf)
 		return conversation.TopLevelAgents(

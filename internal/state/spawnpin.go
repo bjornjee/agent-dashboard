@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/git"
 )
 
@@ -78,6 +79,41 @@ func DeleteSpawnPin(stateDir, paneID string) {
 		return
 	}
 	_ = os.Remove(filepath.Join(SpawnPinsDir(stateDir), spawnPinFilename(paneID)))
+}
+
+// ApplySpawnPins merges staged spawn-pin records into agents whose pane_id
+// matches. Closes the spawn-to-first-hook window: the dashboard renders the
+// pin immediately after spawn, without waiting for the JS hook to fire.
+//
+// For each agent:
+//   - If WorktreeCwd is already set: GC the staging file (it's redundant).
+//   - Else if a staged pin exists for the agent's TmuxPaneID and the pin has
+//     a non-empty WorktreeCwd: apply it (in-memory + on-disk stamp), then
+//     delete the staging file.
+//
+// Must run BEFORE ResolveAgentWorktree so the marker-scan / scan-on-init
+// paths skip already-pinned agents.
+func ApplySpawnPins(sf *domain.StateFile, stateDir string) {
+	for key, agent := range sf.Agents {
+		if agent.TmuxPaneID == "" {
+			continue
+		}
+		pin, ok := ReadSpawnPin(stateDir, agent.TmuxPaneID)
+		if !ok {
+			continue
+		}
+		if agent.WorktreeCwd != "" || pin.WorktreeCwd == "" {
+			// Either the agent is already pinned (no merge needed) or the
+			// staging file was empty (non-worktree spawn). Drop the staging
+			// file in both cases — its job is done.
+			DeleteSpawnPin(stateDir, agent.TmuxPaneID)
+			continue
+		}
+		// Reuse the existing pin-write helper for consistency with the
+		// marker-scan path. Synthesizes a git.Worktree from the staged data.
+		pinAgentToWorktree(sf, key, &agent, git.Worktree{Path: pin.WorktreeCwd, Branch: pin.Branch}, stateDir)
+		DeleteSpawnPin(stateDir, agent.TmuxPaneID)
+	}
 }
 
 // StageSpawnPin writes a SpawnPin for a freshly-spawned agent pane. Best-

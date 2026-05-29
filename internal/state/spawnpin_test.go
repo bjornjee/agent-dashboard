@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,6 +122,89 @@ func TestStageSpawnPin_EmptyPaneIDIsNoop(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "spawn-pins")); err == nil {
 		t.Error("spawn-pins dir should not be created when paneID is empty")
 	}
+}
+
+func TestApplySpawnPins_PopulatesAndConsumes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(AgentsDir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Agent on disk with empty pin
+	agentFile := filepath.Join(AgentsDir(dir), "sess-a.json")
+	if err := os.WriteFile(agentFile, []byte(`{"session_id":"sess-a","tmux_pane_id":"%99","state":"running"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Staged spawn-pin for that pane
+	if err := WriteSpawnPin(dir, SpawnPin{
+		PaneID:      "%99",
+		Target:      "main:1.2",
+		WorktreeCwd: "/wt/a",
+		Branch:      "feat/a",
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sf := ReadState(dir)
+	ApplySpawnPins(&sf, dir)
+
+	got := sf.Agents["sess-a"]
+	if got.WorktreeCwd != "/wt/a" {
+		t.Errorf("WorktreeCwd = %q, want /wt/a", got.WorktreeCwd)
+	}
+	if got.Branch != "feat/a" {
+		t.Errorf("Branch = %q, want feat/a", got.Branch)
+	}
+	// Staging file should have been consumed
+	if _, ok := ReadSpawnPin(dir, "%99"); ok {
+		t.Error("spawn-pin should have been deleted after consumption")
+	}
+	// On-disk agent file should have been stamped
+	data, _ := os.ReadFile(agentFile)
+	if !containsAll(string(data), `"worktree_cwd": "/wt/a"`, `"branch": "feat/a"`) {
+		t.Errorf("agent file not stamped: %s", data)
+	}
+}
+
+func TestApplySpawnPins_SkipsAlreadyPinned(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(AgentsDir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Agent already pinned to /wt/old
+	agentFile := filepath.Join(AgentsDir(dir), "sess-b.json")
+	if err := os.WriteFile(agentFile, []byte(`{"session_id":"sess-b","tmux_pane_id":"%88","worktree_cwd":"/wt/old","branch":"feat/old","state":"running"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Stale staging file with a different pin
+	if err := WriteSpawnPin(dir, SpawnPin{
+		PaneID: "%88", WorktreeCwd: "/wt/new", Branch: "feat/new",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sf := ReadState(dir)
+	ApplySpawnPins(&sf, dir)
+
+	got := sf.Agents["sess-b"]
+	if got.WorktreeCwd != "/wt/old" {
+		t.Errorf("WorktreeCwd should not overwrite, got %q", got.WorktreeCwd)
+	}
+	// Stale staging file should still be deleted (the pane already has a pin)
+	if _, ok := ReadSpawnPin(dir, "%88"); ok {
+		t.Error("stale spawn-pin should have been GC'd")
+	}
+}
+
+// containsAll reports whether s contains every substr in subs.
+func containsAll(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestGCSpawnPins(t *testing.T) {

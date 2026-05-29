@@ -195,6 +195,7 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 		paneCwds = cwds
 	}
 	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
+	state.ApplySpawnPins(&sf, s.cfg.Profile.StateDir)
 	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
 	state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
 	state.ApplyPinnedStates(&sf)
