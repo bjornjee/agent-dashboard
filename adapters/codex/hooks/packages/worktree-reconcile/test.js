@@ -282,6 +282,66 @@ describe('claimMarker race semantics', () => {
   });
 });
 
+describe('reconcileWorktree spawn-pin consumer', () => {
+  it('returns staged pin and deletes the staging file', () => {
+    const dashboardDir = tempDir();
+    const spawnPinsDir = path.join(dashboardDir, 'spawn-pins');
+    fs.mkdirSync(spawnPinsDir, { recursive: true });
+    const pinPath = path.join(spawnPinsDir, '_42.json'); // `%42` → `_42`
+    fs.writeFileSync(pinPath, JSON.stringify({
+      pane_id: '%42',
+      worktree_cwd: '/tmp/wt/spawn',
+      branch: 'feat/spawn',
+      created_at: new Date().toISOString(),
+    }));
+
+    const { spawnSync, calls } = recordingSpawn({});
+    const out = reconcileWorktree(
+      { input: { cwd: '/somewhere' }, existing: {}, sessionId: 'sess-spawn' },
+      { spawnSync, env: { TMUX_PANE: '%42', AGENT_DASHBOARD_DIR: dashboardDir } },
+    );
+
+    assert.equal(out.worktree_cwd, '/tmp/wt/spawn');
+    assert.equal(out.branch, 'feat/spawn');
+    assert.equal(fs.existsSync(pinPath), false, 'staging file should be deleted');
+    assert.equal(calls.length, 0, 'no git subprocess needed when staged pin wins');
+  });
+
+  it('skips staged pin when existing.worktree_cwd is already set', () => {
+    const dashboardDir = tempDir();
+    fs.mkdirSync(path.join(dashboardDir, 'spawn-pins'), { recursive: true });
+    const pinPath = path.join(dashboardDir, 'spawn-pins', '_99.json');
+    fs.writeFileSync(pinPath, JSON.stringify({ pane_id: '%99', worktree_cwd: '/new', branch: 'b' }));
+
+    const out = reconcileWorktree(
+      { input: { cwd: '/x' }, existing: { worktree_cwd: '/old', branch: 'b' }, sessionId: 's' },
+      { spawnSync: () => ({ status: 1 }), env: { TMUX_PANE: '%99', AGENT_DASHBOARD_DIR: dashboardDir } },
+    );
+
+    // Already fully pinned — the function returns null and never touches the staging file
+    assert.equal(out, null);
+    assert.equal(fs.existsSync(pinPath), true, 'staging file untouched when already pinned');
+  });
+
+  it('falls through to marker logic when no staged pin exists', () => {
+    const dashboardDir = tempDir();
+    const { root: source } = makeMainRepo();
+    const { wtRoot } = makeLinkedWorktree(source);
+
+    const { spawnSync } = recordingSpawn({
+      [`git -C ${wtRoot} branch --show-current`]: 'feat/marker\n',
+    });
+
+    const out = reconcileWorktree(
+      { input: { cwd: wtRoot }, existing: {}, sessionId: 'sess-marker' },
+      { spawnSync, env: { TMUX_PANE: '%nonexistent', AGENT_DASHBOARD_DIR: dashboardDir } },
+    );
+
+    assert.equal(out.worktree_cwd, wtRoot);
+    assert.equal(out.branch, 'feat/marker');
+  });
+});
+
 describe('listWorktrees parser', () => {
   it('detached HEAD yields empty branch', () => {
     const spawnSync = () => ({

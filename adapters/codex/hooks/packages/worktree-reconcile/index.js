@@ -25,6 +25,41 @@ const MARKER_NAME = 'agent-dashboard-session';
 const GIT_TIMEOUT_MS = 2000;
 
 /**
+ * Look up and consume the dashboard's spawn-pin staging file for this pane.
+ * Returns `{ worktree_cwd, branch }` and deletes the file on hit, or null on
+ * any miss (no TMUX_PANE, no state dir, no file, existing already pinned,
+ * malformed JSON, or empty worktree_cwd).
+ *
+ * Mirrors the Go-side ApplySpawnPins logic in internal/state/spawnpin.go so
+ * whichever side (JS hook or Go refresh) reaches the staging file first wins
+ * deterministically.
+ */
+function consumeSpawnPin({ fs, path, env, existing }) {
+  if (existing && existing.worktree_cwd) return null;
+  const paneId = env.TMUX_PANE;
+  if (!paneId) return null;
+  const home = env.HOME || env.USERPROFILE || '/tmp';
+  const stateDir = env.AGENT_DASHBOARD_DIR || path.join(home, '.agent-dashboard');
+  const filename = paneId.replace(/%/g, '_') + '.json';
+  const pinPath = path.join(stateDir, 'spawn-pins', filename);
+  let raw;
+  try { raw = fs.readFileSync(pinPath, 'utf8'); }
+  catch { return null; }
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch {
+    try { fs.unlinkSync(pinPath); } catch {} // malformed; clean up
+    return null;
+  }
+  if (!parsed || !parsed.worktree_cwd) {
+    try { fs.unlinkSync(pinPath); } catch {}
+    return null;
+  }
+  try { fs.unlinkSync(pinPath); } catch {}
+  return { worktree_cwd: parsed.worktree_cwd, branch: parsed.branch || '' };
+}
+
+/**
  * Find the .git for the working tree at `cwd` by walking up the directory tree.
  * Returns null when no .git is found (cwd isn't inside any git repo).
  *
@@ -189,9 +224,19 @@ function reconcileWorktree({ input, existing, sessionId }, opts) {
   const fs = o.fs || realFs;
   const path = o.path || realPath;
   const spawnSync = o.spawnSync || realSpawnSync;
+  const env = o.env || process.env;
 
   // Steady state — fully pinned. Nothing to do.
   if (existing && existing.worktree_cwd && existing.branch) return null;
+
+  // Dashboard-staged spawn-pin path. When the dashboard spawned this agent
+  // it left a record at <stateDir>/spawn-pins/<pane_id>.json with the
+  // worktree + branch already resolved. Consuming it here means the agent's
+  // own state file lands correct on the very first hook event, even when a
+  // sibling worktree has a stale marker that would block the marker-claim
+  // path below. No-op when the agent is already pinned (handled above).
+  const stagedPin = consumeSpawnPin({ fs, path, env, existing });
+  if (stagedPin) return stagedPin;
 
   // Branch backfill: worktree_cwd already pinned but branch is missing
   // (legacy state from before the atomic pin, or a partial write). One git
