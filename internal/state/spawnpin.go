@@ -116,6 +116,52 @@ func ApplySpawnPins(sf *domain.StateFile, stateDir string) {
 	}
 }
 
+// ReapStaleMarker deletes the worktree's marker file when its owner sessionID
+// no longer has a state file on disk. Safety invariant: never touch a marker
+// whose owner is still live — that would let an unrelated sibling agent
+// hijack the pin.
+//
+// Called from the create flow so a new agent spawned into a worktree that
+// previously held a (now-dead) agent can claim a fresh marker via the JS
+// hook's reconcileWorktree.
+//
+// No-op when worktreePath is not a linked worktree (its .git is a directory,
+// not the per-worktree pointer file).
+func ReapStaleMarker(stateDir, worktreePath string) {
+	if worktreePath == "" {
+		return
+	}
+	dotgit := filepath.Join(worktreePath, ".git")
+	info, err := os.Lstat(dotgit)
+	if err != nil || !info.Mode().IsRegular() {
+		return // not a linked worktree
+	}
+	body, err := os.ReadFile(dotgit)
+	if err != nil {
+		return
+	}
+	line := strings.TrimSpace(string(body))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return
+	}
+	gitDir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	marker := filepath.Join(gitDir, "agent-dashboard-session")
+	data, err := os.ReadFile(marker)
+	if err != nil {
+		return
+	}
+	owner := strings.TrimSpace(string(data))
+	if owner == "" {
+		return
+	}
+	// Live owner = state file still present. Don't touch.
+	if _, err := os.Stat(filepath.Join(AgentsDir(stateDir), owner+".json")); err == nil {
+		return
+	}
+	_ = os.Remove(marker)
+}
+
 // StageSpawnPin writes a SpawnPin for a freshly-spawned agent pane. Best-
 // effort: a missing worktree match leaves WorktreeCwd/Branch empty (which is
 // still useful — consumers know "no pin expected" and skip the fallback).
@@ -142,6 +188,12 @@ func StageSpawnPin(stateDir, absFolder, paneID, target string) error {
 				break
 			}
 		}
+	}
+	// Clear any stale marker so the new agent's first hook can atomically
+	// claim a fresh one. Safe — only removes markers whose owner has no
+	// live state file.
+	if pin.WorktreeCwd != "" {
+		ReapStaleMarker(stateDir, pin.WorktreeCwd)
 	}
 	return WriteSpawnPin(stateDir, pin)
 }

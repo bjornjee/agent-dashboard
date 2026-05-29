@@ -207,6 +207,78 @@ func containsAll(s string, subs ...string) bool {
 	return true
 }
 
+func TestReapStaleMarker_RemovesWhenOwnerHasNoStateFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(AgentsDir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Build a fake "linked worktree" layout: wt/.git is a file pointing to a
+	// per-worktree git-dir; the marker lives in that dir.
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	perWT := filepath.Join(t.TempDir(), "main.git", "worktrees", "wt")
+	if err := os.MkdirAll(perWT, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+perWT+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(perWT, "agent-dashboard-session")
+	if err := os.WriteFile(marker, []byte("ghost-session-id"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// "ghost-session-id" has no agent state file → marker should be reaped.
+	ReapStaleMarker(dir, wt)
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("stale marker should have been removed")
+	}
+}
+
+func TestReapStaleMarker_KeepsLiveOwner(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(AgentsDir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	perWT := filepath.Join(t.TempDir(), "main.git", "worktrees", "wt")
+	if err := os.MkdirAll(perWT, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+perWT+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(perWT, "agent-dashboard-session")
+	if err := os.WriteFile(marker, []byte("live-session-id"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Owner has a live state file → marker must be preserved.
+	if err := os.WriteFile(filepath.Join(AgentsDir(dir), "live-session-id.json"), []byte(`{"session_id":"live-session-id"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ReapStaleMarker(dir, wt)
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("live owner's marker should not be removed: %v", err)
+	}
+}
+
+func TestReapStaleMarker_NoopOnMainWorktree(t *testing.T) {
+	dir := t.TempDir()
+	// Main worktree: .git is a directory, not a file.
+	main := filepath.Join(t.TempDir(), "main")
+	if err := os.MkdirAll(filepath.Join(main, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Should not panic / not touch anything.
+	ReapStaleMarker(dir, main)
+}
+
 func TestGCSpawnPins(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
