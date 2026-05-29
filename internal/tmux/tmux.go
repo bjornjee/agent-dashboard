@@ -411,6 +411,18 @@ func parsePaneTarget(output string) string {
 	return strings.TrimSpace(output)
 }
 
+// parsePaneIDAndTarget splits the two-column tmux -F output produced by
+// TmuxNewWindow / TmuxSplitWindow. Format: "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}".
+// Returns ("", target) when the input is a bare target without a tab —
+// preserves backwards-compat for any caller still producing single-column output.
+func parsePaneIDAndTarget(output string) (paneID, target string) {
+	line := strings.TrimSpace(output)
+	if i := strings.IndexByte(line, '\t'); i >= 0 {
+		return line[:i], strings.TrimSpace(line[i+1:])
+	}
+	return "", line
+}
+
 // TmuxListWindows lists all windows in a tmux session with their indices and names.
 func TmuxListWindows(session string) ([]domain.TmuxWindowInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
@@ -425,54 +437,59 @@ func TmuxListWindows(session string) ([]domain.TmuxWindowInfo, error) {
 	return parseListWindowsOutput(string(out)), nil
 }
 
-// TmuxNewWindow creates a new window in the given session, returning the new pane's target.
+// TmuxNewWindow creates a new window in the given session, returning the new
+// pane's target and stable pane_id (`%N`). pane_id is needed so the dashboard
+// can stage a spawn-pin keyed by an identifier that survives positional
+// renumbering (window/pane indices shift when sibling panes close).
 // The -d flag keeps focus on the current window (dashboard).
-func TmuxNewWindow(session, windowName, startDir string, shellCmd ...string) (string, error) {
+func TmuxNewWindow(session, windowName, startDir string, shellCmd ...string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
 	args := []string{
 		"new-window", "-t", session + ":", "-n", windowName, "-c", startDir,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 	}
 	if len(shellCmd) > 0 && shellCmd[0] != "" {
 		args = append(args, shellCmd[0])
 	}
 	out, err := runner.Output(ctx, args...)
 	if err != nil {
-		return "", fmt.Errorf("new-window failed: %w", err)
+		return "", "", fmt.Errorf("new-window failed: %w", err)
 	}
-	target := parsePaneTarget(string(out))
+	paneID, target := parsePaneIDAndTarget(string(out))
 	if err := ValidateTarget(target); err != nil {
-		return "", fmt.Errorf("new-window returned invalid target %q: %w", target, err)
+		return "", "", fmt.Errorf("new-window returned invalid target %q: %w", target, err)
 	}
-	return target, nil
+	return target, paneID, nil
 }
 
-// TmuxSplitWindow splits an existing window to create a new pane, returning its target.
-// The -d flag keeps focus on the current pane (dashboard).
-func TmuxSplitWindow(sessionWindow, startDir string, shellCmd ...string) (string, error) {
+// TmuxSplitWindow splits an existing window to create a new pane, returning
+// its target and stable pane_id (`%N`). See TmuxNewWindow for why pane_id is
+// emitted alongside the positional target. The -d flag keeps focus on the
+// current pane (dashboard).
+func TmuxSplitWindow(sessionWindow, startDir string, shellCmd ...string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
 	args := []string{
 		"split-window", "-t", sessionWindow, "-c", startDir,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 	}
 	if len(shellCmd) > 0 && shellCmd[0] != "" {
 		args = append(args, shellCmd[0])
 	}
 	out, err := runner.Output(ctx, args...)
 	if err != nil {
-		return "", fmt.Errorf("split-window failed: %w", err)
+		return "", "", fmt.Errorf("split-window failed: %w", err)
 	}
-	target := parsePaneTarget(string(out))
+	paneID, target := parsePaneIDAndTarget(string(out))
 	if err := ValidateTarget(target); err != nil {
-		return "", fmt.Errorf("split-window returned invalid target %q: %w", target, err)
+		return "", "", fmt.Errorf("split-window returned invalid target %q: %w", target, err)
 	}
 	// Rebalance panes in the window after adding one
 	_ = TmuxEvenLayout(sessionWindow)
-	return target, nil
+	return target, paneID, nil
 }
 
 // TmuxCountPanes returns the number of panes in a tmux window.

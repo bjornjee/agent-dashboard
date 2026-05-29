@@ -325,10 +325,10 @@ func TestTmuxNewWindow_MultipleWindows(t *testing.T) {
 	m := withMockRunner(t)
 	m.On("Output", mock.Anything,
 		"new-window", "-t", "test-new-window:", "-n", "test-win", "-c", mock.AnythingOfType("string"),
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	).Return([]byte("test-new-window:3.0"), nil)
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("%77\ttest-new-window:3.0\n"), nil)
 
-	target, err := TmuxNewWindow("test-new-window", "test-win", t.TempDir())
+	target, paneID, err := TmuxNewWindow("test-new-window", "test-win", t.TempDir())
 	if err != nil {
 		t.Fatalf("TmuxNewWindow failed: %v", err)
 	}
@@ -337,6 +337,9 @@ func TestTmuxNewWindow_MultipleWindows(t *testing.T) {
 	}
 	if err := ValidateTarget(target); err != nil {
 		t.Errorf("returned invalid target %q: %v", target, err)
+	}
+	if paneID != "%77" {
+		t.Errorf("paneID = %q, want %%77", paneID)
 	}
 	m.AssertExpectations(t)
 }
@@ -355,11 +358,11 @@ func TestTmuxZoomPane(t *testing.T) {
 func TestTmuxSplitWindow_AppliesEvenLayout(t *testing.T) {
 	m := withMockRunner(t)
 
-	// split-window returns new pane target
+	// split-window returns new pane target prefixed by pane_id
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "test-split:1", "-c", mock.AnythingOfType("string"),
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
-	).Return([]byte("test-split:1.1"), nil)
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("%88\ttest-split:1.1\n"), nil)
 
 	// TmuxEvenLayout called after split
 	m.On("Run", mock.Anything, "select-layout", "-t", "test-split:1", "tiled").
@@ -370,9 +373,12 @@ func TestTmuxSplitWindow_AppliesEvenLayout(t *testing.T) {
 		"list-panes", "-t", "test-split:1", "-F", "#{pane_index}",
 	).Return([]byte("0\n1\n"), nil)
 
-	_, err := TmuxSplitWindow("test-split:1", t.TempDir())
+	_, paneID, err := TmuxSplitWindow("test-split:1", t.TempDir())
 	if err != nil {
 		t.Fatalf("TmuxSplitWindow failed: %v", err)
+	}
+	if paneID != "%88" {
+		t.Errorf("paneID = %q, want %%88", paneID)
 	}
 
 	count, err := TmuxCountPanes("test-split:1")

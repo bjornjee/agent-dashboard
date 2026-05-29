@@ -100,7 +100,7 @@ func TestCreateNewWindow(t *testing.T) {
 	m.On("Output", mock.Anything,
 		"new-window", "-t", "main:", "-n", mock.AnythingOfType("string"),
 		"-c", mock.AnythingOfType("string"), "-d", "-P", "-F",
-		"#{session_name}:#{window_index}.#{pane_index}", mock.AnythingOfType("string"),
+		"#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}", mock.AnythingOfType("string"),
 	).Return([]byte("main:1.0\n"), nil)
 
 	folder := t.TempDir()
@@ -146,7 +146,7 @@ func TestCreateSplitsIntoExistingWindow(t *testing.T) {
 	// TmuxSplitWindow
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:2", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.AnythingOfType("string"),
 	).Return([]byte("main:2.2\n"), nil)
 
@@ -233,7 +233,7 @@ func TestCreateWorktreeMatchesSameRepo(t *testing.T) {
 	// TmuxSplitWindow
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:1", "-c", worktreeDir,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.AnythingOfType("string"),
 	).Return([]byte("main:1.1\n"), nil)
 
@@ -273,7 +273,7 @@ func TestCreate_DefaultHarnessIsClaude(t *testing.T) {
 	var capturedCmd string
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
 	).Return([]byte("main:0.1\n"), nil)
 	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
@@ -332,7 +332,7 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	var capturedCmd string
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
 	).Return([]byte("main:0.1\n"), nil)
 	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
@@ -367,7 +367,7 @@ func TestCreate_HarnessOverrideCodexFeatureSkill_NoPositionalArg(t *testing.T) {
 	var capturedCmd string
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
 	).Return([]byte("main:0.1\n"), nil)
 	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
@@ -399,7 +399,7 @@ func TestCreate_CodexAllowsCustomSkill(t *testing.T) {
 	var capturedCmd string
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
 	).Return([]byte("main:0.1\n"), nil)
 	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
@@ -445,7 +445,7 @@ func TestCreate_CodexAllowsEmptySkill(t *testing.T) {
 	).Return([]byte("0\n"), nil)
 	m.On("Output", mock.Anything,
 		"split-window", "-t", "main:0", "-c", folder,
-		"-d", "-P", "-F", "#{session_name}:#{window_index}.#{pane_index}",
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
 		mock.Anything,
 	).Return([]byte("main:0.1\n"), nil)
 	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)

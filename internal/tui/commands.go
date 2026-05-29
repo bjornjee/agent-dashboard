@@ -660,7 +660,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			repoName = profile.Command
 		}
 
-		var newTarget string
+		var newTarget, newPaneID string
 
 		// Check for existing window
 		sw, found := repowin.FindWindowForRepo(agents, absFolder, selfPaneID)
@@ -691,11 +691,11 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			} else if count >= maxPanesPerWindow {
 				return createSessionMsg{err: fmt.Errorf("8-pane limit reached for %s", repoName)}
 			} else {
-				newTarget, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
+				newTarget, newPaneID, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
 			}
 		}
 		if !found {
-			newTarget, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
+			newTarget, newPaneID, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
 		}
 
 		if err != nil {
@@ -707,7 +707,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// and nil-safe if the model didn't wire an injector.
 		injector.MaybeSchedule(h.Name(), skill, newTarget, message)
 
-		return createSessionMsg{target: newTarget}
+		return createSessionMsg{target: newTarget, paneID: newPaneID}
 	}
 }
 
@@ -794,7 +794,7 @@ func openWorktreeWindowCmd(session, branch, dir string) tea.Cmd {
 		if branch != "" {
 			windowName = repowin.SanitizeWindowName(branch)
 		}
-		_, err := tmux.TmuxNewWindow(session, windowName, dir)
+		_, _, err := tmux.TmuxNewWindow(session, windowName, dir)
 		return openWorktreeMsg{err: err, dir: dir}
 	}
 }
