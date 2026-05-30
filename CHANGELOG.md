@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.31.0](https://github.com/bjornjee/agent-dashboard/compare/v0.30.0...v0.31.0) (2026-05-30)
+
+
+### Features
+
+* refresh worktree/branch pin on new-agent spawn ([#334](https://github.com/bjornjee/agent-dashboard/issues/334)) ([2f9e27c](https://github.com/bjornjee/agent-dashboard/commit/2f9e27c05a16bfa06d17f1efedff2f488bac6960))
+
+
+### Bug Fixes
+
+* deliver codex new-session user message by dropping fictional plan-mode bootstrap ([#335](https://github.com/bjornjee/agent-dashboard/issues/335)) ([52f41ec](https://github.com/bjornjee/agent-dashboard/commit/52f41ec08c11a706fb854ca38bbf8a56afd1941b))
+
 ## [0.30.0](https://github.com/bjornjee/agent-dashboard/compare/v0.29.0...v0.30.0) (2026-05-28)
 
 

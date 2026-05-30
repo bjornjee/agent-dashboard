@@ -1,6 +1,6 @@
 {
   "name": "agent-dashboard",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "description": "Multi-agent tmux dashboard with skills, hooks, and workflow automation for Codex",
   "author": {
     "name": "bjornjee"
