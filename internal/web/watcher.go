@@ -54,8 +54,7 @@ func (h *sseHub) broadcast(data []byte) {
 }
 
 // StartWatcher watches the agents directory and broadcasts state changes
-// to SSE clients. It also invokes the plan injector's OnStateChange so
-// pending codex plan-mode dispatches react to permission_mode transitions.
+// to SSE clients.
 func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -91,9 +90,6 @@ func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 					// the burst.
 					debounce = time.AfterFunc(300*time.Millisecond, func() {
 						agents := s.readAgentState()
-						// Plan injector observes mode transitions on this
-						// goroutine — keeps tmux send-keys off the HTTP path.
-						s.planInjector.OnStateChange(agents)
 						data, err := json.Marshal(agents)
 						if err != nil {
 							return

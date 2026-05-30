@@ -74,15 +74,6 @@ func (c *Codex) SpawnCommand(skill, message string, opts domain.SpawnOpts) strin
 		cmd += " -s " + shellQuote(opts.Sandbox)
 	}
 
-	// Plan-mode skills (see RequiresPlanMode) omit the positional arg.
-	// Codex cannot enter plan mode from its model loop, so the dashboard's
-	// plan injector (internal/dispatch/plan_injector.go) types
-	// PlanModeCommand and the user's prompt into the pane post-spawn.
-	// Encoding either as a positional arg here would auto-submit the
-	// wrong thing on TUI startup.
-	if RequiresPlanMode(skill) {
-		return cmd
-	}
 	prompt := buildPrompt(skill, message)
 	if prompt != "" {
 		cmd += " " + shellQuote(prompt)
