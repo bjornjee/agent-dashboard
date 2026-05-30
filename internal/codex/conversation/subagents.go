@@ -14,12 +14,12 @@ import (
 )
 
 type subagentSessionMeta struct {
-	ID            string             `json:"id"`
-	Timestamp     string             `json:"timestamp"`
-	Originator    string             `json:"originator"`
-	Source        sessionMetaSource  `json:"source"`
-	AgentNickname string             `json:"agent_nickname"`
-	AgentRole     string             `json:"agent_role"`
+	ID            string            `json:"id"`
+	Timestamp     string            `json:"timestamp"`
+	Originator    string            `json:"originator"`
+	Source        sessionMetaSource `json:"source"`
+	AgentNickname string            `json:"agent_nickname"`
+	AgentRole     string            `json:"agent_role"`
 }
 
 // sessionMetaSource is polymorphic in codex's JSONL schema: user threads
