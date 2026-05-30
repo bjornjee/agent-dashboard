@@ -356,7 +356,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var target string
+	var target, paneID string
 	if found {
 		// Split into the existing window if under the pane limit.
 		count, cErr := tmux.TmuxCountPanes(sw)
@@ -369,7 +369,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			var sErr error
-			target, sErr = tmux.TmuxSplitWindow(sw, folder, cmd)
+			target, paneID, sErr = tmux.TmuxSplitWindow(sw, folder, cmd)
 			if sErr != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("split window: %v", sErr)})
 				return
@@ -384,12 +384,16 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var nErr error
-		target, nErr = tmux.TmuxNewWindow(session, repoName, folder, cmd)
+		target, paneID, nErr = tmux.TmuxNewWindow(session, repoName, folder, cmd)
 		if nErr != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", nErr)})
 			return
 		}
 	}
+	// Stage the worktree/branch pin keyed by the new pane_id so the dashboard
+	// renders correctly *before* the agent's first hook event fires.
+	_ = state.StageSpawnPin(s.cfg.Profile.StateDir, folder, paneID, target)
+
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
 }
 

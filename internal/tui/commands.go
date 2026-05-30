@@ -538,8 +538,13 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 		paneCwds = cwds
 	}
 	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+	// Apply spawn-pins BEFORE marker-scan / scan-on-init so freshly-spawned
+	// agents render with the dashboard-staged pin even when the JS hook
+	// hasn't fired yet.
+	state.ApplySpawnPins(&sf, path)
 	state.ResolveAgentWorktree(&sf, path)
 	state.ResolveAgentBranches(&sf, paneCwds, path)
+	state.GCSpawnPins(path, 10*time.Minute)
 	state.ApplyPinnedStates(&sf)
 	state.ApplyIdleOverrides(&sf)
 	return conversation.TopLevelAgents(
@@ -659,7 +664,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			repoName = profile.Command
 		}
 
-		var newTarget string
+		var newTarget, newPaneID string
 
 		// Check for existing window
 		sw, found := repowin.FindWindowForRepo(agents, absFolder, selfPaneID)
@@ -690,16 +695,23 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			} else if count >= maxPanesPerWindow {
 				return createSessionMsg{err: fmt.Errorf("8-pane limit reached for %s", repoName)}
 			} else {
-				newTarget, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
+				newTarget, newPaneID, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
 			}
 		}
 		if !found {
-			newTarget, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
+			newTarget, newPaneID, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
 		}
 
 		if err != nil {
 			return createSessionMsg{err: err}
 		}
+
+		// Stage the worktree/branch pin keyed by the new pane_id so the
+		// dashboard renders correctly *before* the agent's first hook event
+		// fires. Best-effort: a non-worktree absFolder yields an empty
+		// WorktreeCwd/Branch which is itself useful (tells consumers
+		// "no pin expected").
+		_ = state.StageSpawnPin(profile.StateDir, absFolder, newPaneID, newTarget)
 
 		return createSessionMsg{target: newTarget}
 	}
@@ -788,7 +800,7 @@ func openWorktreeWindowCmd(session, branch, dir string) tea.Cmd {
 		if branch != "" {
 			windowName = repowin.SanitizeWindowName(branch)
 		}
-		_, err := tmux.TmuxNewWindow(session, windowName, dir)
+		_, _, err := tmux.TmuxNewWindow(session, windowName, dir)
 		return openWorktreeMsg{err: err, dir: dir}
 	}
 }
