@@ -14,19 +14,36 @@ import (
 )
 
 type subagentSessionMeta struct {
-	ID        string `json:"id"`
-	Timestamp string `json:"timestamp"`
-	Source    struct {
-		Subagent struct {
-			ThreadSpawn struct {
-				ParentThreadID string `json:"parent_thread_id"`
-				AgentNickname  string `json:"agent_nickname"`
-				AgentRole      string `json:"agent_role"`
-			} `json:"thread_spawn"`
-		} `json:"subagent"`
-	} `json:"source"`
-	AgentNickname string `json:"agent_nickname"`
-	AgentRole     string `json:"agent_role"`
+	ID            string             `json:"id"`
+	Timestamp     string             `json:"timestamp"`
+	Originator    string             `json:"originator"`
+	Source        sessionMetaSource  `json:"source"`
+	AgentNickname string             `json:"agent_nickname"`
+	AgentRole     string             `json:"agent_role"`
+}
+
+// sessionMetaSource is polymorphic in codex's JSONL schema: user threads
+// write a string ("cli", "vscode"), subagent threads write a nested
+// {subagent: {thread_spawn: {...}}} object. The custom UnmarshalJSON
+// accepts both forms so a string source doesn't fail the whole meta
+// decode — without this, payload.originator would never be populated
+// for top-level (non-subagent) sessions.
+type sessionMetaSource struct {
+	Subagent struct {
+		ThreadSpawn struct {
+			ParentThreadID string `json:"parent_thread_id"`
+			AgentNickname  string `json:"agent_nickname"`
+			AgentRole      string `json:"agent_role"`
+		} `json:"thread_spawn"`
+	} `json:"subagent"`
+}
+
+func (s *sessionMetaSource) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		return nil
+	}
+	type alias sessionMetaSource
+	return json.Unmarshal(data, (*alias)(s))
 }
 
 // subagentRolloutDetails carries the per-rollout signals we extract in a
@@ -73,6 +90,26 @@ func ParentThreadID(sessionsRoot, sessionID string) string {
 	return entry.Parent
 }
 
+// OriginatorDesktopApp is the payload.originator string codex writes in
+// session_meta when the rollout was created by the Codex desktop app
+// (as opposed to "codex-tui" for the codex CLI). The dashboard filters
+// these rollouts out — they're not the user's CLI work.
+const OriginatorDesktopApp = "Codex Desktop"
+
+// Originator returns the payload.originator recorded in sessionID's
+// rollout file (e.g. "codex-tui", "Codex Desktop"), or "" when the
+// session has no session_meta line yet or no rollout file under
+// sessionsRoot. Shares the same per-session cache as ParentThreadID, so
+// a TopLevelAgents pass that consults both fields opens at most one
+// file per agent within the TTL window.
+func Originator(sessionsRoot, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	entry, _ := resolveSessionEntry(sessionsRoot, sessionID, true)
+	return entry.Originator
+}
+
 // resolveSessionEntry returns the per-session cache entry for
 // (sessionsRoot, sessionID), populating fields lazily:
 //   - Path: located by directory-only walk (no rollout file opens).
@@ -92,6 +129,7 @@ func resolveSessionEntry(sessionsRoot, sessionID string, readMeta bool) (session
 		if entry.Path != "" {
 			meta, _ := readSubagentSessionMeta(entry.Path)
 			entry.Parent = meta.Source.Subagent.ThreadSpawn.ParentThreadID
+			entry.Originator = meta.Originator
 			entry.MetaRead = true
 			pkgCache.putSession(sessionsRoot, sessionID, entry)
 			return entry, true
@@ -102,6 +140,7 @@ func resolveSessionEntry(sessionsRoot, sessionID string, readMeta bool) (session
 	if readMeta && entry.Path != "" {
 		meta, _ := readSubagentSessionMeta(entry.Path)
 		entry.Parent = meta.Source.Subagent.ThreadSpawn.ParentThreadID
+		entry.Originator = meta.Originator
 		entry.MetaRead = true
 	}
 	pkgCache.putSession(sessionsRoot, sessionID, entry)
