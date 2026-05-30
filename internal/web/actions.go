@@ -390,11 +390,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// For codex skills that require plan mode (feature today), schedule the
-	// post-spawn /plan plan + prompt injection. No-op for other harnesses
-	// and other skills. nil-safe if planInjector isn't wired.
-	s.planInjector.MaybeSchedule(activeHarness.Name(), req.Skill, target, req.Message)
-
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
 }
 

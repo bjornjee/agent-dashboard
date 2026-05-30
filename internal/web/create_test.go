@@ -349,10 +349,10 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	}
 }
 
-func TestCreate_HarnessOverrideCodexFeatureSkill_NoPositionalArg(t *testing.T) {
-	// codex + feature is a plan-mode skill: the spawn command must NOT
-	// include a positional arg or env-var prefix. The dashboard's plan
-	// injector (internal/dispatch) delivers the prompt post-spawn.
+func TestCreate_HarnessOverrideCodexFeatureSkill_PassesPrompt(t *testing.T) {
+	// codex + feature spawns with the user message in the positional
+	// PROMPT slot (alongside the skill marker). Codex auto-submits the
+	// prompt on TUI startup; no post-spawn injection required.
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
 
@@ -378,7 +378,7 @@ func TestCreate_HarnessOverrideCodexFeatureSkill_NoPositionalArg(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	want := "codex"
+	want := "codex '$agent-dashboard:feature hi'"
 	if capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
