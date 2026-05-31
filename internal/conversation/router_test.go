@@ -147,6 +147,37 @@ func TestTopLevelAgents_FiltersCodexSubagentSessions(t *testing.T) {
 	}
 }
 
+// Codex Desktop app rollouts share the ~/.codex/sessions/ tree with the
+// codex CLI, but the user only wants CLI threads on the dashboard. The
+// discriminator is session_meta payload.originator: "codex-tui" for the
+// CLI vs "Codex Desktop" for the desktop app. TopLevelAgents must drop
+// the desktop-app rollouts while keeping codex-tui sessions and other
+// harnesses untouched.
+func TestTopLevelAgents_FiltersCodexDesktopAppSessions(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
+	root := t.TempDir()
+	cliSID := "cli-codex"
+	desktopSID := "desktop-codex"
+	writeCodexRollout(t, root, cliSID, `{"timestamp":"2026-05-29T20:23:40.347Z","type":"session_meta","payload":{"id":"cli-codex","timestamp":"2026-05-29T20:23:40.132Z","originator":"codex-tui","source":"cli","thread_source":"user"}}
+`)
+	writeCodexRollout(t, root, desktopSID, `{"timestamp":"2026-05-29T23:33:05.658Z","type":"session_meta","payload":{"id":"desktop-codex","timestamp":"2026-05-29T23:33:05.658Z","originator":"Codex Desktop","source":"vscode","thread_source":"user"}}
+`)
+	agents := []domain.Agent{
+		{SessionID: cliSID, Harness: "codex", Target: "main:1.0"},
+		{SessionID: desktopSID, Harness: "codex", Target: "main:2.0"},
+		{SessionID: "claude", Harness: "claude", Target: "main:3.0"},
+	}
+
+	got := conversation.TopLevelAgents(agents, conversation.Roots{CodexSessionsRoot: root})
+	if len(got) != 2 {
+		t.Fatalf("got %d agents, want codex-tui + claude (desktop filtered): %+v", len(got), got)
+	}
+	if got[0].SessionID != cliSID || got[1].SessionID != "claude" {
+		t.Errorf("agents = %+v, want codex-tui first, claude second, Desktop filtered", got)
+	}
+}
+
 // Non-codex harnesses must not trigger any codex filesystem work. With a
 // non-existent CodexSessionsRoot, claude/legacy agents still flow through
 // unchanged — the per-agent guard short-circuits before any walk.

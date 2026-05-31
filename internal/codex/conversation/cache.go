@@ -53,10 +53,11 @@ type sessionsIndex struct {
 //     holds the parsed parent_thread_id ("" when the session is top-level).
 //   - Path == "" or MetaRead == false → negative result; valid until TTL.
 type sessionEntry struct {
-	builtAt  time.Time
-	Path     string
-	Parent   string
-	MetaRead bool
+	builtAt    time.Time
+	Path       string
+	Parent     string
+	Originator string
+	MetaRead   bool
 }
 
 // sessionKey scopes per-session cache entries by sessionsRoot so two
