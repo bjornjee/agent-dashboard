@@ -77,7 +77,7 @@ function navigateTo(view, agentId, push) {
       return;
   }
 
-  if (desktop) renderSidebar(agents, selectedAgentId);
+  if (desktop) renderSidebar(agents, selectedAgentId, currentView);
 
   if (push) pushView(view, agentId);
 }
@@ -121,7 +121,7 @@ function connectSSE() {
       // On desktop, refresh sidebar on every SSE tick — but never re-mount
       // the main pane (so a half-filled create form / scroll position is
       // preserved while agents update).
-      if (desktop) renderSidebar(agents, selectedAgentId);
+      if (desktop) renderSidebar(agents, selectedAgentId, currentView);
       try { processNotifications(agents); } catch (err) { console.error('[notify] error:', err); }
     } catch (err) { /* ignore parse errors */ }
   };

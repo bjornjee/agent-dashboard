@@ -1965,4 +1965,59 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 
   /* Floating bottom dock is replaced by the sidebar CTA on desktop. */
   .ui-dock { display: none; }
+
+  /* The detail view's pinned header is mobile-sized (max-height: 50vh).
+   * On desktop, the tabs end up below the fold. Let the pinned section
+   * size to content; the composer at the bottom of .detail-layout stays
+   * sticky via the existing mobile flex rules. */
+  .detail-pinned {
+    max-height: none;
+    overflow-y: visible;
+    flex-shrink: 0;
+  }
+
+  /* Back-arrow in the main-pane app bar is legacy mobile chrome — the
+   * sidebar is the primary navigation on desktop. */
+  #app-main .ui-app-bar__back { display: none; }
+
+  /* Sidebar row layout polish and selected/hover affordances.
+   * Public ui.js primitive APIs unchanged — we wrap rows in
+   * .app-sidebar__nav-row / .app-sidebar__row marker divs. */
+  .app-sidebar__inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding: var(--space-3) var(--space-2);
+    gap: var(--space-1);
+  }
+  .app-sidebar__top { display: flex; flex-direction: column; gap: 2px; }
+  .app-sidebar__list { display: flex; flex-direction: column; gap: 2px; }
+  .app-sidebar__bottom {
+    margin-top: auto;
+    padding-top: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* Sidebar rows use the row primitive but render tighter and without
+   * the chevron/divider so they read as nav items, not list rows. */
+  #app-sidebar .ui-row {
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    min-height: 36px;
+  }
+  #app-sidebar .ui-row::after { display: none; }
+  #app-sidebar .ui-row__chevron { display: none; }
+
+  .app-sidebar__nav-row--selected .ui-row,
+  .app-sidebar__row--selected .ui-row {
+    background: var(--bg-selected);
+  }
+
+  /* Placeholder Search slot is non-interactive in v1. */
+  .app-sidebar__nav-row--placeholder .ui-row {
+    color: var(--text-muted);
+    pointer-events: none;
+  }
 }

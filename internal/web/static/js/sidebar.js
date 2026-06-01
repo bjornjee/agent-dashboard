@@ -29,7 +29,9 @@ function metaLine(agent) {
 
 // Renders the sidebar into #app-sidebar. Pass the currently selected
 // agent id (if any) so the corresponding row gets the selected class.
-export function renderSidebar(agents, selectedAgentId) {
+// currentView ('list' | 'detail' | 'create' | 'usage') drives which nav
+// row gets the active fill.
+export function renderSidebar(agents, selectedAgentId, currentView) {
   const host = document.getElementById('app-sidebar');
   if (!host) return;
 
@@ -39,15 +41,29 @@ export function renderSidebar(agents, selectedAgentId) {
     (grouped[g] = grouped[g] || []).push(agent);
   }
 
+  const sel = (active) => active ? ' app-sidebar__nav-row--selected' : '';
+
   let html = '<div class="app-sidebar__inner">';
 
-  // Top CTA — "+ New agent"
+  // Top CTA — "+ New agent" + non-interactive Search placeholder slot.
   html += '<div class="app-sidebar__top">';
+  html += `<div class="app-sidebar__nav-row${sel(currentView === 'create')}">`;
   html += UI.row({
     title: '+ New agent',
     onclick: 'Dashboard.showCreate()',
     chevron: false,
   });
+  html += '</div>';
+  // Search slot is a declared placeholder per docs/design/desktop-flow-map.md
+  // (slot 2). v1 is non-interactive — the row exists so the layout reads as
+  // intended; wiring lands in a follow-up.
+  html += '<div class="app-sidebar__nav-row app-sidebar__nav-row--placeholder" aria-disabled="true">';
+  html += UI.row({
+    leading: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>',
+    title: 'Search agents',
+    chevron: false,
+  });
+  html += '</div>';
   html += '</div>';
 
   // Agent groups
@@ -76,16 +92,20 @@ export function renderSidebar(agents, selectedAgentId) {
 
   // Bottom anchor — Usage + Settings
   html += '<div class="app-sidebar__bottom">';
+  html += `<div class="app-sidebar__nav-row${sel(currentView === 'usage')}">`;
   html += UI.row({
     title: 'Usage',
     onclick: 'Dashboard.showUsage()',
     chevron: false,
   });
+  html += '</div>';
+  html += '<div class="app-sidebar__nav-row">';
   html += UI.row({
     title: 'Settings',
     onclick: 'Dashboard.openSettings()',
     chevron: false,
   });
+  html += '</div>';
   html += '</div>';
 
   html += '</div>';
