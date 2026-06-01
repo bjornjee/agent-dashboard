@@ -8,6 +8,7 @@ import { UI } from './js/ui.js';
 import { ICONS } from './js/icons.js';
 import { Theme } from './js/theme.js';
 import { initNotify, processNotifications, toggleBrowserNotifications } from './js/notify.js';
+import { renderSidebar, isDesktop, DESKTOP_MQ } from './js/sidebar.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -38,16 +39,28 @@ function pushView(view, agentId) {
 }
 
 function navigateTo(view, agentId, push) {
+  const desktop = isDesktop();
+
   switch (view) {
     case 'list':
       cancelNav();
       stopConversationPoll();
       setView('list');
-      renderList(app, agents);
+      if (desktop) {
+        // On desktop the agent list lives in the sidebar — the main pane
+        // has no standalone "list" page. Default the main pane to create.
+        renderCreate(app, agents);
+      } else {
+        renderList(app, agents);
+      }
       break;
     case 'detail':
-      if (agentId) renderDetail(app, agents, agentId, setView);
-      else navigateTo('list', null, false);
+      if (agentId) {
+        renderDetail(app, agents, agentId, setView);
+      } else {
+        navigateTo('list', null, false);
+        return;
+      }
       break;
     case 'usage':
       stopConversationPoll();
@@ -61,7 +74,11 @@ function navigateTo(view, agentId, push) {
       break;
     default:
       navigateTo('list', null, false);
+      return;
   }
+
+  if (desktop) renderSidebar(agents, selectedAgentId);
+
   if (push) pushView(view, agentId);
 }
 
@@ -89,8 +106,11 @@ function connectSSE() {
   eventSource.onmessage = (e) => {
     try {
       agents = JSON.parse(e.data);
-      if (currentView === 'list') renderList(app, agents);
-      else if (currentView === 'detail' && selectedAgentId) {
+      const desktop = isDesktop();
+      if (currentView === 'list' && !desktop) {
+        // On mobile the list view IS the main pane.
+        renderList(app, agents);
+      } else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
         if (agent) {
           updateActionBar(agent);
@@ -98,6 +118,10 @@ function connectSSE() {
         }
         refreshActiveTab(selectedAgentId);
       }
+      // On desktop, refresh sidebar on every SSE tick — but never re-mount
+      // the main pane (so a half-filled create form / scroll position is
+      // preserved while agents update).
+      if (desktop) renderSidebar(agents, selectedAgentId);
       try { processNotifications(agents); } catch (err) { console.error('[notify] error:', err); }
     } catch (err) { /* ignore parse errors */ }
   };
@@ -308,6 +332,22 @@ window.Dashboard = {
     }
   },
 };
+
+// --- Viewport breakpoint changes ---
+// When the user crosses the desktop breakpoint, re-mount the current view
+// so the right content lands in the right slot (mobile: #app; desktop:
+// sidebar + #app).
+const desktopMql = window.matchMedia(DESKTOP_MQ);
+const onBreakpointChange = () => {
+  if (!desktopMql.matches) {
+    // Leaving desktop — clear the sidebar so it can re-hide.
+    const host = document.getElementById('app-sidebar');
+    if (host) { host.innerHTML = ''; host.hidden = true; }
+  }
+  navigateTo(currentView, selectedAgentId, false);
+};
+if (desktopMql.addEventListener) desktopMql.addEventListener('change', onBreakpointChange);
+else if (desktopMql.addListener) desktopMql.addListener(onBreakpointChange);
 
 // --- Service worker messages ---
 if ('serviceWorker' in navigator) {

@@ -87,6 +87,13 @@
   --transition-default: 200ms ease-out;
   --transition-slow: 280ms ease-out;
 
+  /* Desktop layout tokens (consumed only inside @media (min-width: 1024px)) */
+  --bp-desktop: 1024px;
+  --sidebar-width: 264px;
+  --bg-sidebar: #0E0E10;
+  --bg-selected: #222226;
+  --bg-hover: #2F2F33;
+
   /* Misc tokens kept for legacy usage/diff CSS */
   --interactive-bg: rgba(255, 255, 255, 0.04);
   --interactive-border: rgba(255, 255, 255, 0.08);
@@ -1916,3 +1923,46 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 /* ============================================
    VIEW: Usage
    ============================================ */
+
+/* ============================================================
+ * DESKTOP TWO-PANE SHELL — Phase B
+ * All rules here are scoped to ≥ 1024px. Mobile layout untouched.
+ * ============================================================ */
+
+/* Belt-and-braces: hidden attribute should be display:none across the board.
+ * #app-sidebar carries hidden on mobile; desktop @media unhides it. */
+#app-sidebar[hidden] { display: none; }
+
+@media (min-width: 1024px) {
+  #app-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr;
+    height: 100vh;
+  }
+
+  /* Unhide the sidebar regardless of the hidden attribute. */
+  #app-sidebar,
+  #app-sidebar[hidden] {
+    display: block;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-subtle);
+    overflow-y: auto;
+    height: 100vh;
+  }
+
+  #app-main {
+    overflow-y: auto;
+    height: 100vh;
+  }
+
+  /* Override the mobile 640px centered cap so detail/create/usage
+   * fill the main pane width. */
+  #app {
+    max-width: none;
+    margin: 0;
+    min-height: auto;
+  }
+
+  /* Floating bottom dock is replaced by the sidebar CTA on desktop. */
+  .ui-dock { display: none; }
+}
