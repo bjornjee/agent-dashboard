@@ -1,7 +1,7 @@
 // Agent detail view with tabs and inline subagents.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState } from '../state.js';
+import { effectiveState, stateGroup } from '../state.js';
 import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -9,41 +9,128 @@ import { Theme } from '../theme.js';
 
 export { showModal, toast, stopConversationPoll };
 
+// --- Local primitive helpers (Codex-iOS register; not promoted to ui.js — single caller) ---
+
+function inlineBtn(label, variant, onclick, id) {
+  const v = variant === 'primary' ? 'primary'
+    : variant === 'danger' ? 'danger'
+    : variant === 'ghost' ? 'ghost'
+    : 'secondary';
+  const idAttr = id ? ` id="${id}"` : '';
+  return `<button class="ui-modal-btn ui-modal-btn--${v}" onclick="${onclick}"${idAttr}>${escapeHtml(label)}</button>`;
+}
+
+function inlineStopBtn(onclick) {
+  return `<button class="ui-stop-btn" aria-label="Stop" onclick="${onclick}"><span></span></button>`;
+}
+
+function inlineStatusPill(state) {
+  const group = stateGroup(state).toLowerCase();
+  return `<span class="ui-status-pill"><span class="status-dot status-dot--${group}"></span>${escapeHtml(state)}</span>`;
+}
+
+function inlineEmptyState(icon, title, subtitle) {
+  return `<div class="empty-state"><div class="empty-state-icon">${icon}</div><div class="empty-state-title">${escapeHtml(title)}</div><div class="empty-state-subtitle">${escapeHtml(subtitle)}</div></div>`;
+}
+
+function inlineLoading() {
+  return '<div class="loading"><span class="spinner"></span></div>';
+}
+
+function inlineDisclosure(id, label, open) {
+  const openAttr = open ? ' open' : '';
+  return `<details class="detail-disclosure" id="${id}-section"${openAttr}>
+    <summary data-section="${id}">${escapeHtml(label)}</summary>
+    <div class="detail-disclosure-body" id="${id}"></div>
+  </details>`;
+}
+
+function inlineSegmentedTabs(items, active) {
+  let html = '<div class="detail-tabs">';
+  for (const it of items) {
+    const cls = it.key === active ? ' detail-tabs__tab--active' : '';
+    html += `<button class="detail-tabs__tab${cls}" data-tab="${it.key}">${escapeHtml(it.label)}</button>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function inlineFileStatus(status) {
+  switch (status) {
+    case 'added': return '<span class="file-status file-status--added">+</span>';
+    case 'deleted': return '<span class="file-status file-status--deleted">&minus;</span>';
+    case 'renamed': return '<span class="file-status file-status--renamed">&rarr;</span>';
+    default: return '<span class="file-status file-status--modified"></span>';
+  }
+}
+
+function inlineToggleSwitch(label, key, defaultOn) {
+  const checked = defaultOn ? ' checked' : '';
+  return `<label class="toggle-switch">
+    <span class="toggle-switch__label">${escapeHtml(label)}</span>
+    <input type="checkbox" class="toggle-switch__input" data-key="${escapeHtml(key)}"${checked}>
+    <span class="toggle-switch__track"></span>
+  </label>`;
+}
+
+function inlineVitalStrip(opts) {
+  const elapsed = escapeHtml(opts.elapsed || '');
+  const tokens = formatTokens(opts.tokens || 0);
+  const cost = formatCost(opts.cost || 0) || '&mdash;';
+  return `<div class="vital-strip">
+    <div class="vital-cell"><span class="vital-label">Elapsed</span><span class="vital-value">${elapsed}</span></div>
+    <div class="vital-cell"><span class="vital-label">Tokens</span><span class="vital-value">${tokens}</span></div>
+    <div class="vital-cell"><span class="vital-label">Cost</span><span class="vital-value">${cost}</span></div>
+  </div>`;
+}
+
 // Update the action bar in-place when agent state changes via SSE.
 export function updateActionBar(agent) {
   const bar = document.querySelector('.action-bar');
   if (!bar) return;
+
+  // Capture in-flight composer state so the SSE-driven re-render doesn't
+  // wipe what the user is typing.
+  const oldInput = bar.querySelector('#reply-input');
+  const wasFocused = oldInput && document.activeElement === oldInput;
+  const oldValue = oldInput ? oldInput.value : '';
+  const selStart = oldInput ? oldInput.selectionStart : 0;
+  const selEnd = oldInput ? oldInput.selectionEnd : 0;
+  const oldHeight = oldInput ? oldInput.style.height : '';
+
   const tmp = document.createElement('div');
   tmp.innerHTML = renderActionBar(agent);
   const newBar = tmp.firstElementChild;
-  if (newBar) bar.replaceWith(newBar);
+  if (!newBar) return;
+  bar.replaceWith(newBar);
+
+  const newInput = newBar.querySelector('#reply-input');
+  if (newInput && oldValue) {
+    newInput.value = oldValue;
+    newInput.dispatchEvent(new Event('input', { bubbles: true }));
+    if (oldHeight) newInput.style.height = oldHeight;
+    if (wasFocused) {
+      newInput.focus();
+      try { newInput.setSelectionRange(selStart, selEnd); } catch {}
+    }
+  }
 }
 
 // Track optimistic messages so refreshConversation can preserve them
 let pendingUserMessage = null;
 
-// Optimistically append a user message bubble to the chat.
+// Optimistically append a Codex-style user message pill to the chat.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
-  // Add role label if the last message was not from the user
-  const lastLabel = container.querySelector('.msg-role-label:last-of-type');
-  const lastLabelText = lastLabel ? lastLabel.textContent.trim() : '';
-  if (!lastLabelText.includes('You')) {
-    const labelDiv = document.createElement('div');
-    labelDiv.className = 'msg-role-label';
-    labelDiv.innerHTML = `${ICONS.human} You`;
-    container.appendChild(labelDiv);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = UI.message('user', text);
+  const msgEl = wrap.firstElementChild;
+  if (msgEl) {
+    msgEl.classList.add('ui-msg--optimistic');
+    container.appendChild(msgEl);
   }
-  const msgDiv = document.createElement('div');
-  msgDiv.className = 'msg msg-human msg-optimistic';
-  msgDiv.textContent = text;
-  const timeDiv = document.createElement('div');
-  timeDiv.className = 'msg-time';
-  timeDiv.textContent = formatTimeShort(new Date().toISOString());
-  msgDiv.appendChild(timeDiv);
-  container.appendChild(msgDiv);
   const scrollParent = container.closest('.detail-scroll');
   if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
@@ -67,30 +154,43 @@ function renderActionBar(agent) {
   const id = agent.session_id;
   let actions = '';
 
-  // Reply input for active agent states
-  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr', 'idle_prompt'];
-  if (INPUT_STATES.includes(st)) {
-    const placeholder = (st === 'question' || st === 'error') ? 'Type a reply...' : 'Send a message...';
-    actions += `<input class="action-input" id="reply-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')Dashboard.sendInput('${id}')">`;
-    actions += UI.btn('Send', { variant: 'secondary', onclick: `Dashboard.sendInput('${id}')` });
-  }
-
-  // State-specific buttons
+  // State-specific chips live above the composer (Codex pattern: action chips stacked above input).
   if (st === 'permission' || st === 'plan') {
-    actions += UI.btn('Approve', { variant: 'secondary', onclick: `Dashboard.approve('${id}', event)` });
-    actions += UI.btn('Reject', { variant: 'danger', onclick: `Dashboard.reject('${id}', event)` });
+    actions += inlineBtn('Approve', 'primary', `Dashboard.approve('${id}', event)`);
+    actions += inlineBtn('Reject', 'danger', `Dashboard.reject('${id}', event)`);
   } else if (st === 'pr') {
-    actions += UI.btn('Open PR', { variant: 'secondary', onclick: `Dashboard.openPR('${id}')` });
-    actions += UI.btn('Merge', { variant: 'secondary', onclick: `Dashboard.confirmMerge('${id}')` });
+    actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
+    actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
   } else if (st === 'merged') {
-    actions += UI.btn('Close', { variant: 'ghost', onclick: `Dashboard.confirmClose('${id}')` });
+    actions += inlineBtn('Close', 'ghost', `Dashboard.confirmClose('${id}')`);
   }
 
-  if (st === 'running' || st === 'permission' || st === 'plan' || st === 'question' || st === 'error') {
-    actions += UI.stopBtn(`Dashboard.confirmStop('${id}')`);
+  // Composer is always one row: attach + textarea + (stop OR send). Stop replaces send when the
+  // agent is processing — matches Codex iOS pattern (single primary affordance on the right edge).
+  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr', 'idle_prompt'];
+  const STOP_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+  let composer = '';
+  if (INPUT_STATES.includes(st)) {
+    const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…' : 'Message';
+    const trailing = STOP_STATES.has(st)
+      ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
+      : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
+    composer = `<div class="ui-composer detail-composer">
+      <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
+      <textarea
+        class="ui-composer__input"
+        id="reply-input"
+        rows="1"
+        placeholder="${escapeHtml(placeholder)}"
+        oninput="UI.composerAutoSize(this)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
+      ></textarea>
+      ${trailing}
+    </div>`;
   }
 
-  return `<div class="action-bar">${actions}</div>`;
+  const actionRow = actions ? `<div class="action-row">${actions}</div>` : '';
+  return `<div class="action-bar">${actionRow}${composer}</div>`;
 }
 
 let activityFilter = 'all';
@@ -100,27 +200,21 @@ let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
 
-// Build conversation HTML from an array of message entries.
+// Build conversation HTML from an array of message entries — Codex flat-prose.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
-  let lastRole = '';
   for (const entry of entries) {
     // Skip task-notification messages (internal agent-to-agent noise)
     if (entry.IsNotification) continue;
     const role = entry.Role || entry.role;
     const content = entry.Content || entry.content || '';
     if (!content) continue;
-    const time = entry.Timestamp || entry.timestamp || '';
-    if (role !== lastRole) {
-      const icon = role === 'human' ? ICONS.human : ICONS.assistant;
-      const label = role === 'human' ? 'You' : 'Claude';
-      html += `<div class="msg-role-label">${icon} ${label}</div>`;
-      lastRole = role;
-    }
     if (role === 'human') {
-      html += `<div class="msg msg-human">${escapeHtml(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+      html += UI.message('user', content);
     } else {
-      html += `<div class="msg msg-assistant">${renderMarkdown(content)}<div class="msg-time">${formatTime(time)}</div></div>`;
+      // Assistant prose with rendered markdown — keep HTML, don't escape again
+      const body = renderMarkdown(content);
+      html += UI.message('assistant', body, { html: true });
     }
   }
   html += '</div>';
@@ -153,18 +247,13 @@ async function refreshConversation(agentId) {
   if (pendingUserMessage) {
     const conv = container.querySelector('.conversation');
     if (conv) {
-      const labelDiv = document.createElement('div');
-      labelDiv.className = 'msg-role-label';
-      labelDiv.innerHTML = `${ICONS.human} You`;
-      conv.appendChild(labelDiv);
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'msg msg-human msg-optimistic';
-      msgDiv.textContent = pendingUserMessage;
-      const timeDiv = document.createElement('div');
-      timeDiv.className = 'msg-time';
-      timeDiv.textContent = formatTimeShort(new Date().toISOString());
-      msgDiv.appendChild(timeDiv);
-      conv.appendChild(msgDiv);
+      const wrap = document.createElement('div');
+      wrap.innerHTML = UI.message('user', pendingUserMessage);
+      const msgEl = wrap.firstElementChild;
+      if (msgEl) {
+        msgEl.classList.add('ui-msg--optimistic');
+        conv.appendChild(msgEl);
+      }
     }
   }
 
@@ -222,13 +311,13 @@ export function refreshDetailHeader(agent) {
   const prev = lastAgentState;
   lastAgentState = st;
 
-  // Update status badge
-  const badge = document.querySelector('.detail-title .badge');
-  if (badge) {
+  // Update status pill
+  const pill = document.querySelector('.detail-title .ui-status-pill');
+  if (pill) {
     const tmp = document.createElement('div');
-    tmp.innerHTML = UI.badge(st, st);
-    const newBadge = tmp.firstElementChild;
-    if (newBadge) badge.replaceWith(newBadge);
+    tmp.innerHTML = inlineStatusPill(st);
+    const fresh = tmp.firstElementChild;
+    if (fresh) pill.replaceWith(fresh);
   }
 
   // Update duration
@@ -269,21 +358,28 @@ export async function renderDetail(app, agents, agentId, setView) {
   currentPRUrl = agent.pr_url || '';
 
   const st = effectiveState(agent);
+  const branchPart = agent.branch ? escapeHtml(agent.branch) : '';
+  const modelPart = agent.model ? escapeHtml(agent.model) : '';
+  const durationPart = agent.started_at ? duration(agent) : '';
+  const subline = [branchPart, modelPart, durationPart].filter(Boolean).join(' · ');
+
+  const appBar = UI.appBar({
+    back: true,
+    title: repoName(agent),
+    subtitle: subline,
+    trailing: [
+      ...(st === 'running' ? ['spinner'] : []),
+      { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
+    ],
+  });
+
   const detailHeader = `
     <div class="detail-header">
-      <div class="detail-title">
-        <h2>${escapeHtml(repoName(agent))}</h2>
-        ${UI.badge(st, st)}
-      </div>
-      <div class="detail-meta">
-        ${agent.branch ? '<span>' + escapeHtml(agent.branch) + '</span>' : ''}
-        ${agent.model ? '<span>' + escapeHtml(agent.model) + '</span>' : ''}
-        ${agent.started_at ? '<span>' + duration(agent) + '</span>' : ''}
-      </div>
+      <div class="detail-title">${inlineStatusPill(st)}</div>
     </div>
   `;
 
-  const tabs = UI.tabs([
+  const tabs = inlineSegmentedTabs([
     { key: 'conversation', label: 'Chat' },
     { key: 'activity', label: 'Activity' },
     { key: 'diff', label: 'Diff' },
@@ -297,19 +393,17 @@ export async function renderDetail(app, agents, agentId, setView) {
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
-        ${UI.header('Agent Dashboard', {
-          actions: [{ label: '&larr; Back', onclick: 'Dashboard.showList()' }],
-        })}
+        ${appBar}
         ${detailHeader}
-        ${UI.collapsibleSection('vital-signs-container', 'Stats', vitalOpen)}
-        ${UI.collapsibleSection('subagent-summary', 'Subagents', subagentOpen)}
+        ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
+        ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
         ${tabs}
       </div>
       <div class="detail-scroll">
         <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
-        <div id="tab-activity" class="tab-content">${skeletonLoading(6)}</div>
-        <div id="tab-diff" class="tab-content">${skeletonLoading(3)}</div>
-        <div id="tab-plan" class="tab-content">${skeletonLoading(3)}</div>
+        <div id="tab-activity" class="tab-content"></div>
+        <div id="tab-diff" class="tab-content"></div>
+        <div id="tab-plan" class="tab-content"></div>
       </div>
       ${renderActionBar(agent)}
     </div>
@@ -319,25 +413,27 @@ export async function renderDetail(app, agents, agentId, setView) {
   currentDetailTab = 'conversation';
   currentDetailAgentId = agentId;
   lastAgentState = st;
-  document.querySelectorAll('.tab').forEach(tab => {
+  document.querySelectorAll('.detail-tabs__tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.detail-tabs__tab').forEach(t => t.classList.remove('detail-tabs__tab--active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      tab.classList.add('active');
+      tab.classList.add('detail-tabs__tab--active');
       const target = tab.dataset.tab;
-      document.getElementById('tab-' + target).classList.add('active');
+      const container = document.getElementById('tab-' + target);
+      container.classList.add('active');
+      // Only show skeleton when the tab is empty (first visit) — avoids flicker on re-clicks.
+      if (!container.dataset.loaded) container.innerHTML = skeletonLoading(target === 'activity' ? 6 : target === 'conversation' ? 4 : 3);
       currentDetailTab = target;
       loadTabContent(target, agentId);
-      // Start/stop conversation polling based on active tab
       if (target === 'conversation') startConversationPoll(agentId);
       else stopConversationPoll();
     });
   });
 
-  // Persist collapsible section state
-  document.querySelectorAll('.collapsible-section').forEach(details => {
+  // Persist disclosure state
+  document.querySelectorAll('.detail-disclosure').forEach(details => {
     details.addEventListener('toggle', () => {
-      const summary = details.querySelector('.collapsible-summary');
+      const summary = details.querySelector('summary');
       if (!summary) return;
       const sectionId = summary.dataset.section;
       try { sessionStorage.setItem('collapse-' + sectionId + '-' + agentId, String(!details.open)); } catch {}
@@ -359,7 +455,7 @@ async function loadVitalSigns(agentId, agent) {
   try {
     const usage = await get('/api/agents/' + agentId + '/usage');
     const elapsed = agent.started_at ? duration(agent) : '';
-    container.innerHTML = UI.vitalSigns({
+    container.innerHTML = inlineVitalStrip({
       elapsed: elapsed,
       tokens: (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0),
       cost: usage ? usage.CostUSD : 0,
@@ -426,16 +522,20 @@ async function loadTabContent(tab, agentId) {
   const signal = newNavSignal();
   const container = document.getElementById('tab-' + tab);
   if (!container) return;
+  // Mark loaded after this fetch so subsequent tab-switches don't re-show skeleton.
+  const markLoaded = () => { try { container.dataset.loaded = '1'; } catch {} };
 
   switch (tab) {
     case 'conversation': {
       const entries = await get('/api/agents/' + agentId + '/conversation');
       if (signal.aborted) return;
       if (!entries || entries.length === 0) {
-        container.innerHTML = UI.emptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
+        container.innerHTML = inlineEmptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
+        markLoaded();
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
+      markLoaded();
       const scrollParent = container.closest('.detail-scroll');
       if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
       break;
@@ -444,7 +544,8 @@ async function loadTabContent(tab, agentId) {
       const entries = await get('/api/agents/' + agentId + '/activity');
       if (signal.aborted) return;
       if (!entries || entries.length === 0) {
-        container.innerHTML = UI.emptyState(ICONS.activity, 'No activity yet', 'Tool calls and messages will appear here');
+        container.innerHTML = inlineEmptyState(ICONS.activity, 'No activity yet', 'Tool calls and messages will appear here');
+        markLoaded();
         return;
       }
       let html = '<div class="activity-filter-bar">';
@@ -509,6 +610,7 @@ async function loadTabContent(tab, agentId) {
       }
       html += '</div>';
       container.innerHTML = html;
+      markLoaded();
 
       // Wire filter buttons
       container.querySelectorAll('.activity-filter-btn').forEach(btn => {
@@ -535,7 +637,8 @@ async function loadTabContent(tab, agentId) {
           title = 'Unable to load diff';
           subtitle = 'git reported an error reading this worktree.';
         }
-        container.innerHTML = UI.emptyState(ICONS.fileDiff, title, subtitle);
+        container.innerHTML = inlineEmptyState(ICONS.fileDiff, title, subtitle);
+        markLoaded();
         return;
       }
 
@@ -559,7 +662,7 @@ async function loadTabContent(tab, agentId) {
         for (const f of files) {
           const status = f.status || 'modified';
           html += '<div class="mobile-diff-file">'
-            + UI.fileStatusIndicator(status)
+            + inlineFileStatus(status)
             + '<span class="mobile-diff-file-path">' + escapeHtml(f.path) + '</span>'
             + '<span class="diff-stats"><span class="diff-stats-add">+' + (f.additions || 0) + '</span> <span class="diff-stats-del">-' + (f.deletions || 0) + '</span></span>'
             + '</div>';
@@ -575,6 +678,7 @@ async function loadTabContent(tab, agentId) {
         }
         html += '</div>';
         container.innerHTML = html;
+        markLoaded();
         return;
       }
 
@@ -624,7 +728,7 @@ async function loadTabContent(tab, agentId) {
           const adds = f.additions || 0;
           const dels = f.deletions || 0;
           sidebarHtml += '<div class="diff-sidebar-file' + (f.idx === 0 ? ' active' : '') + '" data-file-idx="' + f.idx + '" title="' + escapeHtml(f.path) + '">'
-            + UI.fileStatusIndicator(status)
+            + inlineFileStatus(status)
             + '<span class="diff-sidebar-name">' + escapeHtml(f.fileName) + '</span>'
             + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
             + '</div>';
@@ -643,11 +747,11 @@ async function loadTabContent(tab, agentId) {
         sectionsHtml += '<div class="diff-file-section" data-file-idx="' + i + '" id="diff-file-' + i + '">'
           + '<div class="diff-file-header">'
           + '<span class="diff-file-chevron expanded">&#9656;</span>'
-          + UI.fileStatusIndicator(status)
+          + inlineFileStatus(status)
           + '<span class="diff-file-path">' + escapeHtml(f.path) + '</span>'
           + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
           + '</div>'
-          + '<div class="diff-file-body">' + UI.loadingBlock() + '</div>'
+          + '<div class="diff-file-body">' + inlineLoading() + '</div>'
           + '</div>';
       }
 
@@ -657,7 +761,7 @@ async function loadTabContent(tab, agentId) {
         + ' with <span class="diff-stats-add">+' + totalAdds + '</span> addition' + (totalAdds !== 1 ? 's' : '')
         + ' and <span class="diff-stats-del">-' + totalDels + '</span> deletion' + (totalDels !== 1 ? 's' : '') + '</span>'
         + '<div class="diff-controls">'
-        + UI.toggleSwitch('Wrap', 'diff-wrap-lines', sessionStorage.getItem('diff-wrap-lines') === 'true')
+        + inlineToggleSwitch('Wrap', 'diff-wrap-lines', sessionStorage.getItem('diff-wrap-lines') === 'true')
         + '<div class="diff-view-toggle">'
         + '<button class="diff-toggle-btn' + (viewMode === 'side-by-side' ? ' active' : '') + '" data-mode="side-by-side">Split</button>'
         + '<button class="diff-toggle-btn' + (viewMode === 'line-by-line' ? ' active' : '') + '" data-mode="line-by-line">Unified</button>'
@@ -668,6 +772,7 @@ async function loadTabContent(tab, agentId) {
         + '<div class="diff-layout">' + sidebarHtml
         + '<div class="diff-content" id="diff-content">' + sectionsHtml + '</div>'
         + '</div></div>';
+      markLoaded();
 
       // Lazy render with IntersectionObserver
       const rendered = new Set();
@@ -808,7 +913,7 @@ async function loadTabContent(tab, agentId) {
           container.querySelectorAll('.diff-file-section').forEach(section => {
             const body = section.querySelector('.diff-file-body');
             if (body && body.style.display !== 'none') {
-              body.innerHTML = UI.loadingBlock();
+              body.innerHTML = inlineLoading();
               lazyObserver.observe(section);
             }
           });
@@ -831,10 +936,12 @@ async function loadTabContent(tab, agentId) {
       const data = await get('/api/agents/' + agentId + '/plan');
       if (signal.aborted) return;
       if (!data || !data.content) {
-        container.innerHTML = UI.emptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
+        container.innerHTML = inlineEmptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
+        markLoaded();
         return;
       }
       container.innerHTML = '<div class="plan-content">' + renderMarkdown(data.content) + '</div>';
+      markLoaded();
       break;
     }
   }

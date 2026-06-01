@@ -1,85 +1,165 @@
-// Reusable UI component factory.
-import { escapeHtml, formatCost, formatCostFull, formatTokens, formatDateShort, durationFromTimestamp } from './format.js';
-import { STATE_BADGE } from './state.js';
+// Reusable UI primitives for the Codex-iOS register.
+// 9 primitives only. KISS/DRY: 2+ callers or explicit structural exception.
+import { escapeHtml } from './format.js';
 import { ICONS } from './icons.js';
-import { Theme } from './theme.js';
-import { isBrowserNotifyEnabled } from './notify.js';
+
+function actionsHtml(items) {
+  if (!items || !items.length) return '';
+  let out = '';
+  for (const a of items) {
+    if (!a) continue;
+    if (a === 'spinner') {
+      out += '<span class="ui-app-bar__spinner" aria-hidden="true"></span>';
+      continue;
+    }
+    const click = a.onclick ? ` onclick="${a.onclick}"` : '';
+    const label = a.ariaLabel || a.label || 'action';
+    out += `<button class="ui-app-bar__action" aria-label="${escapeHtml(label)}"${click}>${a.icon || ''}</button>`;
+  }
+  return out;
+}
 
 export const UI = {
-  header(title, opts) {
+  // 1. App bar — top chrome on every view.
+  appBar(opts) {
     const o = opts || {};
-    const actions = o.actions || [];
-    const showToggle = o.showThemeToggle !== false;
-    let controls = '';
-    for (const a of actions) {
-      controls += `<button class="header-text-btn" onclick="${a.onclick}">${a.label}</button>`;
-    }
-    if (actions.length && o.cta) {
-      controls += '<div class="header-divider"></div>';
-    }
-    if (showToggle) {
-      const notifyIcon = isBrowserNotifyEnabled() ? ICONS.bell : ICONS.bellOff;
-      controls += `<button class="header-icon-btn" onclick="Dashboard.toggleNotifications()" title="Toggle notifications" aria-label="Toggle notifications">${notifyIcon}</button>`;
-      controls += `<button class="header-icon-btn" onclick="Dashboard.cycleTheme()" title="Toggle theme" aria-label="Toggle theme">${Theme.getIcon()}</button>`;
-    }
-    if (o.cta) {
-      controls += `<button class="header-cta" onclick="${o.cta.onclick}">${o.cta.label}</button>`;
-    }
-    return `<div class="header"><button class="header-logo" onclick="Dashboard.showList()" aria-label="Home">${ICONS.logo}</button><span class="header-title">${escapeHtml(title)}</span><div class="header-controls">${controls}</div></div>`;
+    const lead = o.back
+      ? `<button class="ui-app-bar__action ui-app-bar__back" aria-label="Back" onclick="Dashboard.showList()">${ICONS.back}</button>`
+      : o.leading
+      ? `<button class="ui-app-bar__action" aria-label="${escapeHtml(o.leading.ariaLabel || 'leading')}" onclick="${o.leading.onclick || ''}">${o.leading.icon}</button>`
+      : '<span class="ui-app-bar__spacer"></span>';
+    const sub = o.subtitle ? `<span class="ui-app-bar__subtitle">${escapeHtml(o.subtitle)}</span>` : '';
+    const title = o.title
+      ? `<div class="ui-app-bar__titles"><span class="ui-app-bar__title">${escapeHtml(o.title)}</span>${sub}</div>`
+      : '<span class="ui-app-bar__spacer"></span>';
+    return `<header class="ui-app-bar">${lead}${title}<div class="ui-app-bar__trailing">${actionsHtml(o.trailing)}</div></header>`;
   },
 
-  spinner() {
-    return '<span class="spinner spinner-inline"></span>';
+  // 2. Floating dock — list view only. Structural exception.
+  dock(opts) {
+    const o = opts || {};
+    const search = o.search
+      ? `<button class="ui-dock__search" onclick="${o.search.onclick || ''}">${ICONS.search}<span>${escapeHtml(o.search.label)}</span></button>`
+      : '';
+    const cta = o.cta
+      ? `<button class="ui-dock__cta" onclick="${o.cta.onclick || ''}">${o.cta.icon || ''}<span>${escapeHtml(o.cta.label)}</span></button>`
+      : '';
+    return `<nav class="ui-dock" role="navigation">${search}${cta}</nav>`;
   },
 
+  // 3. Action sheet — kebab-driven, modal focus. Structural exception.
+  sheet(items, opts) {
+    const o = opts || {};
+    let body = '';
+    for (const it of items) {
+      const click = it.onclick ? ` onclick="${it.onclick}"` : '';
+      body += `<button class="ui-sheet__item"${click}>${it.icon || ''}<span>${escapeHtml(it.label)}</span><span class="ui-sheet__chevron">${ICONS.chevronRight}</span></button>`;
+    }
+    return `<div class="ui-sheet" role="dialog" aria-modal="true">
+      <div class="ui-sheet__backdrop" onclick="${o.onDismiss || 'Dashboard.dismissSheet()'}"></div>
+      <div class="ui-sheet__panel">${body}</div>
+    </div>`;
+  },
+
+  // 4. Tappable row — list + create form rows.
+  row(opts) {
+    const o = opts || {};
+    const click = o.onclick ? ` onclick="${o.onclick}"` : '';
+    const lead = o.leading ? `<div class="ui-row__leading">${o.leading}</div>` : '';
+    const sub = o.subtitle ? `<span class="ui-row__subtitle">${escapeHtml(o.subtitle)}</span>` : '';
+    const chevron = (o.onclick && o.chevron !== false) ? `<span class="ui-row__chevron">${ICONS.chevronRight}</span>` : '';
+    const trail = (o.trailing || chevron)
+      ? `<div class="ui-row__trailing">${o.trailing || ''}${chevron}</div>` : '';
+    const tag = o.onclick ? 'button' : 'div';
+    return `<${tag} class="ui-row"${click}>${lead}
+      <div class="ui-row__body"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${sub}</div>
+      ${trail}
+    </${tag}>`;
+  },
+
+  // 5. Section label — small-caps muted header. Used everywhere.
+  sectionLabel(text, opts) {
+    const o = opts || {};
+    const meta = o.count != null ? ` <span class="ui-section-label__count">${o.count}</span>` : '';
+    const action = o.action ? `<button class="ui-section-label__action" onclick="${o.action.onclick}">${escapeHtml(o.action.label)}</button>` : '';
+    return `<div class="ui-section-label"><span>${escapeHtml(text)}${meta}</span>${action}</div>`;
+  },
+
+  // 6. Card — layered surface, no border.
+  card(content, opts) {
+    const o = opts || {};
+    const click = o.onclick ? ` onclick="${o.onclick}"` : '';
+    return `<div class="ui-card"${click}>${content}</div>`;
+  },
+
+  // 7. Message — flat chat. user pill / assistant prose / tool footer.
+  message(role, content, opts) {
+    const o = opts || {};
+    if (o.tool) {
+      const label = escapeHtml(o.tool.label || 'tool');
+      return `<div class="ui-msg__tool">${ICONS.check || ''}<span>${label}</span>${ICONS.chevronRight}</div>`;
+    }
+    if (role === 'user') {
+      return `<div class="ui-msg ui-msg--user"><div class="ui-msg__bubble">${escapeHtml(content)}</div></div>`;
+    }
+    const body = o.html ? content : escapeHtml(content);
+    const copy = o.copyable === false ? '' : `<button class="ui-msg__copy" aria-label="Copy">${ICONS.copy}</button>`;
+    return `<div class="ui-msg ui-msg--assistant"><div class="ui-msg__prose">${body}</div>${copy}</div>`;
+  },
+
+  // 8. Composer — sticky bottom input + send. Structural exception.
+  composer(opts) {
+    const o = opts || {};
+    const id = o.id || 'composer-input';
+    const placeholder = escapeHtml(o.placeholder || 'Message');
+    const onSend = o.onSend || '';
+    return `<div class="ui-composer">
+      <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
+      <textarea
+        class="ui-composer__input"
+        id="${id}"
+        rows="1"
+        placeholder="${placeholder}"
+        oninput="UI.composerAutoSize(this)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();${onSend}}"
+      ></textarea>
+      <button class="ui-composer__send" aria-label="Send" onclick="${onSend}">${ICONS.send}</button>
+    </div>`;
+  },
+
+  // 9. Input — rounded text field. Used by create + internally by composer.
+  input(opts) {
+    const o = opts || {};
+    const id = o.id ? ` id="${o.id}"` : '';
+    const ph = escapeHtml(o.placeholder || '');
+    const val = escapeHtml(o.value || '');
+    if (o.multiline) {
+      return `<textarea class="ui-input ui-input--multiline"${id} placeholder="${ph}" rows="${o.rows || 3}">${val}</textarea>`;
+    }
+    return `<input class="ui-input" type="text"${id} placeholder="${ph}" value="${val}">`;
+  },
+
+  // Helper for composer auto-grow (called inline; intentionally on UI, not a primitive).
+  composerAutoSize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+  },
+
+  // --- Legacy fallbacks for the out-of-scope Usage view ---
+  // Kept as thin shims so usage.js still renders. Not part of the 9-primitive set.
+  header(title) {
+    return UI.appBar({
+      back: true,
+      title,
+      trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
+    });
+  },
   loadingBlock() {
     return '<div class="loading"><span class="spinner"></span></div>';
   },
-
-  btn(label, opts) {
-    const v = (opts && opts.variant) || 'secondary';
-    const onclick = (opts && opts.onclick) ? ` onclick="${opts.onclick}"` : '';
-    const id = (opts && opts.id) ? ` id="${opts.id}"` : '';
-    return `<button class="btn btn-${v}"${id}${onclick}>${label}</button>`;
-  },
-
-  stopBtn(onclick) {
-    return `<button class="btn-stop" onclick="${onclick}"><span class="btn-stop__icon"></span></button>`;
-  },
-
-  badge(text, state) {
-    const color = STATE_BADGE[state] || 'running';
-    return `<span class="badge badge-${color}">${escapeHtml(text)}</span>`;
-  },
-
-  card(content, opts) {
-    const onclick = (opts && opts.onclick) ? ` onclick="${opts.onclick}"` : '';
-    const cls = (opts && opts.className) ? ' ' + opts.className : '';
-    return `<div class="card${cls}"${onclick}>${content}</div>`;
-  },
-
-  tabs(items, activeTab) {
-    let html = '<div class="tabs">';
-    for (const item of items) {
-      const cls = item.key === activeTab ? ' active' : '';
-      html += `<button class="tab${cls}" data-tab="${item.key}">${escapeHtml(item.label)}</button>`;
-    }
-    html += '</div>';
-    return html;
-  },
-
-  stateGroupLabel(group, count) {
-    return `<div class="state-group-label"><span class="state-dot state-dot-${group}"></span>${group} (${count})</div>`;
-  },
-
-  emptyState(icon, title, subtitle) {
-    return `<div class="empty-state">${icon}<div class="empty-state-title">${escapeHtml(title)}</div><div class="empty-state-subtitle">${escapeHtml(subtitle)}</div></div>`;
-  },
-
   metricsStrip(cells) {
     let html = '<div class="usage-metrics">';
-    for (let i = 0; i < cells.length; i++) {
-      const c = cells[i];
+    for (const c of cells) {
       html += '<div class="usage-metric">';
       html += `<div class="usage-metric__label">${escapeHtml(c.label)}</div>`;
       html += `<div class="usage-metric__value">${escapeHtml(c.value)}</div>`;
@@ -91,10 +171,8 @@ export const UI = {
       }
       html += '</div>';
     }
-    html += '</div>';
-    return html;
+    return html + '</div>';
   },
-
   chartContainer(title, chartHtml, rightAction) {
     return `<div class="usage-chart-card">
       <div class="usage-chart-card__header">
@@ -104,135 +182,24 @@ export const UI = {
       ${chartHtml}
     </div>`;
   },
-
   chartBar(opts) {
     const todayCls = opts.isToday ? ' usage-bar--today' : '';
     const tooltip = `<div class="chart-tooltip">${escapeHtml(opts.value)} &middot; ${escapeHtml(opts.label)}</div>`;
-    let todayLabel = '';
-    if (opts.isToday) {
-      todayLabel = '<span class="usage-bar-today-label">Today</span>';
-    }
-    return `<div class="usage-bar${todayCls}" style="height:${opts.height}%">
-      ${tooltip}
-      <span class="usage-bar-label">${escapeHtml(opts.label)}</span>
-      ${todayLabel}
-    </div>`;
+    const todayLabel = opts.isToday ? '<span class="usage-bar-today-label">Today</span>' : '';
+    return `<div class="usage-bar${todayCls}" style="height:${opts.height}%">${tooltip}<span class="usage-bar-label">${escapeHtml(opts.label)}</span>${todayLabel}</div>`;
   },
-
   dateRangeSelector(options, active, onclickFn) {
     let html = '<div class="date-range-selector">';
     for (const opt of options) {
       const cls = opt.value === active ? ' date-range-option--active' : '';
       html += `<button class="date-range-option${cls}" onclick="${onclickFn}(${opt.value})">${escapeHtml(opt.label)}</button>`;
     }
-    html += '</div>';
-    return html;
+    return html + '</div>';
   },
-
   tableCard(title, tableHtml) {
     return `<div class="usage-table-container">
       <div class="usage-table__title">${escapeHtml(title)}</div>
       ${tableHtml}
-    </div>`;
-  },
-
-  subagentRow(sub) {
-    const statusColor = sub.status === 'completed' ? 'completed' : sub.status === 'failed' ? 'failed' : 'running';
-    const name = escapeHtml(sub.name || sub.type || 'subagent');
-    const task = sub.task ? escapeHtml(sub.task) : '';
-    const mode = sub.mode ? escapeHtml(sub.mode) : '';
-    const dur = sub.started_at ? durationFromTimestamp(sub.started_at) : '';
-    return `<div class="agent-card__subagent-row">
-      <span class="subagent-status-dot subagent-status-dot--${statusColor}"></span>
-      <span class="agent-card__subagent-name">${name}</span>
-      <span class="agent-card__subagent-task">${task}</span>
-      ${mode ? '<span class="agent-card__subagent-mode">' + mode + '</span>' : ''}
-      <span class="agent-card__subagent-duration">${escapeHtml(dur)}</span>
-    </div>`;
-  },
-
-  fileStatusIndicator(status) {
-    switch (status) {
-      case 'added':
-        return '<span class="file-status file-status--added">+</span>';
-      case 'deleted':
-        return '<span class="file-status file-status--deleted">&minus;</span>';
-      case 'renamed':
-        return '<span class="file-status file-status--renamed">&rarr;</span>';
-      default:
-        return '<span class="file-status file-status--modified"></span>';
-    }
-  },
-
-  toggleSwitch(label, key, defaultOn) {
-    const checked = defaultOn ? ' checked' : '';
-    return `<label class="toggle-switch">
-      <span class="toggle-switch__label">${escapeHtml(label)}</span>
-      <input type="checkbox" class="toggle-switch__input" data-key="${escapeHtml(key)}"${checked}>
-      <span class="toggle-switch__track"></span>
-    </label>`;
-  },
-
-  collapsibleSection(id, label, open) {
-    const openAttr = open ? ' open' : '';
-    return `<details class="collapsible-section" id="${id}-section"${openAttr}>
-      <summary class="collapsible-summary" data-section="${id}">${escapeHtml(label)}</summary>
-      <div class="collapsible-body" id="${id}"></div>
-    </details>`;
-  },
-
-  vitalSigns(opts) {
-    const phase = opts.phase || '';
-    const totalPhases = opts.totalPhases || 0;
-    const elapsed = opts.elapsed || '';
-    const tokens = opts.tokens || 0;
-    const cost = opts.cost || 0;
-    const currentPhase = opts.currentPhase || 0;
-
-    const hasPhase = totalPhases > 0 || phase;
-    let phaseValue = '';
-    let progressHtml = '';
-
-    if (totalPhases > 0) {
-      phaseValue = `<span>${currentPhase} of ${totalPhases}</span>`;
-      if (phase) phaseValue += ` <span class="vital-phase-name">&middot; ${escapeHtml(phase)}</span>`;
-      progressHtml = '<div class="progress-segments">';
-      for (let i = 1; i <= totalPhases; i++) {
-        if (i < currentPhase) progressHtml += '<div class="progress-segment progress-segment--complete"></div>';
-        else if (i === currentPhase) progressHtml += '<div class="progress-segment progress-segment--current"></div>';
-        else progressHtml += '<div class="progress-segment progress-segment--pending"></div>';
-      }
-      progressHtml += '</div>';
-    } else if (phase) {
-      phaseValue = escapeHtml(phase);
-    }
-
-    let phaseCellHtml = '';
-    if (hasPhase) {
-      phaseCellHtml = `<div class="vital-cell">
-        <span class="vital-label">Phase</span>
-        <span class="vital-value vital-value--phase">${phaseValue}</span>
-      </div>
-      <div class="vital-divider"></div>`;
-    }
-
-    return `<div class="vital-signs" role="status">
-      ${phaseCellHtml}
-      <div class="vital-cell">
-        <span class="vital-label">Elapsed</span>
-        <span class="vital-value">${escapeHtml(elapsed)}</span>
-      </div>
-      <div class="vital-divider"></div>
-      <div class="vital-cell">
-        <span class="vital-label">Tokens</span>
-        <span class="vital-value">${formatTokens(tokens)}</span>
-      </div>
-      <div class="vital-divider"></div>
-      <div class="vital-cell">
-        <span class="vital-label">Cost</span>
-        <span class="vital-value vital-value--cost">${formatCost(cost) || '&mdash;'}</span>
-      </div>
-      ${progressHtml}
     </div>`;
   },
 };
