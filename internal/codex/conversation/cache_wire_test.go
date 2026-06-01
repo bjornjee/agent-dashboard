@@ -83,6 +83,31 @@ func TestParentThreadID_UsesCacheAcrossCalls(t *testing.T) {
 	}
 }
 
+// Originator returns payload.originator from session_meta and must share
+// the same per-session cache as ParentThreadID — TopLevelAgents calls
+// both for every codex agent on every stateUpdatedMsg, and the meta read
+// must happen at most once per agent within the TTL window.
+func TestOriginator_UsesCacheAcrossCalls(t *testing.T) {
+	t.Cleanup(conversation.InvalidateCacheForTest)
+
+	root := t.TempDir()
+	sid := "desktop-sid"
+	target := writeRollout(t, root, "2026", "05", "29", sid, `{"timestamp":"2026-05-29T23:33:05.658Z","type":"session_meta","payload":{"id":"desktop-sid","timestamp":"2026-05-29T23:33:05.658Z","originator":"Codex Desktop","source":"vscode","thread_source":"user"}}
+`)
+
+	if got := conversation.Originator(root, sid); got != conversation.OriginatorDesktopApp {
+		t.Fatalf("first call: got %q, want %q", got, conversation.OriginatorDesktopApp)
+	}
+
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := conversation.Originator(root, sid); got != conversation.OriginatorDesktopApp {
+		t.Errorf("second call after file removed: got %q, want cached %q", got, conversation.OriginatorDesktopApp)
+	}
+}
+
 // FindSubagents results must be cached by parent session ID so background
 // polling every 5s doesn't re-walk the full sessions tree.
 func TestFindSubagents_UsesCacheAcrossCalls(t *testing.T) {

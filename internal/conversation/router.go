@@ -64,19 +64,32 @@ func ReadSubagents(agent domain.Agent, roots Roots) []domain.SubagentInfo {
 	}
 }
 
-// TopLevelAgents filters out codex sessions that are themselves subagents
-// of another session. The check is per-agent (not a global walk) — for
-// each codex agent we ask whether its own rollout file carries a
-// parent_thread_id. Both LocateRollout and the session_meta read are
-// cached, so repeated calls within the TTL window cost O(map lookups).
+// TopLevelAgents filters out codex sessions that should not appear at the
+// top of the dashboard:
+//
+//  1. Codex subagents of another session (those with a parent_thread_id in
+//     their session_meta) — the parent shows them under its subagent list.
+//  2. Sessions written by the Codex desktop app (payload.originator ==
+//     OriginatorDesktopApp). They share ~/.codex/sessions/ with codex-tui
+//     but represent the desktop GUI, which the dashboard intentionally
+//     does not surface.
+//
+// The check is per-agent (not a global walk). ParentThreadID and Originator
+// share a per-session cache, so both lookups for the same agent hit the
+// same cached session_meta read within the TTL window.
 func TopLevelAgents(agents []domain.Agent, roots Roots) []domain.Agent {
 	if len(agents) == 0 {
 		return nil
 	}
 	out := make([]domain.Agent, 0, len(agents))
 	for _, agent := range agents {
-		if agent.Harness == "codex" && codexconv.ParentThreadID(roots.CodexSessionsRoot, agent.SessionID) != "" {
-			continue
+		if agent.Harness == "codex" {
+			if codexconv.ParentThreadID(roots.CodexSessionsRoot, agent.SessionID) != "" {
+				continue
+			}
+			if codexconv.Originator(roots.CodexSessionsRoot, agent.SessionID) == codexconv.OriginatorDesktopApp {
+				continue
+			}
 		}
 		out = append(out, agent)
 	}
