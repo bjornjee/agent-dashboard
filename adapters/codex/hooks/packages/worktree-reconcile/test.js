@@ -45,23 +45,61 @@ function recordingSpawn(handlers) {
 }
 
 describe('reconcileWorktree', () => {
-  it('returns null when fully pinned (worktree_cwd + branch) — no syscalls', () => {
+  it('returns null when fully pinned to a linked worktree', () => {
+    const { root: source } = makeMainRepo();
+    const { wtRoot } = makeLinkedWorktree(source);
     const { spawnSync, calls } = recordingSpawn({});
-    const fsSpy = { calls: [] };
-    const proxiedFs = new Proxy(fs, {
-      get(target, prop) {
-        fsSpy.calls.push(prop);
-        return target[prop];
-      },
-    });
+
     const out = reconcileWorktree({
-      input: { cwd: '/whatever' },
-      existing: { worktree_cwd: '/already/pinned', branch: 'feat/x' },
+      input: { cwd: wtRoot },
+      existing: { worktree_cwd: wtRoot, branch: 'feat/x' },
       sessionId: 'sess-1',
-    }, { spawnSync, fs: proxiedFs });
+    }, { spawnSync });
+
     assert.equal(out, null);
     assert.equal(calls.length, 0, 'no git subprocess fired');
-    assert.equal(fsSpy.calls.length, 0, 'no fs syscalls fired');
+  });
+
+  it('does not short-circuit when existing pin still points at the main checkout', () => {
+    const { root: source } = makeMainRepo();
+    const { wtRoot, perWorktreeDir } = makeLinkedWorktree(source);
+
+    const { spawnSync } = recordingSpawn({
+      [`git -C ${source} worktree list --porcelain`]:
+        `worktree ${source}\nHEAD abc\nbranch refs/heads/main\n\nworktree ${wtRoot}\nHEAD def\nbranch refs/heads/feat/foo\n`,
+      [`git -C ${wtRoot} rev-parse --absolute-git-dir`]: `${perWorktreeDir}\n`,
+    });
+
+    const out = reconcileWorktree({
+      input: { cwd: source },
+      existing: { cwd: source, worktree_cwd: source, branch: 'main' },
+      sessionId: 'sess-main-to-wt',
+    }, { spawnSync });
+
+    assert.equal(out.worktree_cwd, wtRoot);
+    assert.equal(out.branch, 'feat/foo');
+  });
+
+  it('does not short-circuit when existing pin points at main and cwd is a subdirectory', () => {
+    const { root: source } = makeMainRepo();
+    const subdir = path.join(source, 'packages', 'app');
+    fs.mkdirSync(subdir, { recursive: true });
+    const { wtRoot, perWorktreeDir } = makeLinkedWorktree(source);
+
+    const { spawnSync } = recordingSpawn({
+      [`git -C ${source} worktree list --porcelain`]:
+        `worktree ${source}\nHEAD abc\nbranch refs/heads/main\n\nworktree ${wtRoot}\nHEAD def\nbranch refs/heads/feat/subdir\n`,
+      [`git -C ${wtRoot} rev-parse --absolute-git-dir`]: `${perWorktreeDir}\n`,
+    });
+
+    const out = reconcileWorktree({
+      input: { cwd: subdir },
+      existing: { cwd: subdir, worktree_cwd: source, branch: 'main' },
+      sessionId: 'sess-main-subdir-to-wt',
+    }, { spawnSync });
+
+    assert.equal(out.worktree_cwd, wtRoot);
+    assert.equal(out.branch, 'feat/subdir');
   });
 
   it('branch backfill: worktree_cwd set, branch empty → returns {branch} and drops marker', () => {
@@ -307,20 +345,38 @@ describe('reconcileWorktree spawn-pin consumer', () => {
     assert.equal(calls.length, 0, 'no git subprocess needed when staged pin wins');
   });
 
-  it('skips staged pin when existing.worktree_cwd is already set', () => {
+  it('skips staged pin when existing.worktree_cwd already points at a linked worktree', () => {
     const dashboardDir = tempDir();
     fs.mkdirSync(path.join(dashboardDir, 'spawn-pins'), { recursive: true });
     const pinPath = path.join(dashboardDir, 'spawn-pins', '_99.json');
     fs.writeFileSync(pinPath, JSON.stringify({ pane_id: '%99', worktree_cwd: '/new', branch: 'b' }));
+    const { root: source } = makeMainRepo();
+    const { wtRoot } = makeLinkedWorktree(source);
 
     const out = reconcileWorktree(
-      { input: { cwd: '/x' }, existing: { worktree_cwd: '/old', branch: 'b' }, sessionId: 's' },
+      { input: { cwd: wtRoot }, existing: { worktree_cwd: wtRoot, branch: 'b' }, sessionId: 's' },
       { spawnSync: () => ({ status: 1 }), env: { TMUX_PANE: '%99', AGENT_DASHBOARD_DIR: dashboardDir } },
     );
 
-    // Already fully pinned — the function returns null and never touches the staging file
+    // Already fully claimed — the function returns null and never touches the staging file.
     assert.equal(out, null);
     assert.equal(fs.existsSync(pinPath), true, 'staging file untouched when already pinned');
+  });
+
+  it('consumes staged pin when existing worktree_cwd still points at main', () => {
+    const dashboardDir = tempDir();
+    fs.mkdirSync(path.join(dashboardDir, 'spawn-pins'), { recursive: true });
+    const pinPath = path.join(dashboardDir, 'spawn-pins', '_99.json');
+    fs.writeFileSync(pinPath, JSON.stringify({ pane_id: '%99', worktree_cwd: '/new', branch: 'b' }));
+    const { root: source } = makeMainRepo();
+
+    const out = reconcileWorktree(
+      { input: { cwd: source }, existing: { cwd: source, worktree_cwd: source, branch: 'main' }, sessionId: 's' },
+      { spawnSync: () => ({ status: 1 }), env: { TMUX_PANE: '%99', AGENT_DASHBOARD_DIR: dashboardDir } },
+    );
+
+    assert.deepEqual(out, { worktree_cwd: '/new', branch: 'b' });
+    assert.equal(fs.existsSync(pinPath), false, 'staging file consumed when existing state is not linked');
   });
 
   it('falls through to marker logic when no staged pin exists', () => {

@@ -1,12 +1,16 @@
 'use strict';
 
 /**
- * Deterministic worktree pinning for the JS hooks.
+ * Deterministic worktree ownership for JS hooks and skill setup scripts.
  *
- * The hook calls reconcileWorktree() on PreToolUse / PostToolUse / SessionStart.
+ * Hooks call reconcileWorktree() on PreToolUse / PostToolUse / SessionStart.
  * The function asks the filesystem + git (NOT the agent's Bash command) where
  * this session's worktree is, and atomically claims it via a marker file at
  * <git-dir>/agent-dashboard-session.
+ *
+ * Skills call claimWorktreeForPane() once after creating and entering a linked
+ * worktree. That explicit path shares marker/state semantics with reconcile
+ * but does not try to infer intent from hook timing.
  *
  * Determinism guarantees:
  *   • POSIX mtime updates atomically on directory adds/removes.
@@ -35,7 +39,7 @@ const GIT_TIMEOUT_MS = 2000;
  * deterministically.
  */
 function consumeSpawnPin({ fs, path, env, existing }) {
-  if (existing && existing.worktree_cwd) return null;
+  if (existing && existing.worktree_cwd && isLinkedWorktreePath(fs, path, existing.worktree_cwd)) return null;
   const paneId = env.TMUX_PANE;
   if (!paneId) return null;
   const home = env.HOME || env.USERPROFILE || '/tmp';
@@ -203,11 +207,84 @@ function resolveWorktreeGitDir(spawnSync, worktreePath) {
   return r.stdout.trim();
 }
 
+function canonicalPath(fs, path, p) {
+  try { return fs.realpathSync(p); } catch {}
+  try { return path.resolve(p); } catch {}
+  return p;
+}
+
+function findAgentByPane(readAllState, agentsDir, paneId) {
+  const state = readAllState(agentsDir);
+  for (const agent of Object.values(state.agents || {})) {
+    if (agent && agent.tmux_pane_id === paneId) return agent;
+  }
+  return null;
+}
+
+function reapStaleMarker(fs, path, stateDir, gitDir) {
+  const marker = path.join(gitDir, MARKER_NAME);
+  let owner;
+  try { owner = fs.readFileSync(marker, 'utf8').trim(); } catch { return; }
+  if (!owner) return;
+  if (fs.existsSync(path.join(stateDir, 'agents', owner + '.json'))) return;
+  try { fs.unlinkSync(marker); } catch {}
+}
+
+function isLinkedWorktreePath(fs, path, p) {
+  const info = findGitDir(fs, path, p);
+  return !!(info && info.type === 'linked');
+}
+
+/**
+ * Explicitly claim a linked worktree for the agent currently running in a
+ * tmux pane. This is the skill-directed path used immediately after a
+ * worktree is created and entered. It differs from reconcileWorktree(), which
+ * is the automatic hook recovery path.
+ */
+function claimWorktreeForPane({ worktreePath, paneId, stateDir, readAllState, writeState }, opts) {
+  if (!paneId) throw new Error('TMUX_PANE is required');
+  if (!worktreePath) throw new Error('worktree path is required');
+  if (!stateDir) throw new Error('state directory is required');
+  if (typeof readAllState !== 'function') throw new Error('readAllState is required');
+  if (typeof writeState !== 'function') throw new Error('writeState is required');
+
+  const o = opts || {};
+  const fs = o.fs || realFs;
+  const path = o.path || realPath;
+  const spawnSync = o.spawnSync || realSpawnSync;
+
+  const agentsDir = path.join(stateDir, 'agents');
+  const agent = findAgentByPane(readAllState, agentsDir, paneId);
+  if (!agent) throw new Error(`no agent state found for pane ${paneId}`);
+  if (!agent.session_id) throw new Error(`agent for pane ${paneId} has no session_id`);
+
+  const absPath = path.resolve(worktreePath);
+  const info = findGitDir(fs, path, absPath);
+  if (!info || info.type !== 'linked') throw new Error(`${absPath} is not a linked worktree`);
+
+  const want = canonicalPath(fs, path, info.worktreeRoot);
+  const wts = listWorktrees(spawnSync, info.worktreeRoot);
+  for (const wt of wts) {
+    if (canonicalPath(fs, path, wt.path) !== want) continue;
+    const gitDir = resolveWorktreeGitDir(spawnSync, wt.path);
+    if (!gitDir) throw new Error(`worktree git dir not found for ${wt.path}`);
+    reapStaleMarker(fs, path, stateDir, gitDir);
+    const claimed = claimMarker(fs, path, gitDir, agent.session_id);
+    if (!claimed.match) throw new Error('worktree marker is owned by another session');
+
+    const update = { worktree_cwd: wt.path, branch: wt.branch || '' };
+    writeState(agent.session_id, update, agentsDir);
+    return update;
+  }
+
+  throw new Error(`worktree ${absPath} not found in git worktree list`);
+}
+
 /**
  * The 5-step reconciliation flow. Returns a partial update object to merge
  * into the agent's state file, or null when there is nothing to write.
  *
- *   1. existing.worktree_cwd already set → null.
+ *   1. existing.worktree_cwd points at a linked worktree → null.
  *   2. fs walk to .git. Linked worktree → claim and return.
  *   3. main worktree → stat <source>/.git/worktrees/ mtime.
  *      ENOENT → null. Never invoke git when no linked worktrees exist.
@@ -226,8 +303,8 @@ function reconcileWorktree({ input, existing, sessionId }, opts) {
   const spawnSync = o.spawnSync || realSpawnSync;
   const env = o.env || process.env;
 
-  // Steady state — fully pinned. Nothing to do.
-  if (existing && existing.worktree_cwd && existing.branch) return null;
+  // Steady state — fully pinned to a linked worktree. Nothing to do.
+  if (existing && existing.worktree_cwd && existing.branch && isLinkedWorktreePath(fs, path, existing.worktree_cwd)) return null;
 
   // Dashboard-staged spawn-pin path. When the dashboard spawned this agent
   // it left a record at <stateDir>/spawn-pins/<pane_id>.json with the
@@ -242,7 +319,7 @@ function reconcileWorktree({ input, existing, sessionId }, opts) {
   // (legacy state from before the atomic pin, or a partial write). One git
   // call. Also drop the marker if absent so future state-file wipes can
   // recover via Go's ResolveAgentWorktree.
-  if (existing && existing.worktree_cwd) {
+  if (existing && existing.worktree_cwd && !existing.branch) {
     const branch = getBranch(spawnSync, existing.worktree_cwd);
     const info = findGitDir(fs, path, existing.worktree_cwd);
     if (info && info.type === 'linked') {
@@ -294,6 +371,7 @@ function reconcileWorktree({ input, existing, sessionId }, opts) {
 
 module.exports = {
   reconcileWorktree,
+  claimWorktreeForPane,
   // Exported for direct unit tests.
   findGitDir,
   claimMarker,

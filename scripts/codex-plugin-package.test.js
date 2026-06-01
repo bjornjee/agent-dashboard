@@ -246,12 +246,12 @@ describe('codex plugin package', () => {
       assert.match(
         text,
         /git worktree add[^\n]+as its own `exec_command` tool call/,
-        `${skillName} must require standalone git worktree add so hooks can pin the worktree`,
+        `${skillName} must require standalone git worktree add so hooks can detect the worktree`,
       );
       assert.match(
         text,
-        /stamp-worktree\.js/,
-        `${skillName} must still run the explicit stamp helper after creating the worktree`,
+        /claim-worktree\.js/,
+        `${skillName} must explicitly run the JS claim script after entering the worktree`,
       );
       assert.match(
         text,
