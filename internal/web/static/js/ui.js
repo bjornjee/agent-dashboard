@@ -160,64 +160,9 @@ export const UI = {
     el.style.height = Math.min(el.scrollHeight, 160) + 'px';
   },
 
-  // --- Legacy fallbacks for the out-of-scope Usage view ---
-  // Kept as thin shims so usage.js still renders. Not part of the 9-primitive set.
-  spinner() {
-    return '<span class="spinner spinner-inline"></span>';
-  },
-  header(title) {
-    return UI.appBar({
-      back: true,
-      title,
-      trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
-    });
-  },
+  // Loading placeholder — used by Usage view and any future page that
+  // needs a spinner while fetching. Intentionally tiny.
   loadingBlock() {
     return '<div class="loading"><span class="spinner"></span></div>';
-  },
-  metricsStrip(cells) {
-    let html = '<div class="usage-metrics">';
-    for (const c of cells) {
-      html += '<div class="usage-metric">';
-      html += `<div class="usage-metric__label">${escapeHtml(c.label)}</div>`;
-      html += `<div class="usage-metric__value">${escapeHtml(c.value)}</div>`;
-      if (c.delta) {
-        const cls = c.delta.direction === 'up' ? 'usage-metric__delta--up'
-          : c.delta.direction === 'down' ? 'usage-metric__delta--down'
-          : 'usage-metric__delta--neutral';
-        html += `<div class="usage-metric__delta ${cls}">${escapeHtml(c.delta.text)}</div>`;
-      }
-      html += '</div>';
-    }
-    return html + '</div>';
-  },
-  chartContainer(title, chartHtml, rightAction) {
-    return `<div class="usage-chart-card">
-      <div class="usage-chart-card__header">
-        <div class="usage-chart__title">${escapeHtml(title)}</div>
-        ${rightAction || ''}
-      </div>
-      ${chartHtml}
-    </div>`;
-  },
-  chartBar(opts) {
-    const todayCls = opts.isToday ? ' usage-bar--today' : '';
-    const tooltip = `<div class="chart-tooltip">${escapeHtml(opts.value)} &middot; ${escapeHtml(opts.label)}</div>`;
-    const todayLabel = opts.isToday ? '<span class="usage-bar-today-label">Today</span>' : '';
-    return `<div class="usage-bar${todayCls}" style="height:${opts.height}%">${tooltip}<span class="usage-bar-label">${escapeHtml(opts.label)}</span>${todayLabel}</div>`;
-  },
-  dateRangeSelector(options, active, onclickFn) {
-    let html = '<div class="date-range-selector">';
-    for (const opt of options) {
-      const cls = opt.value === active ? ' date-range-option--active' : '';
-      html += `<button class="date-range-option${cls}" onclick="${onclickFn}(${opt.value})">${escapeHtml(opt.label)}</button>`;
-    }
-    return html + '</div>';
-  },
-  tableCard(title, tableHtml) {
-    return `<div class="usage-table-container">
-      <div class="usage-table__title">${escapeHtml(title)}</div>
-      ${tableHtml}
-    </div>`;
   },
 };

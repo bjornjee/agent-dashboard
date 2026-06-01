@@ -1,7 +1,15 @@
-// Usage view.
+// Usage view — codex-iOS register, desktop + mobile.
+//
+// Phases:
+//   1. Render shell (app-bar + loading placeholder).
+//   2. Await rate-limit + daily endpoints in parallel.
+//   3. Replace placeholder with a single ui-card stack so the previous
+//      insertAdjacentHTML race (rate-limit card was getting wiped by the
+//      usage-data write) cannot recur.
 import { UI } from '../ui.js';
 import { escapeHtml, repoName, formatTokens, formatCostFull, formatDateShort } from '../format.js';
 import { get } from '../api.js';
+import { ICONS } from '../icons.js';
 
 const RANGE_OPTIONS = [
   { label: 'Week', value: 7 },
@@ -14,72 +22,101 @@ const RANGE_LABELS = { 7: 'This week', 30: 'Last 30 days', 90: 'Last 90 days', 0
 
 let currentAgents = [];
 let currentRange = 7;
+let cachedRateLimits = null;
+let cachedDaily = null;
 
 export async function renderUsage(app, agents) {
   currentAgents = agents;
-  app.innerHTML = UI.header('Agent Dashboard', {
-    actions: [{ label: '&larr; Back', onclick: 'Dashboard.showList()' }],
-  }) + '<div class="usage-view">' + UI.loadingBlock() + '</div>';
+  cachedRateLimits = null;
+  cachedDaily = null;
+  app.innerHTML =
+    UI.appBar({
+      back: true,
+      title: 'Usage',
+      trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
+    }) +
+    '<div class="usage-view"><div class="usage-view__loading">' + UI.loadingBlock() + '</div></div>';
 
-  // Load rate limits and usage data in parallel
-  await Promise.all([loadRateLimits(), loadUsageData()]);
+  const [rl, daily] = await Promise.all([fetchRateLimits(), fetchDaily(currentRange)]);
+  cachedRateLimits = rl;
+  cachedDaily = daily;
+  paintAll();
+  loadAgentBreakdown(currentAgents);
 }
 
-// Exposed globally for onclick from dateRangeSelector
 window.Dashboard = window.Dashboard || {};
 window.Dashboard.setUsageRange = async function(days) {
   if (days === currentRange) return;
   currentRange = days;
-  const chartSection = document.getElementById('usage-chart-section');
-  if (chartSection) chartSection.innerHTML = UI.loadingBlock();
-  await loadUsageData();
+  cachedDaily = await fetchDaily(days);
+  paintAll();
+  loadAgentBreakdown(currentAgents);
 };
 
-async function loadRateLimits() {
+// ---------- data layer ----------
+
+async function fetchRateLimits() {
   try {
-    const resp = await fetch('/api/usage/ratelimit', {
-      headers: { 'X-Requested-With': 'dashboard' },
-    });
-    if (resp.status === 204 || !resp.ok) return;
-    const rl = await resp.json();
-    const view = document.querySelector('.usage-view');
-    if (!view) return;
-
-    const windows = [];
-    if (rl.session) windows.push(renderRateBar('Session (5h)', rl.session));
-    if (rl.weekly) windows.push(renderRateBar('Weekly', rl.weekly));
-    if (rl.opus) windows.push(renderRateBar('Opus (weekly)', rl.opus));
-    if (rl.sonnet) windows.push(renderRateBar('Sonnet (weekly)', rl.sonnet));
-
-    if (windows.length === 0) return;
-
-    let extraHtml = '';
-    if (rl.extra_usage && rl.extra_usage.enabled) {
-      extraHtml = `<div class="rate-limit-extra">Extra Usage: ${formatCostFull(rl.extra_usage.used_credits)} / ${formatCostFull(rl.extra_usage.monthly_limit)}</div>`;
-    }
-
-    const planLabel = rl.plan ? ` <span class="rate-limit-plan">${escapeHtml(rl.plan)}</span>` : '';
-    const card = `<div class="card rate-limit-card">
-      <div class="card-header">Rate Limits${planLabel}</div>
-      <div class="card-body">${windows.join('')}${extraHtml}</div>
-    </div>`;
-
-    // Insert before existing content
-    view.insertAdjacentHTML('afterbegin', card);
-  } catch { /* silently skip if unavailable */ }
+    const resp = await fetch('/api/usage/ratelimit', { headers: { 'X-Requested-With': 'dashboard' } });
+    if (resp.status === 204 || !resp.ok) return null;
+    return await resp.json();
+  } catch { return null; }
 }
 
-function renderRateBar(label, window) {
-  const pct = Math.min(100, Math.max(0, window.used_percent || 0));
-  const resetText = window.resets_at ? formatResetDuration(window.resets_at) : '';
-  const barColor = pct >= 80 ? 'var(--accent-red)' : pct >= 60 ? 'var(--accent-amber)' : 'var(--accent-green)';
-  return `<div class="rate-limit-row">
-    <span class="rate-limit-label">${escapeHtml(label)}</span>
-    <div class="rate-limit-bar-track">
-      <div class="rate-limit-bar-fill" style="width:${pct}%;background:${barColor}"></div>
-    </div>
-    <span class="rate-limit-pct">${Math.round(pct)}%</span>
-    ${resetText ? `<span class="rate-limit-reset">${escapeHtml(resetText)}</span>` : ''}
+async function fetchDaily(days) {
+  return await get('/api/usage/daily?days=' + days);
+}
+
+// ---------- render layer ----------
+
+function paintAll() {
+  const view = document.querySelector('.usage-view');
+  if (!view) return;
+  const parts = [];
+  if (cachedRateLimits) {
+    const card = rateLimitCard(cachedRateLimits);
+    if (card) parts.push(card);
+  }
+  if (cachedDaily) {
+    parts.push(metricsCard(cachedDaily));
+    parts.push(tokenCard(cachedDaily));
+    parts.push(chartCard(cachedDaily));
+  }
+  // Agent breakdown slot — loadAgentBreakdown() writes into it post-paint.
+  parts.push('<div id="usage-agent-breakdown" class="usage-agent-breakdown">' + UI.loadingBlock() + '</div>');
+  view.innerHTML = parts.join('');
+}
+
+function rateLimitCard(rl) {
+  const rows = [];
+  if (rl.session) rows.push(rateRow('Session (5h)', rl.session));
+  if (rl.weekly) rows.push(rateRow('Weekly', rl.weekly));
+  if (rl.opus) rows.push(rateRow('Opus (weekly)', rl.opus));
+  if (rl.sonnet) rows.push(rateRow('Sonnet (weekly)', rl.sonnet));
+  if (rows.length === 0) return null;
+
+  let extra = '';
+  if (rl.extra_usage && rl.extra_usage.enabled) {
+    extra = `<div class="usage-rate__extra">Extra Usage <span class="usage-rate__extra-value">${formatCostFull(rl.extra_usage.used_credits)} / ${formatCostFull(rl.extra_usage.monthly_limit)}</span></div>`;
+  }
+  const plan = rl.plan ? `<span class="usage-card__meta">${escapeHtml(rl.plan)}</span>` : '';
+  const header = `<div class="usage-card__header"><span class="usage-card__title">Rate Limits</span>${plan}</div>`;
+  return UI.card(header + '<div class="usage-rate__rows">' + rows.join('') + '</div>' + extra);
+}
+
+function rateRow(label, win) {
+  const pct = Math.min(100, Math.max(0, win.used_percent || 0));
+  const resetText = win.resets_at ? formatResetDuration(win.resets_at) : '';
+  // Status semantics only when threshold crossed. Neutral default per register
+  // (no --accent-green fills outside running-status dot).
+  let fillCls = 'usage-rate__fill';
+  if (pct >= 80) fillCls += ' usage-rate__fill--warn';
+  else if (pct >= 60) fillCls += ' usage-rate__fill--caution';
+  return `<div class="usage-rate__row">
+    <span class="usage-rate__label">${escapeHtml(label)}</span>
+    <div class="usage-rate__track"><div class="${fillCls}" style="width:${pct}%"></div></div>
+    <span class="usage-rate__pct">${Math.round(pct)}%</span>
+    ${resetText ? `<span class="usage-rate__reset">${escapeHtml(resetText)}</span>` : ''}
   </div>`;
 }
 
@@ -98,38 +135,52 @@ function formatResetDuration(isoStr) {
   return `resets in ${mins}m`;
 }
 
-async function loadUsageData() {
-  const data = await get('/api/usage/daily?days=' + currentRange);
-  if (!data) return;
-
+function metricsCard(data) {
   const days = data.days || [];
-  const todayStr = new Date().toISOString().slice(0, 10);
   const periodTotal = days.reduce((sum, d) => sum + d.cost_usd, 0);
-
-  // Delta: compare today vs yesterday by exact date
   const todayCost = data.today_cost || 0;
   const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const yesterdayEntry = days.find(d => d.date === yesterdayStr);
   const delta = buildDelta(todayCost, yesterdayEntry ? yesterdayEntry.cost_usd : null);
-
   const periodLabel = currentRange === 0 ? 'All time' : 'This period';
-  const metricsHtml = UI.metricsStrip([
-    { label: 'Today', value: formatCostFull(todayCost), delta },
-    { label: periodLabel, value: formatCostFull(periodTotal) },
-    { label: 'All time', value: formatCostFull(data.total_cost || 0) },
-  ]);
+  const cells = [
+    metricCell('Today', formatCostFull(todayCost), delta),
+    metricCell(periodLabel, formatCostFull(periodTotal), null),
+    metricCell('All time', formatCostFull(data.total_cost || 0), null),
+  ];
+  return UI.card('<div class="usage-metrics">' + cells.join('') + '</div>');
+}
 
-  const rangeSelector = UI.dateRangeSelector(RANGE_OPTIONS, currentRange, 'Dashboard.setUsageRange');
-  const chartHtml = buildChart(days, todayStr);
-  const chartCard = UI.chartContainer(RANGE_LABELS[currentRange] || 'Usage', chartHtml, rangeSelector);
+function metricCell(label, value, delta) {
+  const deltaHtml = delta
+    ? `<div class="usage-metric__delta usage-metric__delta--${delta.direction}">${escapeHtml(delta.text)}</div>`
+    : '';
+  return `<div class="usage-metric">
+    <div class="usage-metric__label">${escapeHtml(label)}</div>
+    <div class="usage-metric__value">${escapeHtml(value)}</div>
+    ${deltaHtml}
+  </div>`;
+}
 
-  // Token summary table
+function buildDelta(todayCost, yesterdayCost) {
+  if (yesterdayCost == null || yesterdayCost === 0) return null;
+  const pct = ((todayCost - yesterdayCost) / yesterdayCost) * 100;
+  const absPct = Math.abs(pct);
+  const fmt = absPct < 10 ? absPct.toFixed(1) + '%' : Math.round(absPct) + '%';
+  if (pct > 0) return { direction: 'up', text: '▲ ' + fmt + ' vs yesterday' };
+  if (pct < 0) return { direction: 'down', text: '▼ ' + fmt + ' vs yesterday' };
+  return { direction: 'neutral', text: '— same as yesterday' };
+}
+
+function tokenCard(data) {
+  const days = data.days || [];
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const periodLabel = currentRange === 0 ? 'All time' : 'This period';
   const todayEntry = days.find(d => d.date === todayStr);
   const todayTokens = todayEntry
     ? { input: todayEntry.input_tokens || 0, output: todayEntry.output_tokens || 0, cache: (todayEntry.cache_read_tokens || 0) + (todayEntry.cache_write_tokens || 0) }
     : { input: 0, output: 0, cache: 0 };
   todayTokens.total = todayTokens.input + todayTokens.output + todayTokens.cache;
-
   const periodTokens = days.reduce((acc, d) => {
     acc.input += d.input_tokens || 0;
     acc.output += d.output_tokens || 0;
@@ -138,7 +189,8 @@ async function loadUsageData() {
   }, { input: 0, output: 0, cache: 0 });
   periodTokens.total = periodTokens.input + periodTokens.output + periodTokens.cache;
 
-  const tokenTableHtml = UI.tableCard('Token Usage', `<table class="usage-breakdown-table">
+  const header = `<div class="usage-card__header"><span class="usage-card__title">Token Usage</span></div>`;
+  const table = `<table class="usage-table">
     <thead><tr>
       <th>Period</th><th class="num">Input</th><th class="num">Output</th>
       <th class="num">Cache</th><th class="num">Total</th>
@@ -152,34 +204,36 @@ async function loadUsageData() {
         <td class="num">${formatTokens(todayTokens.total)}</td>
       </tr>
       <tr>
-        <td>${periodLabel}</td>
+        <td>${escapeHtml(periodLabel)}</td>
         <td class="num">${formatTokens(periodTokens.input)}</td>
         <td class="num">${formatTokens(periodTokens.output)}</td>
         <td class="num">${formatTokens(periodTokens.cache)}</td>
         <td class="num">${formatTokens(periodTokens.total)}</td>
       </tr>
     </tbody>
-  </table>`);
-
-  const view = document.querySelector('.usage-view');
-  if (!view) return;
-  view.innerHTML =
-    metricsHtml +
-    tokenTableHtml +
-    '<div id="usage-chart-section">' + chartCard + '</div>' +
-    '<div id="usage-agent-breakdown">' + UI.loadingBlock() + '</div>';
-
-  loadAgentBreakdown(currentAgents);
+  </table>`;
+  return UI.card(header + table);
 }
 
-function buildDelta(todayCost, yesterdayCost) {
-  if (yesterdayCost == null || yesterdayCost === 0) return null;
-  const pct = ((todayCost - yesterdayCost) / yesterdayCost) * 100;
-  const absPct = Math.abs(pct);
-  const fmt = absPct < 10 ? absPct.toFixed(1) + '%' : Math.round(absPct) + '%';
-  if (pct > 0) return { direction: 'up', text: '\u25B2 ' + fmt + ' vs yesterday' };
-  if (pct < 0) return { direction: 'down', text: '\u25BC ' + fmt + ' vs yesterday' };
-  return { direction: 'neutral', text: '\u2014 same as yesterday' };
+function chartCard(data) {
+  const days = data.days || [];
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const title = RANGE_LABELS[currentRange] || 'Usage';
+  const tabs = rangeTabs(currentRange);
+  const header = `<div class="usage-card__header">
+    <span class="usage-card__title">${escapeHtml(title)}</span>
+    ${tabs}
+  </div>`;
+  return UI.card(header + buildChart(days, todayStr));
+}
+
+function rangeTabs(active) {
+  let html = '<div class="usage-tabs" role="tablist">';
+  for (const opt of RANGE_OPTIONS) {
+    const cls = opt.value === active ? ' usage-tabs__tab--active' : '';
+    html += `<button class="usage-tabs__tab${cls}" role="tab" aria-selected="${opt.value === active}" onclick="Dashboard.setUsageRange(${opt.value})">${escapeHtml(opt.label)}</button>`;
+  }
+  return html + '</div>';
 }
 
 function buildChart(days, todayStr) {
@@ -206,7 +260,10 @@ function buildChart(days, todayStr) {
     const label = formatDateShort(day.date);
     const value = formatCostFull(day.cost_usd);
     const isToday = day.date === todayStr;
-    barsHtml += UI.chartBar({ height, label, value, isToday });
+    const todayCls = isToday ? ' usage-bar--today' : '';
+    const tooltip = `<div class="usage-bar__tooltip">${escapeHtml(value)} &middot; ${escapeHtml(label)}</div>`;
+    const todayLabel = isToday ? '<span class="usage-bar__today">Today</span>' : '';
+    barsHtml += `<div class="usage-bar${todayCls}" style="height:${height}%">${tooltip}<span class="usage-bar__label">${escapeHtml(label)}</span>${todayLabel}</div>`;
   }
   barsHtml += '</div>';
 
@@ -228,7 +285,8 @@ async function loadAgentBreakdown(agents) {
   valid.sort((a, b) => b.usage.CostUSD - a.usage.CostUSD);
 
   if (valid.length === 0) {
-    container.innerHTML = '<div style="color:var(--text-tertiary);font-size:13px;padding:8px 0">No per-agent cost data available</div>';
+    container.innerHTML = UI.card(`<div class="usage-card__header"><span class="usage-card__title">Per-agent breakdown</span></div>
+      <div class="usage-empty">No per-agent cost data available</div>`);
     return;
   }
 
@@ -245,28 +303,29 @@ async function loadAgentBreakdown(agents) {
     totals.cache += cache;
     totals.cost += u.CostUSD;
     rows += `<tr>
-      <td class="agent-name">${escapeHtml(name)}</td>
-      <td class="model">${escapeHtml((u.Model || r.agent.model || '?').toLowerCase())}</td>
+      <td class="usage-table__name">${escapeHtml(name)}</td>
+      <td class="usage-table__model">${escapeHtml((u.Model || r.agent.model || '?').toLowerCase())}</td>
       <td class="num">${formatTokens(input)}</td>
       <td class="num">${formatTokens(output)}</td>
       <td class="num">${formatTokens(cache)}</td>
-      <td class="cost">${formatCostFull(u.CostUSD)}</td>
+      <td class="num usage-table__cost">${formatCostFull(u.CostUSD)}</td>
     </tr>`;
   }
 
   let footerHtml = '';
   if (valid.length >= 2) {
     footerHtml = `<tfoot><tr>
-      <td class="agent-name">Total</td>
+      <td class="usage-table__name">Total</td>
       <td></td>
       <td class="num">${formatTokens(totals.input)}</td>
       <td class="num">${formatTokens(totals.output)}</td>
       <td class="num">${formatTokens(totals.cache)}</td>
-      <td class="cost">${formatCostFull(totals.cost)}</td>
+      <td class="num usage-table__cost">${formatCostFull(totals.cost)}</td>
     </tr></tfoot>`;
   }
 
-  const tableHtml = `<table class="usage-breakdown-table">
+  const header = `<div class="usage-card__header"><span class="usage-card__title">Per-agent breakdown</span></div>`;
+  const table = `<table class="usage-table">
     <thead><tr>
       <th>Agent</th><th>Model</th>
       <th class="num">Input</th><th class="num">Output</th>
@@ -275,6 +334,5 @@ async function loadAgentBreakdown(agents) {
     <tbody>${rows}</tbody>
     ${footerHtml}
   </table>`;
-
-  container.innerHTML = UI.tableCard('Per-agent breakdown', tableHtml);
+  container.innerHTML = UI.card(header + table);
 }
