@@ -2079,4 +2079,63 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
    * redundant on desktop — the sidebar's "+ New agent" CTA already signals
    * the active view. Hide it when the next sibling is .create-shell. */
   #app-main .ui-app-bar:has(+ .create-shell) { display: none; }
+
+  /* --------------------------------------------------------------
+   * Phase C — hover + focus-visible affordances (desktop only)
+   *
+   * Register decision: focus = 1px underline in --text-primary, no
+   * outline rectangle, no glow ring. Hover = --bg-hover fill, gated
+   * by @media (hover: hover) so touch devices don't get sticky state.
+   * Selected-row precedence: --bg-selected stays over --bg-hover.
+   * -------------------------------------------------------------- */
+
+  /* Sidebar rows: hover fill + focus underline. Selected row keeps
+   * --bg-selected because its rule appears later (cascade wins). */
+  @media (hover: hover) {
+    #app-sidebar button.ui-row:hover { background: var(--bg-hover); }
+    .app-sidebar__nav-row--selected button.ui-row:hover,
+    .app-sidebar__row--selected button.ui-row:hover { background: var(--bg-selected); }
+  }
+  #app-sidebar button.ui-row:focus-visible {
+    box-shadow: none;
+    outline: none;
+  }
+  #app-sidebar button.ui-row:focus-visible .ui-row__title {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--text-primary);
+  }
+
+  /* App-bar action buttons (kebab, future header-dock pills): the
+   * baseline button background was --bg-elevated, identical to the
+   * old :hover rule (no contrast). Replace with --bg-hover on hover
+   * and underline on focus-visible. */
+  .ui-app-bar__action:hover { background: var(--bg-hover); }
+  .ui-app-bar__action:focus-visible {
+    box-shadow: none;
+    outline: 1px solid var(--text-primary);
+    outline-offset: -1px;
+  }
+
+  /* Sheet items: register declares underline-on-label for focus. */
+  .ui-sheet__item:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+  .ui-sheet__item:focus-visible > span:not(.ui-sheet__chevron) {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--text-primary);
+  }
+
+  /* Composer attach + send + stop: underline-equivalent focus ring
+   * via outline (these have no text label to underline). */
+  .ui-composer__attach:focus-visible,
+  .ui-composer__send:focus-visible,
+  .ui-composer__stop:focus-visible {
+    outline: 1px solid var(--text-primary);
+    outline-offset: -1px;
+  }
 }
