@@ -396,11 +396,13 @@ export async function renderDetail(app, agents, agentId, setView) {
       <div class="detail-pinned">
         ${appBar}
         ${detailHeader}
-        ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
-        ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
         ${tabs}
       </div>
       <div class="detail-scroll">
+        <div class="detail-supplementary">
+          ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
+          ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
+        </div>
         <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
         <div id="tab-activity" class="tab-content"></div>
         <div id="tab-diff" class="tab-content"></div>
