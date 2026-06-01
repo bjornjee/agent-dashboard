@@ -2081,6 +2081,61 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   #app-main .ui-app-bar:has(+ .create-shell) { display: none; }
 
   /* --------------------------------------------------------------
+   * Phase C — header-placement dock (desktop dock-migration)
+   *
+   * The floating glass dock is hidden on desktop (line above). The
+   * `placement: 'header'` variant of the dock primitive renders as
+   * a row of inline pills which detail.js inserts into the app-bar
+   * trailing slot. Override the floating positioning/blur/shadow
+   * since these pills live inside flow, not over it.
+   * -------------------------------------------------------------- */
+  .ui-dock.ui-dock--header {
+    position: static;
+    transform: none;
+    bottom: auto;
+    left: auto;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+    padding: 0;
+    border-radius: 0;
+    max-width: none;
+    display: inline-flex;
+    gap: var(--space-2);
+    z-index: auto;
+  }
+  .ui-dock--header__search {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    min-width: 0;
+    border-radius: var(--radius-pill);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ui-dock--header__cta {
+    padding: 0 var(--space-4);
+    height: 40px;
+    font-size: 14px;
+    border-radius: var(--radius-pill);
+  }
+  @media (hover: hover) {
+    .ui-dock--header__search:hover { background: var(--bg-hover); }
+  }
+  .ui-dock--header__search:focus-visible {
+    outline: 1px solid var(--text-primary);
+    outline-offset: -1px;
+  }
+  .ui-dock--header__cta:focus-visible {
+    outline: 1px solid var(--text-primary);
+    outline-offset: -1px;
+  }
+
+  /* --------------------------------------------------------------
    * Phase C — hover + focus-visible affordances (desktop only)
    *
    * Register decision: focus = 1px underline in --text-primary, no

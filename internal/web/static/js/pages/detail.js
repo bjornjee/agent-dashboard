@@ -6,6 +6,7 @@ import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, form
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
+import { isDesktop } from '../sidebar.js';
 
 export { showModal, toast, stopConversationPoll };
 
@@ -408,6 +409,23 @@ export async function renderDetail(app, agents, agentId, setView) {
       ${renderActionBar(agent)}
     </div>
   `;
+
+  // Phase C dock-migration: on desktop, prepend the header-placement dock
+  // into the app-bar trailing slot so + New / Search are reachable from
+  // detail view without traversing to the sidebar. Floating dock remains
+  // mobile-only (rendered by list.js).
+  if (isDesktop()) {
+    const trailing = app.querySelector('.ui-app-bar__trailing');
+    if (trailing) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = UI.dock({
+        placement: 'header',
+        search: { label: 'Search agents', onclick: 'Dashboard.searchAgents()' },
+        cta: { label: 'New', icon: ICONS.pencil, onclick: 'Dashboard.showCreate()' },
+      });
+      trailing.insertAdjacentElement('afterbegin', wrap.firstElementChild);
+    }
+  }
 
   // Tab switching
   currentDetailTab = 'conversation';

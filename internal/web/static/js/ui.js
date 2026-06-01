@@ -35,9 +35,24 @@ export const UI = {
     return `<header class="ui-app-bar">${lead}${title}<div class="ui-app-bar__trailing">${actionsHtml(o.trailing)}</div></header>`;
   },
 
-  // 2. Floating dock — list view only. Structural exception.
+  // 2. Floating dock — list view only on mobile.
+  // On desktop callers pass `placement: 'header'` to render the same
+  // actions as inline pills inside an app-bar trailing slot (Phase C
+  // dock-migration). The floating variant remains the default so
+  // existing mobile callers keep working unchanged. Structural
+  // exception (no row primitive applies).
   dock(opts) {
     const o = opts || {};
+    const placement = o.placement === 'header' ? 'header' : 'floating';
+    if (placement === 'header') {
+      const search = o.search
+        ? `<button class="ui-dock__search ui-dock--header__search" aria-label="${escapeHtml(o.search.label)}" onclick="${o.search.onclick || ''}">${ICONS.search}</button>`
+        : '';
+      const cta = o.cta
+        ? `<button class="ui-dock__cta ui-dock--header__cta" onclick="${o.cta.onclick || ''}">${o.cta.icon || ''}<span>${escapeHtml(o.cta.label)}</span></button>`
+        : '';
+      return `<div class="ui-dock ui-dock--header" role="group">${search}${cta}</div>`;
+    }
     const search = o.search
       ? `<button class="ui-dock__search" onclick="${o.search.onclick || ''}">${ICONS.search}<span>${escapeHtml(o.search.label)}</span></button>`
       : '';
