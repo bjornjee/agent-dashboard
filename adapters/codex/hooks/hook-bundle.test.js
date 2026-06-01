@@ -54,6 +54,7 @@ describe('codex global hook bundle', () => {
       'pr-skill-detect.sh',
       'agent-state-fast.js',
       'agent-state-reporter.js',
+      'claim-worktree.js',
       'pr-skill-detect.js',
       'effort-config.js',
       'packages/agent-state/index.js',

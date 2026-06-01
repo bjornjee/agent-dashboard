@@ -75,7 +75,7 @@ function readAllState(agentsDir = DEFAULT_AGENTS_DIR) {
  * Write/merge an agent update into its per-agent file.
  *
  * Read → merge → atomic write inside a sidecar file lock so concurrent
- * hook subprocesses and the Go dashboard pin/stamp paths don't overwrite
+ * hook subprocesses and the dashboard pin/stamp paths don't overwrite
  * each other's fields (lost-update race). The atomic rename keeps any
  * unlucky reader (dashboard refresh, sibling hook) from seeing a torn
  * intermediate state.
