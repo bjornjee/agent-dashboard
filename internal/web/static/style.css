@@ -298,9 +298,9 @@ a { color: inherit; }
   border-radius: var(--radius-md);
   transition: background var(--transition-fast);
 }
-.ui-sheet__item + .ui-sheet__item { box-shadow: inset 0 1px 0 0 #38383A; }
+.ui-sheet__item + .ui-sheet__item { box-shadow: inset 0 1px 0 0 var(--border-default); }
 .ui-sheet__item:hover { background: var(--bg-elevated); }
-.ui-sheet__item:active { background: #2F2F33; }
+.ui-sheet__item:active { background: var(--bg-elevated); }
 @keyframes ui-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
@@ -535,7 +535,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .status-dot--queued, .status-dot--waiting, .status-dot--blocked { background: var(--accent-amber); }
 .status-dot--failed, .status-dot--error { background: var(--accent-red); }
 .status-dot--review { background: var(--accent-green); }
-.status-dot--pr { background: #6EE7B7; }
+.status-dot--pr { background: var(--status-running-text); }
 .status-dot--merged, .status-dot--completed { background: var(--text-faint); }
 @keyframes ui-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(60, 203, 107, 0.18); }
@@ -676,7 +676,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 }
 .create-hint { padding: var(--space-2) var(--space-1) 0; font-size: 13px; color: var(--text-muted); min-height: 16px; }
 .create-hint code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 13px; }
-.create-hint--error { color: #FCA5A5; }
+.create-hint--error { color: var(--status-failed-text); }
 .create-hint--ok { color: var(--accent-green); }
 .create-spawn {
   margin-top: var(--space-6);
@@ -718,7 +718,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-modal-btn--primary:hover { opacity: 0.92; }
 .ui-modal-btn--danger {
   background: rgba(239, 68, 68, 0.14);
-  color: #FCA5A5;
+  color: var(--status-failed-text);
 }
 .ui-modal-btn--danger:hover { background: rgba(239, 68, 68, 0.22); }
 
@@ -795,8 +795,6 @@ button.btn-ghost.btn-sm {
   transition: background var(--transition-fast);
 }
 .btn-ghost.btn-sm:hover { background: var(--bg-surface); }
-
-/* Empty state inline (no primitive — used once on list) */
 
 /* Empty state inline (no primitive — used once on list) */
 .empty-state {
@@ -1914,55 +1912,6 @@ button.btn-ghost.btn-sm {
 .tool-group-summary::before { content: '\25B6'; font-size: 8px; transition: transform var(--transition-default); display: inline-block; }
 details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 .tool-group-summary:hover { color: var(--text-muted); }
-
-/* ============================================
-   VIEW: Diff
-   ============================================ */
-.diff-view {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 250px);
-}
-
-.plan-content {
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--text-secondary);
-}
-
-.plan-content h1 {
-  font-size: 17px; font-weight: 500; color: var(--text-primary);
-  margin: 0 0 16px; line-height: 26px;
-}
-.plan-content h2 {
-  font-size: 15px; font-weight: 500; color: var(--text-primary);
-  margin: 24px 0 8px; line-height: 22px;
-}
-.plan-content h3 {
-  font-size: 14px; font-weight: 500; color: var(--text-secondary);
-  margin: 16px 0 6px; line-height: 22px;
-}
-.plan-content p { margin: 0 0 12px; }
-.plan-content ul, .plan-content ol { padding-left: 20px; margin: 0 0 12px; }
-.plan-content li { margin-bottom: 4px; }
-
-.plan-content code {
-  background: var(--code-bg);
-  color: var(--code-text);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.plan-content pre {
-  background: var(--bg-surface);
-  padding: 12px;
-  border-radius: var(--radius-md);
-  overflow-x: auto;
-  margin: 8px 0;
-}
-
-.plan-content pre code { background: none; padding: 0; }
 
 /* ============================================
    VIEW: Usage

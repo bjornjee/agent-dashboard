@@ -147,6 +147,9 @@ export const UI = {
 
   // --- Legacy fallbacks for the out-of-scope Usage view ---
   // Kept as thin shims so usage.js still renders. Not part of the 9-primitive set.
+  spinner() {
+    return '<span class="spinner spinner-inline"></span>';
+  },
   header(title) {
     return UI.appBar({
       back: true,
