@@ -1,8 +1,10 @@
 // Modal dialog and toast notifications.
-import { UI } from './ui.js';
 import { escapeHtml } from './format.js';
 
-export function showModal(title, message, onConfirm) {
+export function showModal(title, message, onConfirm, opts) {
+  const o = opts || {};
+  const confirmLabel = o.confirmLabel || 'Confirm';
+  const cancelLabel = o.cancelLabel || 'Cancel';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -10,8 +12,8 @@ export function showModal(title, message, onConfirm) {
       <div class="modal-title">${escapeHtml(title)}</div>
       <div class="modal-message">${escapeHtml(message)}</div>
       <div class="modal-actions">
-        ${UI.btn('Cancel', { variant: 'ghost', id: 'modal-cancel' })}
-        ${UI.btn('Confirm', { variant: 'danger', id: 'modal-confirm' })}
+        <button class="ui-modal-btn ui-modal-btn--ghost" id="modal-cancel">${escapeHtml(cancelLabel)}</button>
+        <button class="ui-modal-btn ui-modal-btn--primary" id="modal-confirm">${escapeHtml(confirmLabel)}</button>
       </div>
     </div>
   `;

@@ -5,6 +5,7 @@ import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
 import { UI } from './js/ui.js';
+import { ICONS } from './js/icons.js';
 import { Theme } from './js/theme.js';
 import { initNotify, processNotifications, toggleBrowserNotifications } from './js/notify.js';
 
@@ -24,6 +25,9 @@ function setView(view, agentId) {
   currentView = view;
   selectedAgentId = agentId || null;
   document.body.classList.toggle('view-detail', view === 'detail');
+  // Dock + sheet are persistent body children, scoped to the list view only.
+  if (view !== 'list') document.querySelectorAll('.ui-dock').forEach(el => el.remove());
+  document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
   try { sessionStorage.setItem('dashboard-view', JSON.stringify({ view, agentId: agentId || null })); } catch {}
 }
 
@@ -114,6 +118,31 @@ window.Dashboard = {
 
   showCreate() {
     navigateTo('create', null, true);
+  },
+
+  openKebab() {
+    document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
+    const wrap = document.createElement('div');
+    wrap.innerHTML = UI.sheet([
+      { icon: ICONS.spark, label: 'Usage', onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
+      { icon: ICONS.gear, label: 'Settings', onclick: 'Dashboard.dismissSheet();Dashboard.openSettings()' },
+      { icon: ICONS.bell, label: 'Notifications', onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
+    ]);
+    document.body.appendChild(wrap.firstElementChild);
+  },
+
+  dismissSheet() {
+    document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
+  },
+
+  openSettings() {
+    showModal('Settings', 'Theme: cycles dark / light / system. Notifications appear in your browser when an agent needs input.', async (evt) => {
+      await withSpinner(evt, async () => { Theme.cycle(); });
+    }, { confirmLabel: 'Cycle theme' });
+  },
+
+  searchAgents() {
+    // Search lives in a follow-up — for now, the dock pill is decorative.
   },
 
   selectAgent(id) {
