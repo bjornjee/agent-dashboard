@@ -1611,66 +1611,85 @@ button.btn-ghost.btn-sm {
   transform: translateX(14px); background: var(--accent-green);
 }
 
-/* === THEME: Light mode (TODO: re-tokenize) === */
+/* === THEME: Light mode (codex-iOS desktop parity) ===
+ * Sampled from docs/design/codex-screenshots/desktop/codex-light-*.png:
+ * - Sidebar: light-gray (#F4F4F5) against a white main pane (#FFFFFF).
+ * - Primary CTA: dark fill on light surface (Codex send button is dark; Spawn /
+ *   "+ New agent" inherit the same register).
+ * - Surfaces are desaturated cool gray, not warm cream (the prior
+ *   "warm ivory" palette predated the codex-iOS redesign).
+ * Dark theme is unchanged — all dark values live at `:root`. */
 [data-theme="light"] {
-  --bg-base: #F7F5F2;
+  /* Surfaces — codex-iOS light. White main pane; surfaces step down via gray. */
+  --bg-base: #FFFFFF;
   --bg-surface: #FFFFFF;
-  --bg-elevated: #F0EDE8;
+  --bg-elevated: #F2F2F4;
+  --bg-code: #F4F4F5;
   --bg-overlay: rgba(0, 0, 0, 0.3);
   --bg-navbar: #2A2724;
 
-  --border-default: #E8E3DC;
-  --border-hover: #D9D2C9;
-  --border-active: #C7D2FE;
-  --border-subtle: #F0EDE8;
+  /* Desktop tokens — sidebar/selected/hover (register addendum line 31-34). */
+  --bg-sidebar: #F4F4F5;
+  --bg-selected: #E4E4E7;
+  --bg-hover: #ECECEE;
+
+  /* CTA — invert dark theme: dark fill, white text. */
+  --cta-bg: #1C1A17;
+  --cta-text: #FFFFFF;
+
+  --border-default: #E4E4E7;
+  --border-hover: #D4D4D8;
+  --border-active: #A1A1AA;
+  --border-subtle: #E8E8EB;
 
   --text-primary: #1C1A17;
-  --text-secondary: #4A4540;
-  --text-muted: #9C8F7E;
-  --text-tertiary: #9C8F7E;
-  --text-disabled: #C8BFB2;
+  --text-secondary: #3F3F46;
+  --text-muted: #71717A;
+  --text-tertiary: #71717A;
+  --text-faint: #A1A1AA;
+  --text-disabled: #C8C8CC;
 
-  --accent-green: #0D9488;
+  --accent-green: #16A34A;
   --accent-blue: #4F46E5;
-  --accent-amber: #DC6B19;
+  --accent-amber: #D97706;
   --accent-red: #DC2626;
   --accent-indigo: #4F46E5;
 
-  --status-running-bg: rgba(13, 148, 136, 0.08);
-  --status-running-border: rgba(13, 148, 136, 0.2);
-  --status-running-text: #0D9488;
-  --status-queued-bg: #EEF2FF;
-  --status-queued-border: #C7D2FE;
-  --status-queued-text: #4F46E5;
-  --status-warning-bg: #FFF7ED;
-  --status-warning-border: rgba(220, 107, 25, 0.2);
-  --status-warning-text: #DC6B19;
-  --status-failed-bg: rgba(220, 38, 38, 0.08);
-  --status-failed-border: rgba(220, 38, 38, 0.2);
+  --status-running-bg: rgba(22, 163, 74, 0.10);
+  --status-running-border: rgba(22, 163, 74, 0.22);
+  --status-running-text: #15803D;
+  --status-queued-bg: rgba(113, 113, 122, 0.08);
+  --status-queued-border: rgba(113, 113, 122, 0.20);
+  --status-queued-text: #52525B;
+  --status-warning-bg: rgba(217, 119, 6, 0.10);
+  --status-warning-border: rgba(217, 119, 6, 0.22);
+  --status-warning-text: #B45309;
+  --status-failed-bg: rgba(220, 38, 38, 0.10);
+  --status-failed-border: rgba(220, 38, 38, 0.22);
   --status-failed-text: #B91C1C;
-  --status-completed-bg: rgba(156, 143, 126, 0.08);
-  --status-completed-border: rgba(156, 143, 126, 0.2);
-  --status-completed-text: #4A4540;
-  --status-paused-bg: #FFF7ED;
-  --status-paused-border: rgba(220, 107, 25, 0.2);
-  --status-paused-text: #DC6B19;
+  --status-completed-bg: rgba(113, 113, 122, 0.08);
+  --status-completed-border: rgba(113, 113, 122, 0.20);
+  --status-completed-text: #52525B;
+  --status-paused-bg: rgba(217, 119, 6, 0.10);
+  --status-paused-border: rgba(217, 119, 6, 0.22);
+  --status-paused-text: #B45309;
 
-  --code-text: #4F46E5;
-  --code-bg: rgba(79, 70, 229, 0.06);
+  --code-text: #1C1A17;
+  --code-bg: #F4F4F5;
 
-  --interactive-bg: rgba(0, 0, 0, 0.03);
-  --interactive-border: #E8E3DC;
+  --interactive-bg: rgba(0, 0, 0, 0.04);
+  --interactive-border: #E4E4E7;
   --interactive-bg-hover: rgba(0, 0, 0, 0.06);
-  --interactive-border-hover: #D9D2C9;
+  --interactive-border-hover: #D4D4D8;
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
-  --row-alt-bg: rgba(0, 0, 0, 0.015);
-  --row-hover-bg: rgba(0, 0, 0, 0.02);
+  --row-alt-bg: rgba(0, 0, 0, 0.02);
+  --row-hover-bg: rgba(0, 0, 0, 0.03);
   --progress-pending: rgba(0, 0, 0, 0.06);
-  --shadow-medium: rgba(0, 0, 0, 0.1);
-  --badge-pr-text: #4F46E5;
-  --badge-merged-text: #0D9488;
-  --card-hover-gradient: rgba(240, 237, 232, 0.5);
+  --shadow-medium: rgba(0, 0, 0, 0.08);
+  --badge-pr-text: #52525B;
+  --badge-merged-text: #15803D;
+  --card-hover-gradient: rgba(244, 244, 245, 0.6);
 }
 
 /* === LEGACY: activity / conversation / plan content === */
