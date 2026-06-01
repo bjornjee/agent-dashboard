@@ -1940,6 +1940,14 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
  * #app-sidebar carries hidden on mobile; desktop @media unhides it. */
 #app-sidebar[hidden] { display: none; }
 
+/* Boot loading: visible on every viewport before app.js hydrates. */
+.boot-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (min-width: 1024px) {
   #app-shell {
     display: grid;
@@ -2086,6 +2094,24 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
    * redundant on desktop — the sidebar's "+ New agent" CTA already signals
    * the active view. Hide it when the next sibling is .create-shell. */
   #app-main .ui-app-bar:has(+ .create-shell) { display: none; }
+
+  /* Skeleton sidebar visible on desktop while content hydrates. */
+  #app-sidebar.app-sidebar--skeleton { display: block; }
+  .app-sidebar__nav-row--skeleton {
+    height: 36px;
+    margin: 2px 0;
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    opacity: 0.4;
+  }
+  .app-sidebar__skeleton-label {
+    height: 12px;
+    width: 80px;
+    margin: var(--space-3) var(--space-3) var(--space-1);
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    opacity: 0.4;
+  }
 
   /* --------------------------------------------------------------
    * Phase C — header-placement dock (desktop dock-migration)

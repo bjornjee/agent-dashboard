@@ -16,10 +16,25 @@
 </head>
 <body>
 <div id="app-shell">
-  <aside id="app-sidebar" hidden></aside>
+  <aside id="app-sidebar" class="app-sidebar--skeleton" hidden>
+    <div class="app-sidebar__inner">
+      <div class="app-sidebar__top">
+        <div class="app-sidebar__nav-row app-sidebar__nav-row--skeleton"></div>
+        <div class="app-sidebar__nav-row app-sidebar__nav-row--skeleton"></div>
+      </div>
+      <div class="app-sidebar__list">
+        <div class="app-sidebar__skeleton-label"></div>
+        <div class="app-sidebar__nav-row app-sidebar__nav-row--skeleton"></div>
+      </div>
+      <div class="app-sidebar__bottom">
+        <div class="app-sidebar__nav-row app-sidebar__nav-row--skeleton"></div>
+        <div class="app-sidebar__nav-row app-sidebar__nav-row--skeleton"></div>
+      </div>
+    </div>
+  </aside>
   <main id="app-main">
     <div id="app">
-      <div class="loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center">
+      <div class="loading boot-loading">
         <span class="spinner"></span>
       </div>
     </div>

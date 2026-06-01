@@ -165,7 +165,7 @@ test.describe('Sidebar contents and routing', () => {
     await page.waitForSelector('#app-sidebar .app-sidebar__inner', { timeout: 5000 });
 
     const sidebar = page.locator('#app-sidebar');
-    await expect(sidebar.getByText('+ New agent', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('New agent', { exact: true })).toBeVisible();
     await expect(sidebar.getByText('Search agents', { exact: true })).toBeVisible();
     await expect(sidebar.getByText('Usage', { exact: true })).toBeVisible();
     await expect(sidebar.getByText('Settings', { exact: true })).toBeVisible();
@@ -182,7 +182,7 @@ test.describe('Sidebar contents and routing', () => {
     // The first nav-row in the sidebar should be the "+ New agent" CTA and
     // it should carry the --selected modifier on cold load.
     const selectedRow = page.locator('#app-sidebar .app-sidebar__nav-row--selected').first();
-    await expect(selectedRow).toContainText('+ New agent');
+    await expect(selectedRow).toContainText('New agent');
 
     const innerRow = selectedRow.locator('.ui-row');
     const bg = await innerRow.evaluate((el) => getComputedStyle(el).backgroundColor);

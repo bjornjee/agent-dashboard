@@ -3,6 +3,7 @@
 // list view is untouched; this module only mounts when the desktop media
 // query matches.
 import { UI } from './ui.js';
+import { ICONS } from './icons.js';
 import { effectiveState, stateGroup } from './state.js';
 import { escapeHtml, repoName, durationShort } from './format.js';
 
@@ -45,11 +46,12 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
 
   let html = '<div class="app-sidebar__inner">';
 
-  // Top CTA — "+ New agent" + non-interactive Search placeholder slot.
+  // Top CTA — "New agent" + non-interactive Search placeholder slot.
   html += '<div class="app-sidebar__top">';
-  html += `<div class="app-sidebar__nav-row${sel(currentView === 'create')}">`;
+  html += `<div class="app-sidebar__nav-row app-sidebar__nav-row--cta${sel(currentView === 'create')}">`;
   html += UI.row({
-    title: '+ New agent',
+    leading: ICONS.pencil,
+    title: 'New agent',
     onclick: 'Dashboard.showCreate()',
     chevron: false,
   });
