@@ -46,3 +46,4 @@ test-results/
 /*.png
 .env-setup-done
 .feature-plan-path
+.uiux-loop/
