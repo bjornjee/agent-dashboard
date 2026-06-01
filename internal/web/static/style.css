@@ -2074,4 +2074,9 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 
   /* Spawn stays full-width but constrained to the composition block. */
   .create-spawn { align-self: stretch; }
+
+  /* The create view's mobile app-bar (back-arrow + "New agent" title) is
+   * redundant on desktop — the sidebar's "+ New agent" CTA already signals
+   * the active view. Hide it when the next sibling is .create-shell. */
+  #app-main .ui-app-bar:has(+ .create-shell) { display: none; }
 }

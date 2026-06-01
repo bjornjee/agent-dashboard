@@ -45,12 +45,14 @@ function navigateTo(view, agentId, push) {
     case 'list':
       cancelNav();
       stopConversationPoll();
-      setView('list');
       if (desktop) {
         // On desktop the agent list lives in the sidebar — the main pane
-        // has no standalone "list" page. Default the main pane to create.
+        // has no standalone "list" page. Default the main pane to create
+        // and tell the sidebar so "+ New agent" reads as selected.
+        setView('create');
         renderCreate(app, agents);
       } else {
+        setView('list');
         renderList(app, agents);
       }
       break;
