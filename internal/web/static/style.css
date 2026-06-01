@@ -2020,4 +2020,58 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
     color: var(--text-muted);
     pointer-events: none;
   }
+
+  /* Create view — vertically centered composition block on a wide main pane,
+   * with Folder / Harness / Skill rendered as a row of secondary chips below
+   * the textarea (matches Codex codex-dark-04-new-chat-create-agent.png). */
+  .create-shell {
+    min-height: calc(100vh - 64px); /* viewport minus app bar */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-6);
+    gap: var(--space-5);
+  }
+  .create-display {
+    margin: 0;
+    text-align: left;
+  }
+  .create-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* Hide the section labels above the secondary chips — the chips' values
+   * carry the meaning inline. */
+  .create-secondary > .create-secondary__group > .ui-section-label { display: none; }
+
+  /* One-row chip strip. */
+  .create-secondary {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .create-secondary__group { flex: 0 0 auto; }
+  .create-secondary__group .create-field { display: flex; }
+  .create-secondary__group .ui-input {
+    width: auto;
+    min-width: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--bg-elevated);
+    font-size: 13px;
+  }
+  .create-secondary__group select.ui-input {
+    padding-right: var(--space-7);
+  }
+  /* Hide hint text below chips on desktop — the chip is self-explanatory. */
+  .create-secondary .create-hint { display: none; }
+
+  /* Spawn stays full-width but constrained to the composition block. */
+  .create-spawn { align-self: stretch; }
 }

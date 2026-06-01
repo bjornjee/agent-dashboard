@@ -9,47 +9,57 @@ export function renderCreate(app, agents) {
 
   app.innerHTML = `
     ${UI.appBar({ back: true, title: 'New agent' })}
-    <div class="create-display">What should we work on?</div>
-    <div class="create-form">
-      <textarea
-        class="ui-input ui-input--multiline create-message"
-        id="create-message"
-        rows="4"
-        placeholder="Do anything"
-        oninput="UI.composerAutoSize(this)"></textarea>
+    <div class="create-shell">
+      <div class="create-display">What should we work on?</div>
+      <div class="create-form">
+        <textarea
+          class="ui-input ui-input--multiline create-message"
+          id="create-message"
+          rows="4"
+          placeholder="Do anything"
+          oninput="UI.composerAutoSize(this)"></textarea>
 
-      ${UI.sectionLabel('Folder')}
-      <div class="create-field">
-        <input
-          id="create-folder"
-          class="ui-input"
-          type="text"
-          placeholder="/path/to/repo"
-          list="folder-suggestions">
-        <datalist id="folder-suggestions">
-          ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
-        </datalist>
-        <div class="create-hint" id="folder-hint"></div>
+        <div class="create-secondary">
+          <div class="create-secondary__group">
+            ${UI.sectionLabel('Folder')}
+            <div class="create-field">
+              <input
+                id="create-folder"
+                class="ui-input"
+                type="text"
+                placeholder="/path/to/repo"
+                list="folder-suggestions">
+              <datalist id="folder-suggestions">
+                ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
+              </datalist>
+              <div class="create-hint" id="folder-hint"></div>
+            </div>
+          </div>
+
+          <div class="create-secondary__group">
+            ${UI.sectionLabel('Harness')}
+            <div class="create-field">
+              <select id="create-harness" class="ui-input">
+                <option value="">Default (settings.toml)</option>
+                <option value="claude">Claude Code</option>
+                <option value="codex">Codex CLI</option>
+              </select>
+              <div class="create-hint">Codex reads <code>[harness.codex]</code> from settings.toml.</div>
+            </div>
+          </div>
+
+          <div class="create-secondary__group">
+            ${UI.sectionLabel('Skill')}
+            <div class="create-field">
+              <select id="create-skill" class="ui-input">
+                <option value="">Default</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button class="create-spawn" id="create-spawn" onclick="Dashboard.createAgent(event)" disabled>Spawn</button>
       </div>
-
-      ${UI.sectionLabel('Harness')}
-      <div class="create-field">
-        <select id="create-harness" class="ui-input">
-          <option value="">Default (settings.toml)</option>
-          <option value="claude">Claude Code</option>
-          <option value="codex">Codex CLI</option>
-        </select>
-        <div class="create-hint">Codex reads <code>[harness.codex]</code> from settings.toml.</div>
-      </div>
-
-      ${UI.sectionLabel('Skill')}
-      <div class="create-field">
-        <select id="create-skill" class="ui-input">
-          <option value="">Default</option>
-        </select>
-      </div>
-
-      <button class="create-spawn" id="create-spawn" onclick="Dashboard.createAgent(event)" disabled>Spawn</button>
     </div>
   `;
 
