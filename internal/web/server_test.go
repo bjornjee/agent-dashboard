@@ -2056,8 +2056,11 @@ func TestFaviconServesEmbeddedPNG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /: %v", err)
 	}
-	indexRaw, _ := io.ReadAll(indexResp.Body)
+	indexRaw, err := io.ReadAll(indexResp.Body)
 	indexResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
 	indexBody := string(indexRaw)
 	if strings.Contains(indexBody, "fill='%233b82f6'") || strings.Contains(indexBody, "EA%3C/text%3E") {
 		t.Error("index.html still references the old blue 'A' placeholder favicon")
