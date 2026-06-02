@@ -192,18 +192,30 @@ window.Dashboard = {
     });
   },
 
-  // Insert a "/" at the textarea cursor and focus, so the user can
-  // start a slash-command (e.g., /agent-dashboard:pr) without retyping.
-  insertSlash() {
+  // Open a native macOS Choose File dialog via the local server
+  // (POST /api/file-picker → osascript), then insert the chosen
+  // absolute path at the textarea cursor. The dashboard binds to
+  // localhost so the dialog can only be triggered from the user's
+  // own browser.
+  async attachFile() {
     const input = document.getElementById('reply-input');
     if (!input) return;
+    let path = '';
+    try {
+      const result = await post('/api/file-picker');
+      path = (result && result.path) || '';
+    } catch (err) {
+      toast('File picker failed: ' + err.message, 'error');
+      return;
+    }
+    if (!path) return; // user cancelled
     const start = input.selectionStart ?? input.value.length;
     const end = input.selectionEnd ?? input.value.length;
-    const before = input.value.slice(0, start);
-    const after = input.value.slice(end);
-    input.value = before + '/' + after;
+    const sep = (start > 0 && input.value[start - 1] && !/\s/.test(input.value[start - 1])) ? ' ' : '';
+    const insertion = sep + path + ' ';
+    input.value = input.value.slice(0, start) + insertion + input.value.slice(end);
     input.focus();
-    const cursor = start + 1;
+    const cursor = start + insertion.length;
     try { input.setSelectionRange(cursor, cursor); } catch {}
     input.dispatchEvent(new Event('input', { bubbles: true }));
   },

@@ -98,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/usage/ratelimit", s.requireAuth(s.handleRateLimit))
 	mux.HandleFunc("GET /api/skills", s.requireAuth(s.handleSkills))
 	mux.HandleFunc("GET /api/suggestions", s.requireAuth(s.handleSuggestions))
+	mux.HandleFunc("POST /api/file-picker", s.requireAuth(s.requireCSRF(s.handleFilePicker)))
 
 	// Action routes (require session + CSRF header)
 	mux.HandleFunc("POST /api/agents/{id}/approve", s.requireAuth(s.requireCSRF(s.handleApprove)))
