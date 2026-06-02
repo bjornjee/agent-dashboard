@@ -756,6 +756,159 @@ func HasPendingQuestion(projDir, sessionID string) bool {
 	return hasPendingToolCall(projDir, sessionID, "AskUserQuestion")
 }
 
+// ReadPendingQuestion returns the parsed input of the most recent
+// AskUserQuestion tool_use in the session JSONL when it has no human
+// reply after it. Returns nil otherwise.
+func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
+	path := filepath.Join(projDir, sessionID+".jsonl")
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	const tailSize = 64 * 1024
+	stat, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	if stat.Size() > tailSize {
+		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
+			return nil
+		}
+		// Skip the partial first line after a mid-file seek.
+		var b [1]byte
+		for {
+			_, err := f.Read(b[:])
+			if err != nil || b[0] == '\n' {
+				break
+			}
+		}
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, tailSize), 1024*1024)
+
+	var lastInput json.RawMessage
+	var lastID string
+	humanAfter := false
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var entry jsonlEntry
+		if json.Unmarshal(line, &entry) != nil {
+			continue
+		}
+		switch entry.Type {
+		case "assistant":
+			var env messageEnvelope
+			if json.Unmarshal(entry.Message, &env) != nil {
+				continue
+			}
+			var blocks []toolUseBlock
+			if json.Unmarshal(env.Content, &blocks) != nil {
+				continue
+			}
+			for _, b := range blocks {
+				if b.Type != "tool_use" || b.Name != "AskUserQuestion" {
+					continue
+				}
+				// `toolUseBlock.Input` is the raw JSON; we re-decode on
+				// demand to avoid coupling the inner shape here.
+				lastInput = append(lastInput[:0], b.Input...)
+				lastID = ""
+				if id := toolUseID(line); id != "" {
+					lastID = id
+				}
+				humanAfter = false
+			}
+		case "user":
+			if lastInput != nil && isHumanUserEntry(entry.Message) {
+				humanAfter = true
+			}
+		}
+	}
+
+	if lastInput == nil || humanAfter {
+		return nil
+	}
+
+	var parsed struct {
+		Questions []struct {
+			Question    string `json:"question"`
+			Header      string `json:"header"`
+			MultiSelect bool   `json:"multiSelect"`
+			Options     []struct {
+				Label       string `json:"label"`
+				Description string `json:"description"`
+			} `json:"options"`
+		} `json:"questions"`
+	}
+	if json.Unmarshal(lastInput, &parsed) != nil {
+		return nil
+	}
+	if len(parsed.Questions) == 0 {
+		return nil
+	}
+
+	out := &domain.PendingQuestion{
+		ToolUseID: lastID,
+		Questions: make([]domain.PendingQuestionPrompt, 0, len(parsed.Questions)),
+	}
+	for _, q := range parsed.Questions {
+		prompt := domain.PendingQuestionPrompt{
+			Question:    q.Question,
+			Header:      q.Header,
+			MultiSelect: q.MultiSelect,
+			Options:     make([]domain.PendingQuestionOption, 0, len(q.Options)),
+		}
+		for _, o := range q.Options {
+			prompt.Options = append(prompt.Options, domain.PendingQuestionOption{
+				Label:       o.Label,
+				Description: o.Description,
+			})
+		}
+		out.Questions = append(out.Questions, prompt)
+	}
+	return out
+}
+
+// toolUseID extracts the `id` field from the first tool_use content block
+// in a raw JSONL line. The full jsonlEntry decode doesn't expose this
+// because content is a json.RawMessage; we scan for the targeted shape
+// directly to avoid a second full decode in the hot path.
+func toolUseID(line []byte) string {
+	var entry struct {
+		Message json.RawMessage `json:"message"`
+	}
+	if json.Unmarshal(line, &entry) != nil {
+		return ""
+	}
+	var env struct {
+		Content json.RawMessage `json:"content"`
+	}
+	if json.Unmarshal(entry.Message, &env) != nil {
+		return ""
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+		ID   string `json:"id"`
+	}
+	if json.Unmarshal(env.Content, &blocks) != nil {
+		return ""
+	}
+	for _, b := range blocks {
+		if b.Type == "tool_use" && b.Name == "AskUserQuestion" {
+			return b.ID
+		}
+	}
+	return ""
+}
+
 // LastPendingBlockingTool scans the JSONL tail and returns which blocking
 // tool (ExitPlanMode or AskUserQuestion) appeared most recently with no
 // human message after it. Returns "plan", "question", or "" if neither

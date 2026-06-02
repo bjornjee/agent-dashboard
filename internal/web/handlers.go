@@ -152,6 +152,22 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
+// handlePendingQuestion serves GET /api/agents/{id}/pending-question.
+// Codex sessions return null — codex has its own interactive prompt mechanism.
+func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
+	agent, ok := s.lookupAgent(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	if agent.Harness == "codex" || agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
+	pq := conversation.ReadPendingQuestion(agent.ProjDir, agent.SessionID)
+	writeJSON(w, http.StatusOK, pq)
+}
+
 // handleActivity returns the activity log for an agent or subagent.
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))

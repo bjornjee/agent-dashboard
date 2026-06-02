@@ -1358,6 +1358,97 @@ func TestHasPendingQuestion_PlanDoesNotTrigger(t *testing.T) {
 	}
 }
 
+// -- ReadPendingQuestion tests --
+
+func TestReadPendingQuestion_MultiQuestionPayload(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_abc","name":"AskUserQuestion","input":{"questions":[{"question":"What should this feature deliver?","header":"Deliverable","multiSelect":false,"options":[{"label":"Implement fixes (Recommended)","description":"Add tests and repo changes for fixable gaps."},{"label":"Report only","description":"Produce a readiness grade without changing site code."}]},{"question":"How should we handle external checks?","header":"External","multiSelect":false,"options":[{"label":"Document actions (Recommended)","description":"Use live public probes and repo checks."},{"label":"Use credentials","description":"Plan for authenticated checks if you provide credentials."}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool_abc","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}
+`
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	got := ReadPendingQuestion(projDir, sessionID)
+	if got == nil {
+		t.Fatal("ReadPendingQuestion = nil, want populated PendingQuestion")
+	}
+	if got.ToolUseID != "tool_abc" {
+		t.Errorf("ToolUseID = %q, want tool_abc", got.ToolUseID)
+	}
+	if len(got.Questions) != 2 {
+		t.Fatalf("len(Questions) = %d, want 2", len(got.Questions))
+	}
+	q0 := got.Questions[0]
+	if q0.Header != "Deliverable" {
+		t.Errorf("Q0 Header = %q, want Deliverable", q0.Header)
+	}
+	if q0.Question != "What should this feature deliver?" {
+		t.Errorf("Q0 Question = %q", q0.Question)
+	}
+	if q0.MultiSelect {
+		t.Errorf("Q0 MultiSelect = true, want false")
+	}
+	if len(q0.Options) != 2 {
+		t.Fatalf("Q0 Options len = %d, want 2", len(q0.Options))
+	}
+	if q0.Options[0].Label != "Implement fixes (Recommended)" {
+		t.Errorf("Q0 Options[0].Label = %q", q0.Options[0].Label)
+	}
+	if q0.Options[0].Description == "" {
+		t.Errorf("Q0 Options[0].Description was empty, want populated")
+	}
+	if got.Questions[1].Header != "External" {
+		t.Errorf("Q1 Header = %q, want External", got.Questions[1].Header)
+	}
+}
+
+func TestReadPendingQuestion_NoneWhenAnswered(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":"go with A"},"timestamp":"2026-06-02T10:00:02Z"}
+`
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	if got := ReadPendingQuestion(projDir, sessionID); got != nil {
+		t.Errorf("ReadPendingQuestion = %+v, want nil after human reply", got)
+	}
+}
+
+func TestReadPendingQuestion_NilWhenNoQuestion(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"All done!"}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	if got := ReadPendingQuestion(projDir, sessionID); got != nil {
+		t.Errorf("ReadPendingQuestion = %+v, want nil", got)
+	}
+}
+
+func TestReadPendingQuestion_NilForMissingFile(t *testing.T) {
+	if got := ReadPendingQuestion("/nonexistent", "no-such"); got != nil {
+		t.Errorf("ReadPendingQuestion = %+v, want nil for missing file", got)
+	}
+}
+
 // writeSessionFile creates a single session JSON in dir for the Locate tests.
 func writeSessionFile(t *testing.T, dir, sessionID, cwd string, startedAt int64) {
 	t.Helper()

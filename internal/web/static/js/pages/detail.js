@@ -3,7 +3,7 @@ import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { effectiveState, stateGroup, prTag, hasOpenPR } from '../state.js';
 import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
-import { get, cancelNav, newNavSignal } from '../api.js';
+import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
 import { isDesktop } from '../sidebar.js';
@@ -545,13 +545,140 @@ function renderConversationHtml(entries) {
   return html;
 }
 
+// Anatomy matches docs/design/codex-screenshots/mobile/photo_2026-06-01_17-44-47.jpg —
+// elevated surface, per-question small-caps category label, radio list with
+// bold title + muted description, optional freeform answer input, single
+// white submit chip. Submission posts the composed answer to the existing
+// /input endpoint; the agent reads it as the user's next message and the
+// card disappears on the next poll once HasPendingQuestion clears.
+function renderQuestionCard(pending, agentId) {
+  if (!pending || !Array.isArray(pending.questions) || pending.questions.length === 0) return '';
+  const tid = escapeHtml(pending.tool_use_id || '');
+  const blocks = pending.questions.map((q, qi) => {
+    const header = q.header ? `<div class="question-card__label">${escapeHtml(q.header)}</div>` : '';
+    const text = q.question ? `<div class="question-card__question">${escapeHtml(q.question)}</div>` : '';
+    const inputType = q.multi_select ? 'checkbox' : 'radio';
+    const name = `qc-${qi}`;
+    const opts = (q.options || []).map((o, oi) => {
+      const label = escapeHtml(o.label || '');
+      const desc = o.description ? `<div class="question-card__option-desc">${escapeHtml(o.description)}</div>` : '';
+      const inputId = `qc-${qi}-${oi}`;
+      return `<label class="question-card__option" for="${inputId}">
+        <input type="${inputType}" id="${inputId}" name="${name}" value="${label}" class="question-card__radio-input" oninput="window.Dashboard.questionCardUpdate('${tid}')" />
+        <span class="question-card__radio" aria-hidden="true"></span>
+        <span class="question-card__option-body">
+          <span class="question-card__option-title">${label}</span>
+          ${desc}
+        </span>
+      </label>`;
+    }).join('');
+    const freeId = `qc-free-${qi}`;
+    return `<div class="question-card__block" data-qi="${qi}">
+      ${header}
+      ${text}
+      <div class="question-card__options">${opts}</div>
+      <div class="question-card__label question-card__label--answer">Answer</div>
+      <input type="text" id="${freeId}" name="qc-free-${qi}" class="question-card__answer-input" placeholder="Type a response" oninput="window.Dashboard.questionCardUpdate('${tid}')" />
+    </div>`;
+  }).join('');
+  const submitId = `qc-submit-${tid}`;
+  return `<div class="question-card" data-tool-use-id="${tid}" data-agent-id="${escapeHtml(agentId)}">
+    ${blocks}
+    <div class="question-card__footer">
+      <button type="button" id="${submitId}" class="question-card__submit" disabled onclick="window.Dashboard.answerQuestion('${escapeHtml(agentId)}', '${tid}', event)">Send answer</button>
+    </div>
+  </div>`;
+}
+
+// Re-evaluate the submit-button enabled state for a question card.
+// Submit is enabled once every question has either a picked option or
+// non-empty freeform text. Kept in detail.js so it can read the
+// per-card DOM directly without touching app.js's module scope.
+export function updateQuestionCardSubmit(toolUseId) {
+  const card = document.querySelector(`.question-card[data-tool-use-id="${cssEscape(toolUseId)}"]`);
+  if (!card) return;
+  const blocks = card.querySelectorAll('.question-card__block');
+  let allAnswered = true;
+  blocks.forEach((block) => {
+    const picked = block.querySelector('.question-card__radio-input:checked');
+    const free = block.querySelector('.question-card__answer-input');
+    const freeText = free && free.value.trim() ? free.value.trim() : '';
+    if (!picked && !freeText) allAnswered = false;
+  });
+  const btn = card.querySelector('.question-card__submit');
+  if (btn) btn.disabled = !allAnswered;
+}
+
+// Collect the composed answer text from a question card and POST it to
+// the agent's input endpoint. Format mirrors the TUI's serialisation:
+// one block per question, header + question text + picked options +
+// freeform text, separated by blank lines.
+export async function submitQuestionCard(agentId, toolUseId) {
+  const card = document.querySelector(`.question-card[data-tool-use-id="${cssEscape(toolUseId)}"]`);
+  if (!card) return false;
+  const btn = card.querySelector('.question-card__submit');
+  if (btn) btn.disabled = true;
+
+  const blocks = card.querySelectorAll('.question-card__block');
+  const parts = [];
+  blocks.forEach((block) => {
+    const headerEl = block.querySelector('.question-card__label:not(.question-card__label--answer)');
+    const qEl = block.querySelector('.question-card__question');
+    const header = headerEl ? headerEl.textContent.trim() : '';
+    const question = qEl ? qEl.textContent.trim() : '';
+    const picks = Array.from(block.querySelectorAll('.question-card__radio-input:checked'))
+      .map(i => i.value);
+    const free = block.querySelector('.question-card__answer-input');
+    const freeText = free && free.value.trim() ? free.value.trim() : '';
+    let body = '';
+    if (picks.length) body += picks.join(', ');
+    if (freeText) body += (body ? ' — ' : '') + freeText;
+    const label = header ? `${header}: ${question}` : question;
+    parts.push(`${label}\n${body}`);
+  });
+  const text = parts.join('\n\n');
+
+  // Optimistic transition: collapse to "answered" snapshot so the user
+  // sees their submission landed even before the polling loop catches up.
+  card.classList.add('question-card--answered');
+
+  try {
+    const result = await post('/api/agents/' + agentId + '/input', { text });
+    if (!result || !result.ok) {
+      toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      card.classList.remove('question-card--answered');
+      if (btn) btn.disabled = false;
+      return false;
+    }
+    return true;
+  } catch (err) {
+    toast('Failed: ' + err.message, 'error');
+    card.classList.remove('question-card--answered');
+    if (btn) btn.disabled = false;
+    return false;
+  }
+}
+
+// Tiny CSS.escape polyfill — the dashboard needs to support older Safari
+// on iOS PWA. Tool-use IDs are alphanumeric-with-underscores; this only
+// covers that safely.
+function cssEscape(s) {
+  if (typeof window !== 'undefined' && window.CSS && typeof window.CSS.escape === 'function') {
+    return window.CSS.escape(s);
+  }
+  return String(s).replace(/([^a-zA-Z0-9_-])/g, '\\$1');
+}
+
 // Re-fetch and re-render the conversation tab if it is currently active.
 // Called by the SSE handler to keep the chat view up to date.
 async function refreshConversation(agentId, agent) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
   if (!container) return;
-  const entries = await get('/api/agents/' + agentId + '/conversation');
+  const [entries, pending] = await Promise.all([
+    get('/api/agents/' + agentId + '/conversation'),
+    get('/api/agents/' + agentId + '/pending-question'),
+  ]);
   if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
   const scrollParent = container.closest('.detail-scroll');
   const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
@@ -567,6 +694,19 @@ async function refreshConversation(agentId, agent) {
   }
 
   container.innerHTML = renderConversationHtml(entries);
+
+  // Append the AskUserQuestion card inline after the last assistant
+  // message when one is pending. The card is part of the chat stream,
+  // not the action bar — visitors keep prior context in view.
+  if (pending && pending.tool_use_id) {
+    const conv = container.querySelector('.conversation');
+    if (conv) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = renderQuestionCard(pending, agentId);
+      const cardEl = wrap.firstElementChild;
+      if (cardEl) conv.appendChild(cardEl);
+    }
+  }
 
   // Re-append optimistic message if API hasn't caught up yet. The
   // "Sending…" caption (and the muted opacity) ONLY apply while the
@@ -912,7 +1052,10 @@ async function loadTabContent(tab, agentId) {
 
   switch (tab) {
     case 'conversation': {
-      const entries = await get('/api/agents/' + agentId + '/conversation');
+      const [entries, pending] = await Promise.all([
+        get('/api/agents/' + agentId + '/conversation'),
+        get('/api/agents/' + agentId + '/pending-question'),
+      ]);
       if (signal.aborted) return;
       if (!entries || entries.length === 0) {
         container.innerHTML = inlineEmptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
@@ -920,6 +1063,15 @@ async function loadTabContent(tab, agentId) {
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
+      if (pending && pending.tool_use_id) {
+        const conv = container.querySelector('.conversation');
+        if (conv) {
+          const wrap = document.createElement('div');
+          wrap.innerHTML = renderQuestionCard(pending, agentId);
+          const cardEl = wrap.firstElementChild;
+          if (cardEl) conv.appendChild(cardEl);
+        }
+      }
       markLoaded();
       const scrollParent = container.closest('.detail-scroll');
       if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
