@@ -328,6 +328,114 @@ func TestConversationEndpoint(t *testing.T) {
 	}
 }
 
+func TestPendingQuestionEndpoint_ReturnsPayload(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	projectsDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = projectsDir
+
+	cwd := "/tmp/pq-repo-1"
+	projDir := filepath.Join(projectsDir, conversation.ProjectSlug(cwd))
+	os.MkdirAll(projDir, 0755)
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	sessionID := "pq-1"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_abc","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","header":"Pick","multiSelect":false,"options":[{"label":"A","description":"first"},{"label":"B","description":"second"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	agent := domain.Agent{
+		SessionID: sessionID,
+		ProjDir:   projDir,
+		State:     "question",
+		Cwd:       cwd,
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET pending-question: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "tool_abc" {
+		t.Errorf("ToolUseID = %q, want tool_abc", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 {
+		t.Fatalf("len(Questions) = %d, want 1", len(pq.Questions))
+	}
+	if pq.Questions[0].Header != "Pick" {
+		t.Errorf("Header = %q, want Pick", pq.Questions[0].Header)
+	}
+	if len(pq.Questions[0].Options) != 2 {
+		t.Errorf("Options len = %d, want 2", len(pq.Questions[0].Options))
+	}
+}
+
+func TestPendingQuestionEndpoint_EmptyWhenNone(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	projectsDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = projectsDir
+
+	cwd := "/tmp/pq-empty-repo"
+	projDir := filepath.Join(projectsDir, conversation.ProjectSlug(cwd))
+	os.MkdirAll(projDir, 0755)
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	sessionID := "pq-empty"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	agent := domain.Agent{
+		SessionID: sessionID,
+		ProjDir:   projDir,
+		State:     "running",
+		Cwd:       cwd,
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	buf := make([]byte, 4096)
+	n, _ := resp.Body.Read(buf)
+	trimmed := strings.TrimSpace(string(buf[:n]))
+	if trimmed != "null" && trimmed != "{}" {
+		t.Errorf("expected null or {}, got %q", trimmed)
+	}
+}
+
 // withMockCommandRunner swaps the package-level cmdRunner with a mock
 // and restores the original on test cleanup.
 func withMockCommandRunner(t *testing.T) *mocks.MockCommandRunner {

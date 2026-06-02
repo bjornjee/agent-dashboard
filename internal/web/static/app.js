@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll, updateQuestionCardSubmit, submitQuestionCard } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -218,6 +218,20 @@ window.Dashboard = {
     const cursor = start + insertion.length;
     try { input.setSelectionRange(cursor, cursor); } catch {}
     input.dispatchEvent(new Event('input', { bubbles: true }));
+  },
+
+  // Re-evaluate the question card's submit-enabled state on any input
+  // change. Called inline from the card markup.
+  questionCardUpdate(toolUseId) {
+    updateQuestionCardSubmit(toolUseId);
+  },
+
+  // Submit the assembled AskUserQuestion answer to the agent. Reuses
+  // the existing /input endpoint — the answer is just the user's next
+  // message; the agent's tool_use waits on that message as its result.
+  async answerQuestion(id, toolUseId, evt) {
+    if (evt && evt.preventDefault) evt.preventDefault();
+    await submitQuestionCard(id, toolUseId);
   },
 
   async sendInput(id) {

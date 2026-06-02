@@ -119,6 +119,30 @@ type ConversationEntry struct {
 	IsNotification bool // true for task-notification messages and their responses
 }
 
+// PendingQuestion is the parsed payload of the most recent unanswered
+// AskUserQuestion tool_use in a Claude session. The web/mobile dashboard
+// renders this as an interactive question card; nil when no question is
+// pending (or for codex sessions, which use a different mechanism).
+type PendingQuestion struct {
+	ToolUseID string                  `json:"tool_use_id"`
+	Questions []PendingQuestionPrompt `json:"questions"`
+}
+
+// PendingQuestionPrompt mirrors one entry in the AskUserQuestion tool's
+// `questions` array.
+type PendingQuestionPrompt struct {
+	Question    string                  `json:"question"`
+	Header      string                  `json:"header,omitempty"`
+	MultiSelect bool                    `json:"multi_select"`
+	Options     []PendingQuestionOption `json:"options"`
+}
+
+// PendingQuestionOption mirrors one entry in a question's `options` array.
+type PendingQuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
 // ActivityEntry represents a single line in the activity log.
 type ActivityEntry struct {
 	Timestamp string

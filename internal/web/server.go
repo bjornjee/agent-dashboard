@@ -91,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents/{id}/activity", s.requireAuth(s.handleActivity))
 	mux.HandleFunc("GET /api/agents/{id}/diff", s.requireAuth(s.handleDiff))
 	mux.HandleFunc("GET /api/agents/{id}/plan", s.requireAuth(s.handlePlan))
+	mux.HandleFunc("GET /api/agents/{id}/pending-question", s.requireAuth(s.handlePendingQuestion))
 	mux.HandleFunc("GET /api/agents/{id}/usage", s.requireAuth(s.handleUsage))
 	mux.HandleFunc("GET /api/agents/{id}/subagents", s.requireAuth(s.handleSubagents))
 	mux.HandleFunc("GET /api/agents/{id}/pr-url", s.requireAuth(s.handlePRURL))

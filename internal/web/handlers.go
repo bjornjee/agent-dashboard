@@ -152,6 +152,27 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
+// handlePendingQuestion returns the parsed AskUserQuestion payload for an
+// agent that is currently blocked on a question, or null when none is
+// pending. The web dashboard polls this to render the question card
+// inline in the chat stream.
+//
+// Codex sessions intentionally return null here — codex has its own
+// interactive prompt mechanism rendered through a different path.
+func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
+	agent, ok := s.lookupAgent(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	if agent.Harness == "codex" || agent.ProjDir == "" || agent.SessionID == "" {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
+	pq := conversation.ReadPendingQuestion(agent.ProjDir, agent.SessionID)
+	writeJSON(w, http.StatusOK, pq)
+}
+
 // handleActivity returns the activity log for an agent or subagent.
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
