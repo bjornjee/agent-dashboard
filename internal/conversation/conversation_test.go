@@ -1490,6 +1490,35 @@ func TestReadPendingQuestion_FindsEntryBeyondTailWindow(t *testing.T) {
 	}
 }
 
+func TestLastPendingBlockingTool_FindsEntryBeyondTailWindow(t *testing.T) {
+	// Mirror of TestReadPendingQuestion_FindsEntryBeyondTailWindow. The
+	// backup state-resolution path (ApplyIdleOverrides → LastPendingBlockingTool)
+	// must also handle the sidechain-padded case; the previous fix only
+	// updated ReadPendingQuestion, leaving this function silently broken
+	// for resumed sessions whose AskUserQuestion sits far before EOF.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-blocking"
+
+	var b strings.Builder
+	b.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_AUQ","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}` + "\n")
+	b.WriteString(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_AUQ","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}` + "\n")
+	padLine := `{"type":"user","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"sub_t","content":[{"type":"text","text":"` + strings.Repeat("x", 500) + `"}]}]},"timestamp":"2026-06-02T10:00:02Z"}` + "\n"
+	for b.Len() < 200*1024 {
+		b.WriteString(padLine)
+	}
+
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(b.String()), 0644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	got := LastPendingBlockingTool(projDir, sessionID)
+	if got != "question" {
+		t.Errorf("LastPendingBlockingTool = %q, want \"question\" (must scan past tail window)", got)
+	}
+}
+
 // writeSessionFile creates a single session JSON in dir for the Locate tests.
 func writeSessionFile(t *testing.T, dir, sessionID, cwd string, startedAt int64) {
 	t.Helper()

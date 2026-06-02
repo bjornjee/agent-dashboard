@@ -390,6 +390,82 @@ func TestPendingQuestionEndpoint_ReturnsPayload(t *testing.T) {
 	}
 }
 
+func TestPendingQuestionEndpoint_ReadsFromSidecarBeforeJSONL(t *testing.T) {
+	// Claude Code doesn't flush the AskUserQuestion tool_use line to the JSONL
+	// until the user answers; while the agent is paused on the question, the
+	// payload only exists in the agent sidecar (written by agent-state-fast.js's
+	// PreToolUse hook). The endpoint must read from there directly. This test
+	// asserts that path by using a JSONL that contains NO AskUserQuestion at
+	// all — the only place the data exists is the sidecar.
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	projectsDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = projectsDir
+
+	cwd := "/tmp/pq-sidecar-repo"
+	projDir := filepath.Join(projectsDir, conversation.ProjectSlug(cwd))
+	os.MkdirAll(projDir, 0755)
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	sessionID := "pq-sidecar"
+	// JSONL exists (so ProjDir resolution succeeds) but has zero AskUserQuestion
+	// tool_use blocks — mirrors the real bug where the hook stamped state=question
+	// before Claude Code flushed the tool_use line.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"thinking..."}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	agent := domain.Agent{
+		SessionID: sessionID,
+		ProjDir:   projDir,
+		State:     "question",
+		Cwd:       cwd,
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_sidecar_42",
+			Questions: []domain.PendingQuestionPrompt{{
+				Question:    "Pick one",
+				Header:      "Sidecar",
+				MultiSelect: false,
+				Options: []domain.PendingQuestionOption{
+					{Label: "X", Description: "from sidecar"},
+					{Label: "Y", Description: "also from sidecar"},
+				},
+			}},
+		},
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "tool_sidecar_42" {
+		t.Errorf("ToolUseID = %q, want tool_sidecar_42 (sidecar path must win)", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 || pq.Questions[0].Header != "Sidecar" {
+		t.Errorf("Questions not propagated from sidecar: %+v", pq.Questions)
+	}
+	if len(pq.Questions[0].Options) != 2 {
+		t.Errorf("Options len = %d, want 2", len(pq.Questions[0].Options))
+	}
+}
+
 func TestPendingQuestionEndpoint_EmptyWhenNone(t *testing.T) {
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()

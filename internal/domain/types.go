@@ -59,6 +59,14 @@ type Agent struct {
 	// cleared when state transitions out of "plan".
 	DelegatedPlanToolUseID string `json:"delegated_plan_tool_use_id,omitempty"`
 
+	// PendingQuestion is the AskUserQuestion payload captured by the
+	// agent-state-fast PreToolUse hook. Claude Code does not flush the
+	// AskUserQuestion tool_use line to the JSONL until the user answers,
+	// so the sidecar is the only source of this data during the pending
+	// window. Cleared on PostToolUse(AskUserQuestion) or the next PreToolUse
+	// for a different tool. Nil when no question is pending.
+	PendingQuestion *PendingQuestion `json:"pending_question,omitempty"`
+
 	// ProjDir is the resolved ~/.claude/projects/<slug> directory that
 	// contains <SessionID>.jsonl. Populated each load by
 	// state.ResolveAgentProjDir; never persisted (slug can drift if the
