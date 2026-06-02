@@ -31,11 +31,11 @@ export async function promptInstall() {
   return choice.outcome === 'accepted';
 }
 
-export function isIOS() {
+function isIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 }
 
-export function isStandalone() {
+function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches
       || window.navigator.standalone === true;
 }
