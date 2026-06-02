@@ -170,12 +170,15 @@ function renderActionBar(agent) {
   // regardless of the agent's terminal state. The stop button only appears
   // while the agent is actively processing; otherwise the send button.
   const STOP_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
-  const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…' : 'Message';
+  const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
+    : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
   const trailing = STOP_STATES.has(st)
     ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
     : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
+  const modelLabel = agent.model ? escapeHtml(agent.model) : 'auto';
+  const branchLabel = agent.branch ? escapeHtml(agent.branch) : 'no branch';
+  const effortLabel = agent.effort ? escapeHtml(agent.effort) : 'high';
   const composer = `<div class="ui-composer detail-composer">
-    <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
     <textarea
       class="ui-composer__input"
       id="reply-input"
@@ -184,7 +187,15 @@ function renderActionBar(agent) {
       oninput="UI.composerAutoSize(this)"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
     ></textarea>
-    ${trailing}
+    <div class="ui-composer__rail">
+      <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
+      <button class="ui-composer__chip" data-chip="model" tabindex="-1" aria-label="Model"><span>${modelLabel}</span></button>
+      <button class="ui-composer__chip" data-chip="branch" tabindex="-1" aria-label="Branch"><span>${branchLabel}</span></button>
+      <button class="ui-composer__chip" data-chip="effort" tabindex="-1" aria-label="Effort"><span>⚡ ${effortLabel}</span></button>
+      <span class="ui-composer__rail-spacer"></span>
+      <button class="ui-composer__mic" aria-label="Voice input" tabindex="-1">${ICONS.mic || '<svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"12\" rx=\"3\"/><path d=\"M5 11a7 7 0 0014 0\"/><path d=\"M12 18v3\"/></svg>'}</button>
+      ${trailing}
+    </div>
   </div>`;
 
   const actionRow = actions ? `<div class="action-row">${actions}</div>` : '';

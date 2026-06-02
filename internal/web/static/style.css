@@ -492,6 +492,18 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-composer__attach:hover { background: var(--bg-elevated); }
 .ui-composer__input:placeholder-shown ~ .ui-composer__send { background: var(--bg-surface); color: var(--text-faint); }
 .ui-composer__input:placeholder-shown ~ .ui-composer__send:hover { opacity: 1; }
+/* Same de-emphasis when send is nested inside .ui-composer__rail (desktop). */
+.ui-composer:has(.ui-composer__input:placeholder-shown) .ui-composer__send { background: var(--bg-surface); color: var(--text-faint); }
+.ui-composer:has(.ui-composer__input:placeholder-shown) .ui-composer__send:hover { opacity: 1; }
+/* Mobile: the rail wrapper is a layout no-op so attach + send still flex as siblings of the textarea (pill pattern). */
+.ui-composer__rail { display: contents; }
+.ui-composer__chip,
+.ui-composer__mic,
+.ui-composer__rail-spacer { display: none; }
+/* Keep the attach button to the left of the textarea on mobile (it
+ * came after the textarea in source order to sit inside the desktop
+ * chip rail, but on mobile the pill pattern needs it first). */
+.ui-composer__attach { order: -1; }
 .ui-composer__input {
   flex: 1;
   resize: none;
@@ -2236,5 +2248,94 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   .ui-composer__stop:focus-visible {
     outline: 1px solid var(--text-primary);
     outline-offset: -1px;
+  }
+
+  /* ============================================================
+   * Composer — Codex desktop parity (tall card + internal chip rail).
+   * Replaces the mobile pill pattern with a rounded-rectangle card
+   * containing two rows on one elevated surface:
+   *   row 1: textarea (multi-line, transparent)
+   *   row 2: chip rail [attach, model, branch, effort, spacer, mic, send/stop]
+   * ============================================================ */
+  .ui-composer.detail-composer {
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--bg-elevated);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+  .ui-composer.detail-composer .ui-composer__input {
+    background: transparent;
+    border-radius: 0;
+    padding: var(--space-2);
+    min-height: 88px;
+    font-size: 15px;
+    line-height: 22px;
+    max-height: 240px;
+  }
+  .ui-composer.detail-composer .ui-composer__rail {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .ui-composer.detail-composer .ui-composer__rail-spacer {
+    display: block;
+    flex: 1;
+  }
+  .ui-composer.detail-composer .ui-composer__attach {
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .ui-composer.detail-composer .ui-composer__attach:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .ui-composer.detail-composer .ui-composer__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-base);
+    border: 0;
+    color: var(--text-secondary);
+    padding: 5px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 12.5px;
+    line-height: 1;
+    max-width: 220px;
+  }
+  .ui-composer.detail-composer .ui-composer__chip > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-composer.detail-composer .ui-composer__chip::after {
+    content: "▾";
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-left: 2px;
+  }
+  .ui-composer.detail-composer .ui-composer__mic {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ui-composer.detail-composer .ui-composer__send,
+  .ui-composer.detail-composer .ui-composer__stop {
+    width: 32px;
+    height: 32px;
+  }
+  .ui-composer.detail-composer .ui-composer__input:focus-visible {
+    outline: 1px solid var(--text-faint);
+    outline-offset: -1px;
+    border-radius: 8px;
   }
 }
