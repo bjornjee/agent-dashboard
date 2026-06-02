@@ -33,12 +33,35 @@ export const Theme = {
     const next = this.getPreference() === 'dark' ? 'light' : 'dark';
     localStorage.setItem(STORAGE_KEY, next);
     this.apply(next);
-    // Update toggle button icon
-    const btn = document.querySelector('.header-icon-btn');
-    if (btn) btn.innerHTML = this.getIcon();
+    // Refresh every theme-toggle button on the page (app-bar + sidebar).
+    document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+      const slot = btn.querySelector('[data-theme-icon]');
+      if (slot) slot.innerHTML = this.getIcon();
+      else btn.innerHTML = this.getIcon();
+      const label = this.getNextLabel();
+      btn.setAttribute('aria-label', label);
+      const text = btn.querySelector('[data-theme-label]');
+      if (text) text.textContent = label;
+    });
   },
 
   getIcon() {
     return this.getPreference() === 'light' ? ICON_SUN : ICON_MOON;
+  },
+
+  // Label for the *next* state — used in sidebar row text.
+  getNextLabel() {
+    return this.getPreference() === 'light' ? 'Switch to dark' : 'Switch to light';
+  },
+
+  // App-bar trailing entry config, drop-in for UI.appBar({ trailing: [...] }).
+  trailingEntry() {
+    return {
+      icon: this.getIcon(),
+      ariaLabel: this.getNextLabel(),
+      onclick: 'Dashboard.cycleTheme()',
+      cls: 'ui-app-bar__theme',
+      dataAttr: 'theme-toggle',
+    };
   },
 };

@@ -1,6 +1,7 @@
 // Agent list — Codex-iOS register. Thin glue over the primitives.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
+import { Theme } from '../theme.js';
 import { effectiveState, stateGroup, prTag } from '../state.js';
 import { escapeHtml, repoName, durationShort, formatCost } from '../format.js';
 import { get } from '../api.js';
@@ -30,7 +31,10 @@ export function renderList(app, agents) {
 
   let pinned = UI.appBar({
     title: 'Agents',
-    trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
+    trailing: [
+      Theme.trailingEntry(),
+      { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
+    ],
   });
 
   let body = '';
