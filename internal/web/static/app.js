@@ -220,8 +220,7 @@ window.Dashboard = {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   },
 
-  // Re-evaluate the question card's submit-enabled state on any input
-  // change. Called inline from the card markup.
+  // Called inline from the card markup on any input change.
   questionCardUpdate(toolUseId) {
     updateQuestionCardSubmit(toolUseId);
   },

@@ -789,8 +789,6 @@ func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, tailSize), 1024*1024)
 
-	// Walk the tail tracking the most recent AskUserQuestion tool_use and
-	// whether a human user message appeared after it.
 	var lastInput json.RawMessage
 	var lastID string
 	humanAfter := false

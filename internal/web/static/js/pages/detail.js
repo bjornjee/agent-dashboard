@@ -545,7 +545,6 @@ function renderConversationHtml(entries) {
   return html;
 }
 
-// Render the AskUserQuestion card as inline chat content.
 // Anatomy matches docs/design/codex-screenshots/mobile/photo_2026-06-01_17-44-47.jpg —
 // elevated surface, per-question small-caps category label, radio list with
 // bold title + muted description, optional freeform answer input, single
