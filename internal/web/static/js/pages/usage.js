@@ -190,7 +190,7 @@ function tokenCard(data) {
   periodTokens.total = periodTokens.input + periodTokens.output + periodTokens.cache;
 
   const header = `<div class="usage-card__header"><span class="usage-card__title">Token Usage</span></div>`;
-  const table = `<table class="usage-table">
+  const table = `<div class="usage-table-scroll"><table class="usage-table">
     <thead><tr>
       <th>Period</th><th class="num">Input</th><th class="num">Output</th>
       <th class="num">Cache</th><th class="num">Total</th>
@@ -211,7 +211,7 @@ function tokenCard(data) {
         <td class="num">${formatTokens(periodTokens.total)}</td>
       </tr>
     </tbody>
-  </table>`;
+  </table></div>`;
   return UI.card(header + table);
 }
 
@@ -325,7 +325,7 @@ async function loadAgentBreakdown(agents) {
   }
 
   const header = `<div class="usage-card__header"><span class="usage-card__title">Per-agent breakdown</span></div>`;
-  const table = `<table class="usage-table">
+  const table = `<div class="usage-table-scroll"><table class="usage-table">
     <thead><tr>
       <th>Agent</th><th>Model</th>
       <th class="num">Input</th><th class="num">Output</th>
@@ -333,6 +333,6 @@ async function loadAgentBreakdown(agents) {
     </tr></thead>
     <tbody>${rows}</tbody>
     ${footerHtml}
-  </table>`;
+  </table></div>`;
   container.innerHTML = UI.card(header + table);
 }

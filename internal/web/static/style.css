@@ -1401,28 +1401,27 @@ button.btn-ghost.btn-sm {
   text-transform: capitalize;
 }
 
-/* Metrics — three stacked numerics inside a single card */
+/* Tables that exceed the card width on mobile scroll horizontally
+ * instead of overflowing the card. Wrap belongs around <table>. */
+.usage-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Metrics — three stacked numerics inside a single card.
+ * Below 900px (mobile): vertical stack, no dividers, smaller value
+ * font so "$19,870.21" doesn't overflow the card. */
 .usage-metrics {
   display: flex;
-  align-items: flex-start;
-  gap: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
 }
 .usage-metric {
-  flex: 1;
-  padding: 0 var(--space-6);
+  padding: 0;
   position: relative;
+  min-width: 0;
 }
-.usage-metric + .usage-metric::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  background: var(--border-subtle);
-}
-.usage-metric:first-child { padding-left: 0; }
-.usage-metric:last-child { padding-right: 0; }
 .usage-metric__label {
   font-size: 12px;
   font-weight: 400;
@@ -1431,11 +1430,39 @@ button.btn-ghost.btn-sm {
 }
 .usage-metric__value {
   font-family: var(--font-mono);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 500;
   color: var(--text-primary);
   letter-spacing: -0.02em;
-  line-height: 32px;
+  line-height: 30px;
+  word-break: break-word;
+}
+@media (min-width: 900px) {
+  /* Desktop: three columns side by side with a 1px divider between. */
+  .usage-metrics {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .usage-metric {
+    flex: 1;
+    padding: 0 var(--space-6);
+  }
+  .usage-metric + .usage-metric::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background: var(--border-subtle);
+  }
+  .usage-metric:first-child { padding-left: 0; }
+  .usage-metric:last-child { padding-right: 0; }
+  .usage-metric__value {
+    font-size: 24px;
+    line-height: 32px;
+  }
 }
 .usage-metric__delta {
   font-size: 11px;
