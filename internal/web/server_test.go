@@ -438,6 +438,56 @@ func TestPendingQuestionEndpoint_EmptyWhenNone(t *testing.T) {
 	}
 }
 
+func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
+	// Pins the cost-saving gate: even when a pending AskUserQuestion sits
+	// in the JSONL, the endpoint must return null while agent.State is not
+	// "question". The hook layer flips state the moment AskUserQuestion
+	// fires; gating on that avoids a full JSONL scan on every 2s poll for
+	// the 99% case where the agent isn't paused on a question.
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	projectsDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = projectsDir
+
+	cwd := "/tmp/pq-gate-repo"
+	projDir := filepath.Join(projectsDir, conversation.ProjectSlug(cwd))
+	os.MkdirAll(projDir, 0755)
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	sessionID := "pq-gate"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_xyz","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	agent := domain.Agent{
+		SessionID: sessionID,
+		ProjDir:   projDir,
+		State:     "running",
+		Cwd:       cwd,
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	buf := make([]byte, 4096)
+	n, _ := resp.Body.Read(buf)
+	trimmed := strings.TrimSpace(string(buf[:n]))
+	if trimmed != "null" {
+		t.Errorf("expected null (gate should skip scan when state != question), got %q", trimmed)
+	}
+}
+
 // withMockCommandRunner swaps the package-level cmdRunner with a mock
 // and restores the original on test cleanup.
 func withMockCommandRunner(t *testing.T) *mocks.MockCommandRunner {
