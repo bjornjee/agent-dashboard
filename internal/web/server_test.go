@@ -1619,3 +1619,183 @@ func TestCleanupNotFoundReturns404(t *testing.T) {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
 	}
 }
+
+// --- PWA installability ---
+
+func TestPWAManifestServesValidJSON(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/manifest.json")
+	if err != nil {
+		t.Fatalf("GET /manifest.json: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var m struct {
+		Name            string `json:"name"`
+		ShortName       string `json:"short_name"`
+		ID              string `json:"id"`
+		StartURL        string `json:"start_url"`
+		Scope           string `json:"scope"`
+		Display         string `json:"display"`
+		BackgroundColor string `json:"background_color"`
+		ThemeColor      string `json:"theme_color"`
+		Icons           []struct {
+			Src     string `json:"src"`
+			Sizes   string `json:"sizes"`
+			Type    string `json:"type"`
+			Purpose string `json:"purpose"`
+		} `json:"icons"`
+		Shortcuts []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"shortcuts"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+
+	if m.Display != "standalone" {
+		t.Errorf("display: got %q, want standalone", m.Display)
+	}
+	if m.ThemeColor != "#000000" {
+		t.Errorf("theme_color: got %q, want #000000 (must match index.html meta)", m.ThemeColor)
+	}
+	if m.BackgroundColor != "#000000" {
+		t.Errorf("background_color: got %q, want #000000", m.BackgroundColor)
+	}
+	if m.StartURL != "/" {
+		t.Errorf("start_url: got %q, want /", m.StartURL)
+	}
+	if m.ID != "/" {
+		t.Errorf("id: got %q, want /", m.ID)
+	}
+	if m.Scope != "/" {
+		t.Errorf("scope: got %q, want /", m.Scope)
+	}
+
+	var has192, has512, hasMaskable bool
+	for _, ic := range m.Icons {
+		if ic.Type != "image/png" {
+			t.Errorf("icon %q: type %q, want image/png", ic.Src, ic.Type)
+		}
+		if ic.Sizes == "192x192" {
+			has192 = true
+		}
+		if ic.Sizes == "512x512" && (ic.Purpose == "" || ic.Purpose == "any") {
+			has512 = true
+		}
+		if ic.Purpose == "maskable" {
+			hasMaskable = true
+		}
+	}
+	if !has192 {
+		t.Error("manifest missing 192x192 PNG icon")
+	}
+	if !has512 {
+		t.Error("manifest missing 512x512 PNG icon with purpose any")
+	}
+	if !hasMaskable {
+		t.Error("manifest missing maskable icon (required for Android adaptive launchers)")
+	}
+
+	var hasNewAgentShortcut bool
+	for _, s := range m.Shortcuts {
+		if s.Name == "New Agent" && strings.Contains(s.URL, "action=new-agent") {
+			hasNewAgentShortcut = true
+		}
+	}
+	if !hasNewAgentShortcut {
+		t.Error("manifest missing 'New Agent' shortcut with ?action=new-agent URL")
+	}
+}
+
+func TestPWAIconsServeAsPNG(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	pngMagic := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	for _, path := range []string{
+		"/icons/icon-192.png",
+		"/icons/icon-512.png",
+		"/icons/icon-512-maskable.png",
+		"/icons/apple-touch-icon.png",
+	} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		body := make([]byte, 8)
+		_, _ = resp.Body.Read(body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("%s: status %d, want 200", path, resp.StatusCode)
+			continue
+		}
+		for i, b := range pngMagic {
+			if body[i] != b {
+				t.Errorf("%s: byte %d = %#x, want %#x (not a PNG)", path, i, body[i], b)
+				break
+			}
+		}
+	}
+}
+
+func TestPWAServiceWorkerCacheVersion(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/sw.js")
+	if err != nil {
+		t.Fatalf("GET /sw.js: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	buf := make([]byte, 4096)
+	n, _ := resp.Body.Read(buf)
+	body := string(buf[:n])
+	if !strings.Contains(body, "agent-dashboard-v20") {
+		t.Errorf("sw.js cache version: missing 'agent-dashboard-v20' (must bump when icon paths change)")
+	}
+	if strings.Contains(body, "icon-192.svg") {
+		t.Errorf("sw.js still references icon-192.svg (should be /icons/icon-192.png)")
+	}
+}
+
+func TestPWAIndexHTMLHasAppleTouchIcon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+	buf := make([]byte, 8192)
+	n, _ := resp.Body.Read(buf)
+	body := string(buf[:n])
+	if !strings.Contains(body, `rel="apple-touch-icon"`) {
+		t.Error(`index.html missing <link rel="apple-touch-icon">`)
+	}
+	if !strings.Contains(body, "/icons/apple-touch-icon.png") {
+		t.Error(`index.html apple-touch-icon should point to /icons/apple-touch-icon.png`)
+	}
+}
