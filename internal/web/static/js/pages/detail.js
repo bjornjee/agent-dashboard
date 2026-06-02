@@ -540,7 +540,7 @@ function renderActionBar(agent) {
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
     ></textarea>
     <div class="ui-composer__rail">
-      <button class="ui-composer__attach" aria-label="Attach file" title="Attach file from your Mac" onclick="Dashboard.attachFile()">${ICONS.attach}</button>
+      <button class="ui-composer__attach" aria-label="Attach file" title="Attach file" onclick="Dashboard.attachFile('${id}')">${ICONS.attach}</button>
       <button class="ui-composer__chip" data-chip="model" tabindex="-1" aria-label="Model"><span>${modelLabel}</span></button>
       <button class="ui-composer__chip" data-chip="branch" tabindex="-1" aria-label="Branch"><span>${branchLabel}</span></button>
       <button class="ui-composer__chip" data-chip="effort" tabindex="-1" aria-label="Effort"><span>⚡ ${effortLabel}</span></button>

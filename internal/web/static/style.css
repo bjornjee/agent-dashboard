@@ -680,12 +680,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-composer__chip,
 .ui-composer__mic,
 .ui-composer__rail-spacer { display: none; }
-/* Attach button is hidden on mobile: the server-side file picker
- * (osascript "choose file") runs on the Mac running the dashboard, not
- * on the phone. Tapping it from a phone-on-LAN would pop the dialog on
- * the laptop — confusing at best. The desktop @media block restores
- * the button. */
-.ui-composer__attach { display: none; }
 .ui-composer__input {
   flex: 1;
   resize: none;
@@ -2546,10 +2540,9 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     outline-offset: -1px;
   }
 
-  /* Restore the attach (+) button on desktop. Mobile hides it because
-   * the file picker uses osascript on the dashboard server (the user's
-   * Mac), which is the wrong picker for a phone client. Desktop is the
-   * server, so the picker is the right one. */
+  /* Desktop attach (+) button uses inline-flex. Mobile uses the same
+   * display; the JS branch in attachFile() picks osascript (desktop) or
+   * the browser <input type="file"> upload flow (mobile). */
   .ui-composer__attach { display: inline-flex; }
 
   /* ============================================================
