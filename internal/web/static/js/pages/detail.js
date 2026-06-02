@@ -456,22 +456,25 @@ function renderActionBar(agent) {
   const st = effectiveState(agent);
   const id = agent.session_id;
   let actions = '';
+  let panelLabel = '';
 
   // State-specific chips live above the composer (Codex pattern: action chips stacked above input).
   if (st === 'permission' || st === 'plan') {
     actions += inlineBtn('Approve', 'primary', `Dashboard.approve('${id}', event)`);
     actions += inlineBtn('Reject', 'danger', `Dashboard.reject('${id}', event)`);
+    panelLabel = st === 'plan' ? 'Plan review' : 'Permission request';
   } else if (st === 'merged') {
     actions += inlineBtn('Close', 'ghost', `Dashboard.confirmClose('${id}')`);
+    panelLabel = 'Branch merged';
   }
   // PR chips appear whenever the agent has an open PR — whether the
   // live state is "pr" (idle, backend swapped pinned_state in), "running"
   // (active turn but PR was created earlier), or anything else that
-  // isn't "merged". hasOpenPR() consolidates the signal (pinned_state,
-  // raw state, or pr_url — any of the three).
+  // isn't "merged". hasOpenPR() consolidates the signal.
   if (hasOpenPR(agent) && st !== 'merged') {
     actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
     actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
+    panelLabel = panelLabel || 'Pull request';
   }
 
   // Composer is always present so the user can ask follow-up questions
@@ -506,7 +509,15 @@ function renderActionBar(agent) {
     </div>
   </div>`;
 
-  const actionRow = actions ? `<div class="action-row">${actions}</div>` : '';
+  // Wrap the action chips in a labeled panel — gives the floating
+  // buttons context ("Pull request", "Permission request", …) and a
+  // surface that visually pairs with the composer card below.
+  const actionRow = actions
+    ? `<div class="action-panel">
+         <span class="action-panel__label">${escapeHtml(panelLabel)}</span>
+         <div class="action-panel__chips">${actions}</div>
+       </div>`
+    : '';
   return `<div class="action-bar">${actionRow}${composer}</div>`;
 }
 
@@ -706,7 +717,10 @@ export async function renderDetail(app, agents, agentId, setView) {
     ],
   });
 
-  const prChip = prTag(agent)
+  // Suppress the tag chip in the detail header when the status pill
+  // already says "PR open" (state === 'pr', the idle case). Sidebar/list
+  // rows have no status pill, so they always show the tag.
+  const prChip = (prTag(agent) && st !== 'pr')
     ? `<span class="ui-row__tag detail-header__tag">${escapeHtml(prTag(agent))}</span>`
     : '';
   const detailHeader = `

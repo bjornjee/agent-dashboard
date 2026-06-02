@@ -974,6 +974,41 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .tab-content.active { display: block; }
 .action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
 .action-row { display: flex; gap: var(--space-2); padding: var(--space-2) var(--space-5); flex-wrap: wrap; }
+/* Labeled action panel — wraps state-specific chips ("Pull request",
+ * "Permission request", …) above the composer. Gives the floating
+ * pills context + a surface that visually pairs with the composer
+ * card. Eyebrow label sits on the left; chips cluster on the right. */
+.action-panel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-5) var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: 14px;
+  flex-wrap: wrap;
+}
+.action-panel__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.action-panel__chips {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+/* Within the panel, scale the modal buttons down — they should not
+ * dominate the composer that sits below. */
+.action-panel .ui-modal-btn {
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
+}
 .detail-composer { position: relative; bottom: auto; }
 .action-bar .ui-composer { padding-bottom: 0; }
 
