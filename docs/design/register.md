@@ -195,7 +195,63 @@ Anchored bottom-center, 24px from screen edge. Two pills side by side: left = `S
 
 ## What's intentionally not in this register
 
-- Light theme tokens (deferred to follow-up PR; carry over old `[data-theme="light"]` block verbatim)
+- ~~Light theme tokens (deferred to follow-up PR; carry over old `[data-theme="light"]` block verbatim)~~ Light theme is now a first-class section of this register — see "Light mode" below.
 - Dense data-viz styles (Usage view is out of scope; its existing tokens still resolve via the re-used names)
 - Hover/focus states for keyboard navigation (will be added in Phase B styling pass — register declares them as `--text-primary` underline + `#2F2F33` background, no glow rings)
 - Animation easings beyond `ease-out` (the register rejects bounce / elastic / spring)
+
+## Light mode
+
+Light mode is a peer of dark mode in this register, not an afterthought. Dark values declared above continue to apply when `[data-theme="dark"]` (or no `data-theme`) is set; light values below apply when `[data-theme="light"]` is set. The token *names* are identical across themes — only the *values* swap. All values in this section quote the shipped `[data-theme="light"]` block in `internal/web/static/style.css:1858-1920` verbatim; this section documents the rules that block embodies, it does not introduce new values.
+
+### Surfaces
+
+| Token | Light value | Use |
+|---|---|---|
+| `--bg-base` | `#FFFFFF` | Page background (main pane). Pure white. |
+| `--bg-surface` | `#FFFFFF` | Card surface. Same as `--bg-base`; light mode separates cards from page via 1px `--border-default`, not via a surface-color step. |
+| `--bg-elevated` | `#F2F2F4` | Inline inputs, secondary pill chrome, agent-message card fill. Soft neutral gray. |
+| `--bg-code` | `#F4F4F5` | Inline `code` background. One step warmer than `--bg-elevated`. |
+| `--bg-sidebar` | `#F4F4F5` | Sidebar background. Distinct from the white main pane; the boundary reads as a panel separation. |
+| `--bg-selected` | `#E4E4E7` | Selected sidebar row background. Soft neutral gray, never tinted. |
+| `--bg-hover` | `#ECECEE` | Hover background for interactive rows on desktop. One step lighter than `--bg-selected`. |
+
+The dark register's "layered, not bordered" rule (line 127) is **inverted in light**: white-on-white surfaces cannot separate by elevation step, so light mode falls back to a 1px `--border-default` (`#E4E4E7`) around cards. The dark register's prohibition of card outlines applies to dark only.
+
+### Elevation rules (light)
+
+- **No warm shadows.** The dark register has no shadows at all on cards; light follows the same rule for cards but allows a single subtle shadow on lifted surfaces (the floating dock, in mobile light).
+- `--shadow-medium: rgba(0, 0, 0, 0.06)` — the only shadow token in use in light. Quoted directly from `style.css:1919` (`#F2F2F4` resolves to roughly 6% black opacity). Consumed by the floating dock and any other lifted pill surface.
+- **No `--shadow-large` declared for light in this phase.** The dark register's `box-shadow: 0 8px 32px rgba(0,0,0,0.4)` on the dock has no light analog beyond the medium shadow above. If a heavier lift is needed later, it will be added as a new token, not by darkening the existing one.
+
+### Hover precedence (light, applies to dark too)
+
+When a row is both **hovered** and **selected**, the **`--bg-hover` fill takes precedence under the cursor**: the lifted "the cursor is here" state outranks the settled "this row is the current selection" state. Rationale: a selected row that the user is hovering is, by definition, a row the user is about to interact with — the hover signal is the more informative one. This matches the dark register's intent (sidebar hover = `#2F2F33`, selected = `#222226`; hover is the brighter fill) and is asserted here as an explicit, theme-agnostic rule.
+
+### Chat-bubble inversion
+
+The dark register declares the user message as a `--bg-elevated` pill against a dark page (line 178). Light mode **inverts the contrast pair**, not the geometry:
+
+- **User message (light):** `background: var(--cta-bg)` (`#1C1A17`, near-black), `color: var(--cta-text)` (`#FFFFFF`), same `border-radius: 999px` and `padding: 8px 16px` as dark. The bubble is the *dark* element in a light page; the inversion preserves user-message prominence.
+- **Agent message (light):** `background: var(--bg-surface)` (`#FFFFFF`), `color: var(--text-primary)` (`#1C1A17`), `border: 1px solid var(--border-default)` (`#E4E4E7`). The agent message is a white card on a white page — separated by the 1px hairline, not by a surface-color step.
+
+Dark mode is unchanged: user pill = `--bg-elevated` (dark gray on dark page), agent message = no background (prose on dark page).
+
+### Text colors (light)
+
+| Token | Light value | Use |
+|---|---|---|
+| `--text-primary` | `#1C1A17` | Display + headings + body emphasis. Pure near-black; matches `--cta-bg` for token symmetry. |
+| `--text-secondary` | `#3F3F46` | Body prose. |
+| `--text-muted` | `#71717A` | Labels, meta, timestamps with low prominence. |
+| `--text-faint` | `#A1A1AA` | Collapsed indicators, the lowest-emphasis text class. |
+
+### Focus underline carries forward verbatim
+
+The desktop register's focus rule (`desktop-register.md` "Focus styling" section) — 1px underline in `var(--text-primary)`, no outline, no glow ring — applies **bit-exactly** in light. The only thing that changes is the resolved color: `--text-primary` is `#FFFFFF` in dark, `#1C1A17` in light. The underline geometry, the hover-precedence rule above, and the "no outline rectangle" prohibition are all theme-agnostic.
+
+### What the light section intentionally does not declare
+
+- A separate set of shadow tokens beyond `--shadow-medium`. If a future component needs more elevation steps in light, add a token; do not reuse `--shadow-medium` at a higher opacity.
+- Theme-toggle UX. The toggle mechanism is owned by the existing code path; this register declares the values, not the switch.
+- Light variants for `--status-*-bg/border/text`. Those are already declared in the shipped CSS block (`style.css:1893-1910`) and follow the same "saturated-on-tinted" pattern as dark; they do not need to be re-promoted here.

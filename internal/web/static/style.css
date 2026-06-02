@@ -93,6 +93,13 @@
   --bg-selected: #222226;
   --bg-hover: #2F2F33;
 
+  /* Monitor-tier layout tokens (consumed only inside @media (min-width: 1600px)).
+   * Declared mobile-first on :root so getComputedStyle resolves them at every
+   * viewport; the consuming @media block applies them at ≥1600px. */
+  --sidebar-width-monitor: 288px;
+  --reading-max-monitor: 1080px;
+  --page-padding-monitor: 32px;
+
   /* Misc tokens consumed by usage/diff CSS */
   --interactive-bg: rgba(255, 255, 255, 0.04);
   --scrollbar-thumb: rgba(255, 255, 255, 0.15);
@@ -217,6 +224,7 @@ a { color: inherit; }
   gap: var(--space-3);
   padding: var(--space-2);
   background: rgba(26, 26, 28, 0.88);
+  border: 1px solid transparent;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: var(--radius-pill);
@@ -238,6 +246,17 @@ a { color: inherit; }
   min-width: 160px;
 }
 .ui-dock__search:hover { background: rgba(255, 255, 255, 0.04); }
+/* Light-mode dock: the dark-glass blob from dark mode reads as a foreign
+ * element on a white page. Swap to a white card with a hairline outline
+ * and the lighter shadow token. Search-pill hover follows --bg-hover.
+ * Dark mode is unchanged — these overrides only apply under
+ * [data-theme="light"]. See docs/design/light-flow-map.md C1. */
+[data-theme="light"] .ui-dock {
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: 0 8px 32px var(--shadow-medium);
+}
+[data-theme="light"] .ui-dock__search:hover { background: var(--bg-hover); }
 .ui-dock__cta {
   display: inline-flex;
   align-items: center;
@@ -430,6 +449,14 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   white-space: pre-wrap;
   max-height: 260px;
   overflow-y: auto;
+}
+/* Light-mode chat-bubble inversion. The user pill becomes a dark pill on
+ * the white page so it doesn't blend with --bg-elevated chips/buttons.
+ * Agent prose remains on the page surface (the .ui-msg__prose default).
+ * See docs/design/light-flow-map.md A2. */
+[data-theme="light"] .ui-msg--user .ui-msg__bubble {
+  background: var(--cta-bg);
+  color: var(--cta-text);
 }
 .ui-msg--assistant { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
 .ui-msg__prose {
@@ -855,6 +882,13 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: var(--bg-surface);
   color: var(--text-faint);
   cursor: not-allowed;
+}
+/* Light mode: --bg-surface == --bg-base == #FFFFFF, so the disabled fill
+ * collapses into the page. Add a hairline outline so the button keeps a
+ * readable geometry. Dark mode is unchanged — dark --bg-surface (#181B22)
+ * already sits one step above --bg-base (#0B0E14). */
+[data-theme="light"] .create-spawn:disabled {
+  border: 1px solid var(--border-default);
 }
 
 /* Modal action buttons — used by modal.js, supersede old UI.btn */
@@ -1916,7 +1950,7 @@ button.btn-ghost.btn-sm {
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
   --row-alt-bg: rgba(0, 0, 0, 0.02);
-  --shadow-medium: rgba(0, 0, 0, 0.08);
+  --shadow-medium: rgba(0, 0, 0, 0.06);
 }
 
 /* === LEGACY: activity / conversation / plan content === */
@@ -2531,6 +2565,123 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     outline-offset: -1px;
     border-radius: 8px;
   }
+
+  /* --------------------------------------------------------------
+   * Phase D — laptop light-mode polish (>= 900px, light only)
+   *
+   * Three targeted overrides per docs/design/verdict-light-laptop-0.md:
+   *
+   *   1. Composer card: replace the dark register's heavy 0.35 lift
+   *      and white-on-white inset with a single soft --shadow-medium
+   *      drop. Promote the card border from --border-subtle to
+   *      --border-default so the white-card-on-white-pane separation
+   *      reads (register.md "Elevation rules (light)").
+   *
+   *   2. Sidebar selected row: reinforce the fill with a 2px inset
+   *      left-border in --text-primary. The light fill step
+   *      (#E4E4E7 on #F4F4F5) is below the perceptual contrast
+   *      threshold on its own; the accent is the affordance.
+   *      Dark mode keeps fill-only — its surface step is strong.
+   *
+   *   3. Composer chips: promote chip border to --border-default
+   *      so they read against the now-stronger composer card edge.
+   * -------------------------------------------------------------- */
+  [data-theme="light"] .ui-composer.detail-composer {
+    border-color: var(--border-default);
+    box-shadow: 0 8px 24px var(--shadow-medium);
+  }
+  [data-theme="light"] .ui-composer.detail-composer .ui-composer__chip {
+    border-color: var(--border-default);
+  }
+  [data-theme="light"] .ui-composer.detail-composer .ui-composer__chip:hover {
+    border-color: var(--border-hover);
+  }
+
+  /* Sidebar selected row — light only. The accent is rendered as an
+   * inset left-border so the row's overall geometry (height, padding)
+   * is unchanged; the border eats 2px of the left padding visually. */
+  [data-theme="light"] .app-sidebar__nav-row--selected .ui-row,
+  [data-theme="light"] .app-sidebar__row--selected .ui-row {
+    border-left: 2px solid var(--text-primary);
+    padding-left: calc(var(--space-3) - 2px);
+  }
+}
+
+/* ============================================================
+ * Monitor tier (≥ 1600px) — widen the sidebar, cap content,
+ * bump page padding. Layout-only overrides at this tier; the
+ * surface tokens (colors, shadows, borders) carry through from the
+ * laptop @media block (Phase D) without further restyling.
+ *
+ * Tokens consumed are declared on :root above.
+ *
+ * Light-flow-map (docs/design/light-flow-map.md "Monitor light"):
+ *   - "Sidebar widens to 288px (vs. 264px on desktop)."
+ *   - "Main-pane content max-width caps at 1080px, centered."
+ *   - "The cap applies to transcript + composer + create-view
+ *     content; the page chrome (app bar, tabs) still spans the
+ *     full main-pane width."
+ * ============================================================ */
+@media (min-width: 1600px) {
+  #app-shell {
+    grid-template-columns: var(--sidebar-width-monitor) 1fr;
+  }
+
+  /* List + Usage views: their .page-pinned/.page-scroll wrappers
+   * (built in js/pages/list.js + js/pages/usage.js) cap directly.
+   * Padding bumps to 32px to give the capped content room to
+   * breathe inside #app-main. */
+  #app-main .page-scroll,
+  #app-main .page-pinned {
+    max-width: var(--reading-max-monitor);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--page-padding-monitor);
+    padding-right: var(--page-padding-monitor);
+  }
+
+  /* Phase E — Detail view (js/pages/detail.js .detail-layout).
+   *
+   * .detail-layout is a vertical flex column; its three slots are
+   *   1. .detail-pinned  — app bar + header + tabs (chrome). NOT
+   *      capped: per the light-flow-map, "page chrome still spans
+   *      the full main-pane width."
+   *   2. .detail-scroll  — transcript + supplementary disclosures.
+   *      Capped to --reading-max-monitor so prose doesn't stretch
+   *      to 130+ characters per line at 1920px+.
+   *   3. .action-bar     — composer host. Capped on the same column
+   *      so the composer card visually sits under the transcript.
+   *
+   * NOTE on the layout idiom: .detail-layout is a flex column with
+   * default `align-items: stretch`. Naively setting `margin-left:
+   * auto; margin-right: auto;` on a flex child collapses the child
+   * to content width (the flex auto-margin shrinks the item).
+   * We instead use `align-self: center; width: 100%; max-width: X`
+   * — `align-self: center` centres the item without shrinking it,
+   * and width:100% + max-width gives the cap behaviour we want. */
+  #app-main .detail-layout .detail-scroll,
+  #app-main .detail-layout .action-bar {
+    align-self: center;
+    width: 100%;
+    max-width: var(--reading-max-monitor);
+    padding-left: var(--page-padding-monitor);
+    padding-right: var(--page-padding-monitor);
+    box-sizing: border-box;
+  }
+  /* The laptop @media block at line ~2470 sets
+   *   .action-bar padding: 0 0 var(--space-4);
+   * Re-establish vertical padding while overriding horizontal so
+   * the action-bar above keeps the same vertical rhythm. */
+  #app-main .detail-layout .action-bar {
+    padding-top: 0;
+    padding-bottom: var(--space-4);
+  }
+  /* Laptop block sets the composer width to 90% of its .action-bar
+   * parent (line ~2475-2480). At monitor the parent is already capped
+   * to 1080px, so 90% of that yields a 972px composer. That matches
+   * the codex monitor proportion and keeps the composer visibly
+   * narrower than the transcript edge, preserving the "floating card"
+   * register from the laptop tier. */
 }
 
 /* AskUserQuestion card — inline-in-chat surface that matches the Codex
