@@ -157,7 +157,6 @@ window.Dashboard = {
     const wrap = document.createElement('div');
     wrap.innerHTML = UI.sheet([
       { icon: ICONS.spark, label: 'Usage', onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
-      { icon: ICONS.gear, label: 'Settings', onclick: 'Dashboard.dismissSheet();Dashboard.openSettings()' },
       { icon: ICONS.bell, label: 'Notifications', onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
     ]);
     document.body.appendChild(wrap.firstElementChild);
@@ -165,12 +164,6 @@ window.Dashboard = {
 
   dismissSheet() {
     document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
-  },
-
-  openSettings() {
-    showModal('Settings', 'Theme: cycles dark / light / system. Notifications appear in your browser when an agent needs input.', async (evt) => {
-      await withSpinner(evt, async () => { Theme.cycle(); });
-    }, { confirmLabel: 'Cycle theme' });
   },
 
   searchAgents() {

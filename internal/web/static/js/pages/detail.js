@@ -894,6 +894,7 @@ export async function renderDetail(app, agents, agentId, setView) {
     subtitle: subline,
     trailing: [
       ...(st === 'running' ? ['spinner'] : []),
+      Theme.trailingEntry(),
       { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
     ],
   });

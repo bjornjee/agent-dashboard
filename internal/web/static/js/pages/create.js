@@ -1,6 +1,7 @@
 // Create agent view — Codex flat-prose form with display headline + sticky spawn.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
+import { Theme } from '../theme.js';
 import { escapeHtml } from '../format.js';
 import { get } from '../api.js';
 
@@ -8,7 +9,7 @@ export function renderCreate(app, agents) {
   const agentFolders = [...new Set(agents.map(a => a.cwd).filter(Boolean))];
 
   app.innerHTML = `
-    ${UI.appBar({ back: true, title: 'New agent' })}
+    ${UI.appBar({ back: true, title: 'New agent', trailing: [Theme.trailingEntry()] })}
     <div class="create-shell">
       <div class="create-display">What should we work on?</div>
       <div class="create-form">

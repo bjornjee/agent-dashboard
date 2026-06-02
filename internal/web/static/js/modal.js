@@ -29,13 +29,15 @@ export function showModal(title, message, onConfirm, opts) {
 }
 
 export function toast(msg, type) {
+  const variant = type === 'error' ? 'error' : 'success';
   const el = document.createElement('div');
-  el.className = 'toast ' + (type || '');
-  el.textContent = msg;
+  el.className = 'ui-toast ui-toast--' + variant;
+  el.setAttribute('role', variant === 'error' ? 'alert' : 'status');
+  el.innerHTML = `<span class="ui-toast__dot" aria-hidden="true"></span><span class="ui-toast__text">${escapeHtml(msg)}</span>`;
   document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('visible'));
+  requestAnimationFrame(() => el.classList.add('ui-toast--visible'));
   setTimeout(() => {
-    el.classList.remove('visible');
-    setTimeout(() => el.remove(), 300);
-  }, 2500);
+    el.classList.remove('ui-toast--visible');
+    setTimeout(() => el.remove(), 220);
+  }, 2400);
 }

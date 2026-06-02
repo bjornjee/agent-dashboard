@@ -4,6 +4,7 @@
 // query matches.
 import { UI } from './ui.js';
 import { ICONS } from './icons.js';
+import { Theme } from './theme.js';
 import { effectiveState, stateGroup, prTag } from './state.js';
 import { escapeHtml, repoName, durationShort } from './format.js';
 
@@ -112,12 +113,17 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
     chevron: false,
   });
   html += '</div>';
-  html += '<div class="app-sidebar__nav-row">';
-  html += UI.row({
-    title: 'Settings',
-    onclick: 'Dashboard.openSettings()',
-    chevron: false,
-  });
+  // Theme toggle replaces Settings — one click instead of opening a modal.
+  // data-theme-toggle hooks Theme.cycle() to refresh icon + label in place.
+  html += '<div class="app-sidebar__nav-row" data-theme-toggle="1">';
+  html += `<button class="ui-row" onclick="Dashboard.cycleTheme()">
+    <div class="ui-row__leading"><span data-theme-icon>${Theme.getIcon()}</span></div>
+    <div class="ui-row__body">
+      <span class="ui-row__title-line">
+        <span class="ui-row__title" data-theme-label>${Theme.getNextLabel()}</span>
+      </span>
+    </div>
+  </button>`;
   html += '</div>';
   html += '</div>';
 

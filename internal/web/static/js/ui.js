@@ -14,7 +14,9 @@ function actionsHtml(items) {
     }
     const click = a.onclick ? ` onclick="${a.onclick}"` : '';
     const label = a.ariaLabel || a.label || 'action';
-    out += `<button class="ui-app-bar__action" aria-label="${escapeHtml(label)}"${click}>${a.icon || ''}</button>`;
+    const extraCls = a.cls ? ' ' + a.cls : '';
+    const data = a.dataAttr ? ` data-${a.dataAttr}="1"` : '';
+    out += `<button class="ui-app-bar__action${extraCls}" aria-label="${escapeHtml(label)}"${data}${click}>${a.icon || ''}</button>`;
   }
   return out;
 }

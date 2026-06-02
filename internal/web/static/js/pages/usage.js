@@ -10,6 +10,7 @@ import { UI } from '../ui.js';
 import { escapeHtml, repoName, formatTokens, formatCostFull, formatDateShort } from '../format.js';
 import { get } from '../api.js';
 import { ICONS } from '../icons.js';
+import { Theme } from '../theme.js';
 
 const RANGE_OPTIONS = [
   { label: 'Week', value: 7 },
@@ -38,7 +39,10 @@ export async function renderUsage(app, agents) {
         UI.appBar({
           back: true,
           title: 'Usage',
-          trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
+          trailing: [
+            Theme.trailingEntry(),
+            { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
+          ],
         }) +
       '</div>' +
       '<div class="page-scroll">' +

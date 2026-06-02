@@ -61,9 +61,9 @@
   --code-bg: #1F1F23;
 
   /* Typography (rev. 2 — system stack, drop Google Fonts) */
-  --font-primary: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+  --font-primary: "InterVariable", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-display: "InterVariable", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Fira Code", monospace;
 
   /* Spacing (token values unchanged) */
   --space-1: 4px;
@@ -120,8 +120,13 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 15px;
+  line-height: 22px;
+  font-feature-settings: "cv11", "ss03", "cv02", "ss01";
+  text-rendering: optimizeLegibility;
+}
+@supports (font-variation-settings: normal) {
+  body { font-family: "InterVariable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
 }
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; padding: 0; }
 input, textarea { font-family: inherit; color: inherit; }
@@ -435,7 +440,10 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 /* ============================================================
  * PRIMITIVE 7 — MESSAGE
  * ============================================================ */
-.ui-msg { display: flex; padding: var(--space-3) var(--space-5); }
+.ui-msg { display: flex; padding: var(--space-2) var(--space-5); }
+@media (min-width: 900px) {
+  .ui-msg { padding: var(--space-2) var(--space-3); }
+}
 .ui-msg--user { justify-content: flex-end; }
 .ui-msg--user .ui-msg__bubble {
   background: var(--bg-elevated);
@@ -458,13 +466,14 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: var(--cta-bg);
   color: var(--cta-text);
 }
-.ui-msg--assistant { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.ui-msg--assistant { flex-direction: column; align-items: flex-start; gap: var(--space-2); position: relative; }
 .ui-msg__prose {
   color: var(--text-secondary);
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 15px;
+  line-height: 23px;
   max-width: 100%;
   word-wrap: break-word;
+  letter-spacing: -0.005em;
 }
 .ui-msg__prose code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 14px; }
 .ui-msg__prose pre { background: var(--bg-code); color: var(--code-text); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); overflow-x: auto; margin: var(--space-2) 0; }
@@ -472,6 +481,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-msg__prose p { margin: 0 0 var(--space-3); }
 .ui-msg__prose p:last-child { margin-bottom: 0; }
 .ui-msg__copy {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-2);
   width: 24px;
   height: 24px;
   border-radius: var(--radius-pill);
@@ -481,6 +493,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   justify-content: center;
   transition: color var(--transition-fast), opacity var(--transition-fast);
   opacity: 0;
+  background: var(--bg-base);
 }
 .ui-msg:hover .ui-msg__copy,
 .ui-msg__copy:focus-visible { opacity: 1; }
@@ -840,7 +853,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--text-primary);
   line-height: 34px;
 }
-.create-form { padding: 0 var(--space-5) var(--space-7); }
+.create-form { padding: 0 var(--space-5) calc(var(--space-7) + var(--space-3) + env(safe-area-inset-bottom)); }
 .create-message {
   width: 100%;
   border-radius: var(--radius-lg);
@@ -1061,27 +1074,64 @@ button.btn-ghost.btn-sm {
 }
 
 
-/* === LEGACY: modal / toast / spinner / loading === */
-.toast {
+/* === Toast — neutral pill with status dot.
+ * Top-anchored so it never lands on the floating dock or sticky bottom
+ * actions (Spawn, composer, action-bar). Mobile: top-center.
+ * Desktop (>=900px): top-right. Status is signalled by a small dot, not
+ * by tinting the whole surface — keeps the register calm and consistent
+ * with the rest of the iOS card stack. === */
+.ui-toast {
   position: fixed;
-  bottom: 70px;
+  top: calc(56px + var(--space-3) + env(safe-area-inset-top));
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -6px);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 14px 10px 12px;
   background: var(--bg-elevated);
   color: var(--text-primary);
-  padding: 10px 20px;
-  border-radius: var(--radius-lg);
-  font-size: 14px;
-  z-index: 300;
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
   border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 24px var(--shadow-medium);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 18px;
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  max-width: calc(100% - var(--space-6));
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
-
-.toast.visible { opacity: 1; }
-.toast.success { background: var(--status-running-bg); color: var(--status-running-text); border-color: var(--status-running-border); }
-.toast.error { background: var(--status-failed-bg); color: var(--status-failed-text); border-color: var(--status-failed-border); }
+.ui-toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.ui-toast__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+.ui-toast--success .ui-toast__dot { background: var(--accent-green); box-shadow: 0 0 0 3px rgba(60, 203, 107, 0.18); }
+.ui-toast--error   .ui-toast__dot { background: var(--accent-red); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+.ui-toast__text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (min-width: 900px) {
+  .ui-toast {
+    top: var(--space-4);
+    right: var(--space-4);
+    left: auto;
+    transform: translateY(-6px);
+    max-width: 360px;
+  }
+  .ui-toast--visible { transform: translateY(0); }
+}
 
 /* ============================================
    COMPONENT: Modal
@@ -1106,9 +1156,6 @@ button.btn-ghost.btn-sm {
   border: 1px solid var(--border-default);
   box-shadow: 0 4px 12px var(--shadow-medium);
 }
-
-.modal h3 { margin-bottom: 12px; font-size: 16px; font-weight: 500; }
-.modal p { color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; }
 
 .modal-actions {
   display: flex;
@@ -1622,30 +1669,42 @@ button.btn-ghost.btn-sm {
 .usage-metric__delta--down,
 .usage-metric__delta--neutral { color: var(--text-tertiary); }
 
-/* Rate-limit rows */
+/* Rate-limit rows.
+ * Mobile (<900px): two-line grid — label + pct on line 1, full-width track
+ * on line 2, reset duration trailing line 1 as muted micro-copy. Kills the
+ * 320px+ min inline footprint that overflowed 360px viewports. Desktop
+ * @media restores the single-line flex layout. */
 .usage-rate__rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-}
-.usage-rate__row {
-  display: flex;
-  align-items: center;
   gap: var(--space-3);
 }
+.usage-rate__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label pct"
+    "track track";
+  column-gap: var(--space-3);
+  row-gap: 6px;
+  align-items: center;
+}
 .usage-rate__label {
+  grid-area: label;
   font-size: 13px;
   color: var(--text-secondary);
-  min-width: 120px;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .usage-rate__track {
-  flex: 1;
+  grid-area: track;
   height: 6px;
   background: var(--bg-elevated);
   border-radius: var(--radius-pill);
   overflow: hidden;
-  min-width: 100px;
+  min-width: 0;
 }
 .usage-rate__fill {
   height: 100%;
@@ -1656,16 +1715,43 @@ button.btn-ghost.btn-sm {
 .usage-rate__fill--caution { background: var(--accent-amber); }
 .usage-rate__fill--warn { background: var(--accent-red); }
 .usage-rate__pct {
+  grid-area: pct;
   font-size: 13px;
   font-family: var(--font-mono);
   color: var(--text-secondary);
-  min-width: 36px;
+  min-width: 0;
   text-align: right;
 }
 .usage-rate__reset {
-  font-size: 12px;
+  grid-column: 1 / -1;
+  font-size: 11px;
   color: var(--text-tertiary);
-  min-width: 100px;
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .usage-rate__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .usage-rate__label {
+    min-width: 120px;
+    flex-shrink: 0;
+    overflow: visible;
+    white-space: normal;
+  }
+  .usage-rate__track {
+    flex: 1;
+    min-width: 100px;
+  }
+  .usage-rate__pct {
+    min-width: 36px;
+  }
+  .usage-rate__reset {
+    grid-column: auto;
+    font-size: 12px;
+    min-width: 100px;
+  }
 }
 .usage-rate__extra {
   margin-top: var(--space-3);
@@ -1713,16 +1799,24 @@ button.btn-ghost.btn-sm {
 .usage-tabs__tab:focus-visible { outline: 2px solid var(--text-faint); outline-offset: 2px; border-radius: 4px; }
 
 /* Chart */
-.usage-chart-container { position: relative; padding-left: 50px; padding-top: var(--space-2); }
+.usage-chart-container { position: relative; padding-left: 42px; padding-top: var(--space-2); }
 .usage-y-axis {
-  position: absolute; left: 0; top: var(--space-2); bottom: 24px; width: 45px;
-  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding-right: var(--space-2);
+  position: absolute; left: 0; top: var(--space-2); bottom: 24px; width: 38px;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding-right: var(--space-1);
 }
-.usage-y-label { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
+@media (min-width: 900px) {
+  .usage-chart-container { padding-left: 50px; }
+  .usage-y-axis { width: 45px; padding-right: var(--space-2); }
+}
+.usage-y-label { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); }
 .usage-grid-line {
-  position: absolute; left: 50px; right: 0;
+  position: absolute; left: 42px; right: 0;
   border-top: 1px solid var(--border-subtle);
   pointer-events: none;
+}
+@media (min-width: 900px) {
+  .usage-y-label { font-size: 11px; }
+  .usage-grid-line { left: 50px; }
 }
 .usage-chart {
   display: flex;
@@ -1953,12 +2047,16 @@ button.btn-ghost.btn-sm {
   --shadow-medium: rgba(0, 0, 0, 0.06);
 }
 
-/* === LEGACY: activity / conversation / plan content === */
+/* Conversation reading column. 720px was lost in a desert of empty page
+ * on wide screens. 920px gives ~80–90 chars of prose, leaves room for
+ * code blocks, and aligns with the composer cap below. The column is
+ * the only thing centered — surrounding chrome (tabs, status pill) fills
+ * the main pane so the whole view doesn't feel pinched. */
 .conversation {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: 720px;
+  gap: 0;
+  max-width: 920px;
   margin: 0 auto;
 }
 
@@ -2477,9 +2575,12 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     border-top: 0;
     padding: 0 0 var(--space-4);
   }
+  /* Composer mirrors the conversation reading column (920px max),
+   * so the input never hangs wider than the chat above it. */
   #app-main .action-bar .ui-composer.detail-composer,
   #app-main .action-bar .action-panel {
-    width: 90%;
+    width: calc(100% - var(--space-6));
+    max-width: 920px;
     margin-left: auto;
     margin-right: auto;
   }
