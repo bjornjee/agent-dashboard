@@ -121,6 +121,9 @@ export function updateActionBar(agent) {
 let pendingUserMessage = null;
 
 // Optimistically append a Codex-style user message pill to the chat.
+// While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
+// and is followed by a "Sending…" caption sibling. Dashboard.sendInput
+// clears the flag (and removes the caption) once the POST resolves OK.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   const container = document.querySelector('#tab-conversation .conversation');
@@ -131,9 +134,59 @@ export function appendUserMessage(text) {
   if (msgEl) {
     msgEl.classList.add('ui-msg--optimistic');
     container.appendChild(msgEl);
+    const caption = document.createElement('div');
+    caption.className = 'ui-msg__caption ui-msg__caption--sending';
+    caption.textContent = 'Sending…';
+    container.appendChild(caption);
   }
   const scrollParent = container.closest('.detail-scroll');
   if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
+// Called by Dashboard.sendInput when POST resolves OK. Lifts the in-flight
+// affordance from the most recent optimistic bubble without waiting for
+// SSE/conversation refresh to catch up. pendingUserMessage stays set so
+// refreshConversation still preserves the message across SSE ticks.
+export function confirmUserMessageSent() {
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
+  container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
+}
+
+// Last-known agent for the currently-mounted detail view. Used by the
+// 2s conversation poll (which doesn't carry an agent reference) so that
+// the rebuilt .conversation can re-mount the working indicator.
+let lastKnownAgent = null;
+
+// Mounts / updates / removes the inline "working" indicator at the end of
+// the conversation stream. Called from SSE refresh whenever agent state
+// changes. Idempotent — safe to call on every tick.
+export function refreshWorkingIndicator(agent) {
+  if (agent) lastKnownAgent = agent;
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+  const st = effectiveState(agent);
+  const existing = container.querySelector('.ui-msg-status--working');
+  if (!WORKING_STATES.has(st)) {
+    if (existing) existing.remove();
+    return;
+  }
+  const label = agent.current_tool ? 'Running ' + agent.current_tool : 'Thinking…';
+  if (existing) {
+    const text = existing.querySelector('.ui-msg-status__label');
+    if (text && text.textContent !== label) text.textContent = label;
+    return;
+  }
+  const el = document.createElement('div');
+  el.className = 'ui-msg-status ui-msg-status--working';
+  el.innerHTML = '<span class="ui-msg-status__dot"></span><span class="ui-msg-status__label">' + escapeHtml(label) + '</span>';
+  container.appendChild(el);
+  const scrollParent = container.closest('.detail-scroll');
+  if (scrollParent && scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 80) {
+    scrollParent.scrollTop = scrollParent.scrollHeight;
+  }
 }
 
 function timelineIcon(kind) {
@@ -232,7 +285,7 @@ function renderConversationHtml(entries) {
 
 // Re-fetch and re-render the conversation tab if it is currently active.
 // Called by the SSE handler to keep the chat view up to date.
-async function refreshConversation(agentId) {
+async function refreshConversation(agentId, agent) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
   if (!container) return;
@@ -262,9 +315,17 @@ async function refreshConversation(agentId) {
       if (msgEl) {
         msgEl.classList.add('ui-msg--optimistic');
         conv.appendChild(msgEl);
+        const caption = document.createElement('div');
+        caption.className = 'ui-msg__caption ui-msg__caption--sending';
+        caption.textContent = 'Sending…';
+        conv.appendChild(caption);
       }
     }
   }
+
+  // Re-mount the working indicator if the agent is processing — the
+  // innerHTML rewrite above wiped any previous indicator.
+  if (agent) refreshWorkingIndicator(agent);
 
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
@@ -277,7 +338,7 @@ function startConversationPoll(agentId) {
   stopConversationPoll();
   conversationPollTimer = setInterval(() => {
     if (currentDetailTab === 'conversation' && currentDetailAgentId === agentId) {
-      refreshConversation(agentId);
+      refreshConversation(agentId, lastKnownAgent);
     } else {
       stopConversationPoll();
     }
@@ -296,10 +357,10 @@ function stopConversationPoll() {
 // use loadTabContent which creates a nav signal, so we debounce to avoid
 // rapid SSE events causing cancellation churn.
 let refreshTimer = null;
-export function refreshActiveTab(agentId) {
+export function refreshActiveTab(agentId, agent) {
   if (currentDetailAgentId !== agentId) return;
   if (currentDetailTab === 'conversation') {
-    refreshConversation(agentId);
+    refreshConversation(agentId, agent);
     return;
   }
   if (currentDetailTab === 'diff') return; // expensive, skip
@@ -481,6 +542,11 @@ export async function renderDetail(app, agents, agentId, setView) {
   loadTabContent(savedTab, agentId);
   loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
+
+  // Mount the working indicator if the agent is currently processing.
+  // loadTabContent populates .conversation asynchronously so defer the mount.
+  lastKnownAgent = agent;
+  setTimeout(() => refreshWorkingIndicator(agent), 400);
 
   // Start conversation polling only when the conversation tab is active.
   if (savedTab === 'conversation') startConversationPoll(agentId);

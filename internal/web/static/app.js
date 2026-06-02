@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -117,8 +117,9 @@ function connectSSE() {
         if (agent) {
           updateActionBar(agent);
           refreshDetailHeader(agent);
+          refreshWorkingIndicator(agent);
         }
-        refreshActiveTab(selectedAgentId);
+        refreshActiveTab(selectedAgentId, agents.find(a => a.session_id === selectedAgentId));
       }
       // On desktop, refresh sidebar on every SSE tick — but never re-mount
       // the main pane (so a half-filled create form / scroll position is
@@ -200,7 +201,11 @@ window.Dashboard = {
     appendUserMessage(text);
     try {
       const result = await post('/api/agents/' + id + '/input', { text });
-      if (!result || !result.ok) toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (result && result.ok) {
+        confirmUserMessageSent();
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      }
     } finally {
       if (input) input.disabled = false;
     }
