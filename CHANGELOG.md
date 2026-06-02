@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.32.0](https://github.com/bjornjee/agent-dashboard/compare/v0.31.0...v0.32.0) (2026-06-02)
+
+
+### Features
+
+* fuzzy search overlay for the agents button (web + mobile) ([#350](https://github.com/bjornjee/agent-dashboard/issues/350)) ([e7f05ed](https://github.com/bjornjee/agent-dashboard/commit/e7f05ed71351b95301dad483e9a571afbc28befc))
+* installable PWA — pin agent-dashboard to Samsung/Android/iOS home screen ([#343](https://github.com/bjornjee/agent-dashboard/issues/343)) ([09f57e9](https://github.com/bjornjee/agent-dashboard/commit/09f57e96f8855c8daf9dbd8c354c7ba237a0bef8))
+* light-mode UI/UX pass for web + mobile ([#345](https://github.com/bjornjee/agent-dashboard/issues/345)) ([c6c88d1](https://github.com/bjornjee/agent-dashboard/commit/c6c88d18b088a08d84e32c19e9fa140148f64bf1))
+* polish mobile UX rough edges ([#349](https://github.com/bjornjee/agent-dashboard/issues/349)) ([51feec4](https://github.com/bjornjee/agent-dashboard/commit/51feec445e7d6752c67d86c9c859a13fc327f36a))
+* render AskUserQuestion as inline card in web/mobile chat ([#341](https://github.com/bjornjee/agent-dashboard/issues/341)) ([c8643ef](https://github.com/bjornjee/agent-dashboard/commit/c8643ef7a014c12074190b0243d9a571b6b2cf31))
+
+
+### Bug Fixes
+
+* keep AskUserQuestion card clickable across chat poll-tick re-renders ([#351](https://github.com/bjornjee/agent-dashboard/issues/351)) ([bf1b033](https://github.com/bjornjee/agent-dashboard/commit/bf1b033a99608efa160e0669b21a4977a3520857))
+* persist AskUserQuestion payload in agent sidecar ([#348](https://github.com/bjornjee/agent-dashboard/issues/348)) ([2ee38fa](https://github.com/bjornjee/agent-dashboard/commit/2ee38faa63993cc4fd95fbcfb0be2b5e3942fef4))
+* preserve chat scroll position across poll-tick re-renders ([#347](https://github.com/bjornjee/agent-dashboard/issues/347)) ([aecc6d1](https://github.com/bjornjee/agent-dashboard/commit/aecc6d13f125c846e18767a73e3bdea223f23da5))
+* render AskUserQuestion card when subagents are active ([#346](https://github.com/bjornjee/agent-dashboard/issues/346)) ([3b64c04](https://github.com/bjornjee/agent-dashboard/commit/3b64c047827f4173743cdfed21a759afecbb728b))
+* skip action-bar DOM swap when signature unchanged ([#344](https://github.com/bjornjee/agent-dashboard/issues/344)) ([8106661](https://github.com/bjornjee/agent-dashboard/commit/8106661ed1bd7aeffd6355906957d1085a62bff1))
+
 ## [0.31.0](https://github.com/bjornjee/agent-dashboard/compare/v0.30.0...v0.31.0) (2026-06-02)
 
 
