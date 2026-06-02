@@ -2604,18 +2604,28 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 
 /* ============================================================
  * Monitor tier (≥ 1600px) — widen the sidebar, cap content,
- * bump page padding. Layout-only overrides; no surface restyling
- * here (Phase E owns surface treatment at this tier).
+ * bump page padding. Layout-only overrides at this tier; the
+ * surface tokens (colors, shadows, borders) carry through from the
+ * laptop @media block (Phase D) without further restyling.
+ *
  * Tokens consumed are declared on :root above.
+ *
+ * Light-flow-map (docs/design/light-flow-map.md "Monitor light"):
+ *   - "Sidebar widens to 288px (vs. 264px on desktop)."
+ *   - "Main-pane content max-width caps at 1080px, centered."
+ *   - "The cap applies to transcript + composer + create-view
+ *     content; the page chrome (app bar, tabs) still spans the
+ *     full main-pane width."
  * ============================================================ */
 @media (min-width: 1600px) {
   #app-shell {
     grid-template-columns: var(--sidebar-width-monitor) 1fr;
   }
 
-  /* Cap reading length on large displays so prose doesn't stretch
-   * the full main pane width. Padding bumps to 32px to give the
-   * capped content room to breathe inside #app-main. */
+  /* List + Usage views: their .page-pinned/.page-scroll wrappers
+   * (built in js/pages/list.js + js/pages/usage.js) cap directly.
+   * Padding bumps to 32px to give the capped content room to
+   * breathe inside #app-main. */
   #app-main .page-scroll,
   #app-main .page-pinned {
     max-width: var(--reading-max-monitor);
@@ -2624,4 +2634,47 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     padding-left: var(--page-padding-monitor);
     padding-right: var(--page-padding-monitor);
   }
+
+  /* Phase E — Detail view (js/pages/detail.js .detail-layout).
+   *
+   * .detail-layout is a vertical flex column; its three slots are
+   *   1. .detail-pinned  — app bar + header + tabs (chrome). NOT
+   *      capped: per the light-flow-map, "page chrome still spans
+   *      the full main-pane width."
+   *   2. .detail-scroll  — transcript + supplementary disclosures.
+   *      Capped to --reading-max-monitor so prose doesn't stretch
+   *      to 130+ characters per line at 1920px+.
+   *   3. .action-bar     — composer host. Capped on the same column
+   *      so the composer card visually sits under the transcript.
+   *
+   * NOTE on the layout idiom: .detail-layout is a flex column with
+   * default `align-items: stretch`. Naively setting `margin-left:
+   * auto; margin-right: auto;` on a flex child collapses the child
+   * to content width (the flex auto-margin shrinks the item).
+   * We instead use `align-self: center; width: 100%; max-width: X`
+   * — `align-self: center` centres the item without shrinking it,
+   * and width:100% + max-width gives the cap behaviour we want. */
+  #app-main .detail-layout .detail-scroll,
+  #app-main .detail-layout .action-bar {
+    align-self: center;
+    width: 100%;
+    max-width: var(--reading-max-monitor);
+    padding-left: var(--page-padding-monitor);
+    padding-right: var(--page-padding-monitor);
+    box-sizing: border-box;
+  }
+  /* The laptop @media block at line ~2470 sets
+   *   .action-bar padding: 0 0 var(--space-4);
+   * Re-establish vertical padding while overriding horizontal so
+   * the action-bar above keeps the same vertical rhythm. */
+  #app-main .detail-layout .action-bar {
+    padding-top: 0;
+    padding-bottom: var(--space-4);
+  }
+  /* Laptop block sets the composer width to 90% of its .action-bar
+   * parent (line ~2475-2480). At monitor the parent is already capped
+   * to 1080px, so 90% of that yields a 972px composer. That matches
+   * the codex monitor proportion and keeps the composer visibly
+   * narrower than the transcript edge, preserving the "floating card"
+   * register from the laptop tier. */
 }
