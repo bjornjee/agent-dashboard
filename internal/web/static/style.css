@@ -88,7 +88,6 @@
   --transition-slow: 280ms ease-out;
 
   /* Desktop layout tokens (consumed only inside @media (min-width: 900px)) */
-  --bp-desktop: 900px;
   --sidebar-width: 264px;
   --bg-sidebar: #0E0E10;
   --bg-selected: #222226;
@@ -2429,11 +2428,6 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     display: block;
     flex: 1;
   }
-  /* Attach button has no backend hookup yet — hide on desktop until
-   * there's real file-attach functionality. The mobile pill keeps it
-   * (legacy preservation). */
-  /* Attach (+) button is reused as a slash-command starter — clicking
-   * inserts "/" at the textarea cursor and focuses the input. */
   .ui-composer.detail-composer .ui-composer__chip {
     display: inline-flex;
     align-items: center;
