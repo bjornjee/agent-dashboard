@@ -435,15 +435,18 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-msg__prose p { margin: 0 0 var(--space-3); }
 .ui-msg__prose p:last-child { margin-bottom: 0; }
 .ui-msg__copy {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-pill);
   color: var(--text-faint);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color var(--transition-fast);
+  transition: color var(--transition-fast), opacity var(--transition-fast);
+  opacity: 0;
 }
+.ui-msg:hover .ui-msg__copy,
+.ui-msg__copy:focus-visible { opacity: 1; }
 .ui-msg__copy:hover { color: var(--text-secondary); }
 .ui-msg__tool {
   display: inline-flex;
@@ -2284,16 +2287,10 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     display: block;
     flex: 1;
   }
-  .ui-composer.detail-composer .ui-composer__attach {
-    width: 32px;
-    height: 32px;
-    background: transparent;
-    color: var(--text-muted);
-  }
-  .ui-composer.detail-composer .ui-composer__attach:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
+  /* Attach button has no backend hookup yet — hide on desktop until
+   * there's real file-attach functionality. The mobile pill keeps it
+   * (legacy preservation). */
+  .ui-composer.detail-composer .ui-composer__attach { display: none; }
   .ui-composer.detail-composer .ui-composer__chip {
     display: inline-flex;
     align-items: center;
