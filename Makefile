@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web uninstall clean seed web docs icons help
+.PHONY: build build-web fmt vet test test-js test-race test-e2e playwright-install install install-web uninstall clean seed web docs icons help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -31,7 +31,10 @@ vet: ## Run go vet (checks formatting + vets)
 	  fi
 	go vet ./...
 
-test: vet ## Run all tests (vets first)
+test-js: ## Run JS unit tests (node --test)
+	node --test internal/web/static/js/*.test.js internal/web/static/js/pages/*.test.js
+
+test: vet test-js ## Run all tests (vets first, then JS, then Go)
 	CGO_ENABLED=0 go test ./...
 
 test-race: vet ## Run tests with race detector (CI only, requires codesigned binaries)

@@ -2252,12 +2252,6 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     background: var(--bg-selected);
   }
 
-  /* Placeholder Search slot is non-interactive in v1. */
-  .app-sidebar__nav-row--placeholder .ui-row {
-    color: var(--text-muted);
-    pointer-events: none;
-  }
-
   /* Install app row — hidden until js/install.js captures beforeinstallprompt
    * and toggles body.can-install (Samsung/Chromium-only signal). */
   .app-sidebar__install { display: none; }
@@ -2830,5 +2824,118 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 @media (max-width: 640px) {
   .question-card { max-width: 100%; padding: 16px; }
   .question-card__option-title { font-size: 16px; line-height: 21px; }
+}
+
+/* ============================================
+   COMPONENT: Search overlay (fuzzy command palette)
+   ============================================ */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  z-index: 250;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+.search-overlay__panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 48px var(--shadow-medium);
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.search-overlay__inputrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-default);
+}
+.search-overlay__icon { color: var(--text-muted); display: inline-flex; }
+.search-overlay__input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+}
+.search-overlay__input::placeholder { color: var(--text-muted); }
+.search-overlay__results {
+  overflow-y: auto;
+  padding: 6px;
+}
+.search-overlay__row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.search-overlay__row:hover { background: var(--bg-hover, rgba(255, 255, 255, 0.04)); }
+.search-overlay__row--selected,
+.search-overlay__row--selected:hover {
+  background: var(--bg-selected, rgba(255, 255, 255, 0.10));
+}
+.search-overlay__leading { flex: 0 0 auto; display: inline-flex; }
+.search-overlay__rowbody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.search-overlay__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-overlay__subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-overlay__hit {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.search-overlay__tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+.search-overlay__empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .search-overlay { padding-top: 6vh; }
+  .search-overlay__panel { width: 96vw; max-height: 80vh; }
 }
 

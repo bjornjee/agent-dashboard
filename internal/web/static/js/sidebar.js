@@ -56,13 +56,13 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
     chevron: false,
   });
   html += '</div>';
-  // Search slot is a declared placeholder per docs/design/desktop-flow-map.md
-  // (slot 2). v1 is non-interactive — the row exists so the layout reads as
-  // intended; wiring lands in a follow-up.
-  html += '<div class="app-sidebar__nav-row app-sidebar__nav-row--placeholder" aria-disabled="true">';
+  // Search slot — docs/design/desktop-flow-map.md slot 2. Opens the same
+  // fuzzy overlay the mobile dock uses (see js/pages/search.js).
+  html += '<div class="app-sidebar__nav-row">';
   html += UI.row({
     leading: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>',
     title: 'Search agents',
+    onclick: 'Dashboard.searchAgents()',
     chevron: false,
   });
   html += '</div>';
