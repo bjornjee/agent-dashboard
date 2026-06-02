@@ -1,11 +1,13 @@
 // Agent detail view with tabs and inline subagents.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup } from '../state.js';
+import { effectiveState, stateGroup, prTag, hasOpenPR } from '../state.js';
 import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
+import { isDesktop } from '../sidebar.js';
+import { attachSlashAutocomplete } from '../slash-autocomplete.js';
 
 export { showModal, toast, stopConversationPoll };
 
@@ -20,13 +22,28 @@ function inlineBtn(label, variant, onclick, id) {
   return `<button class="ui-modal-btn ui-modal-btn--${v}" onclick="${onclick}"${idAttr}>${escapeHtml(label)}</button>`;
 }
 
-function inlineStopBtn(onclick) {
-  return `<button class="ui-stop-btn" aria-label="Stop" onclick="${onclick}"><span></span></button>`;
-}
+const STATE_LABELS = {
+  running: 'Working',
+  permission: 'Needs approval',
+  plan: 'Plan ready',
+  question: 'Needs reply',
+  error: 'Errored',
+  pr: 'PR open',
+  merged: 'Merged',
+  done: 'Done',
+  idle_prompt: 'Idle',
+  blocked: 'Blocked',
+  waiting: 'Waiting',
+  queued: 'Queued',
+  review: 'Review',
+  failed: 'Failed',
+  completed: 'Completed',
+};
 
 function inlineStatusPill(state) {
   const group = stateGroup(state).toLowerCase();
-  return `<span class="ui-status-pill"><span class="status-dot status-dot--${group}"></span>${escapeHtml(state)}</span>`;
+  const label = STATE_LABELS[state] || (state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown');
+  return `<span class="ui-status-pill ui-status-pill--${group}"><span class="status-dot status-dot--${group}"></span>${escapeHtml(label)}</span>`;
 }
 
 function inlineEmptyState(icon, title, subtitle) {
@@ -114,14 +131,27 @@ export function updateActionBar(agent) {
       try { newInput.setSelectionRange(selStart, selEnd); } catch {}
     }
   }
+  if (newInput) attachSlashAutocomplete(newInput);
 }
 
 // Track optimistic messages so refreshConversation can preserve them
+// across the 2s poll until the API echoes the user's message back.
+//
+// pendingUserMessage  — the text of the in-flight user message
+// pendingMessageAcked — false until POST /input resolves OK; once true
+//                       the conversation refresh stops re-rendering the
+//                       "Sending…" caption (the message is delivered;
+//                       only the API echo is still pending).
 let pendingUserMessage = null;
+let pendingMessageAcked = false;
 
 // Optimistically append a Codex-style user message pill to the chat.
+// While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
+// and is followed by a "Sending…" caption sibling. Dashboard.sendInput
+// clears the flag (and removes the caption) once the POST resolves OK.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
+  pendingMessageAcked = false;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   const wrap = document.createElement('div');
@@ -130,9 +160,278 @@ export function appendUserMessage(text) {
   if (msgEl) {
     msgEl.classList.add('ui-msg--optimistic');
     container.appendChild(msgEl);
+    const caption = document.createElement('div');
+    caption.className = 'ui-msg__caption ui-msg__caption--sending';
+    caption.textContent = 'Sending…';
+    container.appendChild(caption);
   }
   const scrollParent = container.closest('.detail-scroll');
   if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
+// Called by Dashboard.sendInput when POST resolves OK. Three jobs:
+//   1. Lift the in-flight affordance from the optimistic bubble.
+//   2. Reset the per-turn tool tally — a new turn just started.
+//   3. Optimistically mount the Thinking indicator so the user sees
+//      feedback immediately, without waiting for the next SSE tick
+//      (~1-2s after POST). The next SSE update confirms or replaces.
+export function confirmUserMessageSent() {
+  pendingMessageAcked = true;
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
+  container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
+  // New turn — reset tally and the seen-tool watermark so only tools
+  // fired AFTER this moment count for this turn.
+  toolBuckets = {};
+  lastSeenToolTimestamp = new Date().toISOString();
+  // Mount the indicator optimistically so the user doesn't stare at
+  // an empty chat while SSE catches up. PERSIST the synthetic mid-turn
+  // override onto lastKnownAgent so the 2s conversation poll (which
+  // also calls refreshWorkingIndicator) doesn't wipe the indicator
+  // before SSE has had a chance to report PreToolUse/PostToolUse. SSE
+  // updates will overwrite lastKnownAgent with real hook events; the
+  // indicator only disappears once last_hook_event === 'Stop'.
+  if (lastKnownAgent) {
+    lastKnownAgent = {
+      ...lastKnownAgent,
+      last_hook_event: 'UserPromptSubmit',
+      current_tool: '',
+    };
+    refreshWorkingIndicator(lastKnownAgent);
+  }
+}
+
+// Last-known agent for the currently-mounted detail view. Used by the
+// 2s conversation poll (which doesn't carry an agent reference) so that
+// the rebuilt .conversation can re-mount the working indicator.
+let lastKnownAgent = null;
+
+const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+
+// Map raw tool names to user-legible action verbs. Anything not in this
+// table falls into the "ran tool" bucket; the bucket is what surfaces
+// in the rolled-up tally so internal names like "TaskUpdate" never
+// reach the chat copy.
+//   buckets: 'file_read' | 'file_edit' | 'search' | 'command' | 'task' |
+//            'browser' | 'thinking' | 'other'
+function classifyTool(name) {
+  if (!name) return null;
+  const n = String(name);
+  if (n === 'Read' || n === 'NotebookRead') return { bucket: 'file_read', live: 'Reading file' };
+  if (n === 'Edit' || n === 'Write' || n === 'MultiEdit' || n === 'NotebookEdit') return { bucket: 'file_edit', live: 'Editing file' };
+  if (n === 'Grep' || n === 'Glob') return { bucket: 'search', live: 'Searching' };
+  if (n === 'Bash' || n === 'BashOutput' || n === 'KillShell') return { bucket: 'command', live: 'Running command' };
+  if (n.startsWith('Task') || n === 'TodoWrite') return { bucket: 'task', live: 'Updating tasks' };
+  if (n.startsWith('mcp__plugin_playwright') || n.startsWith('mcp__playwright')) return { bucket: 'browser', live: 'Driving browser' };
+  if (n.startsWith('mcp__')) return { bucket: 'mcp', live: 'Calling MCP tool' };
+  if (n === 'WebFetch' || n === 'WebSearch') return { bucket: 'web', live: 'Fetching web content' };
+  return { bucket: 'other', live: 'Running ' + n };
+}
+
+const BUCKET_LABELS = {
+  file_read: ['Read', 'file', 'files'],
+  file_edit: ['Edited', 'file', 'files'],
+  search:    ['Ran', 'search', 'searches'],
+  command:   ['Ran', 'command', 'commands'],
+  task:      ['Updated', 'task', 'tasks'],
+  browser:   ['Drove browser', 'step', 'steps'],
+  mcp:       ['Called', 'MCP tool', 'MCP tools'],
+  web:       ['Fetched', 'page', 'pages'],
+  other:     ['Ran', 'tool', 'tools'],
+};
+
+// Running tally of tools fired during this working session, bucketed
+// by category. Cleared when the agent leaves a working state.
+let toolBuckets = {};
+// Most-recently-completed tool entry (for the inline "Last: …" line).
+// Holds { content, bucket } where content is the raw activity payload
+// like "→ Bash: ls -la".
+let latestToolEntry = null;
+let toolStreamPollTimer = null;
+let lastSeenToolTimestamp = null;
+
+// Extract the tool name from an activity entry like "→ Bash: …" or
+// "→ mcp__playwright__browser_take_screenshot: …".
+function parseToolName(content) {
+  const m = String(content || '').match(/^→\s+([^:\s]+)/);
+  return m ? m[1] : '';
+}
+
+// Render the tally as "Read 3 files · ran 2 commands · edited 1 file".
+function renderToolTally(buckets) {
+  const parts = [];
+  for (const [bucket, count] of Object.entries(buckets)) {
+    if (!count) continue;
+    const [verb, singular, plural] = BUCKET_LABELS[bucket] || BUCKET_LABELS.other;
+    const noun = count === 1 ? singular : plural;
+    parts.push(verb.toLowerCase() + ' ' + count + ' ' + noun);
+  }
+  if (!parts.length) return '';
+  // Capitalise the first chunk.
+  parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+  return parts.join(' · ');
+}
+
+// Detect whether the agent is BETWEEN turns. agent.state stays
+// "running" for the life of the tmux pane, so it's a coarse signal —
+// the real per-turn signal is last_hook_event, which flips to "Stop"
+// when Claude Code finishes a turn (matching the Stop hook event).
+function isAgentMidTurn(agent) {
+  if (!agent) return false;
+  if (!WORKING_STATES.has(effectiveState(agent))) return false;
+  // "Stop" = turn ended, awaiting user. Anything else (PreToolUse,
+  // PostToolUse, UserPromptSubmit, etc.) = mid-turn.
+  const hook = agent.last_hook_event || '';
+  return hook !== 'Stop';
+}
+
+// Mounts / updates / removes the inline "working" block at the end of
+// the conversation stream. Two stacked lines:
+//   1. (optional) muted tally — "Read 3 files · ran 2 commands"
+//   2. live pulsing line     — "Reading file…" / "Thinking…"
+// The tally is derived from the activity-stream poll; the live line is
+// derived from agent.current_tool via the classifyTool() bucket table.
+export function refreshWorkingIndicator(agent) {
+  if (agent) lastKnownAgent = agent;
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  const existing = container.querySelector('.ui-msg-status--working');
+  if (!isAgentMidTurn(agent)) {
+    if (existing) existing.remove();
+    // Turn ended — reset the tally so the next turn starts clean.
+    toolBuckets = {};
+    return;
+  }
+  const classified = classifyTool(agent.current_tool);
+  const liveLabel = classified ? classified.live : 'Thinking';
+  const tally = renderToolTally(toolBuckets);
+  const tallyHtml = tally
+    ? '<div class="ui-msg-status__tally">' + escapeHtml(tally) + '</div>'
+    : '';
+  // Latest activity line — shows what the agent most recently *finished*.
+  // Strips the "→ Tool: " prefix and the long arg tail; e.g.
+  //   "→ Bash: ls -la /Users/bjornjee/Code/bjornjee/worktrees/..."
+  // renders as "Bash · ls -la /Users/bjornjee/Code/…"
+  let latestHtml = '';
+  if (latestToolEntry) {
+    const raw = String(latestToolEntry.content || '').replace(/^→\s*/, '');
+    const m = raw.match(/^([^:]+):\s*(.*)$/);
+    const tool = m ? m[1].trim() : raw;
+    const arg = m ? m[2].trim() : '';
+    const c = classifyTool(tool);
+    const friendly = c ? c.live : tool;
+    const argSnip = arg.length > 64 ? arg.slice(0, 62) + '…' : arg;
+    const display = argSnip ? friendly + ' · ' + argSnip : friendly;
+    latestHtml = '<div class="ui-msg-status__latest">' + escapeHtml(display) + '</div>';
+  }
+  const html =
+    tallyHtml +
+    latestHtml +
+    '<div class="ui-msg-status__live">' +
+      '<span class="ui-msg-status__label">' + escapeHtml(liveLabel) + '</span>' +
+    '</div>';
+  if (existing) {
+    if (existing.innerHTML !== html) existing.innerHTML = html;
+  } else {
+    const el = document.createElement('div');
+    el.className = 'ui-msg-status ui-msg-status--working';
+    el.innerHTML = html;
+    container.appendChild(el);
+    // On *mount* always pull the indicator into view — on mobile the
+    // soft keyboard usually shifts the scroll position out of the
+    // 80-px window below, so the near-bottom heuristic used for
+    // tally/text *updates* would never fire and the user would see
+    // nothing happen. The asymmetry is intentional.
+    const scrollParent = container.closest('.detail-scroll');
+    if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+  }
+  // Lazy-start the activity poll so the tool count keeps incrementing
+  // while the agent is working. The poll auto-stops itself when the
+  // agent leaves a working state.
+  if (!toolStreamPollTimer && agent.session_id) {
+    startToolStreamPoll(agent.session_id);
+  }
+}
+
+// Seed the tally based on the latest user-message timestamp from the
+// conversation. Tools fired AFTER that timestamp count toward the
+// current turn's tally; tools fired BEFORE are from prior turns and
+// are ignored. Called on detail-view mount (before the poll starts).
+async function seedTallyFromTurnBoundary(agentId) {
+  toolBuckets = {};
+  try {
+    const entries = await get('/api/agents/' + agentId + '/conversation');
+    let cutoff = new Date(0).toISOString();
+    if (Array.isArray(entries) && entries.length) {
+      const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
+      if (lastHuman) cutoff = lastHuman.Timestamp || lastHuman.timestamp || cutoff;
+    }
+    lastSeenToolTimestamp = cutoff;
+    const activity = await get('/api/agents/' + agentId + '/activity');
+    if (Array.isArray(activity)) {
+      for (const t of activity) {
+        if ((t.Kind || t.kind) !== 'tool') continue;
+        const ts = t.Timestamp || t.timestamp || '';
+        if (ts <= cutoff) continue;
+        const name = parseToolName(t.Content || t.content);
+        const c = classifyTool(name);
+        if (!c) continue;
+        toolBuckets[c.bucket] = (toolBuckets[c.bucket] || 0) + 1;
+        if (ts > lastSeenToolTimestamp) lastSeenToolTimestamp = ts;
+      }
+    }
+  } catch { /* ignore — tally stays at zero */ }
+}
+
+// Poll the activity endpoint while the agent is mid-turn, bucketing
+// fresh tool entries into toolBuckets so the on-screen tally updates.
+function startToolStreamPoll(agentId) {
+  stopToolStreamPoll();
+  const tick = async () => {
+    if (!isAgentMidTurn(lastKnownAgent)) {
+      toolBuckets = {};
+      latestToolEntry = null;
+      lastSeenToolTimestamp = null;
+      stopToolStreamPoll();
+      return;
+    }
+    if (currentDetailAgentId !== agentId || currentDetailTab !== 'conversation') return;
+    try {
+      const entries = await get('/api/agents/' + agentId + '/activity');
+      if (!Array.isArray(entries)) return;
+      const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
+      // Only count tools fired after the turn boundary. lastSeenToolTimestamp
+      // is set either by seedTallyFromTurnBoundary() on mount (latest human
+      // message timestamp) or by confirmUserMessageSent() on a fresh send.
+      const fresh = lastSeenToolTimestamp
+        ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
+        : [];
+      if (fresh.length) {
+        for (const t of fresh) {
+          const name = parseToolName(t.Content || t.content);
+          const c = classifyTool(name);
+          if (!c) continue;
+          toolBuckets[c.bucket] = (toolBuckets[c.bucket] || 0) + 1;
+        }
+        // Latest entry drives the "Last: …" inline line — show the
+        // user the most recent thing the agent finished doing.
+        const last = fresh[fresh.length - 1];
+        latestToolEntry = { content: last.Content || last.content || '' };
+        lastSeenToolTimestamp = tools[tools.length - 1].Timestamp || tools[tools.length - 1].timestamp;
+        if (lastKnownAgent) refreshWorkingIndicator(lastKnownAgent);
+      }
+    } catch { /* ignore */ }
+  };
+  tick();
+  toolStreamPollTimer = setInterval(tick, 1500);
+}
+
+function stopToolStreamPoll() {
+  if (toolStreamPollTimer) {
+    clearInterval(toolStreamPollTimer);
+    toolStreamPollTimer = null;
+  }
 }
 
 function timelineIcon(kind) {
@@ -153,43 +452,68 @@ function renderActionBar(agent) {
   const st = effectiveState(agent);
   const id = agent.session_id;
   let actions = '';
+  let panelLabel = '';
 
   // State-specific chips live above the composer (Codex pattern: action chips stacked above input).
   if (st === 'permission' || st === 'plan') {
     actions += inlineBtn('Approve', 'primary', `Dashboard.approve('${id}', event)`);
     actions += inlineBtn('Reject', 'danger', `Dashboard.reject('${id}', event)`);
-  } else if (st === 'pr') {
-    actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
-    actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
+    panelLabel = st === 'plan' ? 'Plan review' : 'Permission request';
   } else if (st === 'merged') {
     actions += inlineBtn('Close', 'ghost', `Dashboard.confirmClose('${id}')`);
+    panelLabel = 'Branch merged';
+  }
+  // PR chips appear whenever the agent has an open PR — whether the
+  // live state is "pr" (idle, backend swapped pinned_state in), "running"
+  // (active turn but PR was created earlier), or anything else that
+  // isn't "merged". hasOpenPR() consolidates the signal.
+  if (hasOpenPR(agent) && st !== 'merged') {
+    actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
+    actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
+    panelLabel = panelLabel || 'Pull request';
   }
 
-  // Composer is always one row: attach + textarea + (stop OR send). Stop replaces send when the
-  // agent is processing — matches Codex iOS pattern (single primary affordance on the right edge).
-  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr', 'idle_prompt'];
+  // Composer is always present so the user can ask follow-up questions
+  // regardless of the agent's terminal state. The stop button only appears
+  // while the agent is actively processing; otherwise the send button.
   const STOP_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
-  let composer = '';
-  if (INPUT_STATES.includes(st)) {
-    const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…' : 'Message';
-    const trailing = STOP_STATES.has(st)
-      ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
-      : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
-    composer = `<div class="ui-composer detail-composer">
-      <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
-      <textarea
-        class="ui-composer__input"
-        id="reply-input"
-        rows="1"
-        placeholder="${escapeHtml(placeholder)}"
-        oninput="UI.composerAutoSize(this)"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
-      ></textarea>
+  const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
+    : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
+  const trailing = STOP_STATES.has(st)
+    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
+    : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
+  const modelLabel = agent.model ? escapeHtml(agent.model) : 'auto';
+  const branchLabel = agent.branch ? escapeHtml(agent.branch) : 'no branch';
+  const effortLabel = agent.effort ? escapeHtml(agent.effort) : 'high';
+  const composer = `<div class="ui-composer detail-composer">
+    <textarea
+      class="ui-composer__input"
+      id="reply-input"
+      rows="1"
+      placeholder="${escapeHtml(placeholder)}"
+      oninput="UI.composerAutoSize(this)"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
+    ></textarea>
+    <div class="ui-composer__rail">
+      <button class="ui-composer__attach" aria-label="Attach file" title="Attach file from your Mac" onclick="Dashboard.attachFile()">${ICONS.attach}</button>
+      <button class="ui-composer__chip" data-chip="model" tabindex="-1" aria-label="Model"><span>${modelLabel}</span></button>
+      <button class="ui-composer__chip" data-chip="branch" tabindex="-1" aria-label="Branch"><span>${branchLabel}</span></button>
+      <button class="ui-composer__chip" data-chip="effort" tabindex="-1" aria-label="Effort"><span>⚡ ${effortLabel}</span></button>
+      <span class="ui-composer__rail-spacer"></span>
+      <button class="ui-composer__mic" aria-label="Voice input" tabindex="-1">${ICONS.mic || '<svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"12\" rx=\"3\"/><path d=\"M5 11a7 7 0 0014 0\"/><path d=\"M12 18v3\"/></svg>'}</button>
       ${trailing}
-    </div>`;
-  }
+    </div>
+  </div>`;
 
-  const actionRow = actions ? `<div class="action-row">${actions}</div>` : '';
+  // Wrap the action chips in a labeled panel — gives the floating
+  // buttons context ("Pull request", "Permission request", …) and a
+  // surface that visually pairs with the composer card below.
+  const actionRow = actions
+    ? `<div class="action-panel">
+         <span class="action-panel__label">${escapeHtml(panelLabel)}</span>
+         <div class="action-panel__chips">${actions}</div>
+       </div>`
+    : '';
   return `<div class="action-bar">${actionRow}${composer}</div>`;
 }
 
@@ -223,7 +547,7 @@ function renderConversationHtml(entries) {
 
 // Re-fetch and re-render the conversation tab if it is currently active.
 // Called by the SSE handler to keep the chat view up to date.
-async function refreshConversation(agentId) {
+async function refreshConversation(agentId, agent) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
   if (!container) return;
@@ -237,13 +561,18 @@ async function refreshConversation(agentId) {
     const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
     const lastContent = lastHuman ? (lastHuman.Content || lastHuman.content || '') : '';
     if (lastContent.includes(pendingUserMessage)) {
-      pendingUserMessage = null; // API caught up, clear optimistic state
+      pendingUserMessage = null;       // API caught up, clear optimistic state
+      pendingMessageAcked = false;
     }
   }
 
   container.innerHTML = renderConversationHtml(entries);
 
-  // Re-append optimistic message if API hasn't caught up yet
+  // Re-append optimistic message if API hasn't caught up yet. The
+  // "Sending…" caption (and the muted opacity) ONLY apply while the
+  // POST is still in flight (pendingMessageAcked === false). After ack
+  // the bubble re-renders at full opacity, no caption — just a normal
+  // user message waiting for the API echo.
   if (pendingUserMessage) {
     const conv = container.querySelector('.conversation');
     if (conv) {
@@ -251,11 +580,21 @@ async function refreshConversation(agentId) {
       wrap.innerHTML = UI.message('user', pendingUserMessage);
       const msgEl = wrap.firstElementChild;
       if (msgEl) {
-        msgEl.classList.add('ui-msg--optimistic');
+        if (!pendingMessageAcked) msgEl.classList.add('ui-msg--optimistic');
         conv.appendChild(msgEl);
+        if (!pendingMessageAcked) {
+          const caption = document.createElement('div');
+          caption.className = 'ui-msg__caption ui-msg__caption--sending';
+          caption.textContent = 'Sending…';
+          conv.appendChild(caption);
+        }
       }
     }
   }
+
+  // Re-mount the working indicator if the agent is processing — the
+  // innerHTML rewrite above wiped any previous indicator.
+  if (agent) refreshWorkingIndicator(agent);
 
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
@@ -268,7 +607,7 @@ function startConversationPoll(agentId) {
   stopConversationPoll();
   conversationPollTimer = setInterval(() => {
     if (currentDetailTab === 'conversation' && currentDetailAgentId === agentId) {
-      refreshConversation(agentId);
+      refreshConversation(agentId, lastKnownAgent);
     } else {
       stopConversationPoll();
     }
@@ -287,10 +626,10 @@ function stopConversationPoll() {
 // use loadTabContent which creates a nav signal, so we debounce to avoid
 // rapid SSE events causing cancellation churn.
 let refreshTimer = null;
-export function refreshActiveTab(agentId) {
+export function refreshActiveTab(agentId, agent) {
   if (currentDetailAgentId !== agentId) return;
   if (currentDetailTab === 'conversation') {
-    refreshConversation(agentId);
+    refreshConversation(agentId, agent);
     return;
   }
   if (currentDetailTab === 'diff') return; // expensive, skip
@@ -351,6 +690,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   cancelNav();
   stopConversationPoll();
   pendingUserMessage = null;
+  pendingMessageAcked = false;
   activityFilter = 'all';
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);
@@ -373,44 +713,77 @@ export async function renderDetail(app, agents, agentId, setView) {
     ],
   });
 
+  // Suppress the tag chip in the detail header when the status pill
+  // already says "PR open" (state === 'pr', the idle case). Sidebar/list
+  // rows have no status pill, so they always show the tag.
+  const prChip = (prTag(agent) && st !== 'pr')
+    ? `<span class="ui-row__tag detail-header__tag">${escapeHtml(prTag(agent))}</span>`
+    : '';
   const detailHeader = `
     <div class="detail-header">
-      <div class="detail-title">${inlineStatusPill(st)}</div>
+      <div class="detail-title">${inlineStatusPill(st)}${prChip}</div>
     </div>
   `;
+
+  const TAB_KEYS = ['conversation', 'activity', 'diff', 'plan'];
+  let savedTab = 'conversation';
+  try {
+    const stored = sessionStorage.getItem('detail-tab-' + agentId);
+    if (stored && TAB_KEYS.includes(stored)) savedTab = stored;
+  } catch {}
 
   const tabs = inlineSegmentedTabs([
     { key: 'conversation', label: 'Chat' },
     { key: 'activity', label: 'Activity' },
     { key: 'diff', label: 'Diff' },
     { key: 'plan', label: 'Plan' },
-  ], 'conversation');
+  ], savedTab);
 
   const isMobile = window.innerWidth <= 480;
   const vitalOpen = !isMobile && sessionStorage.getItem('collapse-vital-signs-container-' + agentId) !== 'true';
   const subagentOpen = !isMobile && sessionStorage.getItem('collapse-subagent-summary-' + agentId) !== 'true';
+  const activeCls = (key) => key === savedTab ? ' active' : '';
 
   app.innerHTML = `
     <div class="detail-layout">
       <div class="detail-pinned">
         ${appBar}
         ${detailHeader}
-        ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
-        ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
         ${tabs}
       </div>
       <div class="detail-scroll">
-        <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
-        <div id="tab-activity" class="tab-content"></div>
-        <div id="tab-diff" class="tab-content"></div>
-        <div id="tab-plan" class="tab-content"></div>
+        <div class="detail-supplementary">
+          ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
+          ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
+        </div>
+        <div id="tab-conversation" class="tab-content${activeCls('conversation')}">${savedTab === 'conversation' ? skeletonLoading(4) : ''}</div>
+        <div id="tab-activity" class="tab-content${activeCls('activity')}">${savedTab === 'activity' ? skeletonLoading(6) : ''}</div>
+        <div id="tab-diff" class="tab-content${activeCls('diff')}">${savedTab === 'diff' ? skeletonLoading(3) : ''}</div>
+        <div id="tab-plan" class="tab-content${activeCls('plan')}">${savedTab === 'plan' ? skeletonLoading(3) : ''}</div>
       </div>
       ${renderActionBar(agent)}
     </div>
   `;
 
+  // Phase C dock-migration: on desktop, prepend the header-placement dock
+  // into the app-bar trailing slot so + New / Search are reachable from
+  // detail view without traversing to the sidebar. Floating dock remains
+  // mobile-only (rendered by list.js).
+  if (isDesktop()) {
+    const trailing = app.querySelector('.ui-app-bar__trailing');
+    if (trailing) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = UI.dock({
+        placement: 'header',
+        search: { label: 'Search agents', onclick: 'Dashboard.searchAgents()' },
+        cta: { label: 'New', icon: ICONS.pencil, onclick: 'Dashboard.showCreate()' },
+      });
+      trailing.insertAdjacentElement('afterbegin', wrap.firstElementChild);
+    }
+  }
+
   // Tab switching
-  currentDetailTab = 'conversation';
+  currentDetailTab = savedTab;
   currentDetailAgentId = agentId;
   lastAgentState = st;
   document.querySelectorAll('.detail-tabs__tab').forEach(tab => {
@@ -424,6 +797,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       // Only show skeleton when the tab is empty (first visit) — avoids flicker on re-clicks.
       if (!container.dataset.loaded) container.innerHTML = skeletonLoading(target === 'activity' ? 6 : target === 'conversation' ? 4 : 3);
       currentDetailTab = target;
+      try { sessionStorage.setItem('detail-tab-' + agentId, target); } catch {}
       loadTabContent(target, agentId);
       if (target === 'conversation') startConversationPoll(agentId);
       else stopConversationPoll();
@@ -441,12 +815,23 @@ export async function renderDetail(app, agents, agentId, setView) {
   });
 
   // Load initial tab + subagents + vital signs in parallel
-  loadTabContent('conversation', agentId);
+  loadTabContent(savedTab, agentId);
   loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
 
-  // Start conversation polling for near-realtime updates
-  startConversationPoll(agentId);
+  // Mount the working indicator if the agent is currently processing.
+  // loadTabContent populates .conversation asynchronously so defer the mount.
+  lastKnownAgent = agent;
+  seedTallyFromTurnBoundary(agentId).then(() => {
+    refreshWorkingIndicator(agent);
+  });
+
+  // Wire slash-command autocomplete to the composer textarea.
+  const composerInput = document.getElementById('reply-input');
+  if (composerInput) attachSlashAutocomplete(composerInput);
+
+  // Start conversation polling only when the conversation tab is active.
+  if (savedTab === 'conversation') startConversationPoll(agentId);
 }
 
 async function loadVitalSigns(agentId, agent) {

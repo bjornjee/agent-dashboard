@@ -34,6 +34,25 @@ export function stateGroup(state) {
   return 'OTHER';
 }
 
+// Trust the backend's `ApplyPinnedStates` — it only swaps `state` to
+// `pinned_state` when the agent is idle. So a running agent with a PR
+// pin keeps state="running" (renders under RUNNING); an idle agent
+// with a PR pin gets state="pr" (renders under PR). Reading raw
+// `state` here matches what the TUI does via `SortedAgents`.
 export function effectiveState(agent) {
-  return agent.pinned_state || agent.state;
+  return agent.state;
+}
+
+// Returns a "PR open" tag when the user has pinned a PR on this agent.
+// `pinned_state === 'pr'` is the single source of truth — it persists
+// across state transitions (running, idle_prompt, …) so the tag shows
+// alongside the live state regardless of what the agent is doing.
+export function prTag(agent) {
+  return agent && agent.pinned_state === 'pr' ? 'PR open' : '';
+}
+
+// True when the agent has an open PR — used to gate Open PR / Merge
+// action chips. Same single signal as prTag.
+export function hasOpenPR(agent) {
+  return !!(agent && agent.pinned_state === 'pr');
 }

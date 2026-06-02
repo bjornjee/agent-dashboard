@@ -35,9 +35,24 @@ export const UI = {
     return `<header class="ui-app-bar">${lead}${title}<div class="ui-app-bar__trailing">${actionsHtml(o.trailing)}</div></header>`;
   },
 
-  // 2. Floating dock — list view only. Structural exception.
+  // 2. Floating dock — list view only on mobile.
+  // On desktop callers pass `placement: 'header'` to render the same
+  // actions as inline pills inside an app-bar trailing slot (Phase C
+  // dock-migration). The floating variant remains the default so
+  // existing mobile callers keep working unchanged. Structural
+  // exception (no row primitive applies).
   dock(opts) {
     const o = opts || {};
+    const placement = o.placement === 'header' ? 'header' : 'floating';
+    if (placement === 'header') {
+      const search = o.search
+        ? `<button class="ui-dock__search ui-dock--header__search" aria-label="${escapeHtml(o.search.label)}" onclick="${o.search.onclick || ''}">${ICONS.search}</button>`
+        : '';
+      const cta = o.cta
+        ? `<button class="ui-dock__cta ui-dock--header__cta" onclick="${o.cta.onclick || ''}">${o.cta.icon || ''}<span>${escapeHtml(o.cta.label)}</span></button>`
+        : '';
+      return `<div class="ui-dock ui-dock--header" role="group">${search}${cta}</div>`;
+    }
     const search = o.search
       ? `<button class="ui-dock__search" onclick="${o.search.onclick || ''}">${ICONS.search}<span>${escapeHtml(o.search.label)}</span></button>`
       : '';
@@ -62,19 +77,21 @@ export const UI = {
   },
 
   // 4. Tappable row — list + create form rows.
+  // `tag` (optional): small inline chip rendered after the title (e.g. "PR open").
   row(opts) {
     const o = opts || {};
     const click = o.onclick ? ` onclick="${o.onclick}"` : '';
     const lead = o.leading ? `<div class="ui-row__leading">${o.leading}</div>` : '';
     const sub = o.subtitle ? `<span class="ui-row__subtitle">${escapeHtml(o.subtitle)}</span>` : '';
+    const tagChip = o.tag ? `<span class="ui-row__tag">${escapeHtml(o.tag)}</span>` : '';
     const chevron = (o.onclick && o.chevron !== false) ? `<span class="ui-row__chevron">${ICONS.chevronRight}</span>` : '';
     const trail = (o.trailing || chevron)
       ? `<div class="ui-row__trailing">${o.trailing || ''}${chevron}</div>` : '';
-    const tag = o.onclick ? 'button' : 'div';
-    return `<${tag} class="ui-row"${click}>${lead}
-      <div class="ui-row__body"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${sub}</div>
+    const el = o.onclick ? 'button' : 'div';
+    return `<${el} class="ui-row"${click}>${lead}
+      <div class="ui-row__body"><span class="ui-row__title-line"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${tagChip}</span>${sub}</div>
       ${trail}
-    </${tag}>`;
+    </${el}>`;
   },
 
   // 5. Section label — small-caps muted header. Used everywhere.
@@ -145,64 +162,16 @@ export const UI = {
     el.style.height = Math.min(el.scrollHeight, 160) + 'px';
   },
 
-  // --- Legacy fallbacks for the out-of-scope Usage view ---
-  // Kept as thin shims so usage.js still renders. Not part of the 9-primitive set.
-  spinner() {
-    return '<span class="spinner spinner-inline"></span>';
-  },
-  header(title) {
-    return UI.appBar({
-      back: true,
-      title,
-      trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
-    });
-  },
+  // Loading placeholder — used by Usage view and any future page that
+  // needs a spinner while fetching. Intentionally tiny.
   loadingBlock() {
     return '<div class="loading"><span class="spinner"></span></div>';
   },
-  metricsStrip(cells) {
-    let html = '<div class="usage-metrics">';
-    for (const c of cells) {
-      html += '<div class="usage-metric">';
-      html += `<div class="usage-metric__label">${escapeHtml(c.label)}</div>`;
-      html += `<div class="usage-metric__value">${escapeHtml(c.value)}</div>`;
-      if (c.delta) {
-        const cls = c.delta.direction === 'up' ? 'usage-metric__delta--up'
-          : c.delta.direction === 'down' ? 'usage-metric__delta--down'
-          : 'usage-metric__delta--neutral';
-        html += `<div class="usage-metric__delta ${cls}">${escapeHtml(c.delta.text)}</div>`;
-      }
-      html += '</div>';
-    }
-    return html + '</div>';
-  },
-  chartContainer(title, chartHtml, rightAction) {
-    return `<div class="usage-chart-card">
-      <div class="usage-chart-card__header">
-        <div class="usage-chart__title">${escapeHtml(title)}</div>
-        ${rightAction || ''}
-      </div>
-      ${chartHtml}
-    </div>`;
-  },
-  chartBar(opts) {
-    const todayCls = opts.isToday ? ' usage-bar--today' : '';
-    const tooltip = `<div class="chart-tooltip">${escapeHtml(opts.value)} &middot; ${escapeHtml(opts.label)}</div>`;
-    const todayLabel = opts.isToday ? '<span class="usage-bar-today-label">Today</span>' : '';
-    return `<div class="usage-bar${todayCls}" style="height:${opts.height}%">${tooltip}<span class="usage-bar-label">${escapeHtml(opts.label)}</span>${todayLabel}</div>`;
-  },
-  dateRangeSelector(options, active, onclickFn) {
-    let html = '<div class="date-range-selector">';
-    for (const opt of options) {
-      const cls = opt.value === active ? ' date-range-option--active' : '';
-      html += `<button class="date-range-option${cls}" onclick="${onclickFn}(${opt.value})">${escapeHtml(opt.label)}</button>`;
-    }
-    return html + '</div>';
-  },
-  tableCard(title, tableHtml) {
-    return `<div class="usage-table-container">
-      <div class="usage-table__title">${escapeHtml(title)}</div>
-      ${tableHtml}
-    </div>`;
+
+  // Inline spinner — appended to a button while an async action runs.
+  // Used by withSpinner in app.js. The `.spinner-inline` modifier
+  // scales the dot down to 14 px so it fits inside button chrome.
+  spinner() {
+    return '<span class="spinner spinner-inline" aria-hidden="true"></span>';
   },
 };

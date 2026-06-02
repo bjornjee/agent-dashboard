@@ -85,6 +85,24 @@ func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, paths)
 }
 
+// handleFilePicker pops a native macOS "Choose File" dialog (via
+// osascript) and returns the absolute path the user picked. The
+// dashboard binds to localhost so this is only reachable from the
+// user's own machine.
+func (s *Server) handleFilePicker(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	out, err := cmdRunner.Output(ctx, "osascript", "-e", "POSIX path of (choose file)")
+	if err != nil {
+		// osascript exits non-zero when the user cancels — treat as a
+		// soft "no selection" rather than a server error.
+		writeJSON(w, http.StatusOK, map[string]string{"path": ""})
+		return
+	}
+	path := strings.TrimSpace(string(out))
+	writeJSON(w, http.StatusOK, map[string]string{"path": path})
+}
+
 // CommandRunner abstracts subprocess execution for git/gh commands
 // so tests can swap in a mock.
 type CommandRunner interface {

@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -8,6 +8,7 @@ import { UI } from './js/ui.js';
 import { ICONS } from './js/icons.js';
 import { Theme } from './js/theme.js';
 import { initNotify, processNotifications, toggleBrowserNotifications } from './js/notify.js';
+import { renderSidebar, isDesktop, DESKTOP_MQ } from './js/sidebar.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -38,16 +39,30 @@ function pushView(view, agentId) {
 }
 
 function navigateTo(view, agentId, push) {
+  const desktop = isDesktop();
+
   switch (view) {
     case 'list':
       cancelNav();
       stopConversationPoll();
-      setView('list');
-      renderList(app, agents);
+      if (desktop) {
+        // On desktop the agent list lives in the sidebar — the main pane
+        // has no standalone "list" page. Default the main pane to create
+        // and tell the sidebar so "+ New agent" reads as selected.
+        setView('create');
+        renderCreate(app, agents);
+      } else {
+        setView('list');
+        renderList(app, agents);
+      }
       break;
     case 'detail':
-      if (agentId) renderDetail(app, agents, agentId, setView);
-      else navigateTo('list', null, false);
+      if (agentId) {
+        renderDetail(app, agents, agentId, setView);
+      } else {
+        navigateTo('list', null, false);
+        return;
+      }
       break;
     case 'usage':
       stopConversationPoll();
@@ -61,7 +76,11 @@ function navigateTo(view, agentId, push) {
       break;
     default:
       navigateTo('list', null, false);
+      return;
   }
+
+  if (desktop) renderSidebar(agents, selectedAgentId, currentView);
+
   if (push) pushView(view, agentId);
 }
 
@@ -89,15 +108,23 @@ function connectSSE() {
   eventSource.onmessage = (e) => {
     try {
       agents = JSON.parse(e.data);
-      if (currentView === 'list') renderList(app, agents);
-      else if (currentView === 'detail' && selectedAgentId) {
+      const desktop = isDesktop();
+      if (currentView === 'list' && !desktop) {
+        // On mobile the list view IS the main pane.
+        renderList(app, agents);
+      } else if (currentView === 'detail' && selectedAgentId) {
         const agent = agents.find(a => a.session_id === selectedAgentId);
         if (agent) {
           updateActionBar(agent);
           refreshDetailHeader(agent);
+          refreshWorkingIndicator(agent);
         }
-        refreshActiveTab(selectedAgentId);
+        refreshActiveTab(selectedAgentId, agents.find(a => a.session_id === selectedAgentId));
       }
+      // On desktop, refresh sidebar on every SSE tick — but never re-mount
+      // the main pane (so a half-filled create form / scroll position is
+      // preserved while agents update).
+      if (desktop) renderSidebar(agents, selectedAgentId, currentView);
       try { processNotifications(agents); } catch (err) { console.error('[notify] error:', err); }
     } catch (err) { /* ignore parse errors */ }
   };
@@ -165,6 +192,34 @@ window.Dashboard = {
     });
   },
 
+  // Open a native macOS Choose File dialog via the local server
+  // (POST /api/file-picker → osascript), then insert the chosen
+  // absolute path at the textarea cursor. The dashboard binds to
+  // localhost so the dialog can only be triggered from the user's
+  // own browser.
+  async attachFile() {
+    const input = document.getElementById('reply-input');
+    if (!input) return;
+    let path = '';
+    try {
+      const result = await post('/api/file-picker');
+      path = (result && result.path) || '';
+    } catch (err) {
+      toast('File picker failed: ' + err.message, 'error');
+      return;
+    }
+    if (!path) return; // user cancelled
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const sep = (start > 0 && input.value[start - 1] && !/\s/.test(input.value[start - 1])) ? ' ' : '';
+    const insertion = sep + path + ' ';
+    input.value = input.value.slice(0, start) + insertion + input.value.slice(end);
+    input.focus();
+    const cursor = start + insertion.length;
+    try { input.setSelectionRange(cursor, cursor); } catch {}
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  },
+
   async sendInput(id) {
     const input = document.getElementById('reply-input');
     if (!input || !input.value.trim()) return;
@@ -174,7 +229,11 @@ window.Dashboard = {
     appendUserMessage(text);
     try {
       const result = await post('/api/agents/' + id + '/input', { text });
-      if (!result || !result.ok) toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (result && result.ok) {
+        confirmUserMessageSent();
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      }
     } finally {
       if (input) input.disabled = false;
     }
@@ -308,6 +367,22 @@ window.Dashboard = {
     }
   },
 };
+
+// --- Viewport breakpoint changes ---
+// When the user crosses the desktop breakpoint, re-mount the current view
+// so the right content lands in the right slot (mobile: #app; desktop:
+// sidebar + #app).
+const desktopMql = window.matchMedia(DESKTOP_MQ);
+const onBreakpointChange = () => {
+  if (!desktopMql.matches) {
+    // Leaving desktop — clear the sidebar so it can re-hide.
+    const host = document.getElementById('app-sidebar');
+    if (host) { host.innerHTML = ''; host.hidden = true; }
+  }
+  navigateTo(currentView, selectedAgentId, false);
+};
+if (desktopMql.addEventListener) desktopMql.addEventListener('change', onBreakpointChange);
+else if (desktopMql.addListener) desktopMql.addListener(onBreakpointChange);
 
 // --- Service worker messages ---
 if ('serviceWorker' in navigator) {
