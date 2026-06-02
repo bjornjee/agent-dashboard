@@ -2387,13 +2387,17 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
    *   row 2: chip rail [attach, model, branch, effort, spacer, mic, send/stop]
    * ============================================================ */
   /* Action-bar is a transparent shell on desktop so the composer card
-   * appears to float on top of the chat (Codex pattern). The card
-   * itself carries the elevation. */
+   * appears to float on top of the chat (Codex pattern). Card uses a
+   * percentage of the main pane width so the composer scales with the
+   * viewport — never feels pinched on wide screens, never overflows
+   * on tighter ones. */
   #app-main .action-bar {
     background: transparent;
     border-top: 0;
-    padding: 0 var(--space-5) var(--space-4);
-    max-width: 760px;
+    padding: 0 0 var(--space-4);
+  }
+  #app-main .action-bar .ui-composer.detail-composer {
+    width: 90%;
     margin: 0 auto;
   }
   .ui-composer.detail-composer {
