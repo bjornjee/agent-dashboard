@@ -539,3 +539,88 @@ test.describe('Mobile regression sanity', () => {
     expect(mainBox.width).toBeCloseTo(390, 0);
   });
 });
+
+// ---------- Thinking indicator per-turn lifecycle ----------
+//
+// The chat-feedback fix gates the "working" indicator on
+// last_hook_event !== 'Stop'. agent.state stays "running" for the
+// life of the tmux pane, so this is the only per-turn signal.
+
+test.describe('Working indicator dismisses between turns', () => {
+  async function mountDetailWithAgent(page, agent) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockApi(page, [agent]);
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.waitForSelector('#app-main .detail-layout', { timeout: 5000 });
+    await page.waitForSelector('#tab-conversation .conversation', { timeout: 5000 });
+  }
+
+  test('mid-turn agent (last_hook_event=PreToolUse) shows the indicator', async ({ page }) => {
+    await mountDetailWithAgent(page, makeAgent({
+      session_id: 'desk-001',
+      state: 'running',
+      last_hook_event: 'PreToolUse',
+      current_tool: 'Bash',
+    }));
+
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      const agents = await fetch('/api/agents').then(r => r.json());
+      mod.refreshWorkingIndicator(agents[0]);
+    });
+
+    const indicator = page.locator('.ui-msg-status--working');
+    await expect(indicator).toBeVisible();
+    await expect(indicator.locator('.ui-msg-status__label')).toContainText('Running command');
+  });
+
+  test('agent transitioning to last_hook_event=Stop removes the indicator', async ({ page }) => {
+    await mountDetailWithAgent(page, makeAgent({
+      session_id: 'desk-001',
+      state: 'running',
+      last_hook_event: 'PreToolUse',
+      current_tool: 'Bash',
+    }));
+
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      const agents = await fetch('/api/agents').then(r => r.json());
+      mod.refreshWorkingIndicator(agents[0]);
+    });
+    await expect(page.locator('.ui-msg-status--working')).toBeVisible();
+
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      const agents = await fetch('/api/agents').then(r => r.json());
+      const ended = { ...agents[0], last_hook_event: 'Stop' };
+      mod.refreshWorkingIndicator(ended);
+    });
+
+    await expect(page.locator('.ui-msg-status--working')).toHaveCount(0);
+  });
+
+  test('agent with state=done removes the indicator regardless of last_hook_event', async ({ page }) => {
+    await mountDetailWithAgent(page, makeAgent({
+      session_id: 'desk-001',
+      state: 'running',
+      last_hook_event: 'PreToolUse',
+      current_tool: 'Bash',
+    }));
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      const agents = await fetch('/api/agents').then(r => r.json());
+      mod.refreshWorkingIndicator(agents[0]);
+    });
+    await expect(page.locator('.ui-msg-status--working')).toBeVisible();
+
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      const agents = await fetch('/api/agents').then(r => r.json());
+      const done = { ...agents[0], state: 'done', last_hook_event: 'PreToolUse' };
+      mod.refreshWorkingIndicator(done);
+    });
+    await expect(page.locator('.ui-msg-status--working')).toHaveCount(0);
+  });
+});
