@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.31.0](https://github.com/bjornjee/agent-dashboard/compare/v0.30.0...v0.31.0) (2026-06-02)
+
+
+### Features
+
+* codex-ios ux redesign for web dashboard ([#339](https://github.com/bjornjee/agent-dashboard/issues/339)) ([f623bf3](https://github.com/bjornjee/agent-dashboard/commit/f623bf31936937d889a6898b04a086954f0da578))
+* desktop web dashboard with Codex-parity chat flow ([#340](https://github.com/bjornjee/agent-dashboard/issues/340)) ([40c21ca](https://github.com/bjornjee/agent-dashboard/commit/40c21cafe1c674f9365286362101e52ceff63bef))
+* filter Codex Desktop app sessions from dashboard ([#337](https://github.com/bjornjee/agent-dashboard/issues/337)) ([799846f](https://github.com/bjornjee/agent-dashboard/commit/799846fcc131de88bc9ace4363fffc52ff9c5fe5))
+* refresh worktree/branch pin on new-agent spawn ([#334](https://github.com/bjornjee/agent-dashboard/issues/334)) ([2f9e27c](https://github.com/bjornjee/agent-dashboard/commit/2f9e27c05a16bfa06d17f1efedff2f488bac6960))
+
+
+### Bug Fixes
+
+* deliver codex new-session user message by dropping fictional plan-mode bootstrap ([#335](https://github.com/bjornjee/agent-dashboard/issues/335)) ([52f41ec](https://github.com/bjornjee/agent-dashboard/commit/52f41ec08c11a706fb854ca38bbf8a56afd1941b))
+* re-pin worktrees created mid-session ([#338](https://github.com/bjornjee/agent-dashboard/issues/338)) ([91b0b2e](https://github.com/bjornjee/agent-dashboard/commit/91b0b2e2ac5803b2d86275b975aeb4d930eb0ca9))
+
 ## [0.30.0](https://github.com/bjornjee/agent-dashboard/compare/v0.29.0...v0.30.0) (2026-05-28)
 
 
