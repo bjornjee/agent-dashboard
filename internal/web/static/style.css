@@ -93,29 +93,13 @@
   --bg-selected: #222226;
   --bg-hover: #2F2F33;
 
-  /* Misc tokens kept for legacy usage/diff CSS */
+  /* Misc tokens consumed by usage/diff CSS */
   --interactive-bg: rgba(255, 255, 255, 0.04);
-  --interactive-border: rgba(255, 255, 255, 0.08);
-  --interactive-bg-hover: rgba(255, 255, 255, 0.08);
-  --interactive-border-hover: rgba(255, 255, 255, 0.12);
   --scrollbar-thumb: rgba(255, 255, 255, 0.15);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
   --row-alt-bg: rgba(255, 255, 255, 0.015);
-  --row-hover-bg: rgba(255, 255, 255, 0.02);
-  --progress-pending: rgba(255, 255, 255, 0.06);
   --shadow-medium: rgba(0, 0, 0, 0.5);
-  --badge-pr-text: #C7C7CC;
-  --badge-merged-text: #6EE7B7;
-  --card-hover-gradient: rgba(34, 34, 38, 0.5);
 
-  --color-navbar-bg: #0E0E10;
-  --color-text-on-dark: #FFFFFF;
-  --color-navbar-muted: #8E8E93;
-  --color-navbar-divider: #2A2A2E;
-  --color-navbar-hover: rgba(255, 255, 255, 0.06);
-  --color-navbar-border: rgba(255, 255, 255, 0.06);
-  --color-accent-hover: rgba(255, 255, 255, 0.92);
-  --color-accent-light: rgba(255, 255, 255, 0.06);
 }
 
 /* ============================================================
@@ -752,7 +736,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: var(--text-primary);
   border-radius: 1px;
 }
-.detail-tab-body { padding: var(--space-3) 0 120px; }
 .detail-meta {
   display: flex;
   align-items: center;
@@ -973,7 +956,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 .action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
-.action-row { display: flex; gap: var(--space-2); padding: var(--space-2) var(--space-5); flex-wrap: wrap; }
 /* Labeled action panel — wraps state-specific chips ("Pull request",
  * "Permission request", …) above the composer. Gives the floating
  * pills context + a surface that visually pairs with the composer
@@ -1042,14 +1024,6 @@ button.btn-ghost.btn-sm {
 @media (max-width: 480px) {
   #app { max-width: 100%; }
   .ui-card { margin-left: var(--space-4); margin-right: var(--space-4); }
-}
-
-
-/* === LEGACY: keyframes === */
-
-@keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
-  50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.08); }
 }
 
 
@@ -1839,60 +1813,6 @@ button.btn-ghost.btn-sm {
 
 .usage-agent-breakdown { display: contents; }
 
-/* Subagent rows on agent card */
-.agent-card__subagents {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.agent-card__subagent-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--text-tertiary);
-}
-.subagent-status-dot {
-  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
-}
-.subagent-status-dot--running { background: var(--accent-green); }
-.subagent-status-dot--completed { background: var(--text-tertiary); }
-.subagent-status-dot--failed { background: var(--accent-red); }
-.subagent-status-dot--queued { background: var(--accent-blue); }
-.subagent-status-dot--blocked { background: var(--accent-red); }
-.subagent-status-dot--paused { background: var(--accent-amber); }
-.subagent-status-dot--warning { background: var(--accent-amber); }
-.subagent-status-dot--pr { background: var(--accent-indigo); }
-.subagent-status-dot--merged { background: #5EEAD4; }
-.agent-card__subagent-name {
-  font-size: 12px; font-weight: 500; color: var(--text-muted);
-  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.agent-card__subagent-task {
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 12px; color: var(--text-tertiary);
-}
-.agent-card__subagent-mode {
-  flex-shrink: 0; font-family: var(--font-mono);
-  font-size: 11px; color: var(--accent-blue);
-}
-.agent-card__subagent-duration {
-  flex-shrink: 0; margin-left: auto; font-family: var(--font-mono);
-  font-size: 12px; color: var(--text-tertiary);
-}
-.agent-card__cost {
-  display: flex; align-items: baseline; gap: 4px;
-  margin-left: auto; flex-shrink: 0;
-}
-.agent-card__cost-label {
-  font-size: 11px; font-weight: 400; color: var(--text-tertiary);
-}
-.agent-card__cost-value {
-  font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--accent-green);
-}
-
 /* File status indicators */
 .file-status {
   width: 14px; height: 14px; border-radius: 3px;
@@ -1942,7 +1862,6 @@ button.btn-ghost.btn-sm {
   --bg-elevated: #F2F2F4;
   --bg-code: #F4F4F5;
   --bg-overlay: rgba(0, 0, 0, 0.3);
-  --bg-navbar: #2A2724;
 
   /* Desktop tokens — sidebar/selected/hover (register addendum line 31-34). */
   --bg-sidebar: #F4F4F5;
@@ -1994,18 +1913,10 @@ button.btn-ghost.btn-sm {
   --code-bg: #F4F4F5;
 
   --interactive-bg: rgba(0, 0, 0, 0.04);
-  --interactive-border: #E4E4E7;
-  --interactive-bg-hover: rgba(0, 0, 0, 0.06);
-  --interactive-border-hover: #D4D4D8;
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
   --row-alt-bg: rgba(0, 0, 0, 0.02);
-  --row-hover-bg: rgba(0, 0, 0, 0.03);
-  --progress-pending: rgba(0, 0, 0, 0.06);
   --shadow-medium: rgba(0, 0, 0, 0.08);
-  --badge-pr-text: #52525B;
-  --badge-merged-text: #15803D;
-  --card-hover-gradient: rgba(244, 244, 245, 0.6);
 }
 
 /* === LEGACY: activity / conversation / plan content === */
@@ -2016,62 +1927,6 @@ button.btn-ghost.btn-sm {
   max-width: 720px;
   margin: 0 auto;
 }
-
-.msg-role-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 12px 0 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.msg-role-label__icon {
-  width: 14px;
-  height: 14px;
-  opacity: 0.6;
-}
-
-.msg {
-  max-width: 85%;
-  padding: 12px 16px;
-  font-size: 14px;
-  line-height: 22px;
-  word-wrap: break-word;
-}
-
-.msg-human {
-  max-width: 75%;
-  margin-left: auto;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  color: var(--text-secondary);
-  border-radius: 14px 14px 4px 14px;
-  align-self: flex-end;
-}
-
-.msg-assistant {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: 16px 16px 16px 4px;
-  color: var(--text-secondary);
-  align-self: flex-start;
-}
-
-.msg-time {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-}
-
-.msg-human .msg-time { color: var(--text-tertiary); }
-.msg-optimistic { opacity: 0.7; }
-
-.msg-assistant .markdown-body { color: var(--text-secondary); }
-.msg-assistant .markdown-body code { background: var(--code-bg); color: var(--code-text); }
 
 /* ============================================
    VIEW: Activity Timeline
@@ -2148,31 +2003,6 @@ button.btn-ghost.btn-sm {
   line-height: 20px;
 }
 
-/* Tool call groups */
-.tool-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-2) 0 0;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.tool-group:hover { color: var(--text-muted); }
-
-.tool-group__chevron {
-  width: 12px;
-  height: 12px;
-  transition: transform var(--transition-default);
-  display: inline-block;
-  font-size: 10px;
-}
-
-.tool-group--expanded .tool-group__chevron {
-  transform: rotate(90deg);
-}
-
 .tool-call {
   padding: 8px 0 8px 16px;
   border-left: 1px solid var(--border-default);
@@ -2192,11 +2022,6 @@ button.btn-ghost.btn-sm {
   border-radius: 50%;
   display: inline-block;
 }
-
-/* Legacy activity entry styles (fallback) */
-.activity-time { color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; }
-.activity-kind { font-weight: 500; color: var(--text-secondary); }
-.tool-name { color: var(--code-text); font-family: var(--font-mono); }
 
 /* Activity filter pills */
 .activity-filter-bar {

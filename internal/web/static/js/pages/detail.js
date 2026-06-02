@@ -22,10 +22,6 @@ function inlineBtn(label, variant, onclick, id) {
   return `<button class="ui-modal-btn ui-modal-btn--${v}" onclick="${onclick}"${idAttr}>${escapeHtml(label)}</button>`;
 }
 
-function inlineStopBtn(onclick) {
-  return `<button class="ui-stop-btn" aria-label="Stop" onclick="${onclick}"><span></span></button>`;
-}
-
 const STATE_LABELS = {
   running: 'Working',
   permission: 'Needs approval',
