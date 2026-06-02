@@ -139,7 +139,15 @@ export function updateActionBar(agent) {
 }
 
 // Track optimistic messages so refreshConversation can preserve them
+// across the 2s poll until the API echoes the user's message back.
+//
+// pendingUserMessage  — the text of the in-flight user message
+// pendingMessageAcked — false until POST /input resolves OK; once true
+//                       the conversation refresh stops re-rendering the
+//                       "Sending…" caption (the message is delivered;
+//                       only the API echo is still pending).
 let pendingUserMessage = null;
+let pendingMessageAcked = false;
 
 // Optimistically append a Codex-style user message pill to the chat.
 // While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
@@ -147,6 +155,7 @@ let pendingUserMessage = null;
 // clears the flag (and removes the caption) once the POST resolves OK.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
+  pendingMessageAcked = false;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   const wrap = document.createElement('div');
@@ -171,6 +180,7 @@ export function appendUserMessage(text) {
 //      feedback immediately, without waiting for the next SSE tick
 //      (~1-2s after POST). The next SSE update confirms or replaces.
 export function confirmUserMessageSent() {
+  pendingMessageAcked = true;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
@@ -504,13 +514,18 @@ async function refreshConversation(agentId, agent) {
     const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
     const lastContent = lastHuman ? (lastHuman.Content || lastHuman.content || '') : '';
     if (lastContent.includes(pendingUserMessage)) {
-      pendingUserMessage = null; // API caught up, clear optimistic state
+      pendingUserMessage = null;       // API caught up, clear optimistic state
+      pendingMessageAcked = false;
     }
   }
 
   container.innerHTML = renderConversationHtml(entries);
 
-  // Re-append optimistic message if API hasn't caught up yet
+  // Re-append optimistic message if API hasn't caught up yet. The
+  // "Sending…" caption (and the muted opacity) ONLY apply while the
+  // POST is still in flight (pendingMessageAcked === false). After ack
+  // the bubble re-renders at full opacity, no caption — just a normal
+  // user message waiting for the API echo.
   if (pendingUserMessage) {
     const conv = container.querySelector('.conversation');
     if (conv) {
@@ -518,12 +533,14 @@ async function refreshConversation(agentId, agent) {
       wrap.innerHTML = UI.message('user', pendingUserMessage);
       const msgEl = wrap.firstElementChild;
       if (msgEl) {
-        msgEl.classList.add('ui-msg--optimistic');
+        if (!pendingMessageAcked) msgEl.classList.add('ui-msg--optimistic');
         conv.appendChild(msgEl);
-        const caption = document.createElement('div');
-        caption.className = 'ui-msg__caption ui-msg__caption--sending';
-        caption.textContent = 'Sending…';
-        conv.appendChild(caption);
+        if (!pendingMessageAcked) {
+          const caption = document.createElement('div');
+          caption.className = 'ui-msg__caption ui-msg__caption--sending';
+          caption.textContent = 'Sending…';
+          conv.appendChild(caption);
+        }
       }
     }
   }
@@ -626,6 +643,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   cancelNav();
   stopConversationPoll();
   pendingUserMessage = null;
+  pendingMessageAcked = false;
   activityFilter = 'all';
   setView('detail', agentId);
   const agent = agents.find(a => a.session_id === agentId);

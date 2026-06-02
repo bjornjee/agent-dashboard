@@ -815,3 +815,72 @@ test.describe('Slash-command autocomplete', () => {
     await expect(input).toHaveValue('/fea');
   });
 });
+
+// ---------- Sending caption lifecycle ----------
+
+test.describe('Sending caption clears on POST ack and does not reappear', () => {
+  test('refreshConversation must not re-add the "Sending…" caption after ack', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route(/\/api\/agents/, async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', state: 'running', last_hook_event: 'Stop' })] });
+      } else if (path.endsWith('/conversation')) {
+        // API has NOT yet caught up with the user's pending message —
+        // returns only pre-existing entries. This is the scenario where
+        // pendingUserMessage stays set across the next poll.
+        await route.fulfill({ json: [
+          { Role: 'human', Content: 'previous question', Timestamp: '2026-06-02T10:00:00.000Z' },
+          { Role: 'assistant', Content: 'previous answer', Timestamp: '2026-06-02T10:00:01.000Z' },
+        ]});
+      } else if (path.endsWith('/activity')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.waitForSelector('#tab-conversation .conversation', { timeout: 5000 });
+
+    // 1. Append optimistic user message → "Sending…" caption appears.
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      mod.appendUserMessage('what is going on');
+    });
+    await expect(page.locator('.ui-msg__caption--sending')).toBeVisible();
+
+    // 2. POST resolves → confirmUserMessageSent clears caption.
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      mod.confirmUserMessageSent();
+    });
+    await expect(page.locator('.ui-msg__caption--sending')).toHaveCount(0);
+
+    // 3. Conversation poll fires (manually invoke refreshActiveTab via SSE-equivalent path).
+    // The pending message is still in pendingUserMessage (API hasn't echoed it back),
+    // but the caption MUST NOT reappear since the ack has fired.
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      // refreshActiveTab triggers refreshConversation which rebuilds .conversation HTML.
+      mod.refreshActiveTab('desk-001', { session_id: 'desk-001', state: 'running', last_hook_event: 'Stop' });
+    });
+    // Wait for the re-render to settle.
+    await page.waitForTimeout(800);
+
+    // The optimistic bubble should still be present (API hasn't caught up),
+    // BUT the "Sending…" caption must NOT be back.
+    await expect(page.locator('.ui-msg--user').last()).toBeVisible();
+    await expect(page.locator('.ui-msg__caption--sending')).toHaveCount(0);
+  });
+});
