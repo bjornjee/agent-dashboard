@@ -2352,7 +2352,8 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   /* Attach button has no backend hookup yet — hide on desktop until
    * there's real file-attach functionality. The mobile pill keeps it
    * (legacy preservation). */
-  .ui-composer.detail-composer .ui-composer__attach { display: none; }
+  /* Attach (+) button is reused as a slash-command starter — clicking
+   * inserts "/" at the textarea cursor and focuses the input. */
   .ui-composer.detail-composer .ui-composer__chip {
     display: inline-flex;
     align-items: center;

@@ -192,6 +192,22 @@ window.Dashboard = {
     });
   },
 
+  // Insert a "/" at the textarea cursor and focus, so the user can
+  // start a slash-command (e.g., /agent-dashboard:pr) without retyping.
+  insertSlash() {
+    const input = document.getElementById('reply-input');
+    if (!input) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const before = input.value.slice(0, start);
+    const after = input.value.slice(end);
+    input.value = before + '/' + after;
+    input.focus();
+    const cursor = start + 1;
+    try { input.setSelectionRange(cursor, cursor); } catch {}
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  },
+
   async sendInput(id) {
     const input = document.getElementById('reply-input');
     if (!input || !input.value.trim()) return;
