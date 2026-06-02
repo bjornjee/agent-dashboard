@@ -590,6 +590,23 @@ function renderConversationHtml(entries) {
   return html;
 }
 
+// Signature of every field renderQuestionCard() reads. If this string is
+// unchanged across a poll tick, the rebuilt card would be byte-identical
+// — and rebuilding anyway would wipe the user's picked radio / typed
+// freeform text. refreshConversation uses this to detach-and-re-attach
+// the same DOM node across the container.innerHTML wipe. Same pattern
+// as actionBarSignature (commit 8106661).
+function questionCardSignature(pending) {
+  if (!pending || !Array.isArray(pending.questions)) return '';
+  const parts = [pending.tool_use_id || ''];
+  for (const q of pending.questions) {
+    parts.push(`${q.header || ''}\x1f${q.question || ''}\x1f${q.multi_select ? '1' : '0'}`);
+    const opts = (q.options || []).map(o => `${o.label || ''}\x1f${o.description || ''}`);
+    parts.push(opts.join('\x1e'));
+  }
+  return parts.join('|');
+}
+
 // Anatomy matches docs/design/codex-screenshots/mobile/photo_2026-06-01_17-44-47.jpg —
 // elevated surface, per-question small-caps category label, radio list with
 // bold title + muted description, optional freeform answer input, single
@@ -599,6 +616,7 @@ function renderConversationHtml(entries) {
 function renderQuestionCard(pending, agentId) {
   if (!pending || !Array.isArray(pending.questions) || pending.questions.length === 0) return '';
   const tid = escapeHtml(pending.tool_use_id || '');
+  const sig = escapeHtml(questionCardSignature(pending));
   const blocks = pending.questions.map((q, qi) => {
     const header = q.header ? `<div class="question-card__label">${escapeHtml(q.header)}</div>` : '';
     const text = q.question ? `<div class="question-card__question">${escapeHtml(q.question)}</div>` : '';
@@ -627,7 +645,7 @@ function renderQuestionCard(pending, agentId) {
     </div>`;
   }).join('');
   const submitId = `qc-submit-${tid}`;
-  return `<div class="question-card" data-tool-use-id="${tid}" data-agent-id="${escapeHtml(agentId)}">
+  return `<div class="question-card" data-tool-use-id="${tid}" data-sig="${sig}" data-agent-id="${escapeHtml(agentId)}">
     ${blocks}
     <div class="question-card__footer">
       <button type="button" id="${submitId}" class="question-card__submit" disabled onclick="window.Dashboard.answerQuestion('${escapeHtml(agentId)}', '${tid}', event)">Send answer</button>
@@ -738,6 +756,19 @@ async function refreshConversation(agentId, agent) {
     }
   }
 
+  // Preserve the AskUserQuestion card DOM node across the container wipe
+  // when the pending question is unchanged. Rebuilding the card every 2s
+  // poll detaches its event listeners and resets any picked option or
+  // freeform text the user was filling in — making the card feel
+  // "unclickable". Detach first so innerHTML doesn't destroy it, then
+  // re-attach the same Node so checked radios / focus survive.
+  const existingCard = container.querySelector('.question-card');
+  const sig = pending ? questionCardSignature(pending) : '';
+  const reuseCard = !!(pending && pending.tool_use_id && existingCard
+    && existingCard.dataset.toolUseId === pending.tool_use_id
+    && existingCard.dataset.sig === sig);
+  if (reuseCard) existingCard.remove();
+
   container.innerHTML = renderConversationHtml(entries);
 
   // Append the AskUserQuestion card inline after the last assistant
@@ -746,10 +777,14 @@ async function refreshConversation(agentId, agent) {
   if (pending && pending.tool_use_id) {
     const conv = container.querySelector('.conversation');
     if (conv) {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = renderQuestionCard(pending, agentId);
-      const cardEl = wrap.firstElementChild;
-      if (cardEl) conv.appendChild(cardEl);
+      if (reuseCard) {
+        conv.appendChild(existingCard);
+      } else {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = renderQuestionCard(pending, agentId);
+        const cardEl = wrap.firstElementChild;
+        if (cardEl) conv.appendChild(cardEl);
+      }
     }
   }
 

@@ -2790,7 +2790,7 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   margin: var(--space-3) 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-8);
   max-width: 720px;
   width: 100%;
   align-self: flex-start;
