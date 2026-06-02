@@ -10,6 +10,7 @@ import { Theme } from './js/theme.js';
 import { initNotify, processNotifications, toggleBrowserNotifications } from './js/notify.js';
 import { renderSidebar, isDesktop, DESKTOP_MQ } from './js/sidebar.js';
 import { promptInstall, maybeShowIOSHint, consumeNewAgentShortcut } from './js/install.js';
+import { openSearch, closeSearch, isSearchOpen } from './js/pages/search.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -167,7 +168,7 @@ window.Dashboard = {
   },
 
   searchAgents() {
-    // Search lives in a follow-up — for now, the dock pill is decorative.
+    openSearch(agents);
   },
 
   selectAgent(id) {
@@ -406,6 +407,14 @@ if ('serviceWorker' in navigator) {
 
 // --- Theme ---
 Theme.init();
+
+// Cmd/Ctrl-K toggles the fuzzy search overlay from anywhere in the app.
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.key !== 'k' || e.repeat) return;
+  e.preventDefault();
+  if (isSearchOpen()) closeSearch();
+  else openSearch(agents);
+});
 
 // --- Init ---
 async function init() {

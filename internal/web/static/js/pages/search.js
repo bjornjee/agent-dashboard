@@ -1,0 +1,167 @@
+// Search overlay — Codex-style fuzzy command palette for agents.
+// Mounted as a floating centered panel; filters the in-memory agents list.
+import { escapeHtml, repoName } from '../format.js';
+import { effectiveState, stateGroup } from '../state.js';
+import { fuzzyRank } from '../fuzzy.js';
+import { ICONS } from '../icons.js';
+
+const OVERLAY_ID = 'search-overlay-root';
+const INPUT_ID = 'search-overlay-input';
+
+let currentResults = [];
+let selectedIndex = 0;
+let keydownHandler = null;
+
+// Wraps matched character indices in <strong> tags and HTML-escapes the
+// rest. `indices` is an ordered ascending array; falsy ⇒ no highlights.
+export function highlightMatched(text, indices) {
+  const s = text || '';
+  if (!indices || indices.length === 0) return escapeHtml(s);
+  let out = '';
+  let cursor = 0;
+  for (const idx of indices) {
+    if (idx > cursor) out += escapeHtml(s.slice(cursor, idx));
+    out += '<strong class="search-overlay__hit">' + escapeHtml(s.charAt(idx)) + '</strong>';
+    cursor = idx + 1;
+  }
+  if (cursor < s.length) out += escapeHtml(s.slice(cursor));
+  return out;
+}
+
+// Pure ranker — fuzzy-matches `needle` against the agent's repo name and
+// branch, returns sorted result objects { item, score, indicesByField }.
+export function searchAgents(agents, needle, max) {
+  const cap = typeof max === 'number' ? max : 50;
+  const ranked = fuzzyRank(needle || '', agents, (a) => [repoName(a), a.branch || '']);
+  return ranked.slice(0, cap);
+}
+
+function statusDotHTML(state) {
+  const g = stateGroup(state);
+  return `<span class="status-dot status-dot--${g.toLowerCase()}"></span>`;
+}
+
+function rowHTML(result, index) {
+  const a = result.item;
+  const indicesByField = result.indicesByField || [null, null];
+  const titleHTML = highlightMatched(repoName(a), indicesByField[0]);
+  const subtitleHTML = a.branch ? highlightMatched(a.branch, indicesByField[1]) : '';
+  const tag = stateGroup(effectiveState(a));
+  const sel = index === selectedIndex ? ' search-overlay__row--selected' : '';
+  return (
+    `<button class="search-overlay__row${sel}" data-agent-id="${escapeHtml(a.session_id)}" data-index="${index}" role="option">` +
+      `<span class="search-overlay__leading">${statusDotHTML(effectiveState(a))}</span>` +
+      `<span class="search-overlay__rowbody">` +
+        `<span class="search-overlay__title">${titleHTML}</span>` +
+        (subtitleHTML ? `<span class="search-overlay__subtitle">${subtitleHTML}</span>` : '') +
+      `</span>` +
+      `<span class="search-overlay__tag">${escapeHtml(tag)}</span>` +
+    `</button>`
+  );
+}
+
+function renderResults(container, needle, agents) {
+  currentResults = searchAgents(agents, needle, 50);
+  if (selectedIndex >= currentResults.length) {
+    selectedIndex = Math.max(0, currentResults.length - 1);
+  }
+  if (currentResults.length === 0) {
+    const trimmed = (needle || '').trim();
+    container.innerHTML = trimmed
+      ? `<div class="search-overlay__empty">No agents match "${escapeHtml(trimmed)}"</div>`
+      : `<div class="search-overlay__empty">No agents yet.</div>`;
+    return;
+  }
+  container.innerHTML = currentResults.map((r, i) => rowHTML(r, i)).join('');
+}
+
+function moveSelection(delta, container) {
+  if (currentResults.length === 0) return;
+  selectedIndex = (selectedIndex + delta + currentResults.length) % currentResults.length;
+  container.querySelectorAll('.search-overlay__row').forEach((el, i) => {
+    el.classList.toggle('search-overlay__row--selected', i === selectedIndex);
+    if (i === selectedIndex) el.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function activateSelected() {
+  if (currentResults.length === 0) return;
+  const id = currentResults[selectedIndex].item.session_id;
+  closeSearch();
+  if (window.Dashboard && typeof window.Dashboard.selectAgent === 'function') {
+    window.Dashboard.selectAgent(id);
+  }
+}
+
+export function openSearch(agents) {
+  if (document.getElementById(OVERLAY_ID)) return;
+  selectedIndex = 0;
+  const overlay = document.createElement('div');
+  overlay.id = OVERLAY_ID;
+  overlay.className = 'search-overlay';
+  overlay.innerHTML = `
+    <div class="search-overlay__panel" role="dialog" aria-modal="true" aria-label="Search agents">
+      <div class="search-overlay__inputrow">
+        <span class="search-overlay__icon" aria-hidden="true">${ICONS.search || ''}</span>
+        <input id="${INPUT_ID}" class="search-overlay__input" type="text" placeholder="Search agents" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="search-overlay__results" role="listbox"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector('#' + INPUT_ID);
+  const results = overlay.querySelector('.search-overlay__results');
+  renderResults(results, '', agents);
+
+  input.addEventListener('input', () => {
+    selectedIndex = 0;
+    renderResults(results, input.value, agents);
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeSearch();
+  });
+
+  results.addEventListener('click', (e) => {
+    const btn = e.target.closest('.search-overlay__row');
+    if (!btn) return;
+    const idx = parseInt(btn.getAttribute('data-index') || '0', 10);
+    selectedIndex = isNaN(idx) ? 0 : idx;
+    activateSelected();
+  });
+
+  keydownHandler = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSearch();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveSelection(1, results);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveSelection(-1, results);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      activateSelected();
+    }
+  };
+  document.addEventListener('keydown', keydownHandler);
+
+  setTimeout(() => input.focus(), 0);
+}
+
+export function closeSearch() {
+  const overlay = document.getElementById(OVERLAY_ID);
+  if (overlay) overlay.remove();
+  if (keydownHandler) {
+    document.removeEventListener('keydown', keydownHandler);
+    keydownHandler = null;
+  }
+  currentResults = [];
+  selectedIndex = 0;
+}
+
+export function isSearchOpen() {
+  return !!document.getElementById(OVERLAY_ID);
+}

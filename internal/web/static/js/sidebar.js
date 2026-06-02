@@ -47,7 +47,6 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
 
   let html = '<div class="app-sidebar__inner">';
 
-  // Top CTA — "New agent" + non-interactive Search placeholder slot.
   html += '<div class="app-sidebar__top">';
   html += `<div class="app-sidebar__nav-row app-sidebar__nav-row--cta${sel(currentView === 'create')}">`;
   html += UI.row({
@@ -57,13 +56,11 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
     chevron: false,
   });
   html += '</div>';
-  // Search slot is a declared placeholder per docs/design/desktop-flow-map.md
-  // (slot 2). v1 is non-interactive — the row exists so the layout reads as
-  // intended; wiring lands in a follow-up.
-  html += '<div class="app-sidebar__nav-row app-sidebar__nav-row--placeholder" aria-disabled="true">';
+  html += '<div class="app-sidebar__nav-row">';
   html += UI.row({
-    leading: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>',
+    leading: ICONS.search,
     title: 'Search agents',
+    onclick: 'Dashboard.searchAgents()',
     chevron: false,
   });
   html += '</div>';
