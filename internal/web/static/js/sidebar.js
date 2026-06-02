@@ -93,8 +93,18 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
   }
   html += '</div>';
 
-  // Bottom anchor — Usage + Settings
+  // Bottom anchor — Install (when offered) + Usage + Settings.
+  // The install row is always rendered; CSS hides it unless
+  // body.can-install is set by js/install.js after beforeinstallprompt fires.
   html += '<div class="app-sidebar__bottom">';
+  html += '<div class="app-sidebar__nav-row app-sidebar__install">';
+  html += UI.row({
+    leading: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>',
+    title: 'Install app',
+    onclick: 'Dashboard.installApp()',
+    chevron: false,
+  });
+  html += '</div>';
   html += `<div class="app-sidebar__nav-row${sel(currentView === 'usage')}">`;
   html += UI.row({
     title: 'Usage',
