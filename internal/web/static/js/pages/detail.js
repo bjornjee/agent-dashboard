@@ -388,16 +388,24 @@ export async function renderDetail(app, agents, agentId, setView) {
     </div>
   `;
 
+  const TAB_KEYS = ['conversation', 'activity', 'diff', 'plan'];
+  let savedTab = 'conversation';
+  try {
+    const stored = sessionStorage.getItem('detail-tab-' + agentId);
+    if (stored && TAB_KEYS.includes(stored)) savedTab = stored;
+  } catch {}
+
   const tabs = inlineSegmentedTabs([
     { key: 'conversation', label: 'Chat' },
     { key: 'activity', label: 'Activity' },
     { key: 'diff', label: 'Diff' },
     { key: 'plan', label: 'Plan' },
-  ], 'conversation');
+  ], savedTab);
 
   const isMobile = window.innerWidth <= 480;
   const vitalOpen = !isMobile && sessionStorage.getItem('collapse-vital-signs-container-' + agentId) !== 'true';
   const subagentOpen = !isMobile && sessionStorage.getItem('collapse-subagent-summary-' + agentId) !== 'true';
+  const activeCls = (key) => key === savedTab ? ' active' : '';
 
   app.innerHTML = `
     <div class="detail-layout">
@@ -411,10 +419,10 @@ export async function renderDetail(app, agents, agentId, setView) {
           ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
           ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
         </div>
-        <div id="tab-conversation" class="tab-content active">${skeletonLoading(4)}</div>
-        <div id="tab-activity" class="tab-content"></div>
-        <div id="tab-diff" class="tab-content"></div>
-        <div id="tab-plan" class="tab-content"></div>
+        <div id="tab-conversation" class="tab-content${activeCls('conversation')}">${savedTab === 'conversation' ? skeletonLoading(4) : ''}</div>
+        <div id="tab-activity" class="tab-content${activeCls('activity')}">${savedTab === 'activity' ? skeletonLoading(6) : ''}</div>
+        <div id="tab-diff" class="tab-content${activeCls('diff')}">${savedTab === 'diff' ? skeletonLoading(3) : ''}</div>
+        <div id="tab-plan" class="tab-content${activeCls('plan')}">${savedTab === 'plan' ? skeletonLoading(3) : ''}</div>
       </div>
       ${renderActionBar(agent)}
     </div>
@@ -438,7 +446,7 @@ export async function renderDetail(app, agents, agentId, setView) {
   }
 
   // Tab switching
-  currentDetailTab = 'conversation';
+  currentDetailTab = savedTab;
   currentDetailAgentId = agentId;
   lastAgentState = st;
   document.querySelectorAll('.detail-tabs__tab').forEach(tab => {
@@ -452,6 +460,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       // Only show skeleton when the tab is empty (first visit) — avoids flicker on re-clicks.
       if (!container.dataset.loaded) container.innerHTML = skeletonLoading(target === 'activity' ? 6 : target === 'conversation' ? 4 : 3);
       currentDetailTab = target;
+      try { sessionStorage.setItem('detail-tab-' + agentId, target); } catch {}
       loadTabContent(target, agentId);
       if (target === 'conversation') startConversationPoll(agentId);
       else stopConversationPoll();
@@ -469,12 +478,12 @@ export async function renderDetail(app, agents, agentId, setView) {
   });
 
   // Load initial tab + subagents + vital signs in parallel
-  loadTabContent('conversation', agentId);
+  loadTabContent(savedTab, agentId);
   loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
 
-  // Start conversation polling for near-realtime updates
-  startConversationPoll(agentId);
+  // Start conversation polling only when the conversation tab is active.
+  if (savedTab === 'conversation') startConversationPoll(agentId);
 }
 
 async function loadVitalSigns(agentId, agent) {
