@@ -240,6 +240,19 @@ function renderToolTally(buckets) {
   return parts.join(' · ');
 }
 
+// Detect whether the agent is BETWEEN turns. agent.state stays
+// "running" for the life of the tmux pane, so it's a coarse signal —
+// the real per-turn signal is last_hook_event, which flips to "Stop"
+// when Claude Code finishes a turn (matching the Stop hook event).
+function isAgentMidTurn(agent) {
+  if (!agent) return false;
+  if (!WORKING_STATES.has(effectiveState(agent))) return false;
+  // "Stop" = turn ended, awaiting user. Anything else (PreToolUse,
+  // PostToolUse, UserPromptSubmit, etc.) = mid-turn.
+  const hook = agent.last_hook_event || '';
+  return hook !== 'Stop';
+}
+
 // Mounts / updates / removes the inline "working" block at the end of
 // the conversation stream. Two stacked lines:
 //   1. (optional) muted tally — "Read 3 files · ran 2 commands"
@@ -250,10 +263,11 @@ export function refreshWorkingIndicator(agent) {
   if (agent) lastKnownAgent = agent;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
-  const st = effectiveState(agent);
   const existing = container.querySelector('.ui-msg-status--working');
-  if (!WORKING_STATES.has(st)) {
+  if (!isAgentMidTurn(agent)) {
     if (existing) existing.remove();
+    // Turn ended — reset the tally so the next turn starts clean.
+    toolBuckets = {};
     return;
   }
   const classified = classifyTool(agent.current_tool);
@@ -294,7 +308,7 @@ export function refreshWorkingIndicator(agent) {
 function startToolStreamPoll(agentId) {
   stopToolStreamPoll();
   const tick = async () => {
-    if (!lastKnownAgent || !WORKING_STATES.has(effectiveState(lastKnownAgent))) {
+    if (!isAgentMidTurn(lastKnownAgent)) {
       toolBuckets = {};
       lastSeenToolTimestamp = null;
       stopToolStreamPoll();
