@@ -180,15 +180,17 @@ let lastKnownAgent = null;
 
 const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
 
-// Most recent tool-use entries surfaced inline in the chat while the
-// agent is active. Cleared when the agent leaves a working state.
-let recentToolEntries = [];
+// Running tally of tool calls fired during this working session. The
+// pulsing indicator shows "Thinking" / "Running <tool>" — the count
+// becomes a Codex-style "ran N commands" badge after the agent finishes.
+let toolsThisTurn = 0;
 let toolStreamPollTimer = null;
 let lastSeenToolTimestamp = null;
 
-// Mounts / updates / removes the inline "working" stack at the end of
-// the conversation stream. Renders the most recent N tool-use entries
-// as muted lines above a pulsing "Thinking" / "Running <tool>" indicator.
+// Mounts / updates / removes the single inline "working" line at the
+// end of the conversation stream. Plain prose, no log list, no dot
+// prefix — matches the Codex chat pattern where the only live affordance
+// during work is the "Thinking" word + an animated underline.
 export function refreshWorkingIndicator(agent) {
   if (agent) lastKnownAgent = agent;
   const container = document.querySelector('#tab-conversation .conversation');
@@ -199,16 +201,10 @@ export function refreshWorkingIndicator(agent) {
     if (existing) existing.remove();
     return;
   }
-  const label = agent.current_tool ? 'Running ' + agent.current_tool : 'Thinking…';
-  const toolLines = recentToolEntries.slice(-4).map(t => {
-    return '<div class="ui-msg-status__history">→ ' + escapeHtml(t) + '</div>';
-  }).join('');
+  const label = agent.current_tool ? 'Running ' + agent.current_tool : 'Thinking';
   const html =
-    toolLines +
-    '<div class="ui-msg-status__live">' +
-      '<span class="ui-msg-status__dot"></span>' +
-      '<span class="ui-msg-status__label">' + escapeHtml(label) + '</span>' +
-    '</div>';
+    '<span class="ui-msg-status__label">' + escapeHtml(label) +
+    '<span class="ui-msg-status__ellipsis">…</span></span>';
   if (existing) {
     if (existing.innerHTML !== html) existing.innerHTML = html;
   } else {
@@ -221,25 +217,23 @@ export function refreshWorkingIndicator(agent) {
       scrollParent.scrollTop = scrollParent.scrollHeight;
     }
   }
-  // Lazy-start the tool-stream poll the first time we mount the
-  // indicator while the agent is working. The poll auto-stops itself
-  // when the agent leaves a working state.
+  // Lazy-start the activity poll so the tool count keeps incrementing
+  // while the agent is working. The poll auto-stops itself when the
+  // agent leaves a working state.
   if (!toolStreamPollTimer && agent.session_id) {
     startToolStreamPoll(agent.session_id);
   }
 }
 
 // Poll the activity endpoint while the agent is in a working state so
-// that recent tool calls (Bash, Read, Edit, etc.) stream into the chat
-// as muted lines above the pulsing indicator. Codex-style live status.
-// Stops automatically when the agent leaves a working state.
+// that the tool count keeps a running tally. Currently used to update
+// `toolsThisTurn` (a future "ran N commands" summary will read this);
+// no individual tool detail is rendered in the chat.
 function startToolStreamPoll(agentId) {
   stopToolStreamPoll();
   const tick = async () => {
     if (!lastKnownAgent || !WORKING_STATES.has(effectiveState(lastKnownAgent))) {
-      // Agent went idle — clear the cache and stop polling. The working
-      // indicator removes itself on the next SSE tick.
-      recentToolEntries = [];
+      toolsThisTurn = 0;
       lastSeenToolTimestamp = null;
       stopToolStreamPoll();
       return;
@@ -251,15 +245,10 @@ function startToolStreamPoll(agentId) {
       const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
       const fresh = lastSeenToolTimestamp
         ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
-        : tools.slice(-4);
+        : tools;
       if (fresh.length) {
-        const lines = fresh.map(t => {
-          const c = (t.Content || t.content || '').replace(/^→\s*/, '');
-          return c.length > 80 ? c.slice(0, 78) + '…' : c;
-        });
-        recentToolEntries = recentToolEntries.concat(lines).slice(-4);
+        toolsThisTurn += fresh.length;
         lastSeenToolTimestamp = tools[tools.length - 1].Timestamp || tools[tools.length - 1].timestamp;
-        if (lastKnownAgent) refreshWorkingIndicator(lastKnownAgent);
       }
     } catch { /* ignore */ }
   };
