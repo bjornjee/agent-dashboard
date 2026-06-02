@@ -2554,6 +2554,12 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     outline-offset: -1px;
   }
 
+  /* Restore the attach (+) button on desktop. Mobile hides it because
+   * the file picker uses osascript on the dashboard server (the user's
+   * Mac), which is the wrong picker for a phone client. Desktop is the
+   * server, so the picker is the right one. */
+  .ui-composer__attach { display: inline-flex; }
+
   /* ============================================================
    * Composer — Codex desktop parity (tall card + internal chip rail).
    * Replaces the mobile pill pattern with a rounded-rectangle card
