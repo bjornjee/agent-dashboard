@@ -624,3 +624,104 @@ test.describe('Working indicator dismisses between turns', () => {
     await expect(page.locator('.ui-msg-status--working')).toHaveCount(0);
   });
 });
+
+// ---------- Tally + send-to-Thinking latency ----------
+
+test.describe('Per-turn tally + optimistic Thinking', () => {
+  // Patches mockApi to also serve /activity and /conversation with
+  // controllable timestamps so we can assert turn-boundary behaviour.
+  async function mockApiWithActivity(page, agent, opts) {
+    const o = opts || {};
+    const lastHumanAt = o.lastHumanAt || '2026-06-02T10:00:00.000Z';
+    const priorTools = o.priorTools || []; // ts < lastHumanAt
+    const currentTools = o.currentTools || []; // ts > lastHumanAt
+
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route(/\/api\/agents/, async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [agent] });
+      } else if (path.endsWith('/conversation')) {
+        await route.fulfill({ json: [
+          { Role: 'human', Content: 'previous question', Timestamp: lastHumanAt },
+          { Role: 'assistant', Content: 'previous answer', Timestamp: lastHumanAt },
+        ]});
+      } else if (path.endsWith('/activity')) {
+        const entries = [
+          ...priorTools.map((c, i) => ({ Kind: 'tool', Content: c, Timestamp: '2026-06-02T09:00:0' + i + '.000Z' })),
+          ...currentTools.map((c, i) => ({ Kind: 'tool', Content: c, Timestamp: '2026-06-02T10:30:0' + i + '.000Z' })),
+        ];
+        await route.fulfill({ json: entries });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+  }
+
+  test('tally ignores tools fired BEFORE the latest user message', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockApiWithActivity(page, makeAgent({
+      session_id: 'desk-001', state: 'running', last_hook_event: 'PreToolUse', current_tool: 'Bash',
+    }), {
+      lastHumanAt: '2026-06-02T10:00:00.000Z',
+      priorTools: ['→ Bash: old1', '→ Read: old2', '→ Edit: old3'], // 3 tools from PRIOR turn
+      currentTools: ['→ Bash: new1', '→ Read: new2'],                // 2 tools from CURRENT turn
+    });
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.waitForSelector('#app-main .detail-layout', { timeout: 5000 });
+    await page.waitForSelector('.ui-msg-status--working', { timeout: 5000 });
+    // Give the seed call a beat to resolve and render.
+    await page.waitForTimeout(800);
+
+    const tally = await page.locator('.ui-msg-status__tally').textContent();
+    // 2 current tools: 1 ran command + 1 file read. Prior 3 are excluded.
+    expect(tally).toContain('1');
+    expect(tally).not.toContain('3'); // would fail if priors leaked
+    expect(tally.toLowerCase()).toContain('command');
+    expect(tally.toLowerCase()).toContain('file');
+  });
+
+  test('Thinking appears immediately after confirmUserMessageSent (no SSE wait)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    // Agent starts in Stop state — no indicator on initial mount.
+    await mockApiWithActivity(page, makeAgent({
+      session_id: 'desk-001', state: 'running', last_hook_event: 'Stop', current_tool: '',
+    }));
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.waitForSelector('#app-main .detail-layout', { timeout: 5000 });
+    await page.waitForTimeout(500);
+
+    // Indicator should be absent (last_hook_event === 'Stop')
+    expect(await page.locator('.ui-msg-status--working').count()).toBe(0);
+
+    // Simulate sendInput → POST ack path. No SSE event will fire; the
+    // ONLY trigger for the indicator is confirmUserMessageSent().
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      // Prime lastKnownAgent via a refresh that would no-op (Stop state).
+      const agents = await fetch('/api/agents').then(r => r.json());
+      mod.refreshWorkingIndicator(agents[0]);
+      mod.appendUserMessage('test message');
+      mod.confirmUserMessageSent();
+    });
+
+    // Indicator should be present WITHOUT waiting for SSE — assert
+    // within 500ms (which is well shy of the real SSE lag).
+    await expect(page.locator('.ui-msg-status--working')).toBeVisible({ timeout: 500 });
+    await expect(page.locator('.ui-msg-status__label')).toContainText('Thinking');
+  });
+});

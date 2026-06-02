@@ -162,15 +162,31 @@ export function appendUserMessage(text) {
   if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
-// Called by Dashboard.sendInput when POST resolves OK. Lifts the in-flight
-// affordance from the most recent optimistic bubble without waiting for
-// SSE/conversation refresh to catch up. pendingUserMessage stays set so
-// refreshConversation still preserves the message across SSE ticks.
+// Called by Dashboard.sendInput when POST resolves OK. Three jobs:
+//   1. Lift the in-flight affordance from the optimistic bubble.
+//   2. Reset the per-turn tool tally — a new turn just started.
+//   3. Optimistically mount the Thinking indicator so the user sees
+//      feedback immediately, without waiting for the next SSE tick
+//      (~1-2s after POST). The next SSE update confirms or replaces.
 export function confirmUserMessageSent() {
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
   container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
+  // New turn — reset tally and the seen-tool watermark so only tools
+  // fired AFTER this moment count for this turn.
+  toolBuckets = {};
+  lastSeenToolTimestamp = new Date().toISOString();
+  // Mount the indicator optimistically so the user doesn't stare at
+  // an empty chat while SSE catches up. Synthesise a mid-turn agent
+  // by overriding last_hook_event on the cached lastKnownAgent.
+  if (lastKnownAgent) {
+    refreshWorkingIndicator({
+      ...lastKnownAgent,
+      last_hook_event: 'UserPromptSubmit',
+      current_tool: '', // no tool yet — falls back to "Thinking"
+    });
+  }
 }
 
 // Last-known agent for the currently-mounted detail view. Used by the
@@ -301,10 +317,38 @@ export function refreshWorkingIndicator(agent) {
   }
 }
 
-// Poll the activity endpoint while the agent is in a working state so
-// that the tool count keeps a running tally. Currently used to update
-// `toolsThisTurn` (a future "ran N commands" summary will read this);
-// no individual tool detail is rendered in the chat.
+// Seed the tally based on the latest user-message timestamp from the
+// conversation. Tools fired AFTER that timestamp count toward the
+// current turn's tally; tools fired BEFORE are from prior turns and
+// are ignored. Called on detail-view mount (before the poll starts).
+async function seedTallyFromTurnBoundary(agentId) {
+  toolBuckets = {};
+  try {
+    const entries = await get('/api/agents/' + agentId + '/conversation');
+    let cutoff = new Date(0).toISOString();
+    if (Array.isArray(entries) && entries.length) {
+      const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
+      if (lastHuman) cutoff = lastHuman.Timestamp || lastHuman.timestamp || cutoff;
+    }
+    lastSeenToolTimestamp = cutoff;
+    const activity = await get('/api/agents/' + agentId + '/activity');
+    if (Array.isArray(activity)) {
+      for (const t of activity) {
+        if ((t.Kind || t.kind) !== 'tool') continue;
+        const ts = t.Timestamp || t.timestamp || '';
+        if (ts <= cutoff) continue;
+        const name = parseToolName(t.Content || t.content);
+        const c = classifyTool(name);
+        if (!c) continue;
+        toolBuckets[c.bucket] = (toolBuckets[c.bucket] || 0) + 1;
+        if (ts > lastSeenToolTimestamp) lastSeenToolTimestamp = ts;
+      }
+    }
+  } catch { /* ignore — tally stays at zero */ }
+}
+
+// Poll the activity endpoint while the agent is mid-turn, bucketing
+// fresh tool entries into toolBuckets so the on-screen tally updates.
 function startToolStreamPoll(agentId) {
   stopToolStreamPoll();
   const tick = async () => {
@@ -319,9 +363,12 @@ function startToolStreamPoll(agentId) {
       const entries = await get('/api/agents/' + agentId + '/activity');
       if (!Array.isArray(entries)) return;
       const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
+      // Only count tools fired after the turn boundary. lastSeenToolTimestamp
+      // is set either by seedTallyFromTurnBoundary() on mount (latest human
+      // message timestamp) or by confirmUserMessageSent() on a fresh send.
       const fresh = lastSeenToolTimestamp
         ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
-        : tools.slice(-30); // seed from recent history on first tick
+        : [];
       if (fresh.length) {
         for (const t of fresh) {
           const name = parseToolName(t.Content || t.content);
@@ -702,7 +749,9 @@ export async function renderDetail(app, agents, agentId, setView) {
   // Mount the working indicator if the agent is currently processing.
   // loadTabContent populates .conversation asynchronously so defer the mount.
   lastKnownAgent = agent;
-  setTimeout(() => refreshWorkingIndicator(agent), 400);
+  seedTallyFromTurnBoundary(agentId).then(() => {
+    refreshWorkingIndicator(agent);
+  });
 
   // Start conversation polling only when the conversation tab is active.
   if (savedTab === 'conversation') startConversationPoll(agentId);
