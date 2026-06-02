@@ -1,9 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1735,18 +1737,20 @@ func TestPWAIconsServeAsPNG(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
-		body := make([]byte, 8)
-		_, _ = resp.Body.Read(body)
-		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			t.Errorf("%s: status %d, want 200", path, resp.StatusCode)
 			continue
 		}
-		for i, b := range pngMagic {
-			if body[i] != b {
-				t.Errorf("%s: byte %d = %#x, want %#x (not a PNG)", path, i, body[i], b)
-				break
-			}
+		head := make([]byte, len(pngMagic))
+		_, err = io.ReadFull(resp.Body, head)
+		resp.Body.Close()
+		if err != nil {
+			t.Errorf("%s: read magic bytes: %v", path, err)
+			continue
+		}
+		if !bytes.Equal(head, pngMagic) {
+			t.Errorf("%s: header %#x, want PNG magic %#x", path, head, pngMagic)
 		}
 	}
 }
@@ -1766,9 +1770,11 @@ func TestPWAServiceWorkerCacheVersion(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	buf := make([]byte, 4096)
-	n, _ := resp.Body.Read(buf)
-	body := string(buf[:n])
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read sw.js: %v", err)
+	}
+	body := string(raw)
 	if !strings.Contains(body, "agent-dashboard-v20") {
 		t.Errorf("sw.js cache version: missing 'agent-dashboard-v20' (must bump when icon paths change)")
 	}
@@ -1789,9 +1795,14 @@ func TestPWAIndexHTMLHasAppleTouchIcon(t *testing.T) {
 		t.Fatalf("GET /: %v", err)
 	}
 	defer resp.Body.Close()
-	buf := make([]byte, 8192)
-	n, _ := resp.Body.Read(buf)
-	body := string(buf[:n])
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /: status %d, want 200", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	body := string(raw)
 	if !strings.Contains(body, `rel="apple-touch-icon"`) {
 		t.Error(`index.html missing <link rel="apple-touch-icon">`)
 	}
