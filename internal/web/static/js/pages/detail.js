@@ -7,6 +7,7 @@ import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
 import { isDesktop } from '../sidebar.js';
+import { attachSlashAutocomplete } from '../slash-autocomplete.js';
 
 export { showModal, toast, stopConversationPoll };
 
@@ -134,6 +135,7 @@ export function updateActionBar(agent) {
       try { newInput.setSelectionRange(selStart, selEnd); } catch {}
     }
   }
+  if (newInput) attachSlashAutocomplete(newInput);
 }
 
 // Track optimistic messages so refreshConversation can preserve them
@@ -752,6 +754,10 @@ export async function renderDetail(app, agents, agentId, setView) {
   seedTallyFromTurnBoundary(agentId).then(() => {
     refreshWorkingIndicator(agent);
   });
+
+  // Wire slash-command autocomplete to the composer textarea.
+  const composerInput = document.getElementById('reply-input');
+  if (composerInput) attachSlashAutocomplete(composerInput);
 
   // Start conversation polling only when the conversation tab is active.
   if (savedTab === 'conversation') startConversationPoll(agentId);

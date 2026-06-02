@@ -725,3 +725,93 @@ test.describe('Per-turn tally + optimistic Thinking', () => {
     await expect(page.locator('.ui-msg-status__label')).toContainText('Thinking');
   });
 });
+
+// ---------- Slash-command autocomplete ----------
+
+test.describe('Slash-command autocomplete', () => {
+  async function mockApiWithSkills(page, skills) {
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route('**/api/skills', (route) => route.fulfill({ json: skills }));
+    await page.route(/\/api\/agents/, async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', state: 'running', last_hook_event: 'Stop' })] });
+      } else if (path.endsWith('/conversation')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/activity')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+  }
+
+  async function mountDetail(page) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.waitForSelector('#reply-input', { timeout: 5000 });
+  }
+
+  test('typing "/" shows the popup with /agent-dashboard:<skill> entries', async ({ page }) => {
+    await mockApiWithSkills(page, ['pr', 'feature', 'implement']);
+    await mountDetail(page);
+
+    await page.locator('#reply-input').click();
+    await page.locator('#reply-input').type('/');
+
+    const popup = page.locator('#slash-autocomplete');
+    await expect(popup).toBeVisible();
+    const items = popup.locator('.slash-autocomplete__item');
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(0)).toContainText('/agent-dashboard:pr');
+  });
+
+  test('typing "/pr" filters down to the pr command', async ({ page }) => {
+    await mockApiWithSkills(page, ['pr', 'feature', 'implement', 'fix', 'chore']);
+    await mountDetail(page);
+
+    await page.locator('#reply-input').click();
+    await page.locator('#reply-input').type('/pr');
+
+    const items = page.locator('#slash-autocomplete .slash-autocomplete__item');
+    await expect(items).toHaveCount(1);
+    await expect(items.first()).toContainText('/agent-dashboard:pr');
+  });
+
+  test('Enter inserts the full command and dismisses the popup', async ({ page }) => {
+    await mockApiWithSkills(page, ['pr', 'feature']);
+    await mountDetail(page);
+
+    const input = page.locator('#reply-input');
+    await input.click();
+    await input.type('/pr');
+    await expect(page.locator('#slash-autocomplete')).toBeVisible();
+    await input.press('Enter');
+
+    await expect(page.locator('#slash-autocomplete')).toBeHidden();
+    await expect(input).toHaveValue('/agent-dashboard:pr ');
+  });
+
+  test('Escape dismisses without inserting', async ({ page }) => {
+    await mockApiWithSkills(page, ['pr', 'feature']);
+    await mountDetail(page);
+
+    const input = page.locator('#reply-input');
+    await input.click();
+    await input.type('/fea');
+    await expect(page.locator('#slash-autocomplete')).toBeVisible();
+    await input.press('Escape');
+
+    await expect(page.locator('#slash-autocomplete')).toBeHidden();
+    await expect(input).toHaveValue('/fea');
+  });
+});

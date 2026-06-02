@@ -474,6 +474,54 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   vertical-align: middle;
 }
 
+/* Slash-command autocomplete popup. Positioned absolutely (fixed) over
+ * the textarea via JS — anchored to the composer's top edge. Codex-style
+ * compact list, no header, no footer hint, no scroll arrows. */
+.slash-autocomplete {
+  position: fixed;
+  z-index: 100;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.slash-autocomplete[hidden] { display: none; }
+.slash-autocomplete__item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.slash-autocomplete__item:hover,
+.slash-autocomplete__item--active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.slash-autocomplete__cmd {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.slash-autocomplete__hint {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-left: auto;
+}
+
 /* Inline "working" indicator — two stacked flat-prose lines at the end
  * of the conversation while the agent is processing:
  *   1. tally: muted Codex-style "Read 3 files · ran 2 commands"
