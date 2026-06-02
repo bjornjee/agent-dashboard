@@ -759,6 +759,11 @@ func HasPendingQuestion(projDir, sessionID string) bool {
 // ReadPendingQuestion returns the parsed input of the most recent
 // AskUserQuestion tool_use in the session JSONL when it has no human
 // reply after it. Returns nil otherwise.
+//
+// Scans the entire file: a sibling subagent can keep writing isSidechain
+// entries to the parent's JSONL while the parent is paused on
+// AskUserQuestion, pushing the question line arbitrarily far before EOF.
+// A tail-only scan misses it.
 func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
 	path := filepath.Join(projDir, sessionID+".jsonl")
 	f, err := os.Open(path)
@@ -767,27 +772,8 @@ func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
 	}
 	defer f.Close()
 
-	const tailSize = 64 * 1024
-	stat, err := f.Stat()
-	if err != nil {
-		return nil
-	}
-	if stat.Size() > tailSize {
-		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
-			return nil
-		}
-		// Skip the partial first line after a mid-file seek.
-		var b [1]byte
-		for {
-			_, err := f.Read(b[:])
-			if err != nil || b[0] == '\n' {
-				break
-			}
-		}
-	}
-
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, tailSize), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var lastInput json.RawMessage
 	var lastID string

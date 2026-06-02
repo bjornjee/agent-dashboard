@@ -1449,6 +1449,47 @@ func TestReadPendingQuestion_NilForMissingFile(t *testing.T) {
 	}
 }
 
+func TestReadPendingQuestion_FindsEntryBeyondTailWindow(t *testing.T) {
+	// Regression for the live failure observed in
+	// .claude/projects/.../f0ff1580-....jsonl: a subagent kept appending
+	// sidechain tool_result entries to the parent JSONL while the parent
+	// was paused on AskUserQuestion, pushing the question entry far past
+	// any small tail window. ReadPendingQuestion must still find it.
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	var b strings.Builder
+	b.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_BEYOND","name":"AskUserQuestion","input":{"questions":[{"question":"Which path?","header":"Path","multiSelect":false,"options":[{"label":"A","description":"first"},{"label":"B","description":"second"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}` + "\n")
+	// System-generated tool_result placeholder that always follows.
+	b.WriteString(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_BEYOND","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}` + "\n")
+	// Pad with sidechain user tool_result entries to push the AskUserQuestion
+	// well past the previous 64KB tail window without inserting a human reply.
+	padLine := `{"type":"user","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"sub_t","content":[{"type":"text","text":"` + strings.Repeat("x", 500) + `"}]}]},"timestamp":"2026-06-02T10:00:02Z"}` + "\n"
+	for b.Len() < 200*1024 {
+		b.WriteString(padLine)
+	}
+
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(b.String()), 0644); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	got := ReadPendingQuestion(projDir, sessionID)
+	if got == nil {
+		t.Fatal("ReadPendingQuestion = nil, want populated payload even when AskUserQuestion is far from EOF")
+	}
+	if got.ToolUseID != "toolu_BEYOND" {
+		t.Errorf("ToolUseID = %q, want toolu_BEYOND", got.ToolUseID)
+	}
+	if len(got.Questions) != 1 || len(got.Questions[0].Options) != 2 {
+		t.Fatalf("unexpected payload shape: %+v", got)
+	}
+	if got.Questions[0].Options[0].Label != "A" {
+		t.Errorf("Options[0].Label = %q, want A", got.Questions[0].Options[0].Label)
+	}
+}
+
 // writeSessionFile creates a single session JSON in dir for the Locate tests.
 func writeSessionFile(t *testing.T, dir, sessionID, cwd string, startedAt int64) {
 	t.Helper()
