@@ -43,19 +43,16 @@ export function effectiveState(agent) {
   return agent.state;
 }
 
-// Returns a "PR open" tag when a PR has been created for this agent.
-// The signal is `pinned_state === 'pr'` (the dashboard records the pin
-// when the user creates a PR; `pr_url` is resolved on-demand and isn't
-// always populated). Shows alongside the live state so a running agent
-// with a PR still surfaces RUNNING + PR open.
+// Returns a "PR open" tag when the user has pinned a PR on this agent.
+// `pinned_state === 'pr'` is the single source of truth — it persists
+// across state transitions (running, idle_prompt, …) so the tag shows
+// alongside the live state regardless of what the agent is doing.
 export function prTag(agent) {
-  if (!agent) return '';
-  if (agent.pinned_state === 'pr' || agent.state === 'pr' || agent.pr_url) return 'PR open';
-  return '';
+  return agent && agent.pinned_state === 'pr' ? 'PR open' : '';
 }
 
-// True when the agent has an open PR — used to decide whether to show
-// Open PR / Merge action chips. Mirrors the prTag predicate.
+// True when the agent has an open PR — used to gate Open PR / Merge
+// action chips. Same single signal as prTag.
 export function hasOpenPR(agent) {
-  return !!(agent && (agent.pinned_state === 'pr' || agent.state === 'pr' || agent.pr_url));
+  return !!(agent && agent.pinned_state === 'pr');
 }
