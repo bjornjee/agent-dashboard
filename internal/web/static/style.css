@@ -864,11 +864,21 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--cta-text);
 }
 .ui-modal-btn--primary:hover { opacity: 0.92; }
-.ui-modal-btn--danger {
-  background: rgba(239, 68, 68, 0.14);
-  color: var(--status-failed-text);
+/* Secondary: elevated pill — Codex separates by elevation, not stroke. */
+.ui-modal-btn--secondary {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
-.ui-modal-btn--danger:hover { background: rgba(239, 68, 68, 0.22); }
+.ui-modal-btn--secondary:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+/* Danger: brighter red so destructive action reads instantly as risky. */
+.ui-modal-btn--danger {
+  background: rgba(255, 68, 68, 0.18);
+  color: #ff5c5c;
+}
+.ui-modal-btn--danger:hover { background: rgba(255, 68, 68, 0.26); }
 
 /* Stop button — Codex composer style. Single instance (composer-trailing) or legacy fallback. */
 .ui-stop-btn,
