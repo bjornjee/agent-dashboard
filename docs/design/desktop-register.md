@@ -1,18 +1,21 @@
 # Desktop register addendum
 
-Addendum to `docs/design/register.md`. Declares the additional tokens and rules required for the desktop layout (viewport ≥ 1024px). Mobile is unchanged: everything in `register.md` continues to apply below 1024px bit-exactly.
+Addendum to `docs/design/register.md`. Declares the additional tokens and rules required for the desktop layout (viewport ≥ 900px). Mobile is unchanged: everything in `register.md` continues to apply below 900px bit-exactly.
 
 This file does **not** restate the mobile register; it only declares what's new or different on desktop. Where this addendum is silent, the mobile register applies.
 
 ## Breakpoint
 
-Single desktop breakpoint:
+Two breakpoints. Mobile → desktop flip at `--bp-desktop`; desktop → monitor expansion at `--bp-monitor`.
 
 ```
---bp-desktop: 1024px
+--bp-desktop: 900px
+--bp-monitor: 1600px
 ```
 
-`@media (min-width: 1024px)` switches the app shell from single-column-with-floating-dock (mobile) to two-pane sidebar + main (desktop). There is no intermediate "tablet" breakpoint in this redesign; the layout flips once.
+`@media (min-width: 900px)` switches the app shell from single-column-with-floating-dock (mobile) to two-pane sidebar + main (desktop). There is no intermediate "tablet" breakpoint; the layout flips once at 900px. The value matches the shipped CSS (`internal/web/static/style.css` `@media (min-width: 900px)` blocks); the earlier doc claim of 1024px was a drift from the implementation and is reconciled here.
+
+`@media (min-width: 1600px)` is the third viewport class: at monitor width the sidebar widens to 288px and main-pane content caps at 1080px to preserve line-length on large displays. The token is declared here for the register's record; the consuming `@media` block is added in a later phase.
 
 ## Sidebar dimensions
 
@@ -20,7 +23,7 @@ Single desktop breakpoint:
 --sidebar-width: 264px
 ```
 
-Fixed sidebar width on desktop. Chosen to match the visual proportion of Codex's sidebar in `codex-dark-03-reactivated.png` and `codex-dark-04-new-chat-create-agent.png` (Codex's sidebar reads as ~22–24% of a typical desktop viewport; 264px hits that ratio at 1280px wide and degrades gracefully at 1024px). Adjustable in a later iteration if the agent-name truncation becomes the limiting factor; the token name does not change.
+Fixed sidebar width on desktop. Chosen to match the visual proportion of Codex's sidebar in `codex-dark-03-reactivated.png` and `codex-dark-04-new-chat-create-agent.png` (Codex's sidebar reads as ~22–24% of a typical desktop viewport; 264px hits that ratio at 1280px wide and degrades gracefully at 900px). Adjustable in a later iteration if the agent-name truncation becomes the limiting factor; the token name does not change. At `--bp-monitor` (≥ 1600px) the sidebar widens to 288px (see the monitor row in the token table below).
 
 The sidebar does not resize, does not collapse, and is not draggable in v1.
 
@@ -48,15 +51,16 @@ Append-only additions to the table in `register.md`. Existing tokens are not cha
 
 | Token | Old value | New value | Notes |
 |---|---|---|---|
-| `--bp-desktop` | (new) | `1024px` | Single desktop breakpoint. |
-| `--sidebar-width` | (new) | `264px` | Desktop sidebar fixed width. |
+| `--bp-desktop` | (new) | `900px` | Mobile → desktop breakpoint. Matches the shipped `@media (min-width: 900px)` blocks in `style.css`. |
+| `--bp-monitor` | (new) | `1600px` | Third viewport class; widens sidebar to 288px and main-content max-width to 1080px on large displays. Declared here; consuming `@media` block lands in a later phase. |
+| `--sidebar-width` | (new) | `264px` (desktop) / `288px` (monitor) | Desktop sidebar fixed width. Widens by 24px at `--bp-monitor`. |
 | `--bg-sidebar` | (new) | dark `#0E0E10` / light `#FFFFFF` | Desktop sidebar background. |
 | `--bg-hover` | declared in register.md color table but unconsumed | dark `#2F2F33` / light `#F4F4F5` | First consumer is the desktop sidebar row hover state. |
 | `--bg-selected` | (new) | dark `#222226` / light `#EFEFEF` | Desktop sidebar selected-row background. |
 
 ## What this addendum intentionally does not declare
 
-- **Collapsible sidebar / hamburger affordance.** Out of scope for v1. The sidebar is always visible at ≥ 1024px.
+- **Collapsible sidebar / hamburger affordance.** Out of scope for v1. The sidebar is always visible at ≥ 900px.
 - **Sub-rails inside the main pane** (e.g., a Settings-style sub-navigation in `codex-dark-05-settings.png`). The dashboard's `usage` view is a single page; no sub-rail token is needed.
 - **Multi-window / split-pane affordances.** Out of scope.
 - **Resize handles or persistence of sidebar width.** Out of scope.
