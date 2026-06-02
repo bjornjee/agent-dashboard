@@ -1,11 +1,13 @@
 // Service Worker for Agent Dashboard PWA
-const CACHE_NAME = 'agent-dashboard-v20';
+const CACHE_NAME = 'agent-dashboard-v21';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/app.js',
   '/style.css',
   '/manifest.json',
+  '/favicon.svg',
+  '/icon-logo.png',
   '/js/notify.js',
   '/js/install.js',
   '/icons/icon-192.png',
