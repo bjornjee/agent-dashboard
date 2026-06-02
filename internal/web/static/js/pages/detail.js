@@ -101,10 +101,33 @@ function inlineVitalStrip(opts) {
   </div>`;
 }
 
+// Signature of every agent field that renderActionBar() reads. If this
+// string is unchanged since the last call, the rebuilt HTML would be
+// byte-identical — so we MUST skip the DOM swap. Re-rendering anyway
+// detaches the focused <textarea>, which on mobile (iOS Safari, Chrome
+// Android) dismisses the virtual keyboard mid-typing.
+function actionBarSignature(agent) {
+  return [
+    effectiveState(agent),
+    hasOpenPR(agent) ? '1' : '0',
+    agent.model || '',
+    agent.branch || '',
+    agent.effort || '',
+  ].join('|');
+}
+
 // Update the action bar in-place when agent state changes via SSE.
 export function updateActionBar(agent) {
   const bar = document.querySelector('.action-bar');
   if (!bar) return;
+
+  // SSE fires on every agent-state delta (cost, tokens, hook events,
+  // current_tool — all changing many times per second while an agent
+  // runs). The action bar only depends on a small subset of fields;
+  // bail out when none of them changed so the focused textarea is
+  // never detached. This is what keeps the mobile keyboard open.
+  const sig = actionBarSignature(agent);
+  if (bar.dataset.sig === sig) return;
 
   // Capture in-flight composer state so the SSE-driven re-render doesn't
   // wipe what the user is typing.
@@ -119,6 +142,7 @@ export function updateActionBar(agent) {
   tmp.innerHTML = renderActionBar(agent);
   const newBar = tmp.firstElementChild;
   if (!newBar) return;
+  newBar.dataset.sig = sig;
   bar.replaceWith(newBar);
 
   const newInput = newBar.querySelector('#reply-input');
@@ -921,6 +945,11 @@ export async function renderDetail(app, agents, agentId, setView) {
       trailing.insertAdjacentElement('afterbegin', wrap.firstElementChild);
     }
   }
+
+  // Seed the action-bar signature so the first SSE tick after mount
+  // doesn't trigger a redundant DOM swap (and dismiss the mobile keyboard).
+  const initialBar = app.querySelector('.action-bar');
+  if (initialBar) initialBar.dataset.sig = actionBarSignature(agent);
 
   // Tab switching
   currentDetailTab = savedTab;
