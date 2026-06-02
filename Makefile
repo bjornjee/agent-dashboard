@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web uninstall clean seed web docs help
+.PHONY: build build-web fmt vet test test-race test-e2e playwright-install install install-web uninstall clean seed web docs icons help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -66,6 +66,20 @@ test-e2e: build-web ## Run Playwright end-to-end tests (run playwright-install f
 
 playwright-install: ## Install Playwright browsers (run once)
 	cd tests/playwright && npm install --silent && npx playwright install --with-deps chromium
+
+icons: ## Regenerate PWA icons from internal/web/static/icon-logo.png (macOS sips)
+	@command -v sips >/dev/null 2>&1 || { echo "sips not found (macOS only)"; exit 1; }
+	@cd internal/web/static && \
+	  mkdir -p icons && \
+	  tmpdir=$$(mktemp -d) && \
+	  sips -c 1688 1688 icon-logo.png --out $$tmpdir/square.png >/dev/null && \
+	  sips -z 192 192 $$tmpdir/square.png --out icons/icon-192.png >/dev/null && \
+	  sips -z 512 512 $$tmpdir/square.png --out icons/icon-512.png >/dev/null && \
+	  sips -z 180 180 $$tmpdir/square.png --out icons/apple-touch-icon.png >/dev/null && \
+	  sips -z 410 410 $$tmpdir/square.png --out $$tmpdir/inner.png >/dev/null && \
+	  sips -p 512 512 --padColor 000000 $$tmpdir/inner.png --out icons/icon-512-maskable.png >/dev/null && \
+	  rm -rf $$tmpdir && \
+	  echo "Generated icons in internal/web/static/icons/"
 
 clean: ## Remove build artifacts and state
 	rm -rf bin/

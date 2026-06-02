@@ -1,5 +1,5 @@
 // Service Worker for Agent Dashboard PWA
-const CACHE_NAME = 'agent-dashboard-v19';
+const CACHE_NAME = 'agent-dashboard-v20';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -7,6 +7,10 @@ const STATIC_ASSETS = [
   '/style.css',
   '/manifest.json',
   '/js/notify.js',
+  '/js/install.js',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png',
 ];
 
 // Install: cache static shell
