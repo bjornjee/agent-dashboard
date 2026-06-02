@@ -25,9 +25,28 @@ function inlineStopBtn(onclick) {
   return `<button class="ui-stop-btn" aria-label="Stop" onclick="${onclick}"><span></span></button>`;
 }
 
+const STATE_LABELS = {
+  running: 'Working',
+  permission: 'Needs approval',
+  plan: 'Plan ready',
+  question: 'Needs reply',
+  error: 'Errored',
+  pr: 'PR open',
+  merged: 'Merged',
+  done: 'Done',
+  idle_prompt: 'Idle',
+  blocked: 'Blocked',
+  waiting: 'Waiting',
+  queued: 'Queued',
+  review: 'Review',
+  failed: 'Failed',
+  completed: 'Completed',
+};
+
 function inlineStatusPill(state) {
   const group = stateGroup(state).toLowerCase();
-  return `<span class="ui-status-pill"><span class="status-dot status-dot--${group}"></span>${escapeHtml(state)}</span>`;
+  const label = STATE_LABELS[state] || (state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown');
+  return `<span class="ui-status-pill ui-status-pill--${group}"><span class="status-dot status-dot--${group}"></span>${escapeHtml(label)}</span>`;
 }
 
 function inlineEmptyState(icon, title, subtitle) {
@@ -159,14 +178,21 @@ export function confirmUserMessageSent() {
 // the rebuilt .conversation can re-mount the working indicator.
 let lastKnownAgent = null;
 
-// Mounts / updates / removes the inline "working" indicator at the end of
-// the conversation stream. Called from SSE refresh whenever agent state
-// changes. Idempotent — safe to call on every tick.
+const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+
+// Most recent tool-use entries surfaced inline in the chat while the
+// agent is active. Cleared when the agent leaves a working state.
+let recentToolEntries = [];
+let toolStreamPollTimer = null;
+let lastSeenToolTimestamp = null;
+
+// Mounts / updates / removes the inline "working" stack at the end of
+// the conversation stream. Renders the most recent N tool-use entries
+// as muted lines above a pulsing "Thinking" / "Running <tool>" indicator.
 export function refreshWorkingIndicator(agent) {
   if (agent) lastKnownAgent = agent;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
-  const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
   const st = effectiveState(agent);
   const existing = container.querySelector('.ui-msg-status--working');
   if (!WORKING_STATES.has(st)) {
@@ -174,18 +200,77 @@ export function refreshWorkingIndicator(agent) {
     return;
   }
   const label = agent.current_tool ? 'Running ' + agent.current_tool : 'Thinking…';
+  const toolLines = recentToolEntries.slice(-4).map(t => {
+    return '<div class="ui-msg-status__history">→ ' + escapeHtml(t) + '</div>';
+  }).join('');
+  const html =
+    toolLines +
+    '<div class="ui-msg-status__live">' +
+      '<span class="ui-msg-status__dot"></span>' +
+      '<span class="ui-msg-status__label">' + escapeHtml(label) + '</span>' +
+    '</div>';
   if (existing) {
-    const text = existing.querySelector('.ui-msg-status__label');
-    if (text && text.textContent !== label) text.textContent = label;
-    return;
+    if (existing.innerHTML !== html) existing.innerHTML = html;
+  } else {
+    const el = document.createElement('div');
+    el.className = 'ui-msg-status ui-msg-status--working';
+    el.innerHTML = html;
+    container.appendChild(el);
+    const scrollParent = container.closest('.detail-scroll');
+    if (scrollParent && scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 80) {
+      scrollParent.scrollTop = scrollParent.scrollHeight;
+    }
   }
-  const el = document.createElement('div');
-  el.className = 'ui-msg-status ui-msg-status--working';
-  el.innerHTML = '<span class="ui-msg-status__dot"></span><span class="ui-msg-status__label">' + escapeHtml(label) + '</span>';
-  container.appendChild(el);
-  const scrollParent = container.closest('.detail-scroll');
-  if (scrollParent && scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 80) {
-    scrollParent.scrollTop = scrollParent.scrollHeight;
+  // Lazy-start the tool-stream poll the first time we mount the
+  // indicator while the agent is working. The poll auto-stops itself
+  // when the agent leaves a working state.
+  if (!toolStreamPollTimer && agent.session_id) {
+    startToolStreamPoll(agent.session_id);
+  }
+}
+
+// Poll the activity endpoint while the agent is in a working state so
+// that recent tool calls (Bash, Read, Edit, etc.) stream into the chat
+// as muted lines above the pulsing indicator. Codex-style live status.
+// Stops automatically when the agent leaves a working state.
+function startToolStreamPoll(agentId) {
+  stopToolStreamPoll();
+  const tick = async () => {
+    if (!lastKnownAgent || !WORKING_STATES.has(effectiveState(lastKnownAgent))) {
+      // Agent went idle — clear the cache and stop polling. The working
+      // indicator removes itself on the next SSE tick.
+      recentToolEntries = [];
+      lastSeenToolTimestamp = null;
+      stopToolStreamPoll();
+      return;
+    }
+    if (currentDetailAgentId !== agentId || currentDetailTab !== 'conversation') return;
+    try {
+      const entries = await get('/api/agents/' + agentId + '/activity');
+      if (!Array.isArray(entries)) return;
+      const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
+      const fresh = lastSeenToolTimestamp
+        ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
+        : tools.slice(-4);
+      if (fresh.length) {
+        const lines = fresh.map(t => {
+          const c = (t.Content || t.content || '').replace(/^→\s*/, '');
+          return c.length > 80 ? c.slice(0, 78) + '…' : c;
+        });
+        recentToolEntries = recentToolEntries.concat(lines).slice(-4);
+        lastSeenToolTimestamp = tools[tools.length - 1].Timestamp || tools[tools.length - 1].timestamp;
+        if (lastKnownAgent) refreshWorkingIndicator(lastKnownAgent);
+      }
+    } catch { /* ignore */ }
+  };
+  tick();
+  toolStreamPollTimer = setInterval(tick, 1500);
+}
+
+function stopToolStreamPoll() {
+  if (toolStreamPollTimer) {
+    clearInterval(toolStreamPollTimer);
+    toolStreamPollTimer = null;
   }
 }
 
