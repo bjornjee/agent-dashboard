@@ -2613,9 +2613,16 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     border-top: 0;
     padding: 0 0 var(--space-4);
   }
-  #app-main .action-bar .ui-composer.detail-composer {
+  #app-main .action-bar .ui-composer.detail-composer,
+  #app-main .action-bar .action-panel {
     width: 90%;
-    margin: 0 auto;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* Preserve the vertical gap the panel had via margin-bottom; the
+   * left/right margins are reset by the rule above. */
+  #app-main .action-bar .action-panel {
+    margin-bottom: var(--space-2);
   }
   .ui-composer.detail-composer {
     flex-direction: column;
