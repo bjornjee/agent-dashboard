@@ -167,4 +167,11 @@ export const UI = {
   loadingBlock() {
     return '<div class="loading"><span class="spinner"></span></div>';
   },
+
+  // Inline spinner — appended to a button while an async action runs.
+  // Used by withSpinner in app.js. The `.spinner-inline` modifier
+  // scales the dot down to 14 px so it fits inside button chrome.
+  spinner() {
+    return '<span class="spinner spinner-inline" aria-hidden="true"></span>';
+  },
 };

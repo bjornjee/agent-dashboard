@@ -1007,3 +1007,40 @@ test.describe('Mobile PWA layout', () => {
     expect(dims.pageScroll).toBeGreaterThan(dims.pageClient);
   });
 });
+
+// ---------- Modal confirm POST flow (UI.spinner regression) ----------
+//
+// withSpinner() in app.js calls UI.spinner() to append an in-button
+// spinner while the async action runs. If that helper is missing, the
+// modal confirm handler throws BEFORE the POST fires — no merge, no
+// approve, no close, nothing. This test pins UI.spinner as a required
+// primitive by exercising the Merge confirm flow end-to-end.
+
+test.describe('Modal confirm fires the POST', () => {
+  test('Merge → modal Confirm → POST /api/agents/<id>/merge actually goes out', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const agent = makeAgent({ state: 'pr', pinned_state: 'pr', branch: 'feat/x' });
+    await mockApi(page, [agent]);
+
+    // Intercept the merge POST so the test doesn't actually run gh.
+    let mergeHit = false;
+    await page.route('**/api/agents/*/merge', (route) => {
+      mergeHit = true;
+      route.fulfill({ json: { ok: 'merged' } });
+    });
+    await page.route('**/api/agents/*/cleanup', (route) => route.fulfill({ json: { ok: 'cleaned' } }));
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.waitForSelector('.action-panel button:has-text("Merge")', { timeout: 5000 });
+
+    await page.click('.action-panel button:has-text("Merge")');
+    await page.waitForSelector('#modal-confirm', { timeout: 2000 });
+    await page.click('#modal-confirm');
+
+    // Give the async chain time to fire fetch.
+    await page.waitForTimeout(400);
+    expect(mergeHit).toBe(true);
+  });
+});
