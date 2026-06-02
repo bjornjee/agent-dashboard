@@ -2560,6 +2560,46 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     outline-offset: -1px;
     border-radius: 8px;
   }
+
+  /* --------------------------------------------------------------
+   * Phase D — laptop light-mode polish (>= 900px, light only)
+   *
+   * Three targeted overrides per docs/design/verdict-light-laptop-0.md:
+   *
+   *   1. Composer card: replace the dark register's heavy 0.35 lift
+   *      and white-on-white inset with a single soft --shadow-medium
+   *      drop. Promote the card border from --border-subtle to
+   *      --border-default so the white-card-on-white-pane separation
+   *      reads (register.md "Elevation rules (light)").
+   *
+   *   2. Sidebar selected row: reinforce the fill with a 2px inset
+   *      left-border in --text-primary. The light fill step
+   *      (#E4E4E7 on #F4F4F5) is below the perceptual contrast
+   *      threshold on its own; the accent is the affordance.
+   *      Dark mode keeps fill-only — its surface step is strong.
+   *
+   *   3. Composer chips: promote chip border to --border-default
+   *      so they read against the now-stronger composer card edge.
+   * -------------------------------------------------------------- */
+  [data-theme="light"] .ui-composer.detail-composer {
+    border-color: var(--border-default);
+    box-shadow: 0 8px 24px var(--shadow-medium);
+  }
+  [data-theme="light"] .ui-composer.detail-composer .ui-composer__chip {
+    border-color: var(--border-default);
+  }
+  [data-theme="light"] .ui-composer.detail-composer .ui-composer__chip:hover {
+    border-color: var(--border-hover);
+  }
+
+  /* Sidebar selected row — light only. The accent is rendered as an
+   * inset left-border so the row's overall geometry (height, padding)
+   * is unchanged; the border eats 2px of the left padding visually. */
+  [data-theme="light"] .app-sidebar__nav-row--selected .ui-row,
+  [data-theme="light"] .app-sidebar__row--selected .ui-row {
+    border-left: 2px solid var(--text-primary);
+    padding-left: calc(var(--space-3) - 2px);
+  }
 }
 
 /* ============================================================
