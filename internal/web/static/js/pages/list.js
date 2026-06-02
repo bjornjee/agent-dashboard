@@ -5,7 +5,7 @@ import { effectiveState, stateGroup, prTag } from '../state.js';
 import { escapeHtml, repoName, durationShort, formatCost } from '../format.js';
 import { get } from '../api.js';
 
-const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'MERGED'];
+const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
 function statusDot(state) {
   const group = stateGroup(state);

@@ -1,7 +1,7 @@
 // Agent detail view with tabs and inline subagents.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup, prTag } from '../state.js';
+import { effectiveState, stateGroup, prTag, hasOpenPR } from '../state.js';
 import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -464,10 +464,12 @@ function renderActionBar(agent) {
   } else if (st === 'merged') {
     actions += inlineBtn('Close', 'ghost', `Dashboard.confirmClose('${id}')`);
   }
-  // PR chips key off `pr_url` (the real signal), not the pinned `pr`
-  // state. A running agent that already opened a PR still gets the
-  // chips; the live state shows the agent is mid-turn elsewhere.
-  if (agent.pr_url && st !== 'merged') {
+  // PR chips appear whenever the agent has an open PR — whether the
+  // live state is "pr" (idle, backend swapped pinned_state in), "running"
+  // (active turn but PR was created earlier), or anything else that
+  // isn't "merged". hasOpenPR() consolidates the signal (pinned_state,
+  // raw state, or pr_url — any of the three).
+  if (hasOpenPR(agent) && st !== 'merged') {
     actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
     actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
   }

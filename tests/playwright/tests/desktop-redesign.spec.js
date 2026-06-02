@@ -932,43 +932,48 @@ test.describe('Z Flip 7 unfolded viewports', () => {
 // regression.
 
 test.describe('PR-as-tag', () => {
-  test('running agent with pr_url shows running dot + "PR open" tag (not PR group)', async ({ page }) => {
+  test('running agent with PR pin stays in RUNNING group + shows "PR open" tag', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    const agent = makeAgent({
-      state: 'running',
-      pinned_state: 'pr',
-      pr_url: 'https://github.com/example/repo/pull/42',
-    });
+    // Backend's ApplyPinnedStates leaves state="running" alone (pin only
+    // swaps in for idle states), so the row lands in RUNNING.
+    const agent = makeAgent({ state: 'running', pinned_state: 'pr' });
     await mockApi(page, [agent]);
     await page.goto('/');
     await page.waitForSelector('#app-sidebar .app-sidebar__inner', { timeout: 5000 });
 
-    // Sidebar row: green running dot is present, RUNNING group label exists.
     const runningGroup = page.locator('.ui-section-label', { hasText: 'RUNNING' });
     await expect(runningGroup).toBeVisible();
-    const prGroup = page.locator('.ui-section-label', { hasText: 'PR' });
-    await expect(prGroup).toHaveCount(0);
-
-    // The PR tag chip renders inside the row.
+    // PR tag still renders alongside the live state.
     const tag = page.locator('#app-sidebar .ui-row__tag', { hasText: 'PR open' });
     await expect(tag).toBeVisible();
   });
 
-  test('mobile list row also shows the PR open tag without promoting state', async ({ page }) => {
+  test('idle agent with PR pin lands in PR group (backend already swapped state)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    // When the agent goes idle the backend's ApplyPinnedStates promotes
+    // state from idle_prompt/done to "pr". The sidebar groups under PR.
+    const agent = makeAgent({ state: 'pr', pinned_state: 'pr' });
+    await mockApi(page, [agent]);
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__inner', { timeout: 5000 });
+
+    const prGroup = page.locator('.ui-section-label', { hasText: 'PR' });
+    await expect(prGroup).toBeVisible();
+    const tag = page.locator('#app-sidebar .ui-row__tag', { hasText: 'PR open' });
+    await expect(tag).toBeVisible();
+  });
+
+  test('mobile list row shows the PR open tag in RUNNING group when active', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    const agent = makeAgent({
-      state: 'running',
-      pinned_state: 'pr',
-      pr_url: 'https://github.com/example/repo/pull/42',
-    });
+    const agent = makeAgent({ state: 'running', pinned_state: 'pr' });
     await mockApi(page, [agent]);
     await page.goto('/');
     await page.waitForSelector('.ui-row', { timeout: 5000 });
 
     const tag = page.locator('.ui-row__tag', { hasText: 'PR open' });
     await expect(tag.first()).toBeVisible();
-    const prGroup = page.locator('.ui-section-label', { hasText: 'PR' });
-    await expect(prGroup).toHaveCount(0);
+    const runningGroup = page.locator('.ui-section-label', { hasText: 'RUNNING' });
+    await expect(runningGroup).toBeVisible();
   });
 });
 

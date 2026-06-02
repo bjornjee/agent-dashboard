@@ -712,6 +712,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .status-dot--queued, .status-dot--waiting, .status-dot--blocked { background: var(--accent-amber); }
 .status-dot--failed, .status-dot--error { background: var(--accent-red); }
 .status-dot--review { background: var(--accent-green); }
+.status-dot--pr { background: var(--accent-indigo); }
 .status-dot--merged, .status-dot--completed { background: var(--text-faint); }
 @keyframes ui-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(60, 203, 107, 0.18); }

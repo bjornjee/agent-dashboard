@@ -7,7 +7,7 @@ import { ICONS } from './icons.js';
 import { effectiveState, stateGroup, prTag } from './state.js';
 import { escapeHtml, repoName, durationShort } from './format.js';
 
-const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'MERGED'];
+const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
 export const DESKTOP_MQ = '(min-width: 900px)';
 
