@@ -197,18 +197,18 @@ function tokenCard(data) {
     </tr></thead>
     <tbody>
       <tr>
-        <td>Today</td>
-        <td class="num">${formatTokens(todayTokens.input)}</td>
-        <td class="num">${formatTokens(todayTokens.output)}</td>
-        <td class="num">${formatTokens(todayTokens.cache)}</td>
-        <td class="num">${formatTokens(todayTokens.total)}</td>
+        <td data-label="Period">Today</td>
+        <td class="num" data-label="Input">${formatTokens(todayTokens.input)}</td>
+        <td class="num" data-label="Output">${formatTokens(todayTokens.output)}</td>
+        <td class="num" data-label="Cache">${formatTokens(todayTokens.cache)}</td>
+        <td class="num" data-label="Total">${formatTokens(todayTokens.total)}</td>
       </tr>
       <tr>
-        <td>${escapeHtml(periodLabel)}</td>
-        <td class="num">${formatTokens(periodTokens.input)}</td>
-        <td class="num">${formatTokens(periodTokens.output)}</td>
-        <td class="num">${formatTokens(periodTokens.cache)}</td>
-        <td class="num">${formatTokens(periodTokens.total)}</td>
+        <td data-label="Period">${escapeHtml(periodLabel)}</td>
+        <td class="num" data-label="Input">${formatTokens(periodTokens.input)}</td>
+        <td class="num" data-label="Output">${formatTokens(periodTokens.output)}</td>
+        <td class="num" data-label="Cache">${formatTokens(periodTokens.cache)}</td>
+        <td class="num" data-label="Total">${formatTokens(periodTokens.total)}</td>
       </tr>
     </tbody>
   </table></div>`;
@@ -303,24 +303,24 @@ async function loadAgentBreakdown(agents) {
     totals.cache += cache;
     totals.cost += u.CostUSD;
     rows += `<tr>
-      <td class="usage-table__name">${escapeHtml(name)}</td>
-      <td class="usage-table__model">${escapeHtml((u.Model || r.agent.model || '?').toLowerCase())}</td>
-      <td class="num">${formatTokens(input)}</td>
-      <td class="num">${formatTokens(output)}</td>
-      <td class="num">${formatTokens(cache)}</td>
-      <td class="num usage-table__cost">${formatCostFull(u.CostUSD)}</td>
+      <td class="usage-table__name" data-label="Agent">${escapeHtml(name)}</td>
+      <td class="usage-table__model" data-label="Model">${escapeHtml((u.Model || r.agent.model || '?').toLowerCase())}</td>
+      <td class="num" data-label="Input">${formatTokens(input)}</td>
+      <td class="num" data-label="Output">${formatTokens(output)}</td>
+      <td class="num" data-label="Cache">${formatTokens(cache)}</td>
+      <td class="num usage-table__cost" data-label="Cost">${formatCostFull(u.CostUSD)}</td>
     </tr>`;
   }
 
   let footerHtml = '';
   if (valid.length >= 2) {
     footerHtml = `<tfoot><tr>
-      <td class="usage-table__name">Total</td>
-      <td></td>
-      <td class="num">${formatTokens(totals.input)}</td>
-      <td class="num">${formatTokens(totals.output)}</td>
-      <td class="num">${formatTokens(totals.cache)}</td>
-      <td class="num usage-table__cost">${formatCostFull(totals.cost)}</td>
+      <td class="usage-table__name" data-label="Agent">Total</td>
+      <td data-label="Model"></td>
+      <td class="num" data-label="Input">${formatTokens(totals.input)}</td>
+      <td class="num" data-label="Output">${formatTokens(totals.output)}</td>
+      <td class="num" data-label="Cache">${formatTokens(totals.cache)}</td>
+      <td class="num usage-table__cost" data-label="Cost">${formatCostFull(totals.cost)}</td>
     </tr></tfoot>`;
   }
 

@@ -1,5 +1,5 @@
 // Service Worker for Agent Dashboard PWA
-const CACHE_NAME = 'agent-dashboard-v11';
+const CACHE_NAME = 'agent-dashboard-v12';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

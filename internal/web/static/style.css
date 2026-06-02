@@ -139,7 +139,11 @@ a { color: inherit; }
 #app {
   max-width: 640px;
   margin: 0 auto;
+  /* 100dvh tracks the *dynamic* viewport so mobile URL-bar collapse/
+   * expand doesn't change the layout height mid-scroll. Falls back to
+   * 100vh in browsers that don't support dvh. */
   min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -629,10 +633,12 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-composer__chip,
 .ui-composer__mic,
 .ui-composer__rail-spacer { display: none; }
-/* Keep the attach button to the left of the textarea on mobile (it
- * came after the textarea in source order to sit inside the desktop
- * chip rail, but on mobile the pill pattern needs it first). */
-.ui-composer__attach { order: -1; }
+/* Attach button is hidden on mobile: the server-side file picker
+ * (osascript "choose file") runs on the Mac running the dashboard, not
+ * on the phone. Tapping it from a phone-on-LAN would pop the dialog on
+ * the laptop — confusing at best. The desktop @media block restores
+ * the button. */
+.ui-composer__attach { display: none; }
 .ui-composer__input {
   flex: 1;
   resize: none;
@@ -1411,11 +1417,77 @@ button.btn-ghost.btn-sm {
   text-transform: capitalize;
 }
 
-/* Tables that exceed the card width on mobile scroll horizontally
- * instead of overflowing the card. Wrap belongs around <table>. */
-.usage-table-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+/* Tables on mobile re-flow into a card-stack: each row becomes a
+ * vertical block of label/value pairs (data-label drives the label),
+ * thead is hidden. No horizontal scroll. Desktop @media restores the
+ * normal table layout. */
+.usage-table-scroll { /* no overflow on mobile by default */ }
+.usage-table thead { display: none; }
+.usage-table,
+.usage-table tbody,
+.usage-table tfoot,
+.usage-table tr,
+.usage-table td { display: block; width: 100%; }
+.usage-table tr {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.usage-table tr:last-child { border-bottom: 0; }
+.usage-table td {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 3px 0;
+  text-align: right;
+}
+.usage-table td::before {
+  content: attr(data-label);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  flex: 0 0 auto;
+  margin-right: var(--space-3);
+}
+/* First cell of each row is the heading (period / agent name) —
+ * full-width, no label prefix, prominent. */
+.usage-table tr > td:first-child {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  padding-bottom: var(--space-2);
+  justify-content: flex-start;
+  text-align: left;
+}
+.usage-table tr > td:first-child::before { display: none; }
+/* Hide empty cells (e.g. the empty Model cell in the "Total" footer row). */
+.usage-table tr > td:empty { display: none; }
+/* Numeric cells stay monospaced for column-aligned digits. */
+.usage-table td.num { font-family: var(--font-mono); }
+
+@media (min-width: 900px) {
+  /* Desktop: restore the normal multi-column table layout. */
+  .usage-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .usage-table thead { display: table-header-group; }
+  .usage-table { display: table; }
+  .usage-table tbody { display: table-row-group; }
+  .usage-table tfoot { display: table-footer-group; }
+  .usage-table tr { display: table-row; padding: 0; border-bottom: 0; }
+  .usage-table td {
+    display: table-cell;
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+  }
+  .usage-table td::before { display: none; }
+  .usage-table tr > td:first-child {
+    font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+    padding-bottom: var(--space-2);
+    text-align: left;
+  }
+  .usage-table tr > td:empty { display: table-cell; }
 }
 
 /* Metrics — three stacked numerics inside a single card.

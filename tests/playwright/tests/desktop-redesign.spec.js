@@ -885,15 +885,17 @@ test.describe('Sending caption clears on POST ack and does not reappear', () => 
   });
 });
 
-// ---------- Foldable / responsive viewport sweep ----------
+// ---------- Foldable viewport sweep (unfolded only) ----------
 //
 // Samsung Galaxy Z Flip 7 inner display unfolds to ~412×1010 CSS px.
-// Landscape (1010×412) lands above the 900px desktop breakpoint and
-// should render the two-pane shell. Cover screen at 320×384 is the
-// tightest mobile viewport we care about — percentage-based CSS must
-// not overflow.
+// We only exercise the unfolded ("open") orientations — the cover
+// screen is too small for the dashboard to be useful and we don't
+// design for it.
+//   - 412×1010 portrait  → mobile single-column
+//   - 1010×412 landscape → crosses the 900px desktop breakpoint, so
+//                          renders the two-pane shell
 
-test.describe('Z Flip 7 + extreme mobile viewports', () => {
+test.describe('Z Flip 7 unfolded viewports', () => {
   test('inner portrait 412×1010 renders mobile single-column', async ({ page }) => {
     await page.setViewportSize({ width: 412, height: 1010 });
     await mockApi(page, [makeAgent()]);
@@ -917,19 +919,5 @@ test.describe('Z Flip 7 + extreme mobile viewports', () => {
     await expect(sidebar).toBeVisible();
     const display = await page.locator('#app-shell').evaluate((el) => getComputedStyle(el).display);
     expect(display).toBe('grid');
-  });
-
-  test('cover screen 320×384 no horizontal overflow on body', async ({ page }) => {
-    await page.setViewportSize({ width: 320, height: 384 });
-    await mockApi(page, [makeAgent()]);
-    await page.goto('/');
-    await page.waitForSelector('.ui-row', { timeout: 5000 });
-
-    // Page-level horizontal overflow check — body scrollWidth must equal viewport width.
-    const dims = await page.evaluate(() => ({
-      scrollWidth: document.body.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
-    expect(dims.scrollWidth).toBeLessThanOrEqual(dims.clientWidth + 1);
   });
 });
