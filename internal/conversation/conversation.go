@@ -895,11 +895,17 @@ func toolUseID(line []byte) string {
 	return ""
 }
 
-// LastPendingBlockingTool scans the JSONL tail and returns which blocking
+// LastPendingBlockingTool scans the JSONL and returns which blocking
 // tool (ExitPlanMode or AskUserQuestion) appeared most recently with no
 // human message after it. Returns "plan", "question", or "" if neither
 // is pending. This resolves the ambiguity when both tools are pending —
 // the most recent one wins.
+//
+// Scans the entire file for the same reason ReadPendingQuestion does:
+// a sibling subagent can pad the JSONL with isSidechain entries while
+// the parent is paused on the blocking tool, pushing the relevant
+// tool_use arbitrarily far before EOF. Called from ApplyIdleOverrides,
+// which gates on agent.State so the cost is bounded.
 func LastPendingBlockingTool(projDir, sessionID string) string {
 	path := filepath.Join(projDir, sessionID+".jsonl")
 	f, err := os.Open(path)
@@ -908,27 +914,8 @@ func LastPendingBlockingTool(projDir, sessionID string) string {
 	}
 	defer f.Close()
 
-	const tailSize = 32 * 1024
-	stat, err := f.Stat()
-	if err != nil {
-		return ""
-	}
-	if stat.Size() > tailSize {
-		if _, err := f.Seek(stat.Size()-tailSize, io.SeekStart); err != nil {
-			return ""
-		}
-		// Skip the partial first line after seeking mid-file.
-		var oneByte [1]byte
-		for {
-			_, err := f.Read(oneByte[:])
-			if err != nil || oneByte[0] == '\n' {
-				break
-			}
-		}
-	}
-
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, tailSize), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	// Track the most recent blocking tool seen and whether a human
 	// message appeared after it.

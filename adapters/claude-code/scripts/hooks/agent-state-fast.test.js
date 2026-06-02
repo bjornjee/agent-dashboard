@@ -872,6 +872,130 @@ describe('fast hook state updates (per-agent files)', () => {
   });
 });
 
+describe('AskUserQuestion pending_question lifecycle', () => {
+  const QUESTIONS_PAYLOAD = [{
+    question: 'Where should focus.json live?',
+    header: 'Focus path',
+    multiSelect: false,
+    options: [
+      { label: '~/.agent-dashboard/focus.json', description: 'Co-located with agents/.' },
+      { label: '$XDG_RUNTIME_DIR/...', description: 'Tmpfs-backed.' },
+    ],
+  }];
+
+  it('PreToolUse AskUserQuestion stamps pending_question with tool_use_id + questions', () => {
+    // The JSONL is not flushed until the user answers, so the questions payload
+    // must round-trip through the sidecar — this is the field the dashboard
+    // reads instead of scanning the JSONL.
+    const existing = { target: 'main:1.0', state: 'running', current_tool: '' };
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'AskUserQuestion',
+        tool_use_id: 'toolu_01PENDING',
+        tool_input: { questions: QUESTIONS_PAYLOAD },
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+    assert.equal(changed, true);
+    assert.equal(update.state, 'question');
+    assert.ok(update.pending_question, 'pending_question must be set');
+    assert.equal(update.pending_question.tool_use_id, 'toolu_01PENDING');
+    assert.deepEqual(update.pending_question.questions, QUESTIONS_PAYLOAD);
+  });
+
+  it('PermissionRequest AskUserQuestion also stamps pending_question', () => {
+    // Non-bypassPermissions mode fires PermissionRequest, not PreToolUse.
+    const existing = { target: 'main:1.0', state: 'running', current_tool: '' };
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'AskUserQuestion',
+        tool_use_id: 'toolu_01PERM',
+        tool_input: { questions: QUESTIONS_PAYLOAD },
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+    assert.equal(update.state, 'question');
+    assert.equal(update.pending_question.tool_use_id, 'toolu_01PERM');
+  });
+
+  it('PostToolUse AskUserQuestion clears pending_question even with stop-state guard', () => {
+    // The STOP_STATES guard preserves state=question across late PostToolUse,
+    // but the pending_question payload itself must be cleared so the card
+    // stops rendering on the next /pending-question poll.
+    const existing = {
+      target: 'main:1.0',
+      state: 'question',
+      current_tool: 'AskUserQuestion',
+      pending_question: { tool_use_id: 'toolu_01PENDING', questions: QUESTIONS_PAYLOAD },
+    };
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'AskUserQuestion',
+        tool_use_id: 'toolu_01PENDING',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+    assert.equal(changed, true, 'pending_question clear must surface even under stop-state guard');
+    assert.equal(update.pending_question, null, 'pending_question must be nulled');
+    // State itself is still preserved by the guard until the next PreToolUse.
+    assert.notEqual(update.state, 'running');
+  });
+
+  it('PreToolUse for a non-AskUserQuestion tool clears stale pending_question', () => {
+    // When state transitions out of question (next turn), the payload must
+    // not linger on disk and confuse a later poll.
+    const existing = {
+      target: 'main:1.0',
+      state: 'question',
+      current_tool: 'AskUserQuestion',
+      pending_question: { tool_use_id: 'toolu_01OLD', questions: QUESTIONS_PAYLOAD },
+    };
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+    assert.equal(changed, true);
+    assert.equal(update.state, 'running');
+    assert.equal(update.pending_question, null);
+  });
+
+  it('PreToolUse for unrelated tool with no existing pending_question does NOT add it', () => {
+    // Don't write pending_question:null unconditionally — that would create
+    // diff noise on every tool call.
+    const existing = { target: 'main:1.0', state: 'running', current_tool: '' };
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+    assert.ok(update);
+    assert.equal('pending_question' in update, false);
+  });
+});
+
 // Dynamic effort: while permission_mode='plan' the agent is in the planning
 // phase and should run at 'max'; outside plan mode it should run at 'high'.
 // buildUpdate must surface this transition by setting update.effort so the

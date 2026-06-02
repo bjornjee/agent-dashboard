@@ -199,12 +199,31 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     state = 'permission';
   }
 
+  // AskUserQuestion payload lifecycle: write the questions array on PreToolUse
+  // (the JSONL tool_use line isn't flushed until the user answers, so the
+  // sidecar is the only place this payload exists during the pending window).
+  // Clear it on PostToolUse for the same tool, or on a subsequent PreToolUse
+  // for a different tool — never let a stale payload linger on disk.
+  const stampPendingQ = (hookEvent === 'PreToolUse' || hookEvent === 'PermissionRequest')
+    && toolName === 'AskUserQuestion'
+    && Array.isArray(toolInput.questions);
+  const clearPendingQ = !stampPendingQ
+    && existing.pending_question != null
+    && (
+      (hookEvent === 'PostToolUse' && toolName === 'AskUserQuestion')
+      || (hookEvent === 'PreToolUse' && toolName !== 'AskUserQuestion')
+    );
+
   // Stop-derived states must not be overwritten by a late PostToolUse.
   // PreToolUse (next turn) is allowed through to correctly resume "running".
   if (hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state)) {
     const guardedUpdate = {};
     if (consumeBlocked) guardedUpdate.hook_blocked = '';
     if (newEffort) guardedUpdate.effort = newEffort;
+    // The pending_question clear must surface even under the guard — state
+    // stays at "question" until the next PreToolUse, but the card must stop
+    // rendering as soon as the AskUserQuestion tool completes.
+    if (clearPendingQ) guardedUpdate.pending_question = null;
     if (Object.keys(guardedUpdate).length > 0) {
       return { changed: true, update: guardedUpdate, dispatchEffort };
     }
@@ -231,6 +250,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
+    || stampPendingQ
+    || clearPendingQ
     || !!newEffort
     || (existing.harness || '') !== harness;
 
@@ -257,6 +278,15 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     update.delegated_plan_tool_use_id = input.tool_use_id;
   } else if (clearDelegatedPlanId) {
     update.delegated_plan_tool_use_id = '';
+  }
+
+  if (stampPendingQ) {
+    update.pending_question = {
+      tool_use_id: input.tool_use_id || '',
+      questions: toolInput.questions,
+    };
+  } else if (clearPendingQ) {
+    update.pending_question = null;
   }
 
   // Clear hook_blocked after consuming it (one-shot signal from blocking hooks).
