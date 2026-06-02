@@ -157,7 +157,7 @@ function isAtBottom(scrollParent) {
 }
 
 // Whether the conversation tab has been auto-scrolled to bottom for the
-// currently-open detail session. Reset by openDetail() each time a new
+// currently-open detail session. Reset by renderDetail() each time a new
 // detail view mounts; consulted by loadTabContent('conversation', ...)
 // so tab-switches back to Conversation preserve the user's scroll
 // position instead of re-snapping.
@@ -1101,7 +1101,7 @@ async function loadTabContent(tab, agentId) {
       // Only snap to bottom on the *first* conversation load of this
       // detail session — subsequent tab-switches back to Conversation
       // re-render the same content and should preserve the user's
-      // scroll position. openDetail() resets the flag when a new agent
+      // scroll position. renderDetail() resets the flag when a new agent
       // detail view mounts.
       if (!conversationScrolledThisSession) {
         const scrollParent = container.closest('.detail-scroll');
