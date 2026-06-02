@@ -154,13 +154,20 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 
 // handlePendingQuestion serves GET /api/agents/{id}/pending-question.
 // Codex sessions return null — codex has its own interactive prompt mechanism.
+//
+// Gated on agent.State == "question" so the hot path (every 2 s while the
+// chat tab is open) skips the full JSONL scan unless the hook layer or
+// ApplyIdleOverrides has already determined the agent is actually paused
+// on AskUserQuestion. The frontend only renders the card when the same
+// state surfaces as the "Needs reply" pill, so the gate matches what the
+// UI would do with the response anyway.
 func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.Harness == "codex" || agent.ProjDir == "" || agent.SessionID == "" {
+	if agent.Harness == "codex" || agent.ProjDir == "" || agent.SessionID == "" || agent.State != "question" {
 		writeJSON(w, http.StatusOK, nil)
 		return
 	}
