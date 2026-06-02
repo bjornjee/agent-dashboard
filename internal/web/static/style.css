@@ -2386,13 +2386,25 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
    *   row 1: textarea (multi-line, transparent)
    *   row 2: chip rail [attach, model, branch, effort, spacer, mic, send/stop]
    * ============================================================ */
+  /* Action-bar is a transparent shell on desktop so the composer card
+   * appears to float on top of the chat (Codex pattern). The card
+   * itself carries the elevation. */
+  #app-main .action-bar {
+    background: transparent;
+    border-top: 0;
+    padding: 0 var(--space-5) var(--space-4);
+    max-width: 760px;
+    margin: 0 auto;
+  }
   .ui-composer.detail-composer {
     flex-direction: column;
     align-items: stretch;
     background: var(--bg-elevated);
-    border-radius: var(--radius-lg);
-    padding: var(--space-3);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+    border-radius: 22px;
+    padding: 14px 14px 10px;
     gap: var(--space-2);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 12px 32px rgba(0, 0, 0, 0.35);
   }
   .ui-composer.detail-composer .ui-composer__input {
     background: transparent;
@@ -2422,14 +2434,18 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: var(--bg-base);
-    border: 0;
+    background: transparent;
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
     color: var(--text-secondary);
-    padding: 5px 10px;
+    padding: 4px 10px;
     border-radius: var(--radius-pill);
     font-size: 12.5px;
     line-height: 1;
     max-width: 220px;
+  }
+  .ui-composer.detail-composer .ui-composer__chip:hover {
+    background: var(--bg-base);
+    border-color: var(--border-subtle, rgba(255, 255, 255, 0.12));
   }
   .ui-composer.detail-composer .ui-composer__chip > span {
     overflow: hidden;
