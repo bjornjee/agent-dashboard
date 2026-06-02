@@ -341,12 +341,35 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--text-secondary);
 }
 .ui-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ui-row__title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
 .ui-row__title {
   font-size: 16px;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Inline tag rendered after the title (e.g. "PR open"). Visually a
+ * small outlined pill that sits beside the live state dot, so the user
+ * sees both signals simultaneously — the agent is running AND a PR is
+ * open. */
+.ui-row__tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  color: var(--accent-indigo);
+  border: 1px solid color-mix(in srgb, var(--accent-indigo) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-indigo) 12%, transparent);
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 .ui-row__subtitle {
@@ -689,7 +712,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .status-dot--queued, .status-dot--waiting, .status-dot--blocked { background: var(--accent-amber); }
 .status-dot--failed, .status-dot--error { background: var(--accent-red); }
 .status-dot--review { background: var(--accent-green); }
-.status-dot--pr { background: var(--status-running-text); }
 .status-dot--merged, .status-dot--completed { background: var(--text-faint); }
 @keyframes ui-pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(60, 203, 107, 0.18); }
@@ -2217,6 +2239,35 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   justify-content: center;
 }
 
+/* ============================================================
+ * Page layout (PWA shape) — list + usage views on mobile.
+ * App-bar pinned, body scrolls inside its own region so the page
+ * itself doesn't scroll. Detail view uses .detail-layout instead
+ * (older, includes a separate pinned composer slot).
+ * The desktop @media block collapses this to a no-op since
+ * #app-main provides its own scroll container.
+ * ============================================================ */
+.page-layout {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-pinned { flex-shrink: 0; background: var(--bg-base); }
+.page-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* Leave room above the floating dock so the last row isn't covered. */
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+
+/* Mobile: cap .detail-pinned to keep the chat area legible on a phone.
+ * 50vh was generous; 35vh reserves the lower 65% for messages + composer. */
+@media (max-width: 899px) {
+  .detail-pinned { max-height: 35vh; }
+}
+
 @media (min-width: 900px) {
   #app-shell {
     display: grid;
@@ -2249,6 +2300,13 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 
   /* Floating bottom dock is replaced by the sidebar CTA on desktop. */
   .ui-dock { display: none; }
+
+  /* Collapse .page-layout to a normal block on desktop. #app-main
+   * already provides the scroll container; nesting a second scrollable
+   * region inside it would compete and break sidebar interactions. */
+  .page-layout { display: block; height: auto; overflow: visible; }
+  .page-pinned { background: transparent; }
+  .page-scroll { overflow: visible; padding-bottom: 0; }
 
   /* The detail view's pinned header is mobile-sized (max-height: 50vh).
    * On desktop, the tabs end up below the fold. Let the pinned section

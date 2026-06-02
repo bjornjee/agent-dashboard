@@ -921,3 +921,84 @@ test.describe('Z Flip 7 unfolded viewports', () => {
     expect(display).toBe('grid');
   });
 });
+
+// ---------- PR-as-tag (Slice 1) ----------
+//
+// A running agent that also has an open PR must render the LIVE state
+// (running, green dot, RUNNING group) plus a "PR open" tag, not the
+// pinned `pr` state in the PR group. The backend's ApplyPinnedStates
+// already keeps state="running" for active agents; the frontend used to
+// re-apply the pin and mask the live state — this guards against that
+// regression.
+
+test.describe('PR-as-tag', () => {
+  test('running agent with pr_url shows running dot + "PR open" tag (not PR group)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const agent = makeAgent({
+      state: 'running',
+      pinned_state: 'pr',
+      pr_url: 'https://github.com/example/repo/pull/42',
+    });
+    await mockApi(page, [agent]);
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__inner', { timeout: 5000 });
+
+    // Sidebar row: green running dot is present, RUNNING group label exists.
+    const runningGroup = page.locator('.ui-section-label', { hasText: 'RUNNING' });
+    await expect(runningGroup).toBeVisible();
+    const prGroup = page.locator('.ui-section-label', { hasText: 'PR' });
+    await expect(prGroup).toHaveCount(0);
+
+    // The PR tag chip renders inside the row.
+    const tag = page.locator('#app-sidebar .ui-row__tag', { hasText: 'PR open' });
+    await expect(tag).toBeVisible();
+  });
+
+  test('mobile list row also shows the PR open tag without promoting state', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const agent = makeAgent({
+      state: 'running',
+      pinned_state: 'pr',
+      pr_url: 'https://github.com/example/repo/pull/42',
+    });
+    await mockApi(page, [agent]);
+    await page.goto('/');
+    await page.waitForSelector('.ui-row', { timeout: 5000 });
+
+    const tag = page.locator('.ui-row__tag', { hasText: 'PR open' });
+    await expect(tag.first()).toBeVisible();
+    const prGroup = page.locator('.ui-section-label', { hasText: 'PR' });
+    await expect(prGroup).toHaveCount(0);
+  });
+});
+
+// ---------- PWA page shape (Slice 3) ----------
+//
+// Mobile list page must not scroll as a whole — the app-bar stays
+// pinned and the body scrolls inside .page-scroll. body.scrollHeight
+// equals the viewport height (within 1 px tolerance).
+
+test.describe('Mobile PWA layout', () => {
+  test('list page does not page-scroll on mobile (.page-layout owns the viewport)', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // Seed enough agents to overflow vertically so the scroll happens
+    // somewhere — it must happen inside .page-scroll, not on body.
+    const agents = Array.from({ length: 30 }, (_, i) =>
+      makeAgent({ session_id: 'desk-' + i, branch: 'feat/x-' + i }),
+    );
+    await mockApi(page, agents);
+    await page.goto('/');
+    await page.waitForSelector('.ui-row', { timeout: 5000 });
+
+    const dims = await page.evaluate(() => ({
+      bodyScroll: document.body.scrollHeight,
+      bodyClient: document.body.clientHeight,
+      pageScroll: document.querySelector('.page-scroll')?.scrollHeight || 0,
+      pageClient: document.querySelector('.page-scroll')?.clientHeight || 0,
+    }));
+    // Body should NOT scroll: scrollHeight ≤ clientHeight (+1 px slack).
+    expect(dims.bodyScroll).toBeLessThanOrEqual(dims.bodyClient + 1);
+    // Inner scroll region overflows (where the actual scrolling happens).
+    expect(dims.pageScroll).toBeGreaterThan(dims.pageClient);
+  });
+});

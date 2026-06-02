@@ -77,19 +77,21 @@ export const UI = {
   },
 
   // 4. Tappable row — list + create form rows.
+  // `tag` (optional): small inline chip rendered after the title (e.g. "PR open").
   row(opts) {
     const o = opts || {};
     const click = o.onclick ? ` onclick="${o.onclick}"` : '';
     const lead = o.leading ? `<div class="ui-row__leading">${o.leading}</div>` : '';
     const sub = o.subtitle ? `<span class="ui-row__subtitle">${escapeHtml(o.subtitle)}</span>` : '';
+    const tagChip = o.tag ? `<span class="ui-row__tag">${escapeHtml(o.tag)}</span>` : '';
     const chevron = (o.onclick && o.chevron !== false) ? `<span class="ui-row__chevron">${ICONS.chevronRight}</span>` : '';
     const trail = (o.trailing || chevron)
       ? `<div class="ui-row__trailing">${o.trailing || ''}${chevron}</div>` : '';
-    const tag = o.onclick ? 'button' : 'div';
-    return `<${tag} class="ui-row"${click}>${lead}
-      <div class="ui-row__body"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${sub}</div>
+    const el = o.onclick ? 'button' : 'div';
+    return `<${el} class="ui-row"${click}>${lead}
+      <div class="ui-row__body"><span class="ui-row__title-line"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${tagChip}</span>${sub}</div>
       ${trail}
-    </${tag}>`;
+    </${el}>`;
   },
 
   // 5. Section label — small-caps muted header. Used everywhere.

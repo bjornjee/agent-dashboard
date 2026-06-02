@@ -1,7 +1,7 @@
 // Agent detail view with tabs and inline subagents.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup } from '../state.js';
+import { effectiveState, stateGroup, prTag } from '../state.js';
 import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -190,14 +190,19 @@ export function confirmUserMessageSent() {
   toolBuckets = {};
   lastSeenToolTimestamp = new Date().toISOString();
   // Mount the indicator optimistically so the user doesn't stare at
-  // an empty chat while SSE catches up. Synthesise a mid-turn agent
-  // by overriding last_hook_event on the cached lastKnownAgent.
+  // an empty chat while SSE catches up. PERSIST the synthetic mid-turn
+  // override onto lastKnownAgent so the 2s conversation poll (which
+  // also calls refreshWorkingIndicator) doesn't wipe the indicator
+  // before SSE has had a chance to report PreToolUse/PostToolUse. SSE
+  // updates will overwrite lastKnownAgent with real hook events; the
+  // indicator only disappears once last_hook_event === 'Stop'.
   if (lastKnownAgent) {
-    refreshWorkingIndicator({
+    lastKnownAgent = {
       ...lastKnownAgent,
       last_hook_event: 'UserPromptSubmit',
-      current_tool: '', // no tool yet — falls back to "Thinking"
-    });
+      current_tool: '',
+    };
+    refreshWorkingIndicator(lastKnownAgent);
   }
 }
 
@@ -337,10 +342,13 @@ export function refreshWorkingIndicator(agent) {
     el.className = 'ui-msg-status ui-msg-status--working';
     el.innerHTML = html;
     container.appendChild(el);
+    // On *mount* always pull the indicator into view — on mobile the
+    // soft keyboard usually shifts the scroll position out of the
+    // 80-px window below, so the near-bottom heuristic used for
+    // tally/text *updates* would never fire and the user would see
+    // nothing happen. The asymmetry is intentional.
     const scrollParent = container.closest('.detail-scroll');
-    if (scrollParent && scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 80) {
-      scrollParent.scrollTop = scrollParent.scrollHeight;
-    }
+    if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
   }
   // Lazy-start the activity poll so the tool count keeps incrementing
   // while the agent is working. The poll auto-stops itself when the
@@ -453,11 +461,15 @@ function renderActionBar(agent) {
   if (st === 'permission' || st === 'plan') {
     actions += inlineBtn('Approve', 'primary', `Dashboard.approve('${id}', event)`);
     actions += inlineBtn('Reject', 'danger', `Dashboard.reject('${id}', event)`);
-  } else if (st === 'pr') {
-    actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
-    actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
   } else if (st === 'merged') {
     actions += inlineBtn('Close', 'ghost', `Dashboard.confirmClose('${id}')`);
+  }
+  // PR chips key off `pr_url` (the real signal), not the pinned `pr`
+  // state. A running agent that already opened a PR still gets the
+  // chips; the live state shows the agent is mid-turn elsewhere.
+  if (agent.pr_url && st !== 'merged') {
+    actions += inlineBtn('Open PR', 'secondary', `Dashboard.openPR('${id}')`);
+    actions += inlineBtn('Merge', 'primary', `Dashboard.confirmMerge('${id}')`);
   }
 
   // Composer is always present so the user can ask follow-up questions
@@ -692,9 +704,12 @@ export async function renderDetail(app, agents, agentId, setView) {
     ],
   });
 
+  const prChip = prTag(agent)
+    ? `<span class="ui-row__tag detail-header__tag">${escapeHtml(prTag(agent))}</span>`
+    : '';
   const detailHeader = `
     <div class="detail-header">
-      <div class="detail-title">${inlineStatusPill(st)}</div>
+      <div class="detail-title">${inlineStatusPill(st)}${prChip}</div>
     </div>
   `;
 

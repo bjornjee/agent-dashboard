@@ -29,13 +29,22 @@ export async function renderUsage(app, agents) {
   currentAgents = agents;
   cachedRateLimits = null;
   cachedDaily = null;
+  // PWA shape: app-bar pinned at top, usage content scrolls inside its
+  // own region. The desktop @media collapses .page-layout to a no-op
+  // since #app-main is already the scroll container.
   app.innerHTML =
-    UI.appBar({
-      back: true,
-      title: 'Usage',
-      trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
-    }) +
-    '<div class="usage-view"><div class="usage-view__loading">' + UI.loadingBlock() + '</div></div>';
+    '<div class="page-layout">' +
+      '<div class="page-pinned">' +
+        UI.appBar({
+          back: true,
+          title: 'Usage',
+          trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
+        }) +
+      '</div>' +
+      '<div class="page-scroll">' +
+        '<div class="usage-view"><div class="usage-view__loading">' + UI.loadingBlock() + '</div></div>' +
+      '</div>' +
+    '</div>';
 
   const [rl, daily] = await Promise.all([fetchRateLimits(), fetchDaily(currentRange)]);
   cachedRateLimits = rl;

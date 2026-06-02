@@ -1,11 +1,11 @@
 // Agent list — Codex-iOS register. Thin glue over the primitives.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup } from '../state.js';
+import { effectiveState, stateGroup, prTag } from '../state.js';
 import { escapeHtml, repoName, durationShort, formatCost } from '../format.js';
 import { get } from '../api.js';
 
-const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
+const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'MERGED'];
 
 function statusDot(state) {
   const group = stateGroup(state);
@@ -28,13 +28,14 @@ export function renderList(app, agents) {
     (grouped[g] = grouped[g] || []).push(agent);
   }
 
-  let html = UI.appBar({
+  let pinned = UI.appBar({
     title: 'Agents',
     trailing: [{ icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' }],
   });
 
+  let body = '';
   if (agents.length === 0) {
-    html += `<div class="empty-state">${ICONS.robot}
+    body += `<div class="empty-state">${ICONS.robot}
       <div class="empty-state-title">No agents</div>
       <div class="empty-state-subtitle">Tap + New to start one.</div>
     </div>`;
@@ -43,21 +44,29 @@ export function renderList(app, agents) {
   for (const group of GROUP_ORDER) {
     const list = grouped[group];
     if (!list || !list.length) continue;
-    html += UI.sectionLabel(group, { count: list.length });
+    body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
       const trailing = `<span class="ui-row__trailing-cost" data-agent-id="${id}"></span>`;
-      html += UI.row({
+      body += UI.row({
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
         subtitle: metaLine(agent),
+        tag: prTag(agent),
         trailing,
         onclick: `Dashboard.selectAgent('${id}')`,
       });
     }
   }
 
-  app.innerHTML = html;
+  // PWA shape: app-bar pinned, list body scrolls inside its own region
+  // so the page doesn't scroll as a whole. The desktop @media collapses
+  // .page-layout to display:block (see style.css).
+  app.innerHTML =
+    '<div class="page-layout">' +
+      '<div class="page-pinned">' + pinned + '</div>' +
+      '<div class="page-scroll">' + body + '</div>' +
+    '</div>';
 
   // Dock floats over the list (position:fixed); append to body to escape #app stacking.
   // Sheets are owned by openKebab/dismissSheet — don't touch them here, SSE re-renders this frequently.

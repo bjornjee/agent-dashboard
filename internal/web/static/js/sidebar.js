@@ -4,10 +4,10 @@
 // query matches.
 import { UI } from './ui.js';
 import { ICONS } from './icons.js';
-import { effectiveState, stateGroup } from './state.js';
+import { effectiveState, stateGroup, prTag } from './state.js';
 import { escapeHtml, repoName, durationShort } from './format.js';
 
-const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
+const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'MERGED'];
 
 export const DESKTOP_MQ = '(min-width: 900px)';
 
@@ -84,6 +84,7 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
         subtitle: metaLine(agent),
+        tag: prTag(agent),
         onclick: `Dashboard.selectAgent('${id}')`,
         chevron: false,
       });
