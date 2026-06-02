@@ -169,6 +169,24 @@ export function updateActionBar(agent) {
 let pendingUserMessage = null;
 let pendingMessageAcked = false;
 
+// Auto-follow threshold. If the user has scrolled more than this many
+// pixels above the bottom, treat them as "reading older messages" and
+// preserve their position across poll-tick re-renders instead of
+// snapping back. 60px keeps the follow behaviour sticky enough that a
+// half-line of overscroll still counts as "at bottom".
+const SCROLL_BOTTOM_THRESHOLD_PX = 60;
+function isAtBottom(scrollParent) {
+  if (!scrollParent) return false;
+  return scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < SCROLL_BOTTOM_THRESHOLD_PX;
+}
+
+// Whether the conversation tab has been auto-scrolled to bottom for the
+// currently-open detail session. Reset by renderDetail() each time a new
+// detail view mounts; consulted by loadTabContent('conversation', ...)
+// so tab-switches back to Conversation preserve the user's scroll
+// position instead of re-snapping.
+let conversationScrolledThisSession = false;
+
 // Optimistically append a Codex-style user message pill to the chat.
 // While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
 // and is followed by a "Sending…" caption sibling. Dashboard.sendInput
@@ -358,17 +376,20 @@ export function refreshWorkingIndicator(agent) {
   if (existing) {
     if (existing.innerHTML !== html) existing.innerHTML = html;
   } else {
+    // Capture follow-state BEFORE appending — the mount itself extends
+    // scrollHeight, which would otherwise flip wasAtBottom to false.
+    const scrollParent = container.closest('.detail-scroll');
+    const wasAtBottom = isAtBottom(scrollParent);
     const el = document.createElement('div');
     el.className = 'ui-msg-status ui-msg-status--working';
     el.innerHTML = html;
     container.appendChild(el);
-    // On *mount* always pull the indicator into view — on mobile the
-    // soft keyboard usually shifts the scroll position out of the
-    // 80-px window below, so the near-bottom heuristic used for
-    // tally/text *updates* would never fire and the user would see
-    // nothing happen. The asymmetry is intentional.
-    const scrollParent = container.closest('.detail-scroll');
-    if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+    // Only pull the indicator into view if the user was already at the
+    // bottom. refreshConversation re-runs every 2s and wipes the
+    // indicator (innerHTML rewrite), so this mount path fires every
+    // poll while an agent is working — an unconditional scroll here
+    // overrides whatever scroll position the user just chose.
+    if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
   }
   // Lazy-start the activity poll so the tool count keeps incrementing
   // while the agent is working. The poll auto-stops itself when the
@@ -705,7 +726,7 @@ async function refreshConversation(agentId, agent) {
   ]);
   if (!entries || entries.length === 0) return; // don't wipe existing content with empty state
   const scrollParent = container.closest('.detail-scroll');
-  const wasAtBottom = scrollParent && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < 60);
+  const wasAtBottom = isAtBottom(scrollParent);
 
   // Check if the API has caught up with our optimistic message
   if (pendingUserMessage) {
@@ -955,6 +976,10 @@ export async function renderDetail(app, agents, agentId, setView) {
   currentDetailTab = savedTab;
   currentDetailAgentId = agentId;
   lastAgentState = st;
+  // Fresh detail-view mount — re-enable the one-shot initial scroll so
+  // navigating Agent A → B → A snaps back to the bottom of A's
+  // conversation on the second visit (the DOM was torn down).
+  conversationScrolledThisSession = false;
   document.querySelectorAll('.detail-tabs__tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.detail-tabs__tab').forEach(t => t.classList.remove('detail-tabs__tab--active'));
@@ -1102,8 +1127,16 @@ async function loadTabContent(tab, agentId) {
         }
       }
       markLoaded();
-      const scrollParent = container.closest('.detail-scroll');
-      if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+      // Only snap to bottom on the *first* conversation load of this
+      // detail session — subsequent tab-switches back to Conversation
+      // re-render the same content and should preserve the user's
+      // scroll position. renderDetail() resets the flag when a new agent
+      // detail view mounts.
+      if (!conversationScrolledThisSession) {
+        const scrollParent = container.closest('.detail-scroll');
+        if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+        conversationScrolledThisSession = true;
+      }
       break;
     }
     case 'activity': {
