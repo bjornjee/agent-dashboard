@@ -38,7 +38,7 @@ function fireBrowserNotification(agent, body) {
   const title = agentLabel(agent);
   const opts = {
     body,
-    icon: '/icon-192.svg',
+    icon: '/icons/icon-192.png',
     tag: agent.session_id,
     data: { agentId: agent.session_id },
   };

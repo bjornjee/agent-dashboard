@@ -2224,6 +2224,11 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     pointer-events: none;
   }
 
+  /* Install app row — hidden until js/install.js captures beforeinstallprompt
+   * and toggles body.can-install (Samsung/Chromium-only signal). */
+  .app-sidebar__install { display: none; }
+  body.can-install .app-sidebar__install { display: block; }
+
   /* Create view — vertically centered composition block on a wide main pane,
    * with Folder / Harness / Skill rendered as a row of secondary chips below
    * the textarea (matches Codex codex-dark-04-new-chat-create-agent.png). */

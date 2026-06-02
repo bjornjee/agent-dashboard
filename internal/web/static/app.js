@@ -9,6 +9,7 @@ import { ICONS } from './js/icons.js';
 import { Theme } from './js/theme.js';
 import { initNotify, processNotifications, toggleBrowserNotifications } from './js/notify.js';
 import { renderSidebar, isDesktop, DESKTOP_MQ } from './js/sidebar.js';
+import { promptInstall, maybeShowIOSHint, consumeNewAgentShortcut } from './js/install.js';
 
 // Configure marked.js if available
 if (typeof marked !== 'undefined') {
@@ -145,6 +146,10 @@ window.Dashboard = {
 
   showCreate() {
     navigateTo('create', null, true);
+  },
+
+  installApp() {
+    promptInstall();
   },
 
   openKebab() {
@@ -417,23 +422,27 @@ async function init() {
     initNotify(agents);
   }
 
-  // Restore saved view state
-  let restored = false;
-  try {
-    const saved = JSON.parse(sessionStorage.getItem('dashboard-view'));
-    if (saved && saved.view) {
-      if (saved.view === 'detail' && saved.agentId && agents.find(a => a.session_id === saved.agentId)) {
-        navigateTo('detail', saved.agentId, false);
-        restored = true;
-      } else if (saved.view === 'usage') {
-        navigateTo('usage', null, false);
-        restored = true;
-      } else if (saved.view === 'create') {
-        navigateTo('create', null, false);
-        restored = true;
+  // Manifest shortcut deep-link (?action=new-agent) overrides restore.
+  const shortcutHandled = consumeNewAgentShortcut(navigateTo);
+
+  let restored = shortcutHandled;
+  if (!restored) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('dashboard-view'));
+      if (saved && saved.view) {
+        if (saved.view === 'detail' && saved.agentId && agents.find(a => a.session_id === saved.agentId)) {
+          navigateTo('detail', saved.agentId, false);
+          restored = true;
+        } else if (saved.view === 'usage') {
+          navigateTo('usage', null, false);
+          restored = true;
+        } else if (saved.view === 'create') {
+          navigateTo('create', null, false);
+          restored = true;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   if (!restored) navigateTo('list', null, false);
 
@@ -441,6 +450,7 @@ async function init() {
   history.replaceState({ view: currentView, agentId: selectedAgentId }, '', null);
 
   connectSSE();
+  maybeShowIOSHint(showModal);
 }
 
 init();
