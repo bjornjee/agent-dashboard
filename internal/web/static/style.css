@@ -538,6 +538,15 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--text-faint);
   font-size: 12px;
 }
+.ui-msg-status__latest {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
 .ui-msg-status__live {
   font-size: 15px;
 }

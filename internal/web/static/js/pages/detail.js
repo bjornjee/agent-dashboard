@@ -243,6 +243,10 @@ const BUCKET_LABELS = {
 // Running tally of tools fired during this working session, bucketed
 // by category. Cleared when the agent leaves a working state.
 let toolBuckets = {};
+// Most-recently-completed tool entry (for the inline "Last: …" line).
+// Holds { content, bucket } where content is the raw activity payload
+// like "→ Bash: ls -la".
+let latestToolEntry = null;
 let toolStreamPollTimer = null;
 let lastSeenToolTimestamp = null;
 
@@ -304,8 +308,25 @@ export function refreshWorkingIndicator(agent) {
   const tallyHtml = tally
     ? '<div class="ui-msg-status__tally">' + escapeHtml(tally) + '</div>'
     : '';
+  // Latest activity line — shows what the agent most recently *finished*.
+  // Strips the "→ Tool: " prefix and the long arg tail; e.g.
+  //   "→ Bash: ls -la /Users/bjornjee/Code/bjornjee/worktrees/..."
+  // renders as "Bash · ls -la /Users/bjornjee/Code/…"
+  let latestHtml = '';
+  if (latestToolEntry) {
+    const raw = String(latestToolEntry.content || '').replace(/^→\s*/, '');
+    const m = raw.match(/^([^:]+):\s*(.*)$/);
+    const tool = m ? m[1].trim() : raw;
+    const arg = m ? m[2].trim() : '';
+    const c = classifyTool(tool);
+    const friendly = c ? c.live : tool;
+    const argSnip = arg.length > 64 ? arg.slice(0, 62) + '…' : arg;
+    const display = argSnip ? friendly + ' · ' + argSnip : friendly;
+    latestHtml = '<div class="ui-msg-status__latest">' + escapeHtml(display) + '</div>';
+  }
   const html =
     tallyHtml +
+    latestHtml +
     '<div class="ui-msg-status__live">' +
       '<span class="ui-msg-status__label">' + escapeHtml(liveLabel) + '</span>' +
     '</div>';
@@ -366,6 +387,7 @@ function startToolStreamPoll(agentId) {
   const tick = async () => {
     if (!isAgentMidTurn(lastKnownAgent)) {
       toolBuckets = {};
+      latestToolEntry = null;
       lastSeenToolTimestamp = null;
       stopToolStreamPoll();
       return;
@@ -388,6 +410,10 @@ function startToolStreamPoll(agentId) {
           if (!c) continue;
           toolBuckets[c.bucket] = (toolBuckets[c.bucket] || 0) + 1;
         }
+        // Latest entry drives the "Last: …" inline line — show the
+        // user the most recent thing the agent finished doing.
+        const last = fresh[fresh.length - 1];
+        latestToolEntry = { content: last.Content || last.content || '' };
         lastSeenToolTimestamp = tools[tools.length - 1].Timestamp || tools[tools.length - 1].timestamp;
         if (lastKnownAgent) refreshWorkingIndicator(lastKnownAgent);
       }
