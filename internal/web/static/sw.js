@@ -1,5 +1,5 @@
 // Service Worker for Agent Dashboard PWA
-const CACHE_NAME = 'agent-dashboard-v2';
+const CACHE_NAME = 'agent-dashboard-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -46,21 +46,38 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch strategy
+//   /api/, /events       → network only (live data)
+//   *.js, *.css, *.html  → network-first with cache fallback (so a
+//                          freshly-deployed style.css / app.js wins
+//                          immediately, but offline still works)
+//   everything else      → cache-first with background revalidation
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache API calls or SSE
   if (url.pathname.startsWith('/api/') || url.pathname === '/events') {
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // Cache-first for static assets
+  const isCode = /\.(?:js|css|html)$/.test(url.pathname) || url.pathname === '/';
+  if (isCode) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first with background revalidation for everything else.
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) {
-        // Update cache in background
         fetch(event.request).then((response) => {
           if (response.ok) {
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response));
