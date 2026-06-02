@@ -884,3 +884,52 @@ test.describe('Sending caption clears on POST ack and does not reappear', () => 
     await expect(page.locator('.ui-msg__caption--sending')).toHaveCount(0);
   });
 });
+
+// ---------- Foldable / responsive viewport sweep ----------
+//
+// Samsung Galaxy Z Flip 7 inner display unfolds to ~412×1010 CSS px.
+// Landscape (1010×412) lands above the 900px desktop breakpoint and
+// should render the two-pane shell. Cover screen at 320×384 is the
+// tightest mobile viewport we care about — percentage-based CSS must
+// not overflow.
+
+test.describe('Z Flip 7 + extreme mobile viewports', () => {
+  test('inner portrait 412×1010 renders mobile single-column', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 1010 });
+    await mockApi(page, [makeAgent()]);
+    await page.goto('/');
+    await page.waitForSelector('.ui-row', { timeout: 5000 });
+
+    const sidebar = page.locator('#app-sidebar');
+    expect(await sidebar.isVisible()).toBe(false);
+    // Main pane fills the viewport.
+    const mainBox = await page.locator('#app-main').boundingBox();
+    expect(mainBox.width).toBeCloseTo(412, 0);
+  });
+
+  test('landscape 1010×412 crosses 900px breakpoint → desktop shell', async ({ page }) => {
+    await page.setViewportSize({ width: 1010, height: 412 });
+    await mockApi(page, [makeAgent()]);
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__inner', { timeout: 5000 });
+
+    const sidebar = page.locator('#app-sidebar');
+    await expect(sidebar).toBeVisible();
+    const display = await page.locator('#app-shell').evaluate((el) => getComputedStyle(el).display);
+    expect(display).toBe('grid');
+  });
+
+  test('cover screen 320×384 no horizontal overflow on body', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 384 });
+    await mockApi(page, [makeAgent()]);
+    await page.goto('/');
+    await page.waitForSelector('.ui-row', { timeout: 5000 });
+
+    // Page-level horizontal overflow check — body scrollWidth must equal viewport width.
+    const dims = await page.evaluate(() => ({
+      scrollWidth: document.body.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(dims.scrollWidth).toBeLessThanOrEqual(dims.clientWidth + 1);
+  });
+});
