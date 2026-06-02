@@ -2009,8 +2009,8 @@ func TestPWAServiceWorkerCacheVersion(t *testing.T) {
 		t.Fatalf("read sw.js: %v", err)
 	}
 	body := string(raw)
-	if !strings.Contains(body, "agent-dashboard-v20") {
-		t.Errorf("sw.js cache version: missing 'agent-dashboard-v20' (must bump when icon paths change)")
+	if !strings.Contains(body, "agent-dashboard-v21") {
+		t.Errorf("sw.js cache version: missing 'agent-dashboard-v21' (must bump when icon paths change)")
 	}
 	if strings.Contains(body, "icon-192.svg") {
 		t.Errorf("sw.js still references icon-192.svg (should be /icons/icon-192.png)")
@@ -2042,5 +2042,50 @@ func TestPWAIndexHTMLHasAppleTouchIcon(t *testing.T) {
 	}
 	if !strings.Contains(body, "/icons/apple-touch-icon.png") {
 		t.Error(`index.html apple-touch-icon should point to /icons/apple-touch-icon.png`)
+	}
+}
+
+func TestFaviconServesEmbeddedPNG(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	indexResp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	indexRaw, err := io.ReadAll(indexResp.Body)
+	indexResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	indexBody := string(indexRaw)
+	if strings.Contains(indexBody, "fill='%233b82f6'") || strings.Contains(indexBody, "EA%3C/text%3E") {
+		t.Error("index.html still references the old blue 'A' placeholder favicon")
+	}
+	if !strings.Contains(indexBody, `href="/favicon.svg"`) {
+		t.Error(`index.html should reference /favicon.svg`)
+	}
+
+	svgResp, err := http.Get(ts.URL + "/favicon.svg")
+	if err != nil {
+		t.Fatalf("GET /favicon.svg: %v", err)
+	}
+	defer svgResp.Body.Close()
+	if svgResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /favicon.svg: status %d, want 200", svgResp.StatusCode)
+	}
+	svgRaw, err := io.ReadAll(svgResp.Body)
+	if err != nil {
+		t.Fatalf("read favicon.svg: %v", err)
+	}
+	svgBody := string(svgRaw)
+	if !strings.Contains(svgBody, "<svg ") {
+		t.Error("favicon.svg should be an SVG document")
+	}
+	if !strings.Contains(svgBody, "data:image/png;base64,") {
+		t.Error("favicon.svg should embed a base64 PNG via <image>")
 	}
 }
