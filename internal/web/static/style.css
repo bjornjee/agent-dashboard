@@ -474,15 +474,25 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   vertical-align: middle;
 }
 
-/* Inline "working" indicator — single flat-prose line at the end of
- * the conversation while the agent is processing. No dot, no bubble,
- * no log list. The animated ellipsis is the only live affordance,
- * matching the Codex chat pattern. Disappears when state flips off. */
+/* Inline "working" indicator — two stacked flat-prose lines at the end
+ * of the conversation while the agent is processing:
+ *   1. tally: muted Codex-style "Read 3 files · ran 2 commands"
+ *   2. live:  pulsing "Reading file…" / "Thinking…"
+ * No dot, no bubble, no log list. Disappears when state flips off. */
 .ui-msg-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: var(--space-2) var(--space-5);
+  align-self: flex-start;
+}
+.ui-msg-status__tally {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.ui-msg-status__live {
   color: var(--text-muted);
   font-size: 15px;
-  align-self: flex-start;
 }
 .ui-msg-status__label {
   display: inline-flex;

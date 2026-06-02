@@ -180,17 +180,72 @@ let lastKnownAgent = null;
 
 const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
 
-// Running tally of tool calls fired during this working session. The
-// pulsing indicator shows "Thinking" / "Running <tool>" — the count
-// becomes a Codex-style "ran N commands" badge after the agent finishes.
-let toolsThisTurn = 0;
+// Map raw tool names to user-legible action verbs. Anything not in this
+// table falls into the "ran tool" bucket; the bucket is what surfaces
+// in the rolled-up tally so internal names like "TaskUpdate" never
+// reach the chat copy.
+//   buckets: 'file_read' | 'file_edit' | 'search' | 'command' | 'task' |
+//            'browser' | 'thinking' | 'other'
+function classifyTool(name) {
+  if (!name) return null;
+  const n = String(name);
+  if (n === 'Read' || n === 'NotebookRead') return { bucket: 'file_read', live: 'Reading file' };
+  if (n === 'Edit' || n === 'Write' || n === 'MultiEdit' || n === 'NotebookEdit') return { bucket: 'file_edit', live: 'Editing file' };
+  if (n === 'Grep' || n === 'Glob') return { bucket: 'search', live: 'Searching' };
+  if (n === 'Bash' || n === 'BashOutput' || n === 'KillShell') return { bucket: 'command', live: 'Running command' };
+  if (n.startsWith('Task') || n === 'TodoWrite') return { bucket: 'task', live: 'Updating tasks' };
+  if (n.startsWith('mcp__plugin_playwright') || n.startsWith('mcp__playwright')) return { bucket: 'browser', live: 'Driving browser' };
+  if (n.startsWith('mcp__')) return { bucket: 'mcp', live: 'Calling MCP tool' };
+  if (n === 'WebFetch' || n === 'WebSearch') return { bucket: 'web', live: 'Fetching web content' };
+  return { bucket: 'other', live: 'Running ' + n };
+}
+
+const BUCKET_LABELS = {
+  file_read: ['Read', 'file', 'files'],
+  file_edit: ['Edited', 'file', 'files'],
+  search:    ['Ran', 'search', 'searches'],
+  command:   ['Ran', 'command', 'commands'],
+  task:      ['Updated', 'task', 'tasks'],
+  browser:   ['Drove browser', 'step', 'steps'],
+  mcp:       ['Called', 'MCP tool', 'MCP tools'],
+  web:       ['Fetched', 'page', 'pages'],
+  other:     ['Ran', 'tool', 'tools'],
+};
+
+// Running tally of tools fired during this working session, bucketed
+// by category. Cleared when the agent leaves a working state.
+let toolBuckets = {};
 let toolStreamPollTimer = null;
 let lastSeenToolTimestamp = null;
 
-// Mounts / updates / removes the single inline "working" line at the
-// end of the conversation stream. Plain prose, no log list, no dot
-// prefix — matches the Codex chat pattern where the only live affordance
-// during work is the "Thinking" word + an animated underline.
+// Extract the tool name from an activity entry like "→ Bash: …" or
+// "→ mcp__playwright__browser_take_screenshot: …".
+function parseToolName(content) {
+  const m = String(content || '').match(/^→\s+([^:\s]+)/);
+  return m ? m[1] : '';
+}
+
+// Render the tally as "Read 3 files · ran 2 commands · edited 1 file".
+function renderToolTally(buckets) {
+  const parts = [];
+  for (const [bucket, count] of Object.entries(buckets)) {
+    if (!count) continue;
+    const [verb, singular, plural] = BUCKET_LABELS[bucket] || BUCKET_LABELS.other;
+    const noun = count === 1 ? singular : plural;
+    parts.push(verb.toLowerCase() + ' ' + count + ' ' + noun);
+  }
+  if (!parts.length) return '';
+  // Capitalise the first chunk.
+  parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+  return parts.join(' · ');
+}
+
+// Mounts / updates / removes the inline "working" block at the end of
+// the conversation stream. Two stacked lines:
+//   1. (optional) muted tally — "Read 3 files · ran 2 commands"
+//   2. live pulsing line     — "Reading file…" / "Thinking…"
+// The tally is derived from the activity-stream poll; the live line is
+// derived from agent.current_tool via the classifyTool() bucket table.
 export function refreshWorkingIndicator(agent) {
   if (agent) lastKnownAgent = agent;
   const container = document.querySelector('#tab-conversation .conversation');
@@ -201,10 +256,18 @@ export function refreshWorkingIndicator(agent) {
     if (existing) existing.remove();
     return;
   }
-  const label = agent.current_tool ? 'Running ' + agent.current_tool : 'Thinking';
+  const classified = classifyTool(agent.current_tool);
+  const liveLabel = classified ? classified.live : 'Thinking';
+  const tally = renderToolTally(toolBuckets);
+  const tallyHtml = tally
+    ? '<div class="ui-msg-status__tally">' + escapeHtml(tally) + '</div>'
+    : '';
   const html =
-    '<span class="ui-msg-status__label">' + escapeHtml(label) +
-    '<span class="ui-msg-status__ellipsis">…</span></span>';
+    tallyHtml +
+    '<div class="ui-msg-status__live">' +
+      '<span class="ui-msg-status__label">' + escapeHtml(liveLabel) +
+      '<span class="ui-msg-status__ellipsis">…</span></span>' +
+    '</div>';
   if (existing) {
     if (existing.innerHTML !== html) existing.innerHTML = html;
   } else {
@@ -233,7 +296,7 @@ function startToolStreamPoll(agentId) {
   stopToolStreamPoll();
   const tick = async () => {
     if (!lastKnownAgent || !WORKING_STATES.has(effectiveState(lastKnownAgent))) {
-      toolsThisTurn = 0;
+      toolBuckets = {};
       lastSeenToolTimestamp = null;
       stopToolStreamPoll();
       return;
@@ -245,10 +308,16 @@ function startToolStreamPoll(agentId) {
       const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
       const fresh = lastSeenToolTimestamp
         ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
-        : tools;
+        : tools.slice(-30); // seed from recent history on first tick
       if (fresh.length) {
-        toolsThisTurn += fresh.length;
+        for (const t of fresh) {
+          const name = parseToolName(t.Content || t.content);
+          const c = classifyTool(name);
+          if (!c) continue;
+          toolBuckets[c.bucket] = (toolBuckets[c.bucket] || 0) + 1;
+        }
         lastSeenToolTimestamp = tools[tools.length - 1].Timestamp || tools[tools.length - 1].timestamp;
+        if (lastKnownAgent) refreshWorkingIndicator(lastKnownAgent);
       }
     } catch { /* ignore */ }
   };
