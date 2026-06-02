@@ -1144,9 +1144,6 @@ button.btn-ghost.btn-sm {
   box-shadow: 0 4px 12px var(--shadow-medium);
 }
 
-.modal h3 { margin-bottom: 12px; font-size: 16px; font-weight: 500; }
-.modal p { color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; }
-
 .modal-actions {
   display: flex;
   gap: 8px;
