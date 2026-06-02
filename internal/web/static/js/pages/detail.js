@@ -166,29 +166,26 @@ function renderActionBar(agent) {
     actions += inlineBtn('Close', 'ghost', `Dashboard.confirmClose('${id}')`);
   }
 
-  // Composer is always one row: attach + textarea + (stop OR send). Stop replaces send when the
-  // agent is processing — matches Codex iOS pattern (single primary affordance on the right edge).
-  const INPUT_STATES = ['running', 'permission', 'plan', 'question', 'error', 'pr', 'idle_prompt'];
+  // Composer is always present so the user can ask follow-up questions
+  // regardless of the agent's terminal state. The stop button only appears
+  // while the agent is actively processing; otherwise the send button.
   const STOP_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
-  let composer = '';
-  if (INPUT_STATES.includes(st)) {
-    const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…' : 'Message';
-    const trailing = STOP_STATES.has(st)
-      ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
-      : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
-    composer = `<div class="ui-composer detail-composer">
-      <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
-      <textarea
-        class="ui-composer__input"
-        id="reply-input"
-        rows="1"
-        placeholder="${escapeHtml(placeholder)}"
-        oninput="UI.composerAutoSize(this)"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
-      ></textarea>
-      ${trailing}
-    </div>`;
-  }
+  const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…' : 'Message';
+  const trailing = STOP_STATES.has(st)
+    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
+    : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
+  const composer = `<div class="ui-composer detail-composer">
+    <button class="ui-composer__attach" aria-label="Attach" tabindex="-1">${ICONS.attach}</button>
+    <textarea
+      class="ui-composer__input"
+      id="reply-input"
+      rows="1"
+      placeholder="${escapeHtml(placeholder)}"
+      oninput="UI.composerAutoSize(this)"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Dashboard.sendInput('${id}')}"
+    ></textarea>
+    ${trailing}
+  </div>`;
 
   const actionRow = actions ? `<div class="action-row">${actions}</div>` : '';
   return `<div class="action-bar">${actionRow}${composer}</div>`;

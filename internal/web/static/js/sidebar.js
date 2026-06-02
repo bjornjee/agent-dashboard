@@ -9,7 +9,7 @@ import { escapeHtml, repoName, durationShort } from './format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
-export const DESKTOP_MQ = '(min-width: 1024px)';
+export const DESKTOP_MQ = '(min-width: 900px)';
 
 export function isDesktop() {
   return typeof window !== 'undefined' && window.matchMedia(DESKTOP_MQ).matches;

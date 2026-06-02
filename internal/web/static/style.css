@@ -87,8 +87,8 @@
   --transition-default: 200ms ease-out;
   --transition-slow: 280ms ease-out;
 
-  /* Desktop layout tokens (consumed only inside @media (min-width: 1024px)) */
-  --bp-desktop: 1024px;
+  /* Desktop layout tokens (consumed only inside @media (min-width: 900px)) */
+  --bp-desktop: 900px;
   --sidebar-width: 264px;
   --bg-sidebar: #0E0E10;
   --bg-selected: #222226;
@@ -1940,6 +1940,17 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
  * #app-sidebar carries hidden on mobile; desktop @media unhides it. */
 #app-sidebar[hidden] { display: none; }
 
+/* Belt-and-braces: the floating dock (added to document.body by list.js)
+ * must never appear on detail view, even if a prior list render left one
+ * and the SSE update path forgot to clean it up. The header dock variant
+ * (.ui-dock--header) is excluded — it lives inside the detail app-bar. */
+body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
+
+/* Plan tab focuses on the approved plan markdown — hide Stats + Subagents
+ * disclosures so the plan reads cleanly. They remain visible on Chat /
+ * Activity / Diff tabs. */
+.detail-scroll:has(#tab-plan.active) .detail-supplementary { display: none; }
+
 /* Boot loading: visible on every viewport before app.js hydrates. */
 .boot-loading {
   min-height: 100vh;
@@ -1948,7 +1959,7 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
   justify-content: center;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
   #app-shell {
     display: grid;
     grid-template-columns: var(--sidebar-width) 1fr;

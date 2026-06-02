@@ -139,21 +139,19 @@ test.describe('Desktop shell layout', () => {
     expect(mainBox.width).toBeCloseTo(1280 - 264, 0);
   });
 
-  test('mobile breakpoint at 1023px hides the sidebar and stacks single-column', async ({ page }) => {
-    await page.setViewportSize({ width: 1023, height: 800 });
+  test('mobile breakpoint at 899px hides the sidebar and stacks single-column', async ({ page }) => {
+    await page.setViewportSize({ width: 899, height: 800 });
     await mockApi(page, [makeAgent()]);
     await page.goto('/');
     await page.waitForSelector('.agent-card, .ui-row', { timeout: 5000 });
 
     const sidebar = page.locator('#app-sidebar');
-    // Either display:none via the CSS rule below the breakpoint, or hidden attr.
     const visible = await sidebar.isVisible();
     expect(visible).toBe(false);
 
-    // Main pane takes the full viewport.
     const mainBox = await page.locator('#app-main').boundingBox();
     expect(mainBox).not.toBeNull();
-    expect(mainBox.width).toBeCloseTo(1023, 0);
+    expect(mainBox.width).toBeCloseTo(899, 0);
   });
 });
 
