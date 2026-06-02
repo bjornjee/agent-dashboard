@@ -265,8 +265,7 @@ export function refreshWorkingIndicator(agent) {
   const html =
     tallyHtml +
     '<div class="ui-msg-status__live">' +
-      '<span class="ui-msg-status__label">' + escapeHtml(liveLabel) +
-      '<span class="ui-msg-status__ellipsis">…</span></span>' +
+      '<span class="ui-msg-status__label">' + escapeHtml(liveLabel) + '</span>' +
     '</div>';
   if (existing) {
     if (existing.innerHTML !== html) existing.innerHTML = html;

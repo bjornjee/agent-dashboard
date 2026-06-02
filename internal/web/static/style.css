@@ -477,8 +477,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 /* Inline "working" indicator — two stacked flat-prose lines at the end
  * of the conversation while the agent is processing:
  *   1. tally: muted Codex-style "Read 3 files · ran 2 commands"
- *   2. live:  pulsing "Reading file…" / "Thinking…"
- * No dot, no bubble, no log list. Disappears when state flips off. */
+ *   2. live:  shimmering "Reading file" / "Thinking" — no ellipsis,
+ *      no dot, no bubble. The shimmer is a moving gradient across the
+ *      text itself, matching Codex's "Thinking" treatment. */
 .ui-msg-status {
   display: flex;
   flex-direction: column;
@@ -491,26 +492,31 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   font-size: 12px;
 }
 .ui-msg-status__live {
-  color: var(--text-muted);
   font-size: 15px;
 }
 .ui-msg-status__label {
-  display: inline-flex;
-  align-items: baseline;
-}
-.ui-msg-status__ellipsis {
+  /* Shimmer: a moving lightness gradient swept across the text.
+   * background-clip:text projects the gradient onto the glyphs;
+   * the keyframe shifts background-position from -200% to 200%. */
   display: inline-block;
-  width: 1.2em;
-  animation: ui-msg-status-ellipsis 1.4s steps(4, end) infinite;
-  overflow: hidden;
-  white-space: nowrap;
-  vertical-align: baseline;
+  background: linear-gradient(
+    90deg,
+    var(--text-faint) 0%,
+    var(--text-faint) 40%,
+    var(--text-primary) 50%,
+    var(--text-faint) 60%,
+    var(--text-faint) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: ui-msg-status-shimmer 2.4s linear infinite;
 }
-@keyframes ui-msg-status-ellipsis {
-  0%   { width: 0;     }
-  33%  { width: 0.4em; }
-  66%  { width: 0.8em; }
-  100% { width: 1.2em; }
+@keyframes ui-msg-status-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 .ui-msg__tool {
   display: inline-flex;
