@@ -236,6 +236,13 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 			if e := parseAssistantEntry(entry); e != nil {
 				all = append(all, *e)
 			}
+			// Emit a synthetic plan-saved entry per ExitPlanMode tool_use
+			// in this assistant message. Anchors the chat-stream plan-link
+			// card to the timeline position where the plan was written —
+			// append-only, scrolls with history.
+			if planEntry := extractPlanSavedEntry(entry); planEntry != nil {
+				all = append(all, *planEntry)
+			}
 		}
 	}
 
@@ -422,6 +429,32 @@ func parseAssistantEntry(entry jsonlEntry) *domain.ConversationEntry {
 		Content:   truncate(content, 32000),
 		Timestamp: entry.Timestamp,
 	}
+}
+
+// extractPlanSavedEntry returns a synthetic ConversationEntry with
+// Role="plan-saved" when the assistant message contains an
+// ExitPlanMode tool_use. The frontend uses Role to render a chat-
+// stream plan-link card at this timeline position. Returns nil if
+// no ExitPlanMode block is present.
+func extractPlanSavedEntry(entry jsonlEntry) *domain.ConversationEntry {
+	var env messageEnvelope
+	if err := json.Unmarshal(entry.Message, &env); err != nil {
+		return nil
+	}
+	var blocks []toolUseBlock
+	if err := json.Unmarshal(env.Content, &blocks); err != nil {
+		return nil
+	}
+	for _, b := range blocks {
+		if b.Type == "tool_use" && b.Name == "ExitPlanMode" {
+			return &domain.ConversationEntry{
+				Role:      "plan-saved",
+				Content:   "",
+				Timestamp: entry.Timestamp,
+			}
+		}
+	}
+	return nil
 }
 
 // -- Activity Log (includes tool_use entries) --

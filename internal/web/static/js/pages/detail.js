@@ -592,6 +592,21 @@ let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
 
+// Render a chat-stream plan-link card. Anchored at the timeline
+// position of an ExitPlanMode tool entry so it behaves like an
+// append-only chat bubble: written once, re-renders identically on
+// every poll, scrolls with the rest of the conversation history.
+function renderPlanLinkCard() {
+  return `<button class="chat-plan-link" type="button" onclick="Dashboard.openDetailTab('plan')">
+    <span class="chat-plan-link__icon">${ICONS.clipboard}</span>
+    <span class="chat-plan-link__body">
+      <span class="chat-plan-link__label">Plan</span>
+      <span class="chat-plan-link__title">View plan</span>
+    </span>
+    <span class="chat-plan-link__chevron">${ICONS.chevronRight}</span>
+  </button>`;
+}
+
 // Build conversation HTML from an array of message entries — Codex flat-prose.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
@@ -599,6 +614,13 @@ function renderConversationHtml(entries) {
     // Skip task-notification messages (internal agent-to-agent noise)
     if (entry.IsNotification) continue;
     const role = entry.Role || entry.role;
+    // plan-saved is a backend-emitted synthetic entry per ExitPlanMode
+    // tool_use. Render the chat-stream plan-link card at this timeline
+    // position — append-only, scrolls with conversation history.
+    if (role === 'plan-saved') {
+      html += renderPlanLinkCard();
+      continue;
+    }
     const content = entry.Content || entry.content || '';
     if (!content) continue;
     if (role === 'human') {

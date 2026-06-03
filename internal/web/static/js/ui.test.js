@@ -74,3 +74,4 @@ test('tool footer — label is HTML-escaped', () => {
   const html = UI.message('assistant', '', { tool: { label: '<x>' } });
   assert.match(html, /<span>&lt;x&gt;<\/span>/);
 });
+

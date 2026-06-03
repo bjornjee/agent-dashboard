@@ -1180,6 +1180,49 @@ func TestParseUserEntry_SlashCommand(t *testing.T) {
 
 // -- HasPendingPlanReview tests --
 
+func TestReadConversation_EmitsPlanSavedEntry(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-plan"
+
+	// Human prompt -> assistant turn with text + ExitPlanMode tool_use.
+	// Expect three entries: human, assistant text, synthetic plan-saved.
+	jsonl := `{"type":"user","message":{"role":"user","content":"plan it"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Here is the plan."},{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{"plan":"# Title\n\nbody"}}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	if len(got) != 3 {
+		t.Fatalf("got %d entries, want 3 (human, assistant, plan-saved); entries=%+v", len(got), got)
+	}
+	if got[2].Role != "plan-saved" {
+		t.Errorf("got[2].Role = %q, want plan-saved", got[2].Role)
+	}
+	if got[2].Timestamp != "2026-03-28T10:00:01Z" {
+		t.Errorf("plan-saved timestamp = %q, want assistant turn timestamp", got[2].Timestamp)
+	}
+}
+
+func TestReadConversation_NoPlanSavedWithoutExitPlanMode(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-noplan"
+
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	for _, e := range got {
+		if e.Role == "plan-saved" {
+			t.Errorf("unexpected plan-saved entry: %+v", e)
+		}
+	}
+}
+
 func TestHasPendingPlanReview_Pending(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "proj")

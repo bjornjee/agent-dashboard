@@ -477,6 +477,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   line-height: 22px;
   max-width: 75%;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
   max-height: 260px;
   overflow-y: auto;
@@ -539,11 +540,43 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   font-size: 15px;
   line-height: 23px;
   max-width: 100%;
+  min-width: 0;
+  /* overflow-wrap: anywhere breaks long unbroken tokens (URLs, paths,
+   * `--user-data-dir=...` Chrome args) so the chat column never
+   * triggers a viewport-level horizontal scroll. word-wrap kept for
+   * legacy fallback. */
+  overflow-wrap: anywhere;
   word-wrap: break-word;
   letter-spacing: -0.005em;
 }
-.ui-msg__prose code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 14px; }
-.ui-msg__prose pre { background: var(--bg-code); color: var(--code-text); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); overflow-x: auto; margin: var(--space-2) 0; }
+.ui-msg__prose code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
+/* <pre> code blocks: scroll INSIDE the block (correct, preserves code
+ * formatting) but max-width: 100% so the block itself never pushes the
+ * conversation column beyond its bounds. */
+.ui-msg__prose pre { background: var(--bg-code); color: var(--code-text); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); overflow-x: auto; margin: var(--space-2) 0; max-width: 100%; }
+/* Tables inside chat bubbles — Codex pattern. Wide tables (>6 cols)
+ * never fit on mobile. Wrap each table in an auto-scrolling block
+ * sized to the chat column width so the table scrolls horizontally
+ * within its own bounds; the conversation column stays put. The
+ * scroll wrapper is created by marked + DOMPurify's default <table>
+ * output (display: block with overflow). */
+.ui-msg__prose table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+}
+.ui-msg__prose table th,
+.ui-msg__prose table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  white-space: nowrap;
+}
+.ui-msg__prose table th { font-weight: 600; color: var(--text-primary); }
+.ui-msg__prose table tr + tr td { border-top: 1px solid var(--border-subtle); }
 .ui-msg__prose pre code { background: none; padding: 0; }
 .ui-msg__prose p { margin: 0 0 var(--space-3); }
 .ui-msg__prose p:last-child { margin-bottom: 0; }
@@ -730,6 +763,69 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   font-size: 13px;
   width: fit-content;
 }
+
+/* Plan-link card — Codex pattern. Shown inline in the chat stream once
+ * the agent has written a plan; click jumps to the Plan tab. The card
+ * shares surface tokens with the assistant message card so the visual
+ * rhythm carries from one bubble to the next. */
+.chat-plan-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  margin: var(--space-2) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.chat-plan-link:hover {
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+.chat-plan-link__icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-plan-link__icon svg { width: 18px; height: 18px; }
+.chat-plan-link__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-plan-link__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.chat-plan-link__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-plan-link__chevron { color: var(--text-faint); display: inline-flex; flex-shrink: 0; }
+[data-theme="light"] .chat-plan-link,
+[data-theme="light"] .chat-plan-link__icon {
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] .chat-plan-link:hover { transform: none; border-color: var(--border-hover); }
 .ui-msg__tool > svg:first-child { color: var(--accent-green); width: 14px; height: 14px; }
 .ui-msg__tool > svg:last-child { color: var(--text-muted); }
 .ui-msg__tool > span { flex: 1; }
@@ -917,10 +1013,12 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   font-size: 13px;
   line-height: 18px;
   color: var(--text-secondary);
+  min-width: 0;
+  max-width: 100%;
 }
 .subagent-pill--muted { color: var(--text-muted); background: transparent; padding-left: 0; padding-right: 0; }
 .subagent-type { font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
-.subagent-desc { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subagent-desc { color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subagent-mode { color: var(--text-faint); font-family: var(--font-mono); font-size: 12px; }
 .subagent-time { color: var(--text-faint); margin-left: auto; flex-shrink: 0; }
 .subagent-summary-list .status-dot { width: 6px; height: 6px; }
@@ -932,11 +1030,19 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .tab-content { padding: 0 var(--space-5); }
 .tab-content > .conversation { padding: 0; }
 /* Plan tab — long-form markdown reads tight at 20 px on mobile.
- * Lift to 24 px on mobile and 32 px on desktop so the prose has
- * breathing room and the headings don't crowd the viewport edge. */
-#tab-plan { padding-left: var(--space-6); padding-right: var(--space-6); }
+ * Lift horizontal to 24 px / 32 px and add a top pad so the first
+ * heading isn't slammed against the tab bar's underline. */
+#tab-plan {
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+  padding-top: var(--space-5);
+}
 @media (min-width: 900px) {
-  #tab-plan { padding-left: var(--space-7); padding-right: var(--space-7); }
+  #tab-plan {
+    padding-left: var(--space-7);
+    padding-right: var(--space-7);
+    padding-top: var(--space-6);
+  }
 }
 
 /* Kill browser default focus chrome on tab buttons; keep keyboard-only visible focus */
@@ -2422,6 +2528,7 @@ button.btn-ghost.btn-sm {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
 .tool-call {
@@ -2429,12 +2536,15 @@ button.btn-ghost.btn-sm {
   border-left: 1px solid var(--border-default);
   margin-left: 6px;
   margin-top: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tool-call__name {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--code-text);
+  overflow-wrap: anywhere;
 }
 
 .tool-call__status {

@@ -175,6 +175,14 @@ window.Dashboard = {
     navigateTo('detail', id, true);
   },
 
+  // Programmatic tab switch — used by the chat plan-link card so it
+  // can jump to the Plan tab without simulating a click event handler.
+  // Mirrors the inline behaviour of the .detail-tabs__tab click listener.
+  openDetailTab(target) {
+    const tab = document.querySelector('.detail-tabs__tab[data-tab="' + target + '"]');
+    if (tab) tab.click();
+  },
+
   async approve(id, evt) {
     await withSpinner(evt, async () => {
       const result = await post('/api/agents/' + id + '/approve');
