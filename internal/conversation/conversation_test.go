@@ -1297,14 +1297,37 @@ func TestHasPendingQuestion_Pending(t *testing.T) {
 	os.MkdirAll(projDir, 0755)
 	sessionID := "sess-1"
 
-	// AskUserQuestion followed by tool_result only -> still pending
+	// AskUserQuestion (t1) with NO subsequent reply -> pending. The user
+	// entry that follows is a tool_result for a DIFFERENT tool_use_id
+	// (a sibling sidechain Bash result), which must not count as the
+	// answer to t1.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"bash-99","type":"tool_result","content":"ok"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected pending question -- unrelated tool_result is not the answer")
+	}
+}
+
+func TestHasPendingQuestion_AnsweredViaToolResult(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// AskUserQuestion (t1) answered via a tool_result whose
+	// tool_use_id matches t1 -- this is what the dashboard's "Send
+	// Answer" button posts. Question must be considered resolved so
+	// the question card disappears.
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Option A"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
 	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
 
-	if !HasPendingQuestion(projDir, sessionID) {
-		t.Error("expected pending question -- tool_result is not a human response")
+	if HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected NO pending question -- matching tool_result is the answer (dashboard Send Answer flow)")
 	}
 }
 
@@ -1366,8 +1389,11 @@ func TestReadPendingQuestion_MultiQuestionPayload(t *testing.T) {
 	os.MkdirAll(projDir, 0755)
 	sessionID := "sess-1"
 
+	// The trailing tool_result has a NON-matching tool_use_id, so it
+	// does not resolve tool_abc. Question remains pending and the
+	// payload parses correctly.
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_abc","name":"AskUserQuestion","input":{"questions":[{"question":"What should this feature deliver?","header":"Deliverable","multiSelect":false,"options":[{"label":"Implement fixes (Recommended)","description":"Add tests and repo changes for fixable gaps."},{"label":"Report only","description":"Produce a readiness grade without changing site code."}]},{"question":"How should we handle external checks?","header":"External","multiSelect":false,"options":[{"label":"Document actions (Recommended)","description":"Use live public probes and repo checks."},{"label":"Use credentials","description":"Plan for authenticated checks if you provide credentials."}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
-{"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool_abc","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"sibling-bash-99","type":"tool_result","content":"ls ok"}]},"timestamp":"2026-06-02T10:00:01Z"}
 `
 	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
 		t.Fatalf("write jsonl: %v", err)
@@ -1462,8 +1488,8 @@ func TestReadPendingQuestion_FindsEntryBeyondTailWindow(t *testing.T) {
 
 	var b strings.Builder
 	b.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_BEYOND","name":"AskUserQuestion","input":{"questions":[{"question":"Which path?","header":"Path","multiSelect":false,"options":[{"label":"A","description":"first"},{"label":"B","description":"second"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}` + "\n")
-	// System-generated tool_result placeholder that always follows.
-	b.WriteString(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_BEYOND","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}` + "\n")
+	// Unrelated sidechain tool_result — must NOT resolve toolu_BEYOND.
+	b.WriteString(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"sub_other","type":"tool_result","content":"ok"}]},"timestamp":"2026-06-02T10:00:01Z"}` + "\n")
 	// Pad with sidechain user tool_result entries to push the AskUserQuestion
 	// well past the previous 64KB tail window without inserting a human reply.
 	padLine := `{"type":"user","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"sub_t","content":[{"type":"text","text":"` + strings.Repeat("x", 500) + `"}]}]},"timestamp":"2026-06-02T10:00:02Z"}` + "\n"

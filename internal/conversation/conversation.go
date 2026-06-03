@@ -812,7 +812,10 @@ func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
 				humanAfter = false
 			}
 		case "user":
-			if lastInput != nil && isHumanUserEntry(entry.Message) {
+			if lastInput == nil {
+				continue
+			}
+			if isHumanUserEntry(entry.Message) || hasToolResultFor(entry.Message, lastID) {
 				humanAfter = true
 			}
 		}
@@ -998,6 +1001,7 @@ func hasPendingToolCall(projDir, sessionID, toolName string) bool {
 
 	found := false
 	humanAfter := false
+	var lastID string
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -1024,11 +1028,15 @@ func hasPendingToolCall(projDir, sessionID, toolName string) bool {
 				if b.Type == "tool_use" && b.Name == toolName {
 					found = true
 					humanAfter = false
+					lastID = toolUseID(line)
 					break
 				}
 			}
 		case "user":
-			if found && isHumanUserEntry(entry.Message) {
+			if !found {
+				continue
+			}
+			if isHumanUserEntry(entry.Message) || hasToolResultFor(entry.Message, lastID) {
 				humanAfter = true
 			}
 		}
@@ -1052,6 +1060,34 @@ func isHumanUserEntry(msg json.RawMessage) bool {
 	// If every block is a tool_result, it's system-generated
 	for _, b := range blocks {
 		if b.Type != "tool_result" {
+			return true
+		}
+	}
+	return false
+}
+
+// hasToolResultFor returns true if the user message contains a
+// tool_result block whose tool_use_id matches the supplied id. The
+// dashboard's "Send Answer" button posts AskUserQuestion responses
+// this way -- a matching tool_result IS the user's answer, even though
+// isHumanUserEntry returns false for tool_result-only messages.
+func hasToolResultFor(msg json.RawMessage, id string) bool {
+	if id == "" {
+		return false
+	}
+	var env messageEnvelope
+	if json.Unmarshal(msg, &env) != nil {
+		return false
+	}
+	var blocks []struct {
+		Type      string `json:"type"`
+		ToolUseID string `json:"tool_use_id"`
+	}
+	if json.Unmarshal(env.Content, &blocks) != nil {
+		return false
+	}
+	for _, b := range blocks {
+		if b.Type == "tool_result" && b.ToolUseID == id {
 			return true
 		}
 	}
