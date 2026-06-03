@@ -814,7 +814,24 @@ async function refreshConversation(agentId, agent) {
     && existingCard.dataset.sig === sig);
   if (reuseCard) existingCard.remove();
 
+  // Snapshot horizontal scroll positions of tables inside chat bubbles
+  // BEFORE the innerHTML wipe. Without this, every 2 s poll resets
+  // scrollLeft to 0 — the user reports the table "keeps auto scrolling
+  // to the left" while they're trying to read the right-side columns.
+  // Restored below by index (entry order is stable across polls; new
+  // tables only append at the bottom).
+  const tableScrolls = [];
+  container.querySelectorAll('.ui-msg__prose table').forEach(t => tableScrolls.push(t.scrollLeft));
+
   container.innerHTML = renderConversationHtml(entries);
+
+  // Restore the snapshotted scrollLeft on each table that survived
+  // (length match → 1:1 by index). When a new table appears it lands
+  // at the end; the existing tables keep their position.
+  const tablesAfter = container.querySelectorAll('.ui-msg__prose table');
+  for (let i = 0; i < Math.min(tableScrolls.length, tablesAfter.length); i++) {
+    tablesAfter[i].scrollLeft = tableScrolls[i];
+  }
 
   // Append the AskUserQuestion card inline after the last assistant
   // message when one is pending. The card is part of the chat stream,

@@ -509,6 +509,15 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   flex-shrink: 0;
   margin-top: 2px;
 }
+/* Mobile: drop the avatar circle. At 390 px the 28 px chip + gap eats
+ * ~40 px of column width per row — a meaningful tax when the user pill
+ * is right-aligned and the assistant card already carries its own
+ * surface. The soft card on the left + right-aligned user pill on the
+ * right already do the role differentiation. */
+@media (max-width: 720px) {
+  .ui-msg__avatar { display: none; }
+  .ui-msg--assistant { gap: 0; }
+}
 .ui-msg__card {
   flex: 1;
   min-width: 0;
@@ -684,10 +693,19 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   gap: 2px;
   padding: var(--space-2) var(--space-5);
   align-self: flex-start;
+  /* min-width:0 + max-width:100% so the column can shrink below its
+   * content's intrinsic width. Without this, a long mono "→ Bash: …"
+   * tool description forces the parent flex column to grow past the
+   * viewport, and the .ui-msg-status__latest ellipsis happens at the
+   * parent's edge (off-screen) instead of the viewport's edge. */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .ui-msg-status__tally {
   color: var(--text-faint);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .ui-msg-status__latest {
   color: var(--text-muted);
@@ -697,6 +715,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  min-width: 0;
 }
 .ui-msg-status__live {
   font-size: 15px;
