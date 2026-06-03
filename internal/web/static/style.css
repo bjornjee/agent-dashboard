@@ -774,27 +774,24 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   width: fit-content;
 }
 
-/* Plan-link card — Codex pattern. Shown inline in the chat stream once
- * the agent has written a plan; click jumps to the Plan tab. The card
- * shares surface tokens with the assistant message card so the visual
- * rhythm carries from one bubble to the next. */
+/* Plan-link rendered INSIDE an assistant message bubble — the
+ * .ui-msg__card wrapper carries the surface treatment + hover bg;
+ * this inner button just lays out the icon + label + chevron row
+ * and forwards the click to the Plan tab. No own bg/padding so the
+ * assistant card stays the visual unit. */
+.ui-msg__card--plan-link { cursor: pointer; }
 .chat-plan-link {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  margin: var(--space-2) 0;
-  padding: var(--space-3) var(--space-4);
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-.chat-plan-link:hover {
-  background: var(--bg-elevated);
-  transform: translateY(-1px);
 }
 .chat-plan-link__icon {
   display: inline-flex;

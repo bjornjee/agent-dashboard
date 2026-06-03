@@ -592,12 +592,15 @@ let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
 
-// Render a chat-stream plan-link card. Anchored at the timeline
-// position of an ExitPlanMode tool entry so it behaves like an
-// append-only chat bubble: written once, re-renders identically on
-// every poll, scrolls with the rest of the conversation history.
+// Render a chat-stream plan-link as an assistant message bubble.
+// Wrapped in .ui-msg--assistant + .ui-msg__card so it sits in the
+// conversation flow with the same surface treatment as a regular
+// agent reply — just clickable. Anchored to the backend-emitted
+// plan-saved synthetic entry's timestamp (ExitPlanMode tool_use or
+// first-slug entry) so the bubble stays in its chronological slot
+// across subsequent polls.
 function renderPlanLinkCard() {
-  return `<button class="chat-plan-link" type="button" onclick="Dashboard.openDetailTab('plan')">
+  const inner = `<button class="chat-plan-link" type="button" onclick="Dashboard.openDetailTab('plan')">
     <span class="chat-plan-link__icon">${ICONS.clipboard}</span>
     <span class="chat-plan-link__body">
       <span class="chat-plan-link__label">Plan</span>
@@ -605,6 +608,7 @@ function renderPlanLinkCard() {
     </span>
     <span class="chat-plan-link__chevron">${ICONS.chevronRight}</span>
   </button>`;
+  return `<div class="ui-msg ui-msg--assistant ui-msg--plan-link"><div class="ui-msg__card ui-msg__card--plan-link">${inner}</div></div>`;
 }
 
 // Build conversation HTML from an array of message entries — Codex flat-prose.
