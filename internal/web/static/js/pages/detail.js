@@ -607,15 +607,33 @@ function questionCardSignature(pending) {
   return parts.join('|');
 }
 
+function hasPendingQuestionPayload(pending) {
+  return !!(pending && Array.isArray(pending.questions) && pending.questions.length > 0);
+}
+
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < String(s || '').length; i++) {
+    h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+export function questionCardId(pending) {
+  if (pending && pending.tool_use_id) return pending.tool_use_id;
+  const sig = questionCardSignature(pending);
+  return sig ? `qc-${hashString(sig)}` : '';
+}
+
 // Anatomy matches docs/design/codex-screenshots/mobile/photo_2026-06-01_17-44-47.jpg —
 // elevated surface, per-question small-caps category label, radio list with
 // bold title + muted description, optional freeform answer input, single
 // white submit chip. Submission posts the composed answer to the existing
 // /input endpoint; the agent reads it as the user's next message and the
 // card disappears on the next poll once HasPendingQuestion clears.
-function renderQuestionCard(pending, agentId) {
-  if (!pending || !Array.isArray(pending.questions) || pending.questions.length === 0) return '';
-  const tid = escapeHtml(pending.tool_use_id || '');
+export function renderQuestionCard(pending, agentId) {
+  if (!hasPendingQuestionPayload(pending)) return '';
+  const tid = escapeHtml(questionCardId(pending));
   const sig = escapeHtml(questionCardSignature(pending));
   const blocks = pending.questions.map((q, qi) => {
     const header = q.header ? `<div class="question-card__label">${escapeHtml(q.header)}</div>` : '';
@@ -764,8 +782,9 @@ async function refreshConversation(agentId, agent) {
   // re-attach the same Node so checked radios / focus survive.
   const existingCard = container.querySelector('.question-card');
   const sig = pending ? questionCardSignature(pending) : '';
-  const reuseCard = !!(pending && pending.tool_use_id && existingCard
-    && existingCard.dataset.toolUseId === pending.tool_use_id
+  const pendingCardId = questionCardId(pending);
+  const reuseCard = !!(hasPendingQuestionPayload(pending) && pendingCardId && existingCard
+    && existingCard.dataset.toolUseId === pendingCardId
     && existingCard.dataset.sig === sig);
   if (reuseCard) existingCard.remove();
 
@@ -774,7 +793,7 @@ async function refreshConversation(agentId, agent) {
   // Append the AskUserQuestion card inline after the last assistant
   // message when one is pending. The card is part of the chat stream,
   // not the action bar — visitors keep prior context in view.
-  if (pending && pending.tool_use_id) {
+  if (hasPendingQuestionPayload(pending)) {
     const conv = container.querySelector('.conversation');
     if (conv) {
       if (reuseCard) {
@@ -1153,7 +1172,7 @@ async function loadTabContent(tab, agentId) {
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
-      if (pending && pending.tool_use_id) {
+      if (hasPendingQuestionPayload(pending)) {
         const conv = container.querySelector('.conversation');
         if (conv) {
           const wrap = document.createElement('div');
