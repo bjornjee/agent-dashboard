@@ -191,6 +191,10 @@ let conversationScrolledThisSession = false;
 // While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
 // and is followed by a "Sending…" caption sibling. Dashboard.sendInput
 // clears the flag (and removes the caption) once the POST resolves OK.
+//
+// The bubble is stamped with data-optimistic="1" so refreshConversation
+// can find it (after confirmUserMessageSent strips the visual class) and
+// remove it once the API echoes the message back as a real entry.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   pendingMessageAcked = false;
@@ -200,6 +204,7 @@ export function appendUserMessage(text) {
   wrap.innerHTML = UI.message('user', text);
   const msgEl = wrap.firstElementChild;
   if (msgEl) {
+    msgEl.dataset.optimistic = '1';
     msgEl.classList.add('ui-msg--optimistic');
     container.appendChild(msgEl);
     const caption = document.createElement('div');
@@ -569,23 +574,35 @@ let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
 
+// Drop entries the renderer wouldn't display (internal notifications,
+// empty content). Pure — exported for unit tests so the same predicate
+// drives appendNewEntries' count math.
+export function visibleEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  const out = [];
+  for (const entry of entries) {
+    if (entry.IsNotification) continue;
+    const content = entry.Content || entry.content || '';
+    if (!content) continue;
+    out.push(entry);
+  }
+  return out;
+}
+
+// Render a single visible entry to HTML. Extracted so both the initial
+// full-render path (renderConversationHtml) and the incremental poll
+// path (appendNewEntries) emit identical markup.
+function renderEntryHtml(entry) {
+  const role = entry.Role || entry.role;
+  const content = entry.Content || entry.content || '';
+  if (role === 'human') return UI.message('user', content);
+  return UI.message('assistant', renderMarkdown(content), { html: true });
+}
+
 // Build conversation HTML from an array of message entries — Codex flat-prose.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
-  for (const entry of entries) {
-    // Skip task-notification messages (internal agent-to-agent noise)
-    if (entry.IsNotification) continue;
-    const role = entry.Role || entry.role;
-    const content = entry.Content || entry.content || '';
-    if (!content) continue;
-    if (role === 'human') {
-      html += UI.message('user', content);
-    } else {
-      // Assistant prose with rendered markdown — keep HTML, don't escape again
-      const body = renderMarkdown(content);
-      html += UI.message('assistant', body, { html: true });
-    }
-  }
+  for (const entry of visibleEntries(entries)) html += renderEntryHtml(entry);
   html += '</div>';
   return html;
 }
@@ -750,8 +767,134 @@ function cssEscape(s) {
   return String(s).replace(/([^a-zA-Z0-9_-])/g, '\\$1');
 }
 
-// Re-fetch and re-render the conversation tab if it is currently active.
-// Called by the SSE handler to keep the chat view up to date.
+// Where new entries should be inserted: ahead of any decoration node
+// (question card, optimistic-message bubble + caption, working
+// indicator) so the rendered chat order stays
+//   entries → question card → optimistic msg → caption → working indicator
+// the way appendUserMessage and the original full-render path lay it out.
+// Returns null when nothing decorates the bottom yet, meaning "append".
+function entryInsertAnchor(conv) {
+  return conv.querySelector(
+    '.question-card, [data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working'
+  );
+}
+
+// Idempotent: append every visible entry past data-rendered-count to
+// `conv`, stamp the new count back. Entries the API has already shown
+// us are never touched, so their DOM (focus, caret, :checked, scroll)
+// survives the poll. If the conversation rewinds (history reset, agent
+// switch), falls back to a full rebuild of just the entry nodes — leaves
+// decoration siblings alone.
+function appendNewEntries(conv, entries) {
+  const visible = visibleEntries(entries);
+  const rendered = parseInt(conv.dataset.renderedCount || '0', 10);
+
+  if (visible.length < rendered) {
+    // Conversation got shorter — strip rendered entries and rebuild,
+    // keeping decoration siblings in place.
+    conv.querySelectorAll(':scope > [data-entry-idx]').forEach(el => el.remove());
+    const anchor = entryInsertAnchor(conv);
+    visible.forEach((entry, i) => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = renderEntryHtml(entry);
+      const el = wrap.firstElementChild;
+      if (!el) return;
+      el.dataset.entryIdx = String(i);
+      conv.insertBefore(el, anchor);
+    });
+    conv.dataset.renderedCount = String(visible.length);
+    return;
+  }
+
+  const anchor = entryInsertAnchor(conv);
+  for (let i = rendered; i < visible.length; i++) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderEntryHtml(visible[i]);
+    const el = wrap.firstElementChild;
+    if (!el) continue;
+    el.dataset.entryIdx = String(i);
+    conv.insertBefore(el, anchor);
+  }
+  conv.dataset.renderedCount = String(visible.length);
+}
+
+// Reconcile the AskUserQuestion card without touching it when the
+// pending payload is unchanged. This is the core of the fix: the card's
+// DOM node is preserved across polls, so focus, caret, input.value and
+// :checked all survive instead of being wiped + manually re-applied.
+function reconcileQuestionCard(conv, pending, agentId) {
+  const existing = conv.querySelector('.question-card');
+  if (!hasPendingQuestionPayload(pending)) {
+    if (existing) existing.remove();
+    return;
+  }
+  const sig = questionCardSignature(pending);
+  const pendingCardId = questionCardId(pending);
+  if (existing
+      && existing.dataset.toolUseId === pendingCardId
+      && existing.dataset.sig === sig) {
+    return; // identical card — leave it alone
+  }
+  if (existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderQuestionCard(pending, agentId);
+  const cardEl = wrap.firstElementChild;
+  if (!cardEl) return;
+  // Insert ahead of optimistic msg / caption / working indicator, after
+  // all entry messages — same slot the original full-render path used.
+  const anchor = conv.querySelector('[data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working');
+  conv.insertBefore(cardEl, anchor);
+}
+
+// Reconcile the in-flight optimistic user message. Three states:
+//   1. No pending message      → remove any leftover bubble / caption
+//   2. Pending + not yet acked → ensure bubble + "Sending…" caption present
+//   3. Pending + acked         → bubble present without caption (acked but
+//                                API hasn't echoed yet)
+// The bubble persists across polls — we never tear it down just to put
+// it back, so the .ui-msg--optimistic class transitions cleanly without
+// the bubble flickering.
+function reconcileOptimisticMessage(conv) {
+  const bubble = conv.querySelector('[data-optimistic="1"]');
+  const caption = conv.querySelector('.ui-msg__caption--sending');
+  if (!pendingUserMessage) {
+    if (bubble) bubble.remove();
+    if (caption) caption.remove();
+    return;
+  }
+  if (!bubble) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = UI.message('user', pendingUserMessage);
+    const el = wrap.firstElementChild;
+    if (el) {
+      el.dataset.optimistic = '1';
+      if (!pendingMessageAcked) el.classList.add('ui-msg--optimistic');
+      const anchor = conv.querySelector('.ui-msg__caption--sending, .ui-msg-status--working');
+      conv.insertBefore(el, anchor);
+    }
+  } else {
+    bubble.classList.toggle('ui-msg--optimistic', !pendingMessageAcked);
+  }
+  if (!pendingMessageAcked) {
+    if (!caption) {
+      const c = document.createElement('div');
+      c.className = 'ui-msg__caption ui-msg__caption--sending';
+      c.textContent = 'Sending…';
+      const anchor = conv.querySelector('.ui-msg-status--working');
+      conv.insertBefore(c, anchor);
+    }
+  } else if (caption) {
+    caption.remove();
+  }
+}
+
+// Re-fetch and incrementally update the conversation tab if it is currently
+// active. Called by the 2s poll and by the SSE handler.
+//
+// Incremental by design: only new entries are appended; the question card,
+// any optimistic message, and the working indicator are reconciled in
+// place. Nothing already in the DOM is detached, which is what lets focus,
+// caret position, :checked radios, and input.value survive every poll.
 async function refreshConversation(agentId, agent) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
@@ -764,75 +907,29 @@ async function refreshConversation(agentId, agent) {
   const scrollParent = container.closest('.detail-scroll');
   const wasAtBottom = isAtBottom(scrollParent);
 
-  // Check if the API has caught up with our optimistic message
+  // Detect API catching up with our optimistic message before deciding
+  // whether to render an optimistic bubble; the bubble removal happens
+  // inside reconcileOptimisticMessage on the next line.
   if (pendingUserMessage) {
     const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
     const lastContent = lastHuman ? (lastHuman.Content || lastHuman.content || '') : '';
     if (lastContent.includes(pendingUserMessage)) {
-      pendingUserMessage = null;       // API caught up, clear optimistic state
+      pendingUserMessage = null;
       pendingMessageAcked = false;
     }
   }
 
-  // Preserve the AskUserQuestion card DOM node across the container wipe
-  // when the pending question is unchanged. Rebuilding the card every 2s
-  // poll detaches its event listeners and resets any picked option or
-  // freeform text the user was filling in — making the card feel
-  // "unclickable". Detach first so innerHTML doesn't destroy it, then
-  // re-attach the same Node so checked radios / focus survive.
-  const existingCard = container.querySelector('.question-card');
-  const sig = pending ? questionCardSignature(pending) : '';
-  const pendingCardId = questionCardId(pending);
-  const reuseCard = !!(hasPendingQuestionPayload(pending) && pendingCardId && existingCard
-    && existingCard.dataset.toolUseId === pendingCardId
-    && existingCard.dataset.sig === sig);
-  if (reuseCard) existingCard.remove();
-
-  container.innerHTML = renderConversationHtml(entries);
-
-  // Append the AskUserQuestion card inline after the last assistant
-  // message when one is pending. The card is part of the chat stream,
-  // not the action bar — visitors keep prior context in view.
-  if (hasPendingQuestionPayload(pending)) {
-    const conv = container.querySelector('.conversation');
-    if (conv) {
-      if (reuseCard) {
-        conv.appendChild(existingCard);
-      } else {
-        const wrap = document.createElement('div');
-        wrap.innerHTML = renderQuestionCard(pending, agentId);
-        const cardEl = wrap.firstElementChild;
-        if (cardEl) conv.appendChild(cardEl);
-      }
-    }
+  // First poll after the empty-state placeholder ran — initialise the
+  // .conversation skeleton so the incremental path has somewhere to write.
+  let conv = container.querySelector('.conversation');
+  if (!conv) {
+    container.innerHTML = '<div class="conversation"></div>';
+    conv = container.querySelector('.conversation');
   }
 
-  // Re-append optimistic message if API hasn't caught up yet. The
-  // "Sending…" caption (and the muted opacity) ONLY apply while the
-  // POST is still in flight (pendingMessageAcked === false). After ack
-  // the bubble re-renders at full opacity, no caption — just a normal
-  // user message waiting for the API echo.
-  if (pendingUserMessage) {
-    const conv = container.querySelector('.conversation');
-    if (conv) {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = UI.message('user', pendingUserMessage);
-      const msgEl = wrap.firstElementChild;
-      if (msgEl) {
-        if (!pendingMessageAcked) msgEl.classList.add('ui-msg--optimistic');
-        conv.appendChild(msgEl);
-        if (!pendingMessageAcked) {
-          const caption = document.createElement('div');
-          caption.className = 'ui-msg__caption ui-msg__caption--sending';
-          caption.textContent = 'Sending…';
-          conv.appendChild(caption);
-        }
-      }
-    }
-  }
-
-  // Re-mount the working indicator if the agent is processing — the
-  // innerHTML rewrite above wiped any previous indicator.
+  appendNewEntries(conv, entries);
+  reconcileQuestionCard(conv, pending, agentId);
+  reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
 
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
@@ -1172,9 +1269,19 @@ async function loadTabContent(tab, agentId) {
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
-      if (hasPendingQuestionPayload(pending)) {
-        const conv = container.querySelector('.conversation');
-        if (conv) {
+      const conv = container.querySelector('.conversation');
+      if (conv) {
+        // Seed the incremental-render bookkeeping so the next poll's
+        // appendNewEntries knows what's already in the DOM. Stamping
+        // data-entry-idx on each rendered message keeps the rewind
+        // fallback (history shrank) able to find and prune them.
+        const visible = visibleEntries(entries);
+        const msgs = conv.querySelectorAll(':scope > .ui-msg');
+        for (let i = 0; i < msgs.length && i < visible.length; i++) {
+          msgs[i].dataset.entryIdx = String(i);
+        }
+        conv.dataset.renderedCount = String(visible.length);
+        if (hasPendingQuestionPayload(pending)) {
           const wrap = document.createElement('div');
           wrap.innerHTML = renderQuestionCard(pending, agentId);
           const cardEl = wrap.firstElementChild;
