@@ -522,9 +522,12 @@ function renderActionBar(agent) {
   }
 
   // Composer is always present so the user can ask follow-up questions
-  // regardless of the agent's terminal state. The stop button only appears
-  // while the agent is actively processing; otherwise the send button.
-  const STOP_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+  // regardless of the agent's terminal state. Stop only fits while the
+  // agent's own stream can be interrupted (running) or while a paired
+  // action-panel chip is the primary affordance (permission, plan). For
+  // idle reply-expecting states (question, error) the placeholder below
+  // says "Type a reply…" — the trailing button must agree and offer send.
+  const STOP_STATES = new Set(['running', 'permission', 'plan']);
   const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
     : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
   const trailing = STOP_STATES.has(st)
@@ -1042,7 +1045,7 @@ export async function renderDetail(app, agents, agentId, setView) {
     trailing: [
       ...(st === 'running' ? ['spinner'] : []),
       Theme.trailingEntry(),
-      { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
+      { icon: ICONS.kebab, ariaLabel: 'More', onclick: `Dashboard.openDetailKebab('${agent.session_id}')` },
     ],
   });
 
