@@ -315,6 +315,9 @@ func parseUserEntry(entry jsonlEntry) *domain.ConversationEntry {
 	if text == "" {
 		return nil
 	}
+	if strings.HasPrefix(text, skillBodyPrefix) {
+		return nil
+	}
 
 	return &domain.ConversationEntry{
 		Role:      "human",
@@ -322,6 +325,11 @@ func parseUserEntry(entry jsonlEntry) *domain.ConversationEntry {
 		Timestamp: entry.Timestamp,
 	}
 }
+
+// skillBodyPrefix marks user-role JSONL entries that Claude Code injects
+// when a slash command invokes a skill: the entry carries the SKILL.md
+// preamble + body, not user input, and must not render as a chat bubble.
+const skillBodyPrefix = "Base directory for this skill: "
 
 // cleanSlashCommand converts XML-tagged slash command content into a clean
 // display format. e.g. "<command-name>/refactor</command-name>\n<command-args>clean up</command-args>"
