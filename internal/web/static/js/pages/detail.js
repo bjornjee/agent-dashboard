@@ -811,10 +811,16 @@ async function refreshConversation(agentId, agent) {
   // freeform text the user was filling in — making the card feel
   // "unclickable". Detach first so innerHTML doesn't destroy it, then
   // re-attach the same Node so checked radios / focus survive.
+  // tool_use_id may be empty when the agent state hook stamped
+  // pending_question from a PermissionRequest payload that lacked the
+  // upstream id. Fall back to the question signature as the stable
+  // identifier so the card still renders, preserves across polls, and
+  // can be looked up by submitQuestionCard.
+  const pendingId = (pending && (pending.tool_use_id || questionCardSignature(pending))) || '';
   const existingCard = container.querySelector('.question-card');
   const sig = pending ? questionCardSignature(pending) : '';
-  const reuseCard = !!(pending && pending.tool_use_id && existingCard
-    && existingCard.dataset.toolUseId === pending.tool_use_id
+  const reuseCard = !!(pending && pendingId && existingCard
+    && existingCard.dataset.toolUseId === pendingId
     && existingCard.dataset.sig === sig);
   if (reuseCard) existingCard.remove();
 
@@ -839,15 +845,19 @@ async function refreshConversation(agentId, agent) {
 
   // Append the AskUserQuestion card inline after the last assistant
   // message when one is pending. The card is part of the chat stream,
-  // not the action bar — visitors keep prior context in view.
-  if (pending && pending.tool_use_id) {
+  // not the action bar — visitors keep prior context in view. Use the
+  // tool_use_id when available, otherwise the question signature, so
+  // the card renders even when the agent state hook lacks the id.
+  if (pending && pendingId) {
     const conv = container.querySelector('.conversation');
     if (conv) {
       if (reuseCard) {
         conv.appendChild(existingCard);
       } else {
+        // Pass pendingId down so the card carries the fallback id
+        // when the upstream tool_use_id is empty.
         const wrap = document.createElement('div');
-        wrap.innerHTML = renderQuestionCard(pending, agentId);
+        wrap.innerHTML = renderQuestionCard({ ...pending, tool_use_id: pendingId }, agentId);
         const cardEl = wrap.firstElementChild;
         if (cardEl) conv.appendChild(cardEl);
       }
@@ -1220,11 +1230,14 @@ async function loadTabContent(tab, agentId) {
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
-      if (pending && pending.tool_use_id) {
+      // Fallback to question signature when upstream tool_use_id is
+      // missing — matches the refreshConversation guard above.
+      const pendingId2 = (pending && (pending.tool_use_id || questionCardSignature(pending))) || '';
+      if (pending && pendingId2) {
         const conv = container.querySelector('.conversation');
         if (conv) {
           const wrap = document.createElement('div');
-          wrap.innerHTML = renderQuestionCard(pending, agentId);
+          wrap.innerHTML = renderQuestionCard({ ...pending, tool_use_id: pendingId2 }, agentId);
           const cardEl = wrap.firstElementChild;
           if (cardEl) conv.appendChild(cardEl);
         }
