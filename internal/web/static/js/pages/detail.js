@@ -930,7 +930,7 @@ export async function renderDetail(app, agents, agentId, setView) {
     trailing: [
       ...(st === 'running' ? ['spinner'] : []),
       Theme.trailingEntry(),
-      { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
+      { icon: ICONS.kebab, ariaLabel: 'More', onclick: `Dashboard.openDetailKebab('${agent.session_id}')` },
     ],
   });
 
