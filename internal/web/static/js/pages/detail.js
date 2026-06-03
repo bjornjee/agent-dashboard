@@ -1,8 +1,8 @@
-// Agent detail view with tabs and inline subagents.
-import { UI } from '../ui.js';
+// Agent detail view with tabs and stats disclosure.
+import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { effectiveState, stateGroup, prTag, hasOpenPR } from '../state.js';
-import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
+import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
@@ -898,10 +898,11 @@ export function refreshDetailHeader(agent) {
     if (fresh) pill.replaceWith(fresh);
   }
 
-  // Update duration
+  // Update duration — pick the last non-separator span (B1 split each
+  // meta token into its own <span>, separated by .detail-meta__sep nodes).
   const meta = document.querySelector('.detail-meta');
   if (meta && agent.started_at) {
-    const spans = meta.querySelectorAll('span');
+    const spans = meta.querySelectorAll('span:not(.detail-meta__sep)');
     const last = spans[spans.length - 1];
     if (last) last.textContent = duration(agent);
   }
@@ -909,7 +910,6 @@ export function refreshDetailHeader(agent) {
   // Refresh vital signs only on state change
   if (prev !== null && prev !== st) {
     loadVitalSigns(agent.session_id, agent);
-    loadSubagentSummary(agent.session_id);
   }
 }
 
@@ -940,12 +940,20 @@ export async function renderDetail(app, agents, agentId, setView) {
   const branchPart = agent.branch ? escapeHtml(agent.branch) : '';
   const modelPart = agent.model ? escapeHtml(agent.model) : '';
   const durationPart = agent.started_at ? duration(agent) : '';
-  const subline = [branchPart, modelPart, durationPart].filter(Boolean).join(' · ');
+  // Render each meta token as its own <span> so refreshDetailHeader()
+  // can poke the *last* span (the live duration) without rebuilding the
+  // whole row.
+  const metaSpans = [branchPart, modelPart, durationPart]
+    .filter(Boolean)
+    .map(t => `<span>${t}</span>`)
+    .join('<span class="detail-meta__sep">·</span>');
 
+  // appBar carries only the back arrow + trailing chrome (spinner / theme
+  // / more / dock). The repo title moves below into `.detail-title` so it
+  // can share a row with the status pill + PR tag (B1 — restores visual
+  // hierarchy: title and state on one line, metadata below).
   const appBar = UI.appBar({
     back: true,
-    title: repoName(agent),
-    subtitle: subline,
     trailing: [
       ...(st === 'running' ? ['spinner'] : []),
       Theme.trailingEntry(),
@@ -959,9 +967,18 @@ export async function renderDetail(app, agents, agentId, setView) {
   const prChip = (prTag(agent) && st !== 'pr')
     ? `<span class="ui-row__tag detail-header__tag">${escapeHtml(prTag(agent))}</span>`
     : '';
+  const titleText = escapeHtml(repoName(agent));
+  const metaLine = metaSpans
+    ? `<div class="detail-meta">${metaSpans}</div>`
+    : '';
   const detailHeader = `
     <div class="detail-header">
-      <div class="detail-title">${inlineStatusPill(st)}${prChip}</div>
+      <div class="detail-title">
+        <span class="detail-title__text">${titleText}</span>
+        ${inlineStatusPill(st)}
+        ${prChip}
+      </div>
+      ${metaLine}
     </div>
   `;
 
@@ -981,8 +998,14 @@ export async function renderDetail(app, agents, agentId, setView) {
 
   const isMobile = window.innerWidth <= 480;
   const vitalOpen = !isMobile && sessionStorage.getItem('collapse-vital-signs-container-' + agentId) !== 'true';
-  const subagentOpen = !isMobile && sessionStorage.getItem('collapse-subagent-summary-' + agentId) !== 'true';
   const activeCls = (key) => key === savedTab ? ' active' : '';
+
+  // STATS disclosure is metadata about the current conversation
+  // (elapsed / tokens / cost) — only meaningful on the Chat tab. It's
+  // CSS-scoped to the active Chat tab in style.css (.detail-scroll
+  // rules), so it stays hidden on Activity / Diff / Plan (C1b).
+  // Subagents disclosure removed entirely (C1) — subagent activity is
+  // implied by the live tool-tally line.
 
   app.innerHTML = `
     <div class="detail-layout">
@@ -994,7 +1017,6 @@ export async function renderDetail(app, agents, agentId, setView) {
       <div class="detail-scroll">
         <div class="detail-supplementary">
           ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
-          ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
         </div>
         <div id="tab-conversation" class="tab-content${activeCls('conversation')}">${savedTab === 'conversation' ? skeletonLoading(4) : ''}</div>
         <div id="tab-activity" class="tab-content${activeCls('activity')}">${savedTab === 'activity' ? skeletonLoading(6) : ''}</div>
@@ -1063,9 +1085,8 @@ export async function renderDetail(app, agents, agentId, setView) {
     });
   });
 
-  // Load initial tab + subagents + vital signs in parallel
+  // Load initial tab + vital signs in parallel
   loadTabContent(savedTab, agentId);
-  loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
 
   // Mount the working indicator if the agent is currently processing.
@@ -1097,59 +1118,6 @@ async function loadVitalSigns(agentId, agent) {
   } catch {
     container.innerHTML = '';
   }
-}
-
-async function loadSubagentSummary(agentId) {
-  const container = document.getElementById('subagent-summary');
-  if (!container) return;
-  let subs;
-  try {
-    subs = await get('/api/agents/' + agentId + '/subagents');
-  } catch {
-    container.innerHTML = '';
-    const section = container.closest('.collapsible-section');
-    if (section) section.style.display = 'none';
-    return;
-  }
-  const section = container.closest('.collapsible-section');
-  if (!subs || subs.length === 0) {
-    container.innerHTML = '';
-    if (section) section.style.display = 'none';
-    return;
-  }
-  if (section) section.style.display = '';
-
-  const completed = subs.filter(s => s.Completed || s.completed).length;
-  const running = subs.length - completed;
-
-  const MAX_VISIBLE = 3;
-  const visible = subs.slice(-MAX_VISIBLE);
-  const hidden = subs.length - visible.length;
-
-  let html = '';
-
-  html += '<div class="subagent-summary-list">';
-  if (hidden > 0) {
-    html += `<div class="subagent-pill subagent-pill--muted"><span class="subagent-type">+${hidden} more</span></div>`;
-  }
-  for (const sub of visible) {
-    const isDone = sub.Completed || sub.completed;
-    const type = sub.AgentType || sub.agent_type || 'agent';
-    const desc = sub.InstructionHead || sub.instruction_head || sub.Description || sub.description || '';
-    const mode = sub.Mode || sub.mode || '';
-    const startedAt = sub.StartedAt || sub.started_at || '';
-    const dotClass = isDone ? 'status-dot--completed' : 'status-dot--running';
-    html += `<div class="subagent-pill">`;
-    html += `<span class="status-dot ${dotClass}"></span>`;
-    html += `<span class="subagent-type">${escapeHtml(type)}</span>`;
-    if (desc) html += `<span class="subagent-desc">${escapeHtml(desc)}</span>`;
-    if (mode) html += `<span class="subagent-mode">${escapeHtml(mode)}</span>`;
-    if (startedAt) html += `<span class="subagent-time">${durationFromTimestamp(startedAt)}</span>`;
-    html += '</div>';
-  }
-  html += '</div>';
-
-  container.innerHTML = html;
 }
 
 async function loadTabContent(tab, agentId) {
@@ -1240,8 +1208,12 @@ async function loadTabContent(tab, agentId) {
             toolGroup = [];
           }
 
-          const truncated = content.length > 200;
-          const displayContent = truncated ? content.substring(0, 200) + '...' : content;
+          // Strip <local-command-*> wrappers from human entries — same
+          // surface as the Chat tab (C3). Assistant content is markdown
+          // and never carries those tags.
+          const cleanContent = kind === 'human' ? stripLocalCommandTags(content) : content;
+          const truncated = cleanContent.length > 200;
+          const displayContent = truncated ? cleanContent.substring(0, 200) + '...' : cleanContent;
           html += `<div class="timeline-entry activity-entry" data-kind="${kind}">`;
           html += timelineIcon(kind);
           html += '<div class="timeline-content">';
@@ -1252,7 +1224,7 @@ async function loadTabContent(tab, agentId) {
             html += `<div class="timeline-detail">${escapeHtml(displayContent)}</div>`;
           }
           if (truncated) {
-            html += `<span data-full="${escapeHtml(content)}" data-truncated="true" style="display:none"></span>`;
+            html += `<span data-full="${escapeHtml(cleanContent)}" data-truncated="true" style="display:none"></span>`;
             html += `<button class="btn btn-ghost btn-sm" onclick="Dashboard.toggleExpand(this)">Show more</button>`;
           }
           html += '</div></div>';

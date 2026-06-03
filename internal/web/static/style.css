@@ -206,6 +206,12 @@ a { color: inherit; }
   max-width: 100%;
 }
 .ui-app-bar__trailing { display: flex; align-items: center; gap: var(--space-2); }
+/* Non-interactive variant of the action shell — same pill geometry as
+ * theme/more, but no hover/active feedback. Used to wrap the running
+ * spinner so the header toolbar reads as one rhythm (B2). */
+.ui-app-bar__action--passive { cursor: default; }
+.ui-app-bar__action--passive:hover { background: var(--bg-elevated); }
+.ui-app-bar__action--passive:active { transform: none; }
 .ui-app-bar__spinner {
   width: 18px;
   height: 18px;
@@ -744,7 +750,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 }
 
 /* ============================================================
- * DETAIL VIEW INLINE — segmented tab strip, stats/subagents disclosures
+ * DETAIL VIEW INLINE — segmented tab strip, stats disclosure
  * (single caller; not promoted to a primitive)
  * ============================================================ */
 .detail-tabs {
@@ -784,12 +790,12 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--text-muted);
   font-size: 13px;
 }
-.detail-disclosure { padding: 0 var(--space-5); }
+.detail-disclosure { padding: 0 var(--space-4); }
 .detail-disclosure summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) 0;
+  padding: var(--space-2) 0;
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
@@ -811,26 +817,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 }
 .detail-disclosure[open] summary::after { transform: rotate(45deg); }
 .detail-disclosure-body { padding: 0 0 var(--space-4); color: var(--text-secondary); font-size: 14px; line-height: 20px; }
-
-/* Subagent rows inside the SUBAGENTS disclosure (single caller) */
-.subagent-summary-list { display: flex; flex-direction: column; gap: var(--space-2); }
-.subagent-pill {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--text-secondary);
-}
-.subagent-pill--muted { color: var(--text-muted); background: transparent; padding-left: 0; padding-right: 0; }
-.subagent-type { font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
-.subagent-desc { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.subagent-mode { color: var(--text-faint); font-family: var(--font-mono); font-size: 12px; }
-.subagent-time { color: var(--text-faint); margin-left: auto; flex-shrink: 0; }
-.subagent-summary-list .status-dot { width: 6px; height: 6px; }
 
 /* Vital strip inside STATS disclosure */
 .detail-disclosure-body .vital-strip { padding-left: 0; padding-right: 0; }
@@ -994,9 +980,30 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .vital-label { color: var(--text-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .vital-value { color: var(--text-primary); font-size: 14px; font-weight: 500; }
 
-/* Detail header + meta (inline, single caller) */
-.detail-header { padding: 0 var(--space-5) var(--space-2); }
-.detail-title { display: flex; align-items: center; gap: var(--space-3); }
+/* Detail header + meta (inline, single caller)
+ * B1: title + status pill + tag share a single row so the eye reads
+ * "repo (state)" together; metadata (branch · model · duration) sits
+ * on the row below in muted text. */
+.detail-header { padding: 0 var(--space-5) var(--space-3); }
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+.detail-title__text {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.detail-meta__sep { color: var(--text-faint); }
 .detail-layout { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .detail-pinned { flex-shrink: 0; background: var(--bg-base); max-height: 50vh; overflow-y: auto; }
 .detail-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; padding-bottom: var(--space-5); }
@@ -2219,9 +2226,11 @@ details[open] > .tool-group-summary::before { transform: rotate(90deg); }
  * (.ui-dock--header) is excluded — it lives inside the detail app-bar. */
 body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 
-/* Plan tab focuses on the approved plan markdown — hide Stats + Subagents
- * disclosures so the plan reads cleanly. They remain visible on Chat /
- * Activity / Diff tabs. */
+/* STATS disclosure is conversation metadata — only meaningful on the
+ * Chat tab. Hide it on Activity / Diff / Plan so those tabs read clean
+ * (C1b). */
+.detail-scroll:has(#tab-activity.active) .detail-supplementary,
+.detail-scroll:has(#tab-diff.active) .detail-supplementary,
 .detail-scroll:has(#tab-plan.active) .detail-supplementary { display: none; }
 
 /* Boot loading: visible on every viewport before app.js hydrates. */

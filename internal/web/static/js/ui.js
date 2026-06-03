@@ -3,13 +3,30 @@
 import { escapeHtml } from './format.js';
 import { ICONS } from './icons.js';
 
+// Strip Claude Code's <local-command-*> tag wrappers from user-message text.
+// These markers (caveat / stdout / stderr) are appended by the harness when a
+// slash-command runs locally; the wrapper itself is internal plumbing and
+// should not surface in the chat bubble. Returns the inner text only.
+// Safe to call on null/undefined — returns ''.
+export function stripLocalCommandTags(s) {
+  if (s == null) return '';
+  return String(s).replace(
+    /<\/?local-command-(?:caveat|stdout|stderr)>/g,
+    ''
+  );
+}
+
 function actionsHtml(items) {
   if (!items || !items.length) return '';
   let out = '';
   for (const a of items) {
     if (!a) continue;
     if (a === 'spinner') {
-      out += '<span class="ui-app-bar__spinner" aria-hidden="true"></span>';
+      // Wrap in the same shell as theme/more action buttons so the
+      // header toolbar reads as a single visual rhythm (B2).
+      out += '<span class="ui-app-bar__action ui-app-bar__action--passive" aria-label="Running" role="status">' +
+        '<span class="ui-app-bar__spinner" aria-hidden="true"></span>' +
+        '</span>';
       continue;
     }
     const click = a.onclick ? ` onclick="${a.onclick}"` : '';
@@ -119,7 +136,8 @@ export const UI = {
       return `<div class="ui-msg__tool">${ICONS.check || ''}<span>${label}</span>${ICONS.chevronRight}</div>`;
     }
     if (role === 'user') {
-      return `<div class="ui-msg ui-msg--user"><div class="ui-msg__bubble">${escapeHtml(content)}</div></div>`;
+      const clean = stripLocalCommandTags(content);
+      return `<div class="ui-msg ui-msg--user"><div class="ui-msg__bubble">${escapeHtml(clean)}</div></div>`;
     }
     const body = o.html ? content : escapeHtml(content);
     const copy = o.copyable === false ? '' : `<button class="ui-msg__copy" aria-label="Copy">${ICONS.copy}</button>`;
