@@ -1201,6 +1201,12 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   cursor: not-allowed;
 }
 
+/* Folder pill is now a label-wrapped real <input> (no hidden input).
+ * Browsers refuse to open a <datalist> popup from a clip-hidden input
+ * — the popup has nothing to anchor to — so the input itself must be
+ * visible. The label styles the input + folder icon + chevron as a
+ * single pill; cursor: text on the input lets the user type a path,
+ * focus + click triggers the native datalist suggestions popup. */
 .create-folder-pill {
   display: inline-flex;
   align-items: center;
@@ -1212,26 +1218,32 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   align-self: flex-start;
   background: transparent;
   transition: color var(--transition-fast), background var(--transition-fast);
+  cursor: text;
+  min-width: 220px;
 }
-.create-folder-pill:hover { color: var(--text-secondary); background: var(--bg-surface); }
-.create-folder-pill svg { width: 16px; height: 16px; opacity: 0.8; }
-.create-folder-pill--set { color: var(--text-secondary); background: var(--bg-surface); }
-
-/* The real folder <input> stays in the DOM (drives spawn, holds datalist
- * suggestions) but is visually hidden — the folder pill above is the
- * affordance. Focus on the pill forwards into this input so the browser's
- * native datalist popup still appears. */
-.create-folder-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0,0,0,0);
-  white-space: nowrap;
+.create-folder-pill:hover,
+.create-folder-pill:focus-within { color: var(--text-secondary); background: var(--bg-surface); }
+/* Empty-folder state — draw attention so the user knows this is the
+ * required first step. The send button is disabled until folder is
+ * set; without this cue users assume the harness/skill pills are also
+ * gated, which they're not. Soft ring + colour shift, no jiggle. */
+.create-folder-pill--empty {
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px var(--border-hover);
+}
+.create-folder-pill svg { width: 16px; height: 16px; opacity: 0.8; flex-shrink: 0; }
+.create-folder-pill__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
   border: 0;
+  outline: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
 }
+.create-folder-pill__input::placeholder { color: var(--text-muted); }
 
 .create-hint {
   font-size: 12px;

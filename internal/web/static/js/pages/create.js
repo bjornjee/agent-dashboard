@@ -95,19 +95,19 @@ export function renderCreate(app, agents) {
         </div>
       </div>
 
-      <button class="create-folder-pill" type="button" id="create-folder-trigger" aria-label="Pick folder" onclick="document.getElementById('create-folder').focus()">
+      <label class="create-folder-pill" for="create-folder">
         ${ICONS.folder}
-        <span id="create-folder-label">Work in a project</span>
+        <input
+          id="create-folder"
+          class="create-folder-pill__input"
+          type="text"
+          placeholder="Work in a project"
+          list="folder-suggestions"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Project folder">
         ${CHEVRON_DOWN}
-      </button>
-      <input
-        id="create-folder"
-        class="create-folder-input"
-        type="text"
-        placeholder="/path/to/repo"
-        list="folder-suggestions"
-        autocomplete="off"
-        spellcheck="false">
+      </label>
       <datalist id="folder-suggestions">
         ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
       </datalist>
@@ -140,32 +140,35 @@ export function renderCreate(app, agents) {
   });
 
   const folderInput = document.getElementById('create-folder');
-  const folderLabel = document.getElementById('create-folder-label');
-  const folderPill = document.getElementById('create-folder-trigger');
+  const folderPill = folderInput ? folderInput.closest('.create-folder-pill') : null;
   const folderHint = document.getElementById('folder-hint');
   const spawnBtn = document.getElementById('create-spawn');
 
   function updateFolderState() {
-    if (!folderInput || !folderHint || !spawnBtn || !folderLabel || !folderPill) return;
+    if (!folderInput || !folderHint || !spawnBtn || !folderPill) return;
     const val = folderInput.value.trim();
-    folderLabel.textContent = formatFolderLabel(val);
-    folderPill.classList.toggle('create-folder-pill--set', val.length > 0);
-    if (!val) {
-      folderHint.textContent = 'Pick a folder to spawn in.';
+    const empty = val.length === 0;
+    folderPill.classList.toggle('create-folder-pill--empty', empty);
+    if (empty) {
+      folderHint.textContent = 'Pick a folder to enable spawn.';
       folderHint.className = 'create-hint';
       spawnBtn.disabled = true;
+      spawnBtn.title = 'Pick a folder first';
     } else if (!val.startsWith('/')) {
       folderHint.textContent = 'Path should be absolute (start with /)';
       folderHint.className = 'create-hint create-hint--error';
       spawnBtn.disabled = true;
+      spawnBtn.title = 'Path must be absolute';
     } else if (agentFolders.length > 0 && agentFolders.includes(val)) {
       folderHint.textContent = 'Known folder';
       folderHint.className = 'create-hint create-hint--ok';
       spawnBtn.disabled = false;
+      spawnBtn.title = 'Spawn (Cmd/Ctrl+Enter)';
     } else {
       folderHint.textContent = '';
       folderHint.className = 'create-hint';
       spawnBtn.disabled = false;
+      spawnBtn.title = 'Spawn (Cmd/Ctrl+Enter)';
     }
   }
 
