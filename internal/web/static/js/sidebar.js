@@ -105,6 +105,7 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
   html += '</div>';
   html += `<div class="app-sidebar__nav-row${sel(currentView === 'usage')}">`;
   html += UI.row({
+    leading: ICONS.chartBar,
     title: 'Usage',
     onclick: 'Dashboard.showUsage()',
     chevron: false,

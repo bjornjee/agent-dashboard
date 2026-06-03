@@ -415,7 +415,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-section-label__count {
   display: inline-block;
   margin-left: var(--space-2);
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-weight: 400;
 }
 .ui-section-label__action {
@@ -2344,6 +2344,46 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   }
   #app-sidebar .ui-row::after { display: none; }
   #app-sidebar .ui-row__chevron { display: none; }
+
+  /* A1 — Agent subtitle wraps to 2 lines (was single-line ellipsis).
+   * At 264px the branch name alone fills line 1; the model + age land on
+   * line 2 instead of being clipped after "claud…". -webkit-line-clamp
+   * is the cross-browser-supported pattern (Chromium, WebKit, Firefox 68+). */
+  #app-sidebar .app-sidebar__row .ui-row__subtitle {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  /* A2 — At 264px the inline "PR open" tag forces the title to ellipsis
+   * ("agent-dashboa…"). Let the title-line flex-wrap so the tag drops
+   * onto its own line beneath the title when there's not enough room.
+   * The title stays full-width on line 1; the tag (and any future row
+   * affordance on the title-line) lands on line 2. The subtitle still
+   * follows on its own row inside .ui-row__body. */
+  #app-sidebar .app-sidebar__row .ui-row__title-line {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  #app-sidebar .app-sidebar__row .ui-row__title-line .ui-row__title {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* A3 — Bottom nav rows (Install / Usage / theme toggle) must render
+   * with an explicit transparent background so they read as a uniform
+   * stack. Without this, button user-agent defaults or stale :active
+   * fills can make one row look elevated and falsely "selected".
+   * The selected/hover rules above still win via :hover / --selected. */
+  .app-sidebar__bottom .ui-row,
+  .app-sidebar__bottom button.ui-row {
+    background: transparent;
+  }
 
   .app-sidebar__nav-row--selected .ui-row,
   .app-sidebar__row--selected .ui-row {
