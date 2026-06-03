@@ -271,9 +271,24 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		markNotifications(all[notifStart:])
 	}
 
-	// Cap at limit (keep last N)
+	// Cap at limit (keep last N) — BUT preserve any plan-saved
+	// synthetic entries that would otherwise be dropped. Plans are
+	// rare (1-2 per session) and the chat-stream plan-link card
+	// must appear regardless of where in history the plan was
+	// written. Dropped plan-saved entries get re-prepended at the
+	// start of the capped window so the user still sees the card.
 	if limit > 0 && len(all) > limit {
+		dropped := all[:len(all)-limit]
 		all = all[len(all)-limit:]
+		var rescued []domain.ConversationEntry
+		for _, e := range dropped {
+			if e.Role == "plan-saved" {
+				rescued = append(rescued, e)
+			}
+		}
+		if len(rescued) > 0 {
+			all = append(rescued, all...)
+		}
 	}
 
 	// The scanner reads to EOF; file offset == file size
