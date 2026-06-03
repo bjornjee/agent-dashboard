@@ -2411,11 +2411,11 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     min-height: calc(100vh - 64px); /* viewport minus app bar */
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: stretch;
     max-width: 720px;
     margin: 0 auto;
-    padding: var(--space-6) var(--space-6);
+    padding: 12vh var(--space-6) var(--space-6);
     gap: var(--space-5);
   }
   .create-display {
@@ -2425,7 +2425,7 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   .create-form {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
 
   /* Hide the section labels above the secondary chips — the chips' values
@@ -2455,8 +2455,13 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   /* Hide hint text below chips on desktop — the chip is self-explanatory. */
   .create-secondary .create-hint { display: none; }
 
-  /* Spawn stays full-width but constrained to the composition block. */
-  .create-spawn { align-self: stretch; }
+  /* Spawn stays full-width but tightly coupled to the chip strip above
+   * via a small margin-top — without this the gap between secondary chips
+   * (short) and full-width spawn reads as disconnected (E1). */
+  .create-spawn {
+    align-self: stretch;
+    margin-top: var(--space-2);
+  }
 
   /* The create view's mobile app-bar (back-arrow + "New agent" title) is
    * redundant on desktop — the sidebar's "+ New agent" CTA already signals
