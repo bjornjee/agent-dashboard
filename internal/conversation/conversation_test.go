@@ -1178,6 +1178,29 @@ func TestParseUserEntry_SlashCommand(t *testing.T) {
 	}
 }
 
+func TestParseUserEntry_SkillBody(t *testing.T) {
+	// When a slash command invokes a skill, Claude Code emits a separate
+	// user-role JSONL entry whose text begins with the harness preamble
+	// "Base directory for this skill: ...". This is not user input and
+	// must be dropped so it doesn't render as a giant user bubble.
+	body := "Base directory for this skill: /Users/bob/.claude/plugins/cache/agent-dashboard/agent-dashboard/0.32.0/skills/pr\n\nOpen a pull request for the current branch.\n"
+	blocks := []map[string]string{{"type": "text", "text": body}}
+	contentJSON, _ := json.Marshal(blocks)
+	msgJSON, _ := json.Marshal(map[string]json.RawMessage{
+		"role":    json.RawMessage(`"user"`),
+		"content": contentJSON,
+	})
+	entry := jsonlEntry{
+		Type:      "user",
+		Message:   json.RawMessage(msgJSON),
+		Timestamp: "2026-06-03T22:22:00Z",
+	}
+
+	if got := parseUserEntry(entry); got != nil {
+		t.Errorf("expected nil (skill body dropped), got %+v", got)
+	}
+}
+
 // -- HasPendingPlanReview tests --
 
 func TestHasPendingPlanReview_Pending(t *testing.T) {
