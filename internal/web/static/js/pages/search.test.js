@@ -9,14 +9,17 @@ const path = require('node:path');
 
 let highlightMatched;
 let searchAgents;
+let searchTagClass;
 
 test('load module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'search.js')).href;
   const mod = await import(url);
   highlightMatched = mod.highlightMatched;
   searchAgents = mod.searchAgents;
+  searchTagClass = mod.searchTagClass;
   assert.equal(typeof highlightMatched, 'function');
   assert.equal(typeof searchAgents, 'function');
+  assert.equal(typeof searchTagClass, 'function');
 });
 
 test('highlightMatched wraps matched chars in <strong>', () => {
@@ -96,4 +99,34 @@ test('searchAgents handles missing branch gracefully', () => {
   const results = searchAgents(agents, 'app', 50);
   assert.equal(results.length, 1);
   assert.equal(results[0].item.session_id, '1');
+});
+
+// G1: status pills in the search overlay must mirror the sidebar's
+// state-dot semantics — each agent state maps to its existing accent-*
+// token so the pill carries a status colour instead of neutral grey.
+test('searchTagClass maps waiting/blocked states to amber accent modifier', () => {
+  assert.equal(searchTagClass('question'), 'search-overlay__tag--waiting');
+  assert.equal(searchTagClass('error'), 'search-overlay__tag--waiting');
+  assert.equal(searchTagClass('permission'), 'search-overlay__tag--blocked');
+  assert.equal(searchTagClass('plan'), 'search-overlay__tag--blocked');
+});
+
+test('searchTagClass maps running state to running accent modifier', () => {
+  assert.equal(searchTagClass('running'), 'search-overlay__tag--running');
+});
+
+test('searchTagClass maps review states to review accent modifier', () => {
+  assert.equal(searchTagClass('idle_prompt'), 'search-overlay__tag--review');
+  assert.equal(searchTagClass('done'), 'search-overlay__tag--review');
+});
+
+test('searchTagClass maps pr state to pr accent modifier', () => {
+  assert.equal(searchTagClass('pr'), 'search-overlay__tag--pr');
+});
+
+test('searchTagClass returns empty for merged / unknown states (neutral)', () => {
+  assert.equal(searchTagClass('merged'), '');
+  assert.equal(searchTagClass('somethingelse'), '');
+  assert.equal(searchTagClass(''), '');
+  assert.equal(searchTagClass(undefined), '');
 });

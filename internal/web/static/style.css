@@ -3088,6 +3088,26 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   border-radius: 999px;
   letter-spacing: 0.04em;
 }
+/* G1 — colour-code the pill to mirror the sidebar's state-dot semantics.
+ * Tinted background + matching text colour using existing accent tokens
+ * so WAITING/RUNNING/REVIEW/PR no longer read as the same neutral grey. */
+.search-overlay__tag--waiting,
+.search-overlay__tag--blocked {
+  color: var(--accent-amber);
+  background: color-mix(in srgb, var(--accent-amber) 14%, transparent);
+}
+.search-overlay__tag--running {
+  color: var(--accent-green);
+  background: color-mix(in srgb, var(--accent-green) 14%, transparent);
+}
+.search-overlay__tag--review {
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
+}
+.search-overlay__tag--pr {
+  color: var(--accent-indigo);
+  background: color-mix(in srgb, var(--accent-indigo) 14%, transparent);
+}
 .search-overlay__empty {
   padding: 24px;
   text-align: center;
