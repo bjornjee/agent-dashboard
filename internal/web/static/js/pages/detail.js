@@ -390,10 +390,8 @@ export function refreshWorkingIndicator(agent) {
     el.innerHTML = html;
     container.appendChild(el);
     // Only pull the indicator into view if the user was already at the
-    // bottom. refreshConversation re-runs every 2s and wipes the
-    // indicator (innerHTML rewrite), so this mount path fires every
-    // poll while an agent is working — an unconditional scroll here
-    // overrides whatever scroll position the user just chose.
+    // bottom. An unconditional scroll here would override whatever
+    // scroll position the user just chose.
     if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
   }
   // Lazy-start the activity poll so the tool count keeps incrementing
@@ -608,11 +606,9 @@ function renderConversationHtml(entries) {
 }
 
 // Signature of every field renderQuestionCard() reads. If this string is
-// unchanged across a poll tick, the rebuilt card would be byte-identical
-// — and rebuilding anyway would wipe the user's picked radio / typed
-// freeform text. refreshConversation uses this to detach-and-re-attach
-// the same DOM node across the container.innerHTML wipe. Same pattern
-// as actionBarSignature (commit 8106661).
+// unchanged across a poll tick, reconcileQuestionCard leaves the existing
+// DOM node in place — preserving the user's picked radio / typed freeform
+// text. Same pattern as actionBarSignature.
 function questionCardSignature(pending) {
   if (!pending || !Array.isArray(pending.questions)) return '';
   const parts = [pending.tool_use_id || ''];
