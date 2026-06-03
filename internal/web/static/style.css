@@ -466,7 +466,51 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: var(--cta-bg);
   color: var(--cta-text);
 }
-.ui-msg--assistant { flex-direction: column; align-items: flex-start; gap: var(--space-2); position: relative; }
+/* Assistant message: avatar + soft-elevated card so consecutive turns are
+ * visually distinct and don't read as one wall of text. The card lifts on
+ * hover; the copy button is anchored inside the card so it travels with it.
+ * User pills and tool footers are unaffected. */
+.ui-msg--assistant { flex-direction: row; align-items: flex-start; gap: var(--space-3); position: relative; }
+.ui-msg__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.ui-msg__card {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  position: relative;
+  transition: background var(--transition-fast);
+}
+.ui-msg__card:hover { background: var(--bg-elevated); }
+.ui-msg__meta {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+/* Light mode: --bg-surface ≈ --bg-base on the white page, so the card
+ * would collapse into the conversation column. Add a hairline border so
+ * each assistant turn still reads as a discrete surface. */
+[data-theme="light"] .ui-msg__card,
+[data-theme="light"] .ui-msg__avatar {
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] .ui-msg__card:hover {
+  border-color: var(--border-hover);
+}
 .ui-msg__prose {
   color: var(--text-secondary);
   font-size: 15px;
@@ -482,8 +526,8 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .ui-msg__prose p:last-child { margin-bottom: 0; }
 .ui-msg__copy {
   position: absolute;
-  top: var(--space-1);
-  right: var(--space-2);
+  top: var(--space-2);
+  right: var(--space-3);
   width: 24px;
   height: 24px;
   border-radius: var(--radius-pill);
@@ -493,9 +537,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   justify-content: center;
   transition: color var(--transition-fast), opacity var(--transition-fast);
   opacity: 0;
-  background: var(--bg-base);
+  background: transparent;
 }
-.ui-msg:hover .ui-msg__copy,
+.ui-msg__card:hover .ui-msg__copy,
 .ui-msg__copy:focus-visible { opacity: 1; }
 .ui-msg__copy:hover { color: var(--text-secondary); }
 
@@ -843,65 +887,241 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .detail-tabs__tab:focus { outline: none; }
 .detail-tabs__tab:focus-visible { outline: 2px solid var(--text-faint); outline-offset: -2px; border-radius: 4px; }
 
-/* Create view — large display title + sticky-bottom spawn */
-.create-display {
-  padding: var(--space-6) var(--space-5) var(--space-5);
+/* Create view — Codex composer anatomy: centered hero, single composer
+ * card with inline harness/skill pills, folder pill below, recent-folder
+ * action cards. Replaces the previous flat vertical form. */
+.create-shell {
+  padding: var(--space-6) var(--space-5) calc(var(--space-7) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+@media (min-width: 900px) {
+  .create-shell {
+    max-width: 920px;
+    margin: 0 auto;
+    padding-top: 10vh;
+    gap: var(--space-6);
+  }
+}
+.create-hero {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text-primary);
-  line-height: 34px;
+  text-align: center;
+  line-height: 32px;
 }
-.create-form { padding: 0 var(--space-5) calc(var(--space-7) + var(--space-3) + env(safe-area-inset-bottom)); }
-.create-message {
+@media (min-width: 900px) {
+  .create-hero { font-size: 32px; line-height: 38px; }
+}
+
+.create-composer {
   width: 100%;
-  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
   padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.create-composer:focus-within {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--border-hover);
+}
+.create-composer__input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: var(--text-primary);
   font-size: 16px;
   line-height: 22px;
-  min-height: 120px;
-  resize: vertical;
+  min-height: 64px;
+  max-height: 240px;
+  font-family: inherit;
+  padding: var(--space-1) 0 0;
 }
-.create-field { padding: 0 0 var(--space-4); }
-.create-field .ui-input { width: 100%; }
-.create-field select.ui-input {
+.create-composer__input::placeholder { color: var(--text-faint); }
+.create-composer__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+.create-composer__lead,
+.create-composer__trail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.create-composer__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.create-composer__icon:hover { background: var(--bg-base); color: var(--text-secondary); }
+.create-composer__icon svg { width: 16px; height: 16px; }
+.create-composer__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background var(--transition-fast);
+  position: relative;
+  cursor: pointer;
+}
+.create-composer__pill:hover { background: var(--bg-base); }
+.create-composer__pill svg { color: var(--text-muted); flex-shrink: 0; width: 14px; height: 14px; }
+.create-composer__pill select {
   appearance: none;
   -webkit-appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
-  background-size: 6px 6px;
-  background-repeat: no-repeat;
-  padding-right: var(--space-7);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  max-width: 140px;
 }
-.create-hint { padding: var(--space-2) var(--space-1) 0; font-size: 13px; color: var(--text-muted); min-height: 16px; }
-.create-hint code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 13px; }
-.create-hint--error { color: var(--status-failed-text); }
-.create-hint--ok { color: var(--accent-green); }
-.create-spawn {
-  margin-top: var(--space-6);
-  padding: var(--space-4);
+.create-composer__send {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
   background: var(--cta-bg);
   color: var(--cta-text);
-  border-radius: var(--radius-pill);
-  font-size: 16px;
-  font-weight: 600;
-  width: 100%;
-  text-align: center;
-  transition: opacity var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
 }
-.create-spawn:hover:not(:disabled) { opacity: 0.92; }
-.create-spawn:disabled {
-  background: var(--bg-surface);
+.create-composer__send:hover:not(:disabled) { opacity: 0.92; }
+.create-composer__send:disabled {
+  background: var(--bg-elevated);
   color: var(--text-faint);
   cursor: not-allowed;
 }
-/* Light mode: --bg-surface == --bg-base == #FFFFFF, so the disabled fill
- * collapses into the page. Add a hairline outline so the button keeps a
- * readable geometry. Dark mode is unchanged — dark --bg-surface (#181B22)
- * already sits one step above --bg-base (#0B0E14). */
-[data-theme="light"] .create-spawn:disabled {
+
+.create-folder-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 13px;
+  align-self: flex-start;
+  background: transparent;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.create-folder-pill:hover { color: var(--text-secondary); background: var(--bg-surface); }
+.create-folder-pill svg { width: 16px; height: 16px; opacity: 0.8; }
+.create-folder-pill--set { color: var(--text-secondary); background: var(--bg-surface); }
+
+/* The real folder <input> stays in the DOM (drives spawn, holds datalist
+ * suggestions) but is visually hidden — the folder pill above is the
+ * affordance. Focus on the pill forwards into this input so the browser's
+ * native datalist popup still appears. */
+.create-folder-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.create-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 16px;
+  text-align: center;
+}
+.create-hint code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px; }
+.create-hint--error { color: var(--status-failed-text); }
+.create-hint--ok { color: var(--accent-green); }
+
+.create-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+@media (min-width: 720px) {
+  .create-actions { grid-template-columns: repeat(3, 1fr); }
+}
+.create-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  cursor: pointer;
+  min-height: 96px;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.create-action:hover {
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+.create-action__icon {
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.create-action__icon svg { width: 20px; height: 20px; }
+.create-action__title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.create-action__sub {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 16px;
+  word-break: break-all;
+}
+
+/* Light-mode parity: against a white page, --bg-surface ≈ --bg-base, so the
+ * composer and action cards collapse into the page. Add a hairline border
+ * (matches the .create-spawn:disabled pattern that lived here before). */
+[data-theme="light"] .create-composer,
+[data-theme="light"] .create-action,
+[data-theme="light"] .create-folder-pill--set {
   border: 1px solid var(--border-default);
+}
+[data-theme="light"] .create-composer__send:disabled {
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] .create-action:hover {
+  transform: none;
+  border-color: var(--border-hover);
 }
 
 /* Modal action buttons — used by modal.js, supersede old UI.btn */
@@ -2354,60 +2574,6 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
    * and toggles body.can-install (Samsung/Chromium-only signal). */
   .app-sidebar__install { display: none; }
   body.can-install .app-sidebar__install { display: block; }
-
-  /* Create view — vertically centered composition block on a wide main pane,
-   * with Folder / Harness / Skill rendered as a row of secondary chips below
-   * the textarea (matches Codex codex-dark-04-new-chat-create-agent.png). */
-  .create-shell {
-    min-height: calc(100vh - 64px); /* viewport minus app bar */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: stretch;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: var(--space-6) var(--space-6);
-    gap: var(--space-5);
-  }
-  .create-display {
-    margin: 0;
-    text-align: left;
-  }
-  .create-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  /* Hide the section labels above the secondary chips — the chips' values
-   * carry the meaning inline. */
-  .create-secondary > .create-secondary__group > .ui-section-label { display: none; }
-
-  /* One-row chip strip. */
-  .create-secondary {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .create-secondary__group { flex: 0 0 auto; }
-  .create-secondary__group .create-field { display: flex; }
-  .create-secondary__group .ui-input {
-    width: auto;
-    min-width: 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-pill);
-    background: var(--bg-elevated);
-    font-size: 13px;
-  }
-  .create-secondary__group select.ui-input {
-    padding-right: var(--space-7);
-  }
-  /* Hide hint text below chips on desktop — the chip is self-explanatory. */
-  .create-secondary .create-hint { display: none; }
-
-  /* Spawn stays full-width but constrained to the composition block. */
-  .create-spawn { align-self: stretch; }
 
   /* The create view's mobile app-bar (back-arrow + "New agent" title) is
    * redundant on desktop — the sidebar's "+ New agent" CTA already signals

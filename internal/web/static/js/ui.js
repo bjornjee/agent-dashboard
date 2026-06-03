@@ -123,7 +123,9 @@ export const UI = {
     }
     const body = o.html ? content : escapeHtml(content);
     const copy = o.copyable === false ? '' : `<button class="ui-msg__copy" aria-label="Copy">${ICONS.copy}</button>`;
-    return `<div class="ui-msg ui-msg--assistant"><div class="ui-msg__prose">${body}</div>${copy}</div>`;
+    const avatar = escapeHtml(o.avatar || 'A');
+    const meta = o.timestamp ? `<span class="ui-msg__meta">${escapeHtml(o.timestamp)}</span>` : '';
+    return `<div class="ui-msg ui-msg--assistant"><div class="ui-msg__avatar" aria-hidden="true">${avatar}</div><div class="ui-msg__card"><div class="ui-msg__prose">${body}</div>${meta}${copy}</div></div>`;
   },
 
   // 8. Composer — sticky bottom input + send. Structural exception.

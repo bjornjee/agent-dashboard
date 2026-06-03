@@ -1,66 +1,119 @@
-// Create agent view — Codex flat-prose form with display headline + sticky spawn.
+// Create agent view — Codex composer anatomy: centered hero + single
+// composer card with inline harness/skill pills, folder pill below, and
+// recent-folder action cards. Spawn POST is unchanged — same IDs.
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
 import { escapeHtml } from '../format.js';
 import { get } from '../api.js';
 
+// Path basename. Trims trailing slashes so '/repo/alpha/' → 'alpha'.
+function basename(p) {
+  if (!p) return '';
+  const trimmed = String(p).replace(/\/+$/, '');
+  const i = trimmed.lastIndexOf('/');
+  return i < 0 ? trimmed : trimmed.slice(i + 1);
+}
+
+// Recent-folder summary for the action-card row. Counts agents per cwd,
+// sorts by count desc (insertion order preserved on ties), caps at `limit`.
+// Pure — exported for unit tests.
+export function buildRecentFolders(agents, limit = 3) {
+  if (!Array.isArray(agents) || agents.length === 0) return [];
+  const counts = new Map();
+  for (const a of agents) {
+    const cwd = a && a.cwd;
+    if (!cwd) continue;
+    counts.set(cwd, (counts.get(cwd) || 0) + 1);
+  }
+  const out = [];
+  for (const [cwd, count] of counts) out.push({ cwd, count, label: basename(cwd) });
+  out.sort((a, b) => b.count - a.count);
+  return out.slice(0, limit);
+}
+
+// Folder-pill label. Pure — exported for unit tests.
+export function formatFolderLabel(p) {
+  const b = basename(p);
+  return b || 'Work in a project';
+}
+
+const SEND_ARROW = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
+const CHEVRON_DOWN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+
+function actionCard(folder) {
+  const path = escapeHtml(folder.cwd);
+  const label = escapeHtml(folder.label || folder.cwd);
+  const sub = `${folder.count} agent${folder.count === 1 ? '' : 's'} · ${path}`;
+  return `<button class="create-action" type="button" data-folder="${path}">
+    <span class="create-action__icon">${ICONS.folder}</span>
+    <span class="create-action__title">${label}</span>
+    <span class="create-action__sub">${sub}</span>
+  </button>`;
+}
+
 export function renderCreate(app, agents) {
-  const agentFolders = [...new Set(agents.map(a => a.cwd).filter(Boolean))];
+  const agentFolders = [...new Set((agents || []).map(a => a && a.cwd).filter(Boolean))];
+  const recents = buildRecentFolders(agents || []);
 
   app.innerHTML = `
     ${UI.appBar({ back: true, title: 'New agent', trailing: [Theme.trailingEntry()] })}
     <div class="create-shell">
-      <div class="create-display">What should we work on?</div>
-      <div class="create-form">
+      <h1 class="create-hero">What should we work on?</h1>
+
+      <div class="create-composer">
         <textarea
-          class="ui-input ui-input--multiline create-message"
+          class="create-composer__input"
           id="create-message"
-          rows="4"
+          rows="3"
           placeholder="Do anything"
-          oninput="UI.composerAutoSize(this)"></textarea>
+          oninput="UI.composerAutoSize(this)"
+          onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){const b=document.getElementById('create-spawn');if(b&&!b.disabled){event.preventDefault();Dashboard.createAgent(event);}}"></textarea>
 
-        <div class="create-secondary">
-          <div class="create-secondary__group">
-            ${UI.sectionLabel('Folder')}
-            <div class="create-field">
-              <input
-                id="create-folder"
-                class="ui-input"
-                type="text"
-                placeholder="/path/to/repo"
-                list="folder-suggestions">
-              <datalist id="folder-suggestions">
-                ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
-              </datalist>
-              <div class="create-hint" id="folder-hint"></div>
-            </div>
-          </div>
-
-          <div class="create-secondary__group">
-            ${UI.sectionLabel('Harness')}
-            <div class="create-field">
-              <select id="create-harness" class="ui-input">
-                <option value="">Default (settings.toml)</option>
+        <div class="create-composer__toolbar">
+          <div class="create-composer__lead">
+            <button class="create-composer__icon" type="button" aria-label="More" tabindex="-1">${ICONS.attach}</button>
+            <label class="create-composer__pill" title="Harness">
+              ${ICONS.gear}
+              <select id="create-harness" aria-label="Harness">
+                <option value="">Default</option>
                 <option value="claude">Claude Code</option>
                 <option value="codex">Codex CLI</option>
               </select>
-              <div class="create-hint">Codex reads <code>[harness.codex]</code> from settings.toml.</div>
-            </div>
+              ${CHEVRON_DOWN}
+            </label>
           </div>
-
-          <div class="create-secondary__group">
-            ${UI.sectionLabel('Skill')}
-            <div class="create-field">
-              <select id="create-skill" class="ui-input">
-                <option value="">Default</option>
+          <div class="create-composer__trail">
+            <label class="create-composer__pill" title="Skill">
+              <select id="create-skill" aria-label="Skill">
+                <option value="">Skill</option>
               </select>
-            </div>
+              ${CHEVRON_DOWN}
+            </label>
+            <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
           </div>
         </div>
-
-        <button class="create-spawn" id="create-spawn" onclick="Dashboard.createAgent(event)" disabled>Spawn</button>
       </div>
+
+      <button class="create-folder-pill" type="button" id="create-folder-trigger" aria-label="Pick folder" onclick="document.getElementById('create-folder').focus()">
+        ${ICONS.folder}
+        <span id="create-folder-label">Work in a project</span>
+        ${CHEVRON_DOWN}
+      </button>
+      <input
+        id="create-folder"
+        class="create-folder-input"
+        type="text"
+        placeholder="/path/to/repo"
+        list="folder-suggestions"
+        autocomplete="off"
+        spellcheck="false">
+      <datalist id="folder-suggestions">
+        ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
+      </datalist>
+      <div class="create-hint" id="folder-hint">Pick a folder to spawn in.</div>
+
+      ${recents.length ? `<div class="create-actions">${recents.map(actionCard).join('')}</div>` : ''}
     </div>
   `;
 
@@ -87,12 +140,16 @@ export function renderCreate(app, agents) {
   });
 
   const folderInput = document.getElementById('create-folder');
+  const folderLabel = document.getElementById('create-folder-label');
+  const folderPill = document.getElementById('create-folder-trigger');
   const folderHint = document.getElementById('folder-hint');
   const spawnBtn = document.getElementById('create-spawn');
 
   function updateFolderState() {
-    if (!folderInput || !folderHint || !spawnBtn) return;
+    if (!folderInput || !folderHint || !spawnBtn || !folderLabel || !folderPill) return;
     const val = folderInput.value.trim();
+    folderLabel.textContent = formatFolderLabel(val);
+    folderPill.classList.toggle('create-folder-pill--set', val.length > 0);
     if (!val) {
       folderHint.textContent = 'Pick a folder to spawn in.';
       folderHint.className = 'create-hint';
@@ -113,5 +170,19 @@ export function renderCreate(app, agents) {
   }
 
   if (folderInput) folderInput.addEventListener('input', updateFolderState);
+
+  // Recent-folder cards: one-tap to fill the folder input. Wired after
+  // render so onclick strings don't have to escape paths into HTML.
+  for (const btn of document.querySelectorAll('.create-action')) {
+    btn.addEventListener('click', () => {
+      const folder = btn.getAttribute('data-folder') || '';
+      if (!folderInput || !folder) return;
+      folderInput.value = folder;
+      folderInput.dispatchEvent(new Event('input'));
+      const msg = document.getElementById('create-message');
+      if (msg) msg.focus();
+    });
+  }
+
   updateFolderState();
 }
