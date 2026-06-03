@@ -669,6 +669,32 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   0%   { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+/* Pre-tool pulsing orb — shown between message-send and the first
+ * PreToolUse hook, as a Codex-mobile-style placeholder so the user gets
+ * immediate visual progress while the model warms up. Once the first
+ * tool fires, the JS swaps this for the tally + shimmer treatment. */
+.ui-msg-status__orb-wrap {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  padding: var(--space-1) 0;
+}
+.ui-msg-status__orb {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.25);
+  animation: ui-msg-status-orb-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ui-msg-status-orb-pulse {
+  0%, 100% { transform: scale(0.7); opacity: 0.45; box-shadow: 0 0 0 0 rgba(255,255,255,0.0); }
+  50%      { transform: scale(1.15); opacity: 1;    box-shadow: 0 0 0 6px rgba(255,255,255,0.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-msg-status__orb { animation: none; opacity: 0.7; }
+}
 .ui-msg__tool {
   display: inline-flex;
   align-items: center;

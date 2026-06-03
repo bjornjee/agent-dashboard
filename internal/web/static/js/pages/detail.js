@@ -351,6 +351,29 @@ export function refreshWorkingIndicator(agent) {
   const tallyHtml = tally
     ? '<div class="ui-msg-status__tally">' + escapeHtml(tally) + '</div>'
     : '';
+  // Pre-tool state: agent has acknowledged the prompt but no tool has
+  // fired yet (no tally, no latest entry, no current_tool). Show a
+  // pulsing orb as the placeholder — Codex-mobile pattern. Once the
+  // first PreToolUse hook arrives, this branch falls through to the
+  // regular tally + shimmer render below.
+  if (!tally && !latestToolEntry && !classified) {
+    const orbHtml = '<div class="ui-msg-status__orb-wrap"><span class="ui-msg-status__orb" aria-hidden="true"></span></div>';
+    if (existing) {
+      if (existing.innerHTML !== orbHtml) existing.innerHTML = orbHtml;
+    } else {
+      const scrollParent = container.closest('.detail-scroll');
+      const wasAtBottom = isAtBottom(scrollParent);
+      const el = document.createElement('div');
+      el.className = 'ui-msg-status ui-msg-status--working';
+      el.innerHTML = orbHtml;
+      container.appendChild(el);
+      if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+    }
+    if (!toolStreamPollTimer && agent.session_id) {
+      startToolStreamPoll(agent.session_id);
+    }
+    return;
+  }
   // Latest activity line — shows what the agent most recently *finished*.
   // Strips the "→ Tool: " prefix and the long arg tail; e.g.
   //   "→ Bash: ls -la /Users/bjornjee/Code/bjornjee/worktrees/..."
