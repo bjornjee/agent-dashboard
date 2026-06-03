@@ -975,14 +975,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: var(--text-primary);
   border-radius: 1px;
 }
-.detail-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-5) var(--space-3);
-  color: var(--text-muted);
-  font-size: 13px;
-}
 .detail-disclosure { padding: 0 var(--space-5); }
 .detail-disclosure summary {
   display: flex;
@@ -1323,8 +1315,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
  * composer and action cards collapse into the page. Add a hairline border
  * (matches the .create-spawn:disabled pattern that lived here before). */
 [data-theme="light"] .create-composer,
-[data-theme="light"] .create-action,
-[data-theme="light"] .create-folder-pill--set {
+[data-theme="light"] .create-action {
   border: 1px solid var(--border-default);
 }
 [data-theme="light"] .create-composer__send:disabled {
@@ -1370,8 +1361,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 }
 .ui-modal-btn--danger:hover { background: rgba(255, 68, 68, 0.26); }
 
-/* Stop button — Codex composer style. Single instance (composer-trailing) or legacy fallback. */
-.ui-stop-btn,
+/* Stop button — Codex composer style. Single instance (composer-trailing). */
 .ui-composer__stop {
   width: 36px;
   height: 36px;
@@ -1384,9 +1374,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   flex-shrink: 0;
   transition: background var(--transition-fast);
 }
-.ui-stop-btn:hover,
 .ui-composer__stop:hover { background: rgba(239, 68, 68, 0.22); }
-.ui-stop-btn > span,
 .ui-composer__stop > span {
   width: 12px;
   height: 12px;
@@ -2643,10 +2631,6 @@ button.btn-ghost.btn-sm {
 .tool-group-summary::before { content: '\25B6'; font-size: 8px; transition: transform var(--transition-default); display: inline-block; }
 details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 .tool-group-summary:hover { color: var(--text-muted); }
-
-/* ============================================
-   VIEW: Usage
-   ============================================ */
 
 /* ============================================================
  * DESKTOP TWO-PANE SHELL — Phase B

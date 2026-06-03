@@ -941,14 +941,6 @@ export function refreshDetailHeader(agent) {
     if (fresh) pill.replaceWith(fresh);
   }
 
-  // Update duration
-  const meta = document.querySelector('.detail-meta');
-  if (meta && agent.started_at) {
-    const spans = meta.querySelectorAll('span');
-    const last = spans[spans.length - 1];
-    if (last) last.textContent = duration(agent);
-  }
-
   // Refresh vital signs only on state change
   if (prev !== null && prev !== st) {
     loadVitalSigns(agent.session_id, agent);
@@ -1167,20 +1159,12 @@ async function loadSubagentSummary(agentId) {
     subs = await get('/api/agents/' + agentId + '/subagents');
   } catch {
     container.innerHTML = '';
-    const section = container.closest('.collapsible-section');
-    if (section) section.style.display = 'none';
     return;
   }
-  const section = container.closest('.collapsible-section');
   if (!subs || subs.length === 0) {
     container.innerHTML = '';
-    if (section) section.style.display = 'none';
     return;
   }
-  if (section) section.style.display = '';
-
-  const completed = subs.filter(s => s.Completed || s.completed).length;
-  const running = subs.length - completed;
 
   const MAX_VISIBLE = 3;
   const visible = subs.slice(-MAX_VISIBLE);
