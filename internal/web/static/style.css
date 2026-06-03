@@ -261,6 +261,15 @@ a { color: inherit; }
   border-color: var(--border-default);
   box-shadow: 0 8px 32px var(--shadow-medium);
 }
+/* The header variant lives inline in the app bar — the dock card border
+ * looks like a stray rectangle around the search + New cluster. Drop the
+ * border + shadow only for that variant; the buttons inside carry their
+ * own affordance. */
+[data-theme="light"] .ui-dock.ui-dock--header {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+}
 [data-theme="light"] .ui-dock__search:hover { background: var(--bg-hover); }
 .ui-dock__cta {
   display: inline-flex;
@@ -908,6 +917,13 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 /* Activity / Diff / Plan tab content padding */
 .tab-content { padding: 0 var(--space-5); }
 .tab-content > .conversation { padding: 0; }
+/* Plan tab — long-form markdown reads tight at 20 px on mobile.
+ * Lift to 24 px on mobile and 32 px on desktop so the prose has
+ * breathing room and the headings don't crowd the viewport edge. */
+#tab-plan { padding-left: var(--space-6); padding-right: var(--space-6); }
+@media (min-width: 900px) {
+  #tab-plan { padding-left: var(--space-7); padding-right: var(--space-7); }
+}
 
 /* Kill browser default focus chrome on tab buttons; keep keyboard-only visible focus */
 .detail-tabs__tab:focus { outline: none; }
@@ -1252,7 +1268,14 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .detail-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; padding-bottom: var(--space-5); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-.action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
+/* Action bar (composer container) — pad below so the composer card's
+ * rounded bottom corners aren't clipped by the viewport edge. The mobile
+ * pad needs to clear the composer card's drop shadow (24 px blur) + the
+ * iOS home indicator (env safe area). */
+.action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-5) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
+@media (min-width: 900px) {
+  .action-bar { padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom)); }
+}
 /* Labeled action panel — wraps state-specific chips ("Pull request",
  * "Permission request", …) above the composer. Gives the floating
  * pills context + a surface that visually pairs with the composer
@@ -2241,9 +2264,11 @@ button.btn-ghost.btn-sm {
   --bg-code: #F4F4F5;
   --bg-overlay: rgba(0, 0, 0, 0.3);
 
-  /* Desktop tokens — sidebar/selected/hover (register addendum line 31-34). */
+  /* Desktop tokens — sidebar/selected/hover (register addendum line 31-34).
+   * --bg-selected darkened from #E4E4E7 → #D4D4D8 so the selected fill
+   * reads against the #F4F4F5 sidebar without needing an accent bar. */
   --bg-sidebar: #F4F4F5;
-  --bg-selected: #E4E4E7;
+  --bg-selected: #D4D4D8;
   --bg-hover: #ECECEE;
 
   /* CTA — invert dark theme: dark fill, white text. */
@@ -2851,10 +2876,13 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     width: 32px;
     height: 32px;
   }
+  /* Composer card already provides the focused-state affordance via its
+   * box-shadow + border. An inner textarea outline on top reads as a
+   * second, conflicting frame — the "awkward border line" inside the
+   * composer when the user clicks. Drop the inner outline; rely on the
+   * outer surface. */
   .ui-composer.detail-composer .ui-composer__input:focus-visible {
-    outline: 1px solid var(--text-faint);
-    outline-offset: -1px;
-    border-radius: 8px;
+    outline: none;
   }
 
   /* --------------------------------------------------------------
@@ -2888,13 +2916,15 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     border-color: var(--border-hover);
   }
 
-  /* Sidebar selected row — light only. The accent is rendered as an
-   * inset left-border so the row's overall geometry (height, padding)
-   * is unchanged; the border eats 2px of the left padding visually. */
+  /* Sidebar selected row — light only. The 2 px dark left-border the
+   * earlier pass used read as a botched shadow, especially in light
+   * mode where the rule put a hard #1C1A17 strip against #F4F4F5.
+   * Replace with a deeper fill (--bg-selected darkened below) so the
+   * affordance carries without an accent bar — matches register.md
+   * "refined-minimal, no decorative gestures." */
   [data-theme="light"] .app-sidebar__nav-row--selected .ui-row,
   [data-theme="light"] .app-sidebar__row--selected .ui-row {
-    border-left: 2px solid var(--text-primary);
-    padding-left: calc(var(--space-3) - 2px);
+    background: var(--bg-selected);
   }
 }
 
