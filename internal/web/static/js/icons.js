@@ -19,6 +19,7 @@ export const ICONS = {
   pencil: `<svg ${s20}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`,
   send: `<svg ${s20}><path d="M12 19V5M5 12l7-7 7 7"/></svg>`,
   attach: `<svg ${s20}><path d="M12 5v14M5 12h14"/></svg>`,
+  stop: `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>`,
 
   // Row affordances
   chevronRight: `<svg ${s16}><path d="M9 18l6-6-6-6"/></svg>`,

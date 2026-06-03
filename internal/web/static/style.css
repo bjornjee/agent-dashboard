@@ -948,6 +948,12 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   border-radius: 2px;
   background: var(--accent-red);
 }
+.ui-stop-btn > svg,
+.ui-composer__stop > svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
 
 /* Status pill — inline status with dot + label */
 .ui-status-pill {

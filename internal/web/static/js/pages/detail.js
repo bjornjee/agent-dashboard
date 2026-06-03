@@ -555,7 +555,7 @@ function renderActionBar(agent) {
   const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
     : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
   const trailing = STOP_STATES.has(st)
-    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
+    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`
     : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
   const modelLabel = agent.model ? escapeHtml(agent.model) : 'auto';
   const branchLabel = agent.branch ? escapeHtml(agent.branch) : 'no branch';
@@ -1592,7 +1592,7 @@ async function loadTabContent(tab, agentId) {
       const data = await get('/api/agents/' + agentId + '/plan');
       if (signal.aborted) return;
       if (!data || !data.content) {
-        container.innerHTML = inlineEmptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
+        container.innerHTML = inlineEmptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing.');
         markLoaded();
         return;
       }
