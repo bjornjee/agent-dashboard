@@ -300,6 +300,41 @@ function parseToolName(content) {
   return m ? m[1] : '';
 }
 
+// Pure helper: turn a latest-tool entry into the short display string for
+// the "ui-msg-status__latest" line. Two failure modes we explicitly guard
+// against:
+//   1. Playwright/MCP browser calls dump their raw JS payload (often an
+//      arrow-function body) into `arg`. We drop it and surface the bare
+//      method name instead (e.g. `browser_click`).
+//   2. Bash calls that wrap JS / heredocs / multi-line scripts blow past
+//      the truncation budget and look like noise. We replace with the
+//      literal `<inline code>` label.
+// Exported so node tests can exercise it without a DOM.
+export function formatLatestToolDisplay(entry) {
+  if (!entry || !entry.content) return '';
+  const raw = String(entry.content).replace(/^→\s*/, '');
+  const m = raw.match(/^([^:]+):\s*([\s\S]*)$/);
+  const tool = m ? m[1].trim() : raw;
+  const arg = m ? m[2].trim() : '';
+  const c = classifyTool(tool);
+  const friendly = c ? c.live : tool;
+  let argSnip;
+  if (c && c.bucket === 'browser') {
+    // Drop the JS payload — surface the bare method name (e.g.
+    // `mcp__plugin_playwright__browser_click` → `browser_click`).
+    const parts = tool.split('__');
+    argSnip = parts.length > 1 ? parts[parts.length - 1] : tool;
+  } else if (
+    c && c.bucket === 'command' &&
+    (arg.indexOf('\n') !== -1 || /^\(\s*\)\s*=>/.test(arg) || /^function\b/.test(arg))
+  ) {
+    argSnip = '<inline code>';
+  } else {
+    argSnip = arg.length > 64 ? arg.slice(0, 62) + '…' : arg;
+  }
+  return argSnip ? friendly + ' · ' + argSnip : friendly;
+}
+
 // Render the tally as "Read 3 files · ran 2 commands · edited 1 file".
 function renderToolTally(buckets) {
   const parts = [];
@@ -352,20 +387,15 @@ export function refreshWorkingIndicator(agent) {
     ? '<div class="ui-msg-status__tally">' + escapeHtml(tally) + '</div>'
     : '';
   // Latest activity line — shows what the agent most recently *finished*.
-  // Strips the "→ Tool: " prefix and the long arg tail; e.g.
-  //   "→ Bash: ls -la /Users/bjornjee/Code/bjornjee/worktrees/..."
-  // renders as "Bash · ls -la /Users/bjornjee/Code/…"
+  // Display rendering (incl. bucket-aware sanitisation for browser MCP
+  // calls and inline-code bash payloads) lives in formatLatestToolDisplay
+  // so it can be unit-tested without a DOM.
   let latestHtml = '';
   if (latestToolEntry) {
-    const raw = String(latestToolEntry.content || '').replace(/^→\s*/, '');
-    const m = raw.match(/^([^:]+):\s*(.*)$/);
-    const tool = m ? m[1].trim() : raw;
-    const arg = m ? m[2].trim() : '';
-    const c = classifyTool(tool);
-    const friendly = c ? c.live : tool;
-    const argSnip = arg.length > 64 ? arg.slice(0, 62) + '…' : arg;
-    const display = argSnip ? friendly + ' · ' + argSnip : friendly;
-    latestHtml = '<div class="ui-msg-status__latest">' + escapeHtml(display) + '</div>';
+    const display = formatLatestToolDisplay(latestToolEntry);
+    if (display) {
+      latestHtml = '<div class="ui-msg-status__latest">' + escapeHtml(display) + '</div>';
+    }
   }
   const html =
     tallyHtml +
