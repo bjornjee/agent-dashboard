@@ -19,6 +19,7 @@ export const ICONS = {
   pencil: `<svg ${s20}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`,
   send: `<svg ${s20}><path d="M12 19V5M5 12l7-7 7 7"/></svg>`,
   attach: `<svg ${s20}><path d="M12 5v14M5 12h14"/></svg>`,
+  stop: `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>`,
 
   // Row affordances
   chevronRight: `<svg ${s16}><path d="M9 18l6-6-6-6"/></svg>`,
@@ -44,6 +45,7 @@ export const ICONS = {
   activity: `<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>`,
   calendar: `<svg ${s16}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
   sigma: `<svg ${s16}><path d="M18 7V4H6l6 8-6 8h12v-3"/></svg>`,
-  subagent: `<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/></svg>`,
-  chart: `<svg ${s16}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+  // Nav-row chart icon (20px, matches search/pencil/install) — used as
+  // the leading slot for the sidebar's "Usage" entry.
+  chartBar: `<svg ${s20}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
 };

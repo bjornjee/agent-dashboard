@@ -41,21 +41,41 @@ function statusDotHTML(state) {
   return `<span class="status-dot status-dot--${g.toLowerCase()}"></span>`;
 }
 
+// Maps an agent state to the accent modifier class for the search-overlay
+// status pill. Mirrors the sidebar's state-dot semantics so the WAITING /
+// RUNNING / REVIEW / PR / BLOCKED tags carry their accent colour instead
+// of the default neutral grey. Returns '' for merged / unknown so callers
+// can append unconditionally without producing dangling spaces.
+export function searchTagClass(state) {
+  const g = stateGroup(state);
+  switch (g) {
+    case 'WAITING': return 'search-overlay__tag--waiting';
+    case 'BLOCKED': return 'search-overlay__tag--blocked';
+    case 'RUNNING': return 'search-overlay__tag--running';
+    case 'REVIEW':  return 'search-overlay__tag--review';
+    case 'PR':      return 'search-overlay__tag--pr';
+    default:        return '';
+  }
+}
+
 function rowHTML(result, index) {
   const a = result.item;
   const indicesByField = result.indicesByField || [null, null];
   const titleHTML = highlightMatched(repoName(a), indicesByField[0]);
   const subtitleHTML = a.branch ? highlightMatched(a.branch, indicesByField[1]) : '';
-  const tag = stateGroup(effectiveState(a));
+  const state = effectiveState(a);
+  const tag = stateGroup(state);
+  const tagMod = searchTagClass(state);
+  const tagCls = tagMod ? 'search-overlay__tag ' + tagMod : 'search-overlay__tag';
   const sel = index === selectedIndex ? ' search-overlay__row--selected' : '';
   return (
     `<button class="search-overlay__row${sel}" data-agent-id="${escapeHtml(a.session_id)}" data-index="${index}" role="option">` +
-      `<span class="search-overlay__leading">${statusDotHTML(effectiveState(a))}</span>` +
+      `<span class="search-overlay__leading">${statusDotHTML(state)}</span>` +
       `<span class="search-overlay__rowbody">` +
         `<span class="search-overlay__title">${titleHTML}</span>` +
         (subtitleHTML ? `<span class="search-overlay__subtitle">${subtitleHTML}</span>` : '') +
       `</span>` +
-      `<span class="search-overlay__tag">${escapeHtml(tag)}</span>` +
+      `<span class="${tagCls}">${escapeHtml(tag)}</span>` +
     `</button>`
   );
 }
