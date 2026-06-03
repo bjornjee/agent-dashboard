@@ -125,6 +125,20 @@ body {
   font-feature-settings: "cv11", "ss03", "cv02", "ss01";
   text-rendering: optimizeLegibility;
 }
+/* Smooth dark/light cross-fade. Without this, toggling --bg-* /
+ * --text-* tokens flips the whole UI instantly — the user reports
+ * this as "harsh and ugly". Theme.cycle() adds .theme-cycling to <html>
+ * for ~260ms; the universal transition fires only inside that window so
+ * hover/focus transitions on individual elements keep their own
+ * timings the rest of the time. prefers-reduced-motion no-ops. */
+html.theme-cycling,
+html.theme-cycling *:not(.spinner):not(.spinner *):not(.ui-msg-status__label):not(.ui-msg-status__orb):not(.ui-app-bar__spinner) {
+  transition: background-color 240ms ease, color 240ms ease, border-color 240ms ease, fill 240ms ease, box-shadow 240ms ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-cycling,
+  html.theme-cycling * { transition: none !important; }
+}
 @supports (font-variation-settings: normal) {
   body { font-family: "InterVariable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
 }

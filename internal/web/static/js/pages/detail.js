@@ -1087,17 +1087,34 @@ export async function renderDetail(app, agents, agentId, setView) {
   if (savedTab === 'conversation') startConversationPoll(agentId);
 }
 
+// Per-agent vital signs cache. Keyed by agentId so switching between
+// agents doesn't bleed values. Used to suppress redundant innerHTML
+// rewrites — without this, every state-change SSE event wipes the
+// strip and re-mounts it, producing a visible cost flicker on mobile.
+const vitalSignsCache = new Map(); // agentId → { tokens, cost }
+
 async function loadVitalSigns(agentId, agent) {
   const container = document.getElementById('vital-signs-container');
   if (!container) return;
   try {
     const usage = await get('/api/agents/' + agentId + '/usage');
     const elapsed = agent.started_at ? duration(agent) : '';
-    container.innerHTML = inlineVitalStrip({
-      elapsed: elapsed,
-      tokens: (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0),
-      cost: usage ? usage.CostUSD : 0,
-    });
+    const tokens = (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0);
+    const cost = usage ? usage.CostUSD : 0;
+    const prev = vitalSignsCache.get(agentId);
+
+    // If the strip is already mounted AND tokens/cost are unchanged,
+    // just patch the elapsed cell so the duration ticks without
+    // wiping the rest of the strip (which is what causes the flicker).
+    if (prev && prev.tokens === tokens && prev.cost === cost) {
+      const cells = container.querySelectorAll('.vital-value');
+      if (cells.length === 3) {
+        cells[0].textContent = elapsed;
+        return;
+      }
+    }
+    vitalSignsCache.set(agentId, { tokens, cost });
+    container.innerHTML = inlineVitalStrip({ elapsed, tokens, cost });
   } catch {
     container.innerHTML = '';
   }
