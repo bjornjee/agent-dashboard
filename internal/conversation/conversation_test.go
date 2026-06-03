@@ -1205,6 +1205,46 @@ func TestReadConversation_EmitsPlanSavedEntry(t *testing.T) {
 	}
 }
 
+func TestReadConversation_EmitsPlanSavedOnFirstSlug(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-slug"
+
+	// Plan came from /agent-dashboard:feature (slash-command skill);
+	// no ExitPlanMode tool_use. Slug appears once the plan markdown
+	// is written. Expect a plan-saved synthetic entry anchored to the
+	// first slug-bearing entry's timestamp.
+	jsonl := `{"type":"user","message":{"role":"user","content":"/agent-dashboard:feature do X"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"attachment","slug":"happy-cat","timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","slug":"happy-cat","message":{"role":"user","content":"thanks"},"timestamp":"2026-03-28T10:00:03Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	count := 0
+	var planEntry *ConversationEntryLite
+	for i := range got {
+		if got[i].Role == "plan-saved" {
+			count++
+			pe := ConversationEntryLite{Role: got[i].Role, Timestamp: got[i].Timestamp}
+			planEntry = &pe
+		}
+	}
+	if count != 1 {
+		t.Fatalf("got %d plan-saved entries, want exactly 1 (one per session for slug-driven plans)", count)
+	}
+	if planEntry.Timestamp != "2026-03-28T10:00:02Z" {
+		t.Errorf("plan-saved timestamp = %q, want first-slug timestamp 2026-03-28T10:00:02Z", planEntry.Timestamp)
+	}
+}
+
+type ConversationEntryLite struct {
+	Role      string
+	Timestamp string
+}
+
 func TestReadConversation_NoPlanSavedWithoutExitPlanMode(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "proj")
