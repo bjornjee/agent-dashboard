@@ -149,7 +149,54 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return
 	}
+	// Single-source-of-truth check for plan existence — exactly the
+	// same trigger handlePlan uses. If the agent has a plan but the
+	// conversation entries don't already include a plan-saved
+	// synthetic entry (e.g. delegated Plan subagent that didn't
+	// stamp a slug onto JSONL entries the reader could see), append
+	// one at the end so the chat-stream plan-link card still mounts.
+	if !hasPlanSavedEntry(entries) && s.agentHasPlan(agent) {
+		ts := ""
+		if len(entries) > 0 {
+			ts = entries[len(entries)-1].Timestamp
+		}
+		entries = append(entries, domain.ConversationEntry{
+			Role:      "plan-saved",
+			Timestamp: ts,
+		})
+	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+func hasPlanSavedEntry(entries []domain.ConversationEntry) bool {
+	for _, e := range entries {
+		if e.Role == "plan-saved" {
+			return true
+		}
+	}
+	return false
+}
+
+// agentHasPlan mirrors handlePlan's content-presence check exactly.
+// Returns true iff /api/agents/{id}/plan would return non-empty
+// content for this agent. Used to backstop the JSONL forensics in
+// the conversation reader (ExitPlanMode tool_use, first slug field)
+// so a chat-stream plan-link card mounts even when those signals
+// aren't available — e.g. delegated Plan subagent.
+func (s *Server) agentHasPlan(agent domain.Agent) bool {
+	if agent.ProjDir == "" || agent.SessionID == "" {
+		return false
+	}
+	if agent.DelegatedPlanToolUseID != "" {
+		if conversation.ReadDelegatedPlanContent(agent.ProjDir, agent.SessionID, agent.DelegatedPlanToolUseID) != "" {
+			return true
+		}
+	}
+	slug := conversation.ReadPlanSlug(agent.ProjDir, agent.SessionID)
+	if slug == "" {
+		return false
+	}
+	return conversation.ReadPlanContent(s.cfg.Profile.PlansDir, slug) != ""
 }
 
 // handlePendingQuestion serves GET /api/agents/{id}/pending-question.
