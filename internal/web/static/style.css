@@ -482,42 +482,33 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   max-height: 260px;
   overflow-y: auto;
 }
-/* Light-mode chat-bubble inversion. The user pill becomes a dark pill on
- * the white page so it doesn't blend with --bg-elevated chips/buttons.
- * Agent prose remains on the page surface (the .ui-msg__prose default).
- * See docs/design/light-flow-map.md A2. */
+/* Light-mode user pill — iOS systemGray4 (#D1D1D6) with dark text.
+ * Iter-16 trajectory:
+ *   #1C1A17 (deep black, ~21:1) — too punchy; user reported screaming
+ *   #3A3A3C (~10.5:1) — still heavy
+ *   #636366 (~4.6:1) — mid-gray chip, competes with white card
+ *   #D1D1D6 (~1.6:1 vs white) — featherweight recessive fill, matches
+ *     Codex iOS "from-them" style; pairs with #1C1A17 text (~13:1
+ *     intra-bubble contrast, well over WCAG AAA). Sits visibly below
+ *     the white assistant card + hairline border in the elevation
+ *     hierarchy: white canvas > white assistant card (with hairline) >
+ *     pale-gray user pill. */
 [data-theme="light"] .ui-msg--user .ui-msg__bubble {
-  background: var(--cta-bg);
-  color: var(--cta-text);
+  background: #D1D1D6;
+  color: #1C1A17;
 }
 /* Assistant message: avatar + soft-elevated card so consecutive turns are
  * visually distinct and don't read as one wall of text. The card lifts on
  * hover; the copy button is anchored inside the card so it travels with it.
  * User pills and tool footers are unaffected. */
 .ui-msg--assistant { flex-direction: row; align-items: flex-start; gap: var(--space-3); position: relative; }
-.ui-msg__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-/* Mobile: drop the avatar circle. At 390 px the 28 px chip + gap eats
- * ~40 px of column width per row — a meaningful tax when the user pill
- * is right-aligned and the assistant card already carries its own
- * surface. The soft card on the left + right-aligned user pill on the
- * right already do the role differentiation. */
-@media (max-width: 720px) {
-  .ui-msg__avatar { display: none; }
-  .ui-msg--assistant { gap: 0; }
-}
+/* Avatar circle removed at every viewport. The assistant card's own
+ * surface + position vs. the right-aligned user pill is enough role
+ * differentiation; the chip was decorative overhead, not a load-
+ * bearing affordance. JS still emits the markup so callers don't
+ * change; CSS just hides it. */
+.ui-msg__avatar { display: none; }
+.ui-msg--assistant { gap: 0; }
 .ui-msg__card {
   flex: 1;
   min-width: 0;
