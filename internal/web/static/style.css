@@ -1167,6 +1167,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   transition: background var(--transition-fast);
   position: relative;
   cursor: pointer;
+  min-width: 0;
 }
 .create-composer__pill:hover { background: var(--bg-base); }
 .create-composer__pill svg { color: var(--text-muted); flex-shrink: 0; width: 14px; height: 14px; }
@@ -1181,6 +1182,20 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   padding: 0;
   cursor: pointer;
   max-width: 140px;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+/* Mobile: tighten the toolbar so all four children + the send button
+ * fit inside the composer card without the send circle clipping the
+ * rounded right corner. Caps select to 80 px, cuts toolbar gap to
+ * 4 px, and ensures the send button never shrinks. */
+@media (max-width: 720px) {
+  .create-composer__toolbar { gap: var(--space-1); }
+  .create-composer__lead,
+  .create-composer__trail { gap: var(--space-1); min-width: 0; }
+  .create-composer__pill { padding: 0 var(--space-2); }
+  .create-composer__pill select { max-width: 88px; }
+  .create-composer__send { flex-shrink: 0; }
 }
 .create-composer__send {
   width: 32px;
