@@ -379,7 +379,7 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
     if (!text) return;
     const showCopied = () => {
       btn.classList.add('ui-msg__copy--copied');
-      btn.innerHTML = ICONS.check || ICONS.copy;
+      btn.innerHTML = ICONS.check;
       setTimeout(() => {
         btn.classList.remove('ui-msg__copy--copied');
         btn.innerHTML = ICONS.copy;
