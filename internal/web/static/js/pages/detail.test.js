@@ -10,16 +10,27 @@ const path = require('node:path');
 let questionCardId;
 let renderQuestionCard;
 let formatLatestToolDisplay;
+let isAgentMidTurn;
+let getMessageCopyText;
 
 test('load module', async () => {
+  // Stub a minimal global `document` so any module-level click delegation
+  // setup in detail.js doesn't crash under node:test (no jsdom).
+  if (typeof globalThis.document === 'undefined') {
+    globalThis.document = { addEventListener() {} };
+  }
   const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
   const mod = await import(url);
   questionCardId = mod.questionCardId;
   renderQuestionCard = mod.renderQuestionCard;
   formatLatestToolDisplay = mod.formatLatestToolDisplay;
+  isAgentMidTurn = mod.isAgentMidTurn;
+  getMessageCopyText = mod.getMessageCopyText;
   assert.equal(typeof questionCardId, 'function');
   assert.equal(typeof renderQuestionCard, 'function');
   assert.equal(typeof formatLatestToolDisplay, 'function');
+  assert.equal(typeof isAgentMidTurn, 'function');
+  assert.equal(typeof getMessageCopyText, 'function');
 });
 
 test('questionCardId prefers real tool_use_id', () => {
@@ -135,4 +146,63 @@ test('formatLatestToolDisplay falls back to raw tool name when not classified', 
   const entry = { content: '→ SomethingNovel: arg here' };
   // classifyTool returns { bucket: 'other', live: 'Running SomethingNovel' }
   assert.equal(formatLatestToolDisplay(entry), 'Running SomethingNovel · arg here');
+});
+
+// isAgentMidTurn must be deterministic on agent.state — independent of
+// last_hook_event. Otherwise the inline working indicator lingers after
+// the agent leaves a working state but before/without a Stop hook event.
+test('isAgentMidTurn returns false for null agent', () => {
+  assert.equal(isAgentMidTurn(null), false);
+  assert.equal(isAgentMidTurn(undefined), false);
+});
+
+test('isAgentMidTurn returns true while state is running, regardless of hook', () => {
+  assert.equal(isAgentMidTurn({ state: 'running' }), true);
+  assert.equal(isAgentMidTurn({ state: 'running', last_hook_event: 'PostToolUse' }), true);
+  assert.equal(isAgentMidTurn({ state: 'running', last_hook_event: '' }), true);
+});
+
+test('isAgentMidTurn returns false once state leaves WORKING_STATES — Stop hook NOT required', () => {
+  // The bug: spinner would persist while last_hook_event was anything but 'Stop'.
+  // After fix: state alone is the deterministic trigger.
+  assert.equal(isAgentMidTurn({ state: 'done', last_hook_event: 'PostToolUse' }), false);
+  assert.equal(isAgentMidTurn({ state: 'idle_prompt', last_hook_event: 'PreToolUse' }), false);
+  assert.equal(isAgentMidTurn({ state: 'pr' }), false);
+  assert.equal(isAgentMidTurn({ state: 'merged' }), false);
+});
+
+test('isAgentMidTurn keeps other working states (permission/plan/question/error) as mid-turn', () => {
+  assert.equal(isAgentMidTurn({ state: 'permission' }), true);
+  assert.equal(isAgentMidTurn({ state: 'plan' }), true);
+  assert.equal(isAgentMidTurn({ state: 'question' }), true);
+  assert.equal(isAgentMidTurn({ state: 'error' }), true);
+});
+
+// Pure DOM helper: read the assistant-message prose for the clipboard.
+// The button delegate calls this with the .ui-msg__copy button element.
+test('getMessageCopyText returns trimmed innerText from the ui-msg__prose sibling', () => {
+  const mockBtn = {
+    closest(sel) {
+      assert.equal(sel, '.ui-msg__card');
+      return {
+        querySelector(s) {
+          assert.equal(s, '.ui-msg__prose');
+          return { innerText: '  Hello, world!\n\n  ' };
+        },
+      };
+    },
+  };
+  assert.equal(getMessageCopyText(mockBtn), 'Hello, world!');
+});
+
+test('getMessageCopyText returns empty string when no ui-msg__card ancestor', () => {
+  const mockBtn = { closest() { return null; } };
+  assert.equal(getMessageCopyText(mockBtn), '');
+});
+
+test('getMessageCopyText returns empty string when no .ui-msg__prose inside', () => {
+  const mockBtn = {
+    closest() { return { querySelector() { return null; } }; },
+  };
+  assert.equal(getMessageCopyText(mockBtn), '');
 });
