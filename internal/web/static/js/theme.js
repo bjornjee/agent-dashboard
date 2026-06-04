@@ -32,7 +32,13 @@ export const Theme = {
   cycle() {
     const next = this.getPreference() === 'dark' ? 'light' : 'dark';
     localStorage.setItem(STORAGE_KEY, next);
+    // Cross-fade window — CSS .theme-cycling rule enables a 240ms
+    // transition on color tokens during this turn only, so element
+    // hover/focus transitions keep their normal cadence after.
+    const root = document.documentElement;
+    root.classList.add('theme-cycling');
     this.apply(next);
+    setTimeout(() => root.classList.remove('theme-cycling'), 280);
     // Refresh every theme-toggle button on the page (app-bar + sidebar).
     document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
       const slot = btn.querySelector('[data-theme-icon]');

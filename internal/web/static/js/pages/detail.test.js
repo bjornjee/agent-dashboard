@@ -183,7 +183,7 @@ test('isAgentMidTurn keeps other working states (permission/plan/question/error)
 test('getMessageCopyText returns trimmed innerText from the ui-msg__prose sibling', () => {
   const mockBtn = {
     closest(sel) {
-      assert.equal(sel, '.ui-msg');
+      assert.equal(sel, '.ui-msg__card');
       return {
         querySelector(s) {
           assert.equal(s, '.ui-msg__prose');
@@ -195,7 +195,7 @@ test('getMessageCopyText returns trimmed innerText from the ui-msg__prose siblin
   assert.equal(getMessageCopyText(mockBtn), 'Hello, world!');
 });
 
-test('getMessageCopyText returns empty string when no ui-msg ancestor', () => {
+test('getMessageCopyText returns empty string when no ui-msg__card ancestor', () => {
   const mockBtn = { closest() { return null; } };
   assert.equal(getMessageCopyText(mockBtn), '');
 });

@@ -1203,6 +1203,118 @@ func TestParseUserEntry_SkillBody(t *testing.T) {
 
 // -- HasPendingPlanReview tests --
 
+func TestReadConversation_EmitsPlanSavedEntry(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-plan"
+
+	// Human prompt -> assistant turn with text + ExitPlanMode tool_use.
+	// Expect three entries: human, assistant text, synthetic plan-saved.
+	jsonl := `{"type":"user","message":{"role":"user","content":"plan it"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Here is the plan."},{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{"plan":"# Title\n\nbody"}}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	if len(got) != 3 {
+		t.Fatalf("got %d entries, want 3 (human, assistant, plan-saved); entries=%+v", len(got), got)
+	}
+	if got[2].Role != "plan-saved" {
+		t.Errorf("got[2].Role = %q, want plan-saved", got[2].Role)
+	}
+	if got[2].Timestamp != "2026-03-28T10:00:01Z" {
+		t.Errorf("plan-saved timestamp = %q, want assistant turn timestamp", got[2].Timestamp)
+	}
+}
+
+func TestReadConversation_EmitsPlanSavedOnFirstSlug(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-slug"
+
+	// Plan came from /agent-dashboard:feature (slash-command skill);
+	// no ExitPlanMode tool_use. Slug appears once the plan markdown
+	// is written. Expect a plan-saved synthetic entry anchored to the
+	// first slug-bearing entry's timestamp.
+	jsonl := `{"type":"user","message":{"role":"user","content":"/agent-dashboard:feature do X"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"attachment","slug":"happy-cat","timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","slug":"happy-cat","message":{"role":"user","content":"thanks"},"timestamp":"2026-03-28T10:00:03Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	count := 0
+	var planIdx int = -1
+	for i := range got {
+		if got[i].Role == "plan-saved" {
+			count++
+			planIdx = i
+		}
+	}
+	if count != 1 {
+		t.Fatalf("got %d plan-saved entries, want exactly 1 (one per session for slug-driven plans)", count)
+	}
+	if got[planIdx].Timestamp != "2026-03-28T10:00:02Z" {
+		t.Errorf("plan-saved timestamp = %q, want first-slug timestamp 2026-03-28T10:00:02Z", got[planIdx].Timestamp)
+	}
+}
+
+// /agent-dashboard:feature stamps a plan slug on JSONL entries (skill
+// writes the plan directory on disk) AND calls ExitPlanMode at the plan
+// phase. The chat must show ONE plan-link card anchored to the
+// ExitPlanMode position — not two cards (slug + ExitPlanMode), and not a
+// premature card from the first-slug entry where the plan didn't exist
+// yet.
+func TestReadConversation_SlugAndExitPlanMode_EmitsSinglePlanSavedAtExitPlanMode(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-slug-and-exitplan"
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"/agent-dashboard:feature do X"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"setting up"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"attachment","slug":"happy-cat","timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","slug":"happy-cat","message":{"role":"user","content":"continuing"},"timestamp":"2026-03-28T10:00:03Z"}
+{"type":"assistant","slug":"happy-cat","message":{"role":"assistant","content":[{"type":"text","text":"plan ready"},{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{"plan":"# Title\n\nbody"}}]},"timestamp":"2026-03-28T10:00:04Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	var planEntries []domain.ConversationEntry
+	for i := range got {
+		if got[i].Role == "plan-saved" {
+			planEntries = append(planEntries, got[i])
+		}
+	}
+	if len(planEntries) != 1 {
+		t.Fatalf("got %d plan-saved entries, want exactly 1 (ExitPlanMode supersedes slug); entries=%+v", len(planEntries), planEntries)
+	}
+	if planEntries[0].Timestamp != "2026-03-28T10:00:04Z" {
+		t.Errorf("plan-saved timestamp = %q, want ExitPlanMode timestamp 2026-03-28T10:00:04Z", planEntries[0].Timestamp)
+	}
+}
+
+func TestReadConversation_NoPlanSavedWithoutExitPlanMode(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-noplan"
+
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	for _, e := range got {
+		if e.Role == "plan-saved" {
+			t.Errorf("unexpected plan-saved entry: %+v", e)
+		}
+	}
+}
+
 func TestHasPendingPlanReview_Pending(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "proj")
@@ -1320,14 +1432,37 @@ func TestHasPendingQuestion_Pending(t *testing.T) {
 	os.MkdirAll(projDir, 0755)
 	sessionID := "sess-1"
 
-	// AskUserQuestion followed by tool_result only -> still pending
+	// AskUserQuestion (t1) with NO subsequent reply -> pending. The user
+	// entry that follows is a tool_result for a DIFFERENT tool_use_id
+	// (a sibling sidechain Bash result), which must not count as the
+	// answer to t1.
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"bash-99","type":"tool_result","content":"ok"}]},"timestamp":"2026-03-28T10:00:01Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	if !HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected pending question -- unrelated tool_result is not the answer")
+	}
+}
+
+func TestHasPendingQuestion_AnsweredViaToolResult(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-1"
+
+	// AskUserQuestion (t1) answered via a tool_result whose
+	// tool_use_id matches t1 -- this is what the dashboard's "Send
+	// Answer" button posts. Question must be considered resolved so
+	// the question card disappears.
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"question":"Which approach?"}}]},"timestamp":"2026-03-28T10:00:00Z"}
 {"type":"user","message":{"role":"user","content":[{"tool_use_id":"t1","type":"tool_result","content":"Option A"}]},"timestamp":"2026-03-28T10:00:01Z"}
 `
 	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
 
-	if !HasPendingQuestion(projDir, sessionID) {
-		t.Error("expected pending question -- tool_result is not a human response")
+	if HasPendingQuestion(projDir, sessionID) {
+		t.Error("expected NO pending question -- matching tool_result is the answer (dashboard Send Answer flow)")
 	}
 }
 
@@ -1389,8 +1524,11 @@ func TestReadPendingQuestion_MultiQuestionPayload(t *testing.T) {
 	os.MkdirAll(projDir, 0755)
 	sessionID := "sess-1"
 
+	// The trailing tool_result has a NON-matching tool_use_id, so it
+	// does not resolve tool_abc. Question remains pending and the
+	// payload parses correctly.
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_abc","name":"AskUserQuestion","input":{"questions":[{"question":"What should this feature deliver?","header":"Deliverable","multiSelect":false,"options":[{"label":"Implement fixes (Recommended)","description":"Add tests and repo changes for fixable gaps."},{"label":"Report only","description":"Produce a readiness grade without changing site code."}]},{"question":"How should we handle external checks?","header":"External","multiSelect":false,"options":[{"label":"Document actions (Recommended)","description":"Use live public probes and repo checks."},{"label":"Use credentials","description":"Plan for authenticated checks if you provide credentials."}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
-{"type":"user","message":{"role":"user","content":[{"tool_use_id":"tool_abc","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"sibling-bash-99","type":"tool_result","content":"ls ok"}]},"timestamp":"2026-06-02T10:00:01Z"}
 `
 	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644); err != nil {
 		t.Fatalf("write jsonl: %v", err)
@@ -1485,8 +1623,8 @@ func TestReadPendingQuestion_FindsEntryBeyondTailWindow(t *testing.T) {
 
 	var b strings.Builder
 	b.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_BEYOND","name":"AskUserQuestion","input":{"questions":[{"question":"Which path?","header":"Path","multiSelect":false,"options":[{"label":"A","description":"first"},{"label":"B","description":"second"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}` + "\n")
-	// System-generated tool_result placeholder that always follows.
-	b.WriteString(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_BEYOND","type":"tool_result","content":"pending"}]},"timestamp":"2026-06-02T10:00:01Z"}` + "\n")
+	// Unrelated sidechain tool_result — must NOT resolve toolu_BEYOND.
+	b.WriteString(`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"sub_other","type":"tool_result","content":"ok"}]},"timestamp":"2026-06-02T10:00:01Z"}` + "\n")
 	// Pad with sidechain user tool_result entries to push the AskUserQuestion
 	// well past the previous 64KB tail window without inserting a human reply.
 	padLine := `{"type":"user","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"sub_t","content":[{"type":"text","text":"` + strings.Repeat("x", 500) + `"}]}]},"timestamp":"2026-06-02T10:00:02Z"}` + "\n"

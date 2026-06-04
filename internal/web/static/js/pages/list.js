@@ -3,8 +3,7 @@ import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
 import { effectiveState, stateGroup, prTag } from '../state.js';
-import { escapeHtml, repoName, durationShort, formatCost } from '../format.js';
-import { get } from '../api.js';
+import { escapeHtml, repoName, durationShort } from '../format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
@@ -51,13 +50,11 @@ export function renderList(app, agents) {
     body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
-      const trailing = `<span class="ui-row__trailing-cost" data-agent-id="${id}"></span>`;
       body += UI.row({
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
         subtitle: metaLine(agent),
         tag: prTag(agent),
-        trailing,
         onclick: `Dashboard.selectAgent('${id}')`,
       });
     }
@@ -81,17 +78,4 @@ export function renderList(app, agents) {
     cta: { label: '+ New', icon: ICONS.pencil, onclick: 'Dashboard.showCreate()' },
   });
   document.body.appendChild(dock.firstElementChild);
-
-  loadAgentCosts();
-}
-
-async function loadAgentCosts() {
-  const els = document.querySelectorAll('.ui-row__trailing-cost[data-agent-id]');
-  if (!els.length) return;
-  await Promise.all(Array.from(els).map(async (el) => {
-    try {
-      const u = await get('/api/agents/' + el.dataset.agentId + '/usage');
-      if (u && u.CostUSD > 0) el.textContent = formatCost(u.CostUSD);
-    } catch { /* ignore */ }
-  }));
 }

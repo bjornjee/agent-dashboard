@@ -123,6 +123,7 @@ type jsonlEntry struct {
 	Type      string          `json:"type"`
 	Message   json.RawMessage `json:"message"`
 	Timestamp string          `json:"timestamp"`
+	Slug      string          `json:"slug"`
 }
 
 type messageEnvelope struct {
@@ -216,6 +217,14 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		prevLen = len(all)
 	}
 
+	// Slug-based plan-saved emission is deferred to end-of-scan because
+	// slug appears on JSONL entries as soon as the plan directory is
+	// created, before ExitPlanMode fires. Emit at first-slug only when no
+	// ExitPlanMode was found; otherwise anchor the card to ExitPlanMode.
+	slugFirstIdx := -1
+	slugFirstTimestamp := ""
+	exitPlanEmitted := false
+
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -236,7 +245,33 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 			if e := parseAssistantEntry(entry); e != nil {
 				all = append(all, *e)
 			}
+			// Emit a synthetic plan-saved entry per ExitPlanMode tool_use
+			// in this assistant message. Anchors the chat-stream plan-link
+			// card to the timeline position where the plan was written —
+			// append-only, scrolls with history.
+			if planEntry := extractPlanSavedEntry(entry); planEntry != nil {
+				all = append(all, *planEntry)
+				exitPlanEmitted = true
+			}
 		}
+		if entry.Slug != "" && slugFirstIdx < 0 {
+			slugFirstIdx = len(all)
+			slugFirstTimestamp = entry.Timestamp
+		}
+	}
+
+	// No ExitPlanMode seen → fall back to slug position so skill-based
+	// plans still get a card. planSavedEmitted guards against re-inserting
+	// on incremental reads that already have the entry from a prior scan.
+	if slugFirstIdx >= 0 && !exitPlanEmitted && !planSavedEmitted(all) {
+		if slugFirstIdx > len(all) {
+			slugFirstIdx = len(all)
+		}
+		slugEntry := domain.ConversationEntry{
+			Role:      "plan-saved",
+			Timestamp: slugFirstTimestamp,
+		}
+		all = append(all[:slugFirstIdx], append([]domain.ConversationEntry{slugEntry}, all[slugFirstIdx:]...)...)
 	}
 
 	// Only mark notifications on new entries + the boundary entry from prev
@@ -249,9 +284,24 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		markNotifications(all[notifStart:])
 	}
 
-	// Cap at limit (keep last N)
+	// Cap at limit (keep last N) — BUT preserve any plan-saved
+	// synthetic entries that would otherwise be dropped. Plans are
+	// rare (1-2 per session) and the chat-stream plan-link card
+	// must appear regardless of where in history the plan was
+	// written. Dropped plan-saved entries get re-prepended at the
+	// start of the capped window so the user still sees the card.
 	if limit > 0 && len(all) > limit {
+		dropped := all[:len(all)-limit]
 		all = all[len(all)-limit:]
+		var rescued []domain.ConversationEntry
+		for _, e := range dropped {
+			if e.Role == "plan-saved" {
+				rescued = append(rescued, e)
+			}
+		}
+		if len(rescued) > 0 {
+			all = append(rescued, all...)
+		}
 	}
 
 	// The scanner reads to EOF; file offset == file size
@@ -430,6 +480,47 @@ func parseAssistantEntry(entry jsonlEntry) *domain.ConversationEntry {
 		Content:   truncate(content, 32000),
 		Timestamp: entry.Timestamp,
 	}
+}
+
+// planSavedEmitted returns true if entries already contains a
+// plan-saved synthetic entry. Used to guard against emitting more
+// than one slug-driven plan-saved entry per session (the slug
+// field repeats across many entries once a plan is referenced).
+// ExitPlanMode-driven plan-saved entries are NOT capped — every
+// ExitPlanMode tool_use legitimately marks a plan revision.
+func planSavedEmitted(entries []domain.ConversationEntry) bool {
+	for _, e := range entries {
+		if e.Role == "plan-saved" {
+			return true
+		}
+	}
+	return false
+}
+
+// extractPlanSavedEntry returns a synthetic ConversationEntry with
+// Role="plan-saved" when the assistant message contains an
+// ExitPlanMode tool_use. The frontend uses Role to render a chat-
+// stream plan-link card at this timeline position. Returns nil if
+// no ExitPlanMode block is present.
+func extractPlanSavedEntry(entry jsonlEntry) *domain.ConversationEntry {
+	var env messageEnvelope
+	if err := json.Unmarshal(entry.Message, &env); err != nil {
+		return nil
+	}
+	var blocks []toolUseBlock
+	if err := json.Unmarshal(env.Content, &blocks); err != nil {
+		return nil
+	}
+	for _, b := range blocks {
+		if b.Type == "tool_use" && b.Name == "ExitPlanMode" {
+			return &domain.ConversationEntry{
+				Role:      "plan-saved",
+				Content:   "",
+				Timestamp: entry.Timestamp,
+			}
+		}
+	}
+	return nil
 }
 
 // -- Activity Log (includes tool_use entries) --
@@ -820,7 +911,10 @@ func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
 				humanAfter = false
 			}
 		case "user":
-			if lastInput != nil && isHumanUserEntry(entry.Message) {
+			if lastInput == nil {
+				continue
+			}
+			if isHumanUserEntry(entry.Message) || hasToolResultFor(entry.Message, lastID) {
 				humanAfter = true
 			}
 		}
@@ -1006,6 +1100,7 @@ func hasPendingToolCall(projDir, sessionID, toolName string) bool {
 
 	found := false
 	humanAfter := false
+	var lastID string
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -1032,11 +1127,15 @@ func hasPendingToolCall(projDir, sessionID, toolName string) bool {
 				if b.Type == "tool_use" && b.Name == toolName {
 					found = true
 					humanAfter = false
+					lastID = toolUseID(line)
 					break
 				}
 			}
 		case "user":
-			if found && isHumanUserEntry(entry.Message) {
+			if !found {
+				continue
+			}
+			if isHumanUserEntry(entry.Message) || hasToolResultFor(entry.Message, lastID) {
 				humanAfter = true
 			}
 		}
@@ -1060,6 +1159,34 @@ func isHumanUserEntry(msg json.RawMessage) bool {
 	// If every block is a tool_result, it's system-generated
 	for _, b := range blocks {
 		if b.Type != "tool_result" {
+			return true
+		}
+	}
+	return false
+}
+
+// hasToolResultFor returns true if the user message contains a
+// tool_result block whose tool_use_id matches the supplied id. The
+// dashboard's "Send Answer" button posts AskUserQuestion responses
+// this way -- a matching tool_result IS the user's answer, even though
+// isHumanUserEntry returns false for tool_result-only messages.
+func hasToolResultFor(msg json.RawMessage, id string) bool {
+	if id == "" {
+		return false
+	}
+	var env messageEnvelope
+	if json.Unmarshal(msg, &env) != nil {
+		return false
+	}
+	var blocks []struct {
+		Type      string `json:"type"`
+		ToolUseID string `json:"tool_use_id"`
+	}
+	if json.Unmarshal(env.Content, &blocks) != nil {
+		return false
+	}
+	for _, b := range blocks {
+		if b.Type == "tool_result" && b.ToolUseID == id {
 			return true
 		}
 	}

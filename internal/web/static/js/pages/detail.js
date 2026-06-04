@@ -357,12 +357,12 @@ function renderToolTally(buckets) {
 
 // Extract the user-visible prose of an assistant message for the
 // clipboard. `btn` is the .ui-msg__copy element clicked. Returns '' if
-// the surrounding .ui-msg / .ui-msg__prose can't be located.
+// the surrounding .ui-msg__card / .ui-msg__prose can't be located.
 export function getMessageCopyText(btn) {
   if (!btn) return '';
-  const msg = btn.closest('.ui-msg');
-  if (!msg) return '';
-  const prose = msg.querySelector('.ui-msg__prose');
+  const card = btn.closest('.ui-msg__card');
+  if (!card) return '';
+  const prose = card.querySelector('.ui-msg__prose');
   if (!prose) return '';
   return String(prose.innerText || '').trim();
 }
@@ -427,6 +427,29 @@ export function refreshWorkingIndicator(agent) {
   const tallyHtml = tally
     ? '<div class="ui-msg-status__tally">' + escapeHtml(tally) + '</div>'
     : '';
+  // Pre-tool state: agent has acknowledged the prompt but no tool has
+  // fired yet (no tally, no latest entry, no current_tool). Show a
+  // pulsing orb as the placeholder — Codex-mobile pattern. Once the
+  // first PreToolUse hook arrives, this branch falls through to the
+  // regular tally + shimmer render below.
+  if (!tally && !latestToolEntry && !classified) {
+    const orbHtml = '<div class="ui-msg-status__orb-wrap"><span class="ui-msg-status__orb" aria-hidden="true"></span></div>';
+    if (existing) {
+      if (existing.innerHTML !== orbHtml) existing.innerHTML = orbHtml;
+    } else {
+      const scrollParent = container.closest('.detail-scroll');
+      const wasAtBottom = isAtBottom(scrollParent);
+      const el = document.createElement('div');
+      el.className = 'ui-msg-status ui-msg-status--working';
+      el.innerHTML = orbHtml;
+      container.appendChild(el);
+      if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+    }
+    if (!toolStreamPollTimer && agent.session_id) {
+      startToolStreamPoll(agent.session_id);
+    }
+    return;
+  }
   // Latest activity line — shows what the agent most recently *finished*.
   // Display rendering (incl. bucket-aware sanitisation for browser MCP
   // calls and inline-code bash payloads) lives in formatLatestToolDisplay
@@ -641,14 +664,37 @@ let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
 
+// Render a chat-stream plan-link as an assistant message bubble.
+// Wrapped in .ui-msg--assistant + .ui-msg__card so it sits in the
+// conversation flow with the same surface treatment as a regular
+// agent reply — just clickable. Anchored to the backend-emitted
+// plan-saved synthetic entry's timestamp (ExitPlanMode tool_use or
+// first-slug entry) so the bubble stays in its chronological slot
+// across subsequent polls.
+function renderPlanLinkCard() {
+  const inner = `<button class="chat-plan-link" type="button" onclick="Dashboard.openDetailTab('plan')">
+    <span class="chat-plan-link__icon">${ICONS.clipboard}</span>
+    <span class="chat-plan-link__body">
+      <span class="chat-plan-link__label">Plan</span>
+      <span class="chat-plan-link__title">View plan</span>
+    </span>
+    <span class="chat-plan-link__chevron">${ICONS.chevronRight}</span>
+  </button>`;
+  return `<div class="ui-msg ui-msg--assistant ui-msg--plan-link"><div class="ui-msg__card ui-msg__card--plan-link">${inner}</div></div>`;
+}
+
 // Drop entries the renderer wouldn't display (internal notifications,
-// empty content). Pure — exported for unit tests so the same predicate
+// empty content). plan-saved synthetic entries pass through (no
+// content body — they render the plan-link card from their role
+// alone). Pure — exported for unit tests so the same predicate
 // drives appendNewEntries' count math.
 export function visibleEntries(entries) {
   if (!Array.isArray(entries)) return [];
   const out = [];
   for (const entry of entries) {
     if (entry.IsNotification) continue;
+    const role = entry.Role || entry.role;
+    if (role === 'plan-saved') { out.push(entry); continue; }
     const content = entry.Content || entry.content || '';
     if (!content) continue;
     out.push(entry);
@@ -661,6 +707,7 @@ export function visibleEntries(entries) {
 // path (appendNewEntries) emit identical markup.
 function renderEntryHtml(entry) {
   const role = entry.Role || entry.role;
+  if (role === 'plan-saved') return renderPlanLinkCard();
   const content = entry.Content || entry.content || '';
   if (role === 'human') return UI.message('user', content);
   return UI.message('assistant', renderMarkdown(content), { html: true });
@@ -985,7 +1032,10 @@ async function refreshConversation(agentId, agent) {
   }
 
   // First poll after the empty-state placeholder ran — initialise the
-  // .conversation skeleton so the incremental path has somewhere to write.
+  // .conversation skeleton so the incremental path has somewhere to
+  // write. Main's appendNewEntries is incremental and doesn't wipe DOM,
+  // so tables / cards / focused inputs persist naturally across polls
+  // (replaces the earlier snapshot-and-restore-scrollLeft hack).
   let conv = container.querySelector('.conversation');
   if (!conv) {
     container.innerHTML = '<div class="conversation"></div>';
@@ -1266,17 +1316,34 @@ export async function renderDetail(app, agents, agentId, setView) {
   if (savedTab === 'conversation') startConversationPoll(agentId);
 }
 
+// Per-agent vital signs cache. Keyed by agentId so switching between
+// agents doesn't bleed values. Used to suppress redundant innerHTML
+// rewrites — without this, every state-change SSE event wipes the
+// strip and re-mounts it, producing a visible cost flicker on mobile.
+const vitalSignsCache = new Map(); // agentId → { tokens, cost }
+
 async function loadVitalSigns(agentId, agent) {
   const container = document.getElementById('vital-signs-container');
   if (!container) return;
   try {
     const usage = await get('/api/agents/' + agentId + '/usage');
     const elapsed = agent.started_at ? duration(agent) : '';
-    container.innerHTML = inlineVitalStrip({
-      elapsed: elapsed,
-      tokens: (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0),
-      cost: usage ? usage.CostUSD : 0,
-    });
+    const tokens = (usage && usage.InputTokens ? usage.InputTokens + (usage.OutputTokens || 0) : 0);
+    const cost = usage ? usage.CostUSD : 0;
+    const prev = vitalSignsCache.get(agentId);
+
+    // If the strip is already mounted AND tokens/cost are unchanged,
+    // just patch the elapsed cell so the duration ticks without
+    // wiping the rest of the strip (which is what causes the flicker).
+    if (prev && prev.tokens === tokens && prev.cost === cost) {
+      const cells = container.querySelectorAll('.vital-value');
+      if (cells.length === 3) {
+        cells[0].textContent = elapsed;
+        return;
+      }
+    }
+    vitalSignsCache.set(agentId, { tokens, cost });
+    container.innerHTML = inlineVitalStrip({ elapsed, tokens, cost });
   } catch {
     container.innerHTML = '';
   }
