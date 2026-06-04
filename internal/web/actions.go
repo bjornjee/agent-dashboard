@@ -100,8 +100,23 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, map[string]string{"error": "pane no longer exists"})
 		return
 	}
-	if err := tmux.TmuxSendKeys(target, req.Text); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	// Codex needs a paste-buffer + bracketed-paste delivery and a Tab,Enter
+	// submit while a turn is in flight (Tab queues the reply); Enter alone
+	// only submits when codex is idle. Sending raw text + Enter for codex
+	// lands as multi-line input with a trailing newline and never submits.
+	// Mirrors internal/tui/commands.go sendReply (PR #293).
+	var sendErr error
+	if agent.Harness == "codex" {
+		submit := []string{"Enter"}
+		if agent.State == "running" {
+			submit = []string{"Tab", "Enter"}
+		}
+		sendErr = tmux.TmuxPasteKeysClearingInput(target, req.Text, submit...)
+	} else {
+		sendErr = tmux.TmuxSendKeys(target, req.Text)
+	}
+	if sendErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": sendErr.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "sent"})
