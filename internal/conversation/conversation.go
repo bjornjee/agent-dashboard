@@ -217,6 +217,14 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		prevLen = len(all)
 	}
 
+	// Slug-based plan-saved emission is deferred to end-of-scan because
+	// slug appears on JSONL entries as soon as the plan directory is
+	// created, before ExitPlanMode fires. Emit at first-slug only when no
+	// ExitPlanMode was found; otherwise anchor the card to ExitPlanMode.
+	slugFirstIdx := -1
+	slugFirstTimestamp := ""
+	exitPlanEmitted := false
+
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -243,22 +251,27 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 			// append-only, scrolls with history.
 			if planEntry := extractPlanSavedEntry(entry); planEntry != nil {
 				all = append(all, *planEntry)
+				exitPlanEmitted = true
 			}
 		}
-		// Slug-based plan creation (e.g. /agent-dashboard:feature writes a
-		// plan markdown file to disk; subsequent JSONL entries carry a
-		// `slug` field referencing it). The slug doesn't surface as an
-		// ExitPlanMode tool_use, so the per-assistant-message handler
-		// above wouldn't fire. Emit one plan-saved entry at the first
-		// slug occurrence so the chat-stream plan-link card still mounts
-		// at the correct timeline position. Guarded so we don't emit a
-		// duplicate when ExitPlanMode + slug appear in the same session.
-		if entry.Slug != "" && !planSavedEmitted(all) {
-			all = append(all, domain.ConversationEntry{
-				Role:      "plan-saved",
-				Timestamp: entry.Timestamp,
-			})
+		if entry.Slug != "" && slugFirstIdx < 0 {
+			slugFirstIdx = len(all)
+			slugFirstTimestamp = entry.Timestamp
 		}
+	}
+
+	// No ExitPlanMode seen → fall back to slug position so skill-based
+	// plans still get a card. planSavedEmitted guards against re-inserting
+	// on incremental reads that already have the entry from a prior scan.
+	if slugFirstIdx >= 0 && !exitPlanEmitted && !planSavedEmitted(all) {
+		if slugFirstIdx > len(all) {
+			slugFirstIdx = len(all)
+		}
+		slugEntry := domain.ConversationEntry{
+			Role:      "plan-saved",
+			Timestamp: slugFirstTimestamp,
+		}
+		all = append(all[:slugFirstIdx], append([]domain.ConversationEntry{slugEntry}, all[slugFirstIdx:]...)...)
 	}
 
 	// Only mark notifications on new entries + the boundary entry from prev
