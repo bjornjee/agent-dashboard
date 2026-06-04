@@ -2009,8 +2009,8 @@ func TestPWAServiceWorkerCacheVersion(t *testing.T) {
 		t.Fatalf("read sw.js: %v", err)
 	}
 	body := string(raw)
-	if !strings.Contains(body, "agent-dashboard-v21") {
-		t.Errorf("sw.js cache version: missing 'agent-dashboard-v21' (must bump when icon paths change)")
+	if !strings.Contains(body, "agent-dashboard-v22") {
+		t.Errorf("sw.js cache version: missing 'agent-dashboard-v22' (must bump when icon paths change)")
 	}
 	if strings.Contains(body, "icon-192.svg") {
 		t.Errorf("sw.js still references icon-192.svg (should be /icons/icon-192.png)")

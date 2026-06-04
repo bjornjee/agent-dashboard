@@ -125,6 +125,20 @@ body {
   font-feature-settings: "cv11", "ss03", "cv02", "ss01";
   text-rendering: optimizeLegibility;
 }
+/* Smooth dark/light cross-fade. Without this, toggling --bg-* /
+ * --text-* tokens flips the whole UI instantly — the user reports
+ * this as "harsh and ugly". Theme.cycle() adds .theme-cycling to <html>
+ * for ~260ms; the universal transition fires only inside that window so
+ * hover/focus transitions on individual elements keep their own
+ * timings the rest of the time. prefers-reduced-motion no-ops. */
+html.theme-cycling,
+html.theme-cycling *:not(.spinner):not(.spinner *):not(.ui-msg-status__label):not(.ui-msg-status__orb):not(.ui-app-bar__spinner) {
+  transition: background-color 240ms ease, color 240ms ease, border-color 240ms ease, fill 240ms ease, box-shadow 240ms ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-cycling,
+  html.theme-cycling * { transition: none !important; }
+}
 @supports (font-variation-settings: normal) {
   body { font-family: "InterVariable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
 }
@@ -266,6 +280,15 @@ a { color: inherit; }
   background: var(--bg-surface);
   border-color: var(--border-default);
   box-shadow: 0 8px 32px var(--shadow-medium);
+}
+/* The header variant lives inline in the app bar — the dock card border
+ * looks like a stray rectangle around the search + New cluster. Drop the
+ * border + shadow only for that variant; the buttons inside carry their
+ * own affordance. */
+[data-theme="light"] .ui-dock.ui-dock--header {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
 }
 [data-theme="light"] .ui-dock__search:hover { background: var(--bg-hover); }
 .ui-dock__cta {
@@ -460,36 +483,113 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   line-height: 22px;
   max-width: 75%;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
   max-height: 260px;
   overflow-y: auto;
 }
-/* Light-mode chat-bubble inversion. The user pill becomes a dark pill on
- * the white page so it doesn't blend with --bg-elevated chips/buttons.
- * Agent prose remains on the page surface (the .ui-msg__prose default).
- * See docs/design/light-flow-map.md A2. */
+/* Light-mode user pill — iOS systemGray4 (#D1D1D6) with dark text.
+ * Iter-16 trajectory:
+ *   #1C1A17 (deep black, ~21:1) — too punchy; user reported screaming
+ *   #3A3A3C (~10.5:1) — still heavy
+ *   #636366 (~4.6:1) — mid-gray chip, competes with white card
+ *   #D1D1D6 (~1.6:1 vs white) — featherweight recessive fill, matches
+ *     Codex iOS "from-them" style; pairs with #1C1A17 text (~13:1
+ *     intra-bubble contrast, well over WCAG AAA). Sits visibly below
+ *     the white assistant card + hairline border in the elevation
+ *     hierarchy: white canvas > white assistant card (with hairline) >
+ *     pale-gray user pill. */
 [data-theme="light"] .ui-msg--user .ui-msg__bubble {
-  background: var(--cta-bg);
-  color: var(--cta-text);
+  background: #D1D1D6;
+  color: #1C1A17;
 }
-.ui-msg--assistant { flex-direction: column; align-items: flex-start; gap: var(--space-2); position: relative; }
+/* Assistant message: avatar + soft-elevated card so consecutive turns are
+ * visually distinct and don't read as one wall of text. The card lifts on
+ * hover; the copy button is anchored inside the card so it travels with it.
+ * User pills and tool footers are unaffected. */
+.ui-msg--assistant { flex-direction: row; align-items: flex-start; gap: var(--space-3); position: relative; }
+/* Avatar circle removed at every viewport. The assistant card's own
+ * surface + position vs. the right-aligned user pill is enough role
+ * differentiation; the chip was decorative overhead, not a load-
+ * bearing affordance. JS still emits the markup so callers don't
+ * change; CSS just hides it. */
+.ui-msg__avatar { display: none; }
+.ui-msg--assistant { gap: 0; }
+.ui-msg__card {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  position: relative;
+  transition: background var(--transition-fast);
+}
+.ui-msg__card:hover { background: var(--bg-elevated); }
+.ui-msg__meta {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+/* Light mode: --bg-surface ≈ --bg-base on the white page, so the card
+ * would collapse into the conversation column. Add a hairline border so
+ * each assistant turn still reads as a discrete surface. */
+[data-theme="light"] .ui-msg__card,
+[data-theme="light"] .ui-msg__avatar {
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] .ui-msg__card:hover {
+  border-color: var(--border-hover);
+}
 .ui-msg__prose {
   color: var(--text-secondary);
   font-size: 15px;
   line-height: 23px;
   max-width: 100%;
+  min-width: 0;
+  /* overflow-wrap: anywhere breaks long unbroken tokens (URLs, paths,
+   * `--user-data-dir=...` Chrome args) so the chat column never
+   * triggers a viewport-level horizontal scroll. word-wrap kept for
+   * legacy fallback. */
+  overflow-wrap: anywhere;
   word-wrap: break-word;
   letter-spacing: -0.005em;
 }
-.ui-msg__prose code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 14px; }
-.ui-msg__prose pre { background: var(--bg-code); color: var(--code-text); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); overflow-x: auto; margin: var(--space-2) 0; }
+.ui-msg__prose code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
+/* <pre> code blocks: scroll INSIDE the block (correct, preserves code
+ * formatting) but max-width: 100% so the block itself never pushes the
+ * conversation column beyond its bounds. */
+.ui-msg__prose pre { background: var(--bg-code); color: var(--code-text); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); overflow-x: auto; margin: var(--space-2) 0; max-width: 100%; }
+/* Tables inside chat bubbles — Codex pattern. Wide tables (>6 cols)
+ * never fit on mobile. Wrap each table in an auto-scrolling block
+ * sized to the chat column width so the table scrolls horizontally
+ * within its own bounds; the conversation column stays put. The
+ * scroll wrapper is created by marked + DOMPurify's default <table>
+ * output (display: block with overflow). */
+.ui-msg__prose table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+}
+.ui-msg__prose table th,
+.ui-msg__prose table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  white-space: nowrap;
+}
+.ui-msg__prose table th { font-weight: 600; color: var(--text-primary); }
+.ui-msg__prose table tr + tr td { border-top: 1px solid var(--border-subtle); }
 .ui-msg__prose pre code { background: none; padding: 0; }
 .ui-msg__prose p { margin: 0 0 var(--space-3); }
 .ui-msg__prose p:last-child { margin-bottom: 0; }
 .ui-msg__copy {
   position: absolute;
-  top: var(--space-1);
-  right: var(--space-2);
+  top: var(--space-2);
+  right: var(--space-3);
   width: 24px;
   height: 24px;
   border-radius: var(--radius-pill);
@@ -499,9 +599,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   justify-content: center;
   transition: color var(--transition-fast), opacity var(--transition-fast);
   opacity: 0;
-  background: var(--bg-base);
+  background: transparent;
 }
-.ui-msg:hover .ui-msg__copy,
+.ui-msg__card:hover .ui-msg__copy,
 .ui-msg__copy:focus-visible { opacity: 1; }
 .ui-msg__copy:hover { color: var(--text-secondary); }
 
@@ -590,10 +690,19 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   gap: 2px;
   padding: var(--space-2) var(--space-5);
   align-self: flex-start;
+  /* min-width:0 + max-width:100% so the column can shrink below its
+   * content's intrinsic width. Without this, a long mono "→ Bash: …"
+   * tool description forces the parent flex column to grow past the
+   * viewport, and the .ui-msg-status__latest ellipsis happens at the
+   * parent's edge (off-screen) instead of the viewport's edge. */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .ui-msg-status__tally {
   color: var(--text-faint);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .ui-msg-status__latest {
   color: var(--text-muted);
@@ -603,6 +712,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  min-width: 0;
 }
 .ui-msg-status__live {
   font-size: 15px;
@@ -631,6 +741,32 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   0%   { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+/* Pre-tool pulsing orb — shown between message-send and the first
+ * PreToolUse hook, as a Codex-mobile-style placeholder so the user gets
+ * immediate visual progress while the model warms up. Once the first
+ * tool fires, the JS swaps this for the tally + shimmer treatment. */
+.ui-msg-status__orb-wrap {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+  padding: var(--space-1) 0;
+}
+.ui-msg-status__orb {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.25);
+  animation: ui-msg-status-orb-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ui-msg-status-orb-pulse {
+  0%, 100% { transform: scale(0.7); opacity: 0.45; box-shadow: 0 0 0 0 rgba(255,255,255,0.0); }
+  50%      { transform: scale(1.15); opacity: 1;    box-shadow: 0 0 0 6px rgba(255,255,255,0.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-msg-status__orb { animation: none; opacity: 0.7; }
+}
 .ui-msg__tool {
   display: inline-flex;
   align-items: center;
@@ -643,6 +779,66 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   font-size: 13px;
   width: fit-content;
 }
+
+/* Plan-link rendered INSIDE an assistant message bubble — the
+ * .ui-msg__card wrapper carries the surface treatment + hover bg;
+ * this inner button just lays out the icon + label + chevron row
+ * and forwards the click to the Plan tab. No own bg/padding so the
+ * assistant card stays the visual unit. */
+.ui-msg__card--plan-link { cursor: pointer; }
+.chat-plan-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.chat-plan-link__icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-plan-link__icon svg { width: 18px; height: 18px; }
+.chat-plan-link__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-plan-link__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.chat-plan-link__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-plan-link__chevron { color: var(--text-faint); display: inline-flex; flex-shrink: 0; }
+[data-theme="light"] .chat-plan-link,
+[data-theme="light"] .chat-plan-link__icon {
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] .chat-plan-link:hover { transform: none; border-color: var(--border-hover); }
 .ui-msg__tool > svg:first-child { color: var(--accent-green); width: 14px; height: 14px; }
 .ui-msg__tool > svg:last-child { color: var(--text-muted); }
 .ui-msg__tool > span { flex: 1; }
@@ -824,70 +1020,299 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 /* Activity / Diff / Plan tab content padding */
 .tab-content { padding: 0 var(--space-5); }
 .tab-content > .conversation { padding: 0; }
+/* Plan tab — long-form markdown reads tight at 20 px on mobile.
+ * Lift horizontal to 24 px / 32 px and add a top pad so the first
+ * heading isn't slammed against the tab bar's underline. */
+#tab-plan {
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+  padding-top: var(--space-5);
+}
+@media (min-width: 900px) {
+  #tab-plan {
+    padding-left: var(--space-7);
+    padding-right: var(--space-7);
+    padding-top: var(--space-6);
+  }
+}
 
 /* Kill browser default focus chrome on tab buttons; keep keyboard-only visible focus */
 .detail-tabs__tab:focus { outline: none; }
 .detail-tabs__tab:focus-visible { outline: 2px solid var(--text-faint); outline-offset: -2px; border-radius: 4px; }
 
-/* Create view — large display title + sticky-bottom spawn */
-.create-display {
-  padding: var(--space-6) var(--space-5) var(--space-5);
+/* Create view — Codex composer anatomy: centered hero, single composer
+ * card with inline harness/skill pills, folder pill below, recent-folder
+ * action cards. Replaces the previous flat vertical form. */
+.create-shell {
+  padding: var(--space-6) var(--space-5) calc(var(--space-7) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+@media (min-width: 900px) {
+  .create-shell {
+    max-width: 920px;
+    margin: 0 auto;
+    padding-top: 10vh;
+    gap: var(--space-6);
+  }
+}
+.create-hero {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text-primary);
-  line-height: 34px;
+  text-align: center;
+  line-height: 32px;
 }
-.create-form { padding: 0 var(--space-5) calc(var(--space-7) + var(--space-3) + env(safe-area-inset-bottom)); }
-.create-message {
+@media (min-width: 900px) {
+  .create-hero { font-size: 32px; line-height: 38px; }
+}
+
+.create-composer {
   width: 100%;
-  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
   padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.create-composer:focus-within {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--border-hover);
+}
+.create-composer__input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  resize: none;
+  color: var(--text-primary);
   font-size: 16px;
   line-height: 22px;
-  min-height: 120px;
-  resize: vertical;
+  min-height: 64px;
+  max-height: 240px;
+  font-family: inherit;
+  padding: var(--space-1) 0 0;
 }
-.create-field { padding: 0 0 var(--space-4); }
-.create-field .ui-input { width: 100%; }
-.create-field select.ui-input {
+.create-composer__input::placeholder { color: var(--text-faint); }
+.create-composer__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+.create-composer__lead,
+.create-composer__trail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.create-composer__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.create-composer__icon:hover { background: var(--bg-base); color: var(--text-secondary); }
+.create-composer__icon svg { width: 16px; height: 16px; }
+.create-composer__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background var(--transition-fast);
+  position: relative;
+  cursor: pointer;
+  min-width: 0;
+}
+.create-composer__pill:hover { background: var(--bg-base); }
+.create-composer__pill svg { color: var(--text-muted); flex-shrink: 0; width: 14px; height: 14px; }
+.create-composer__pill select {
   appearance: none;
   -webkit-appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
-  background-size: 6px 6px;
-  background-repeat: no-repeat;
-  padding-right: var(--space-7);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  max-width: 140px;
+  min-width: 0;
+  text-overflow: ellipsis;
 }
-.create-hint { padding: var(--space-2) var(--space-1) 0; font-size: 13px; color: var(--text-muted); min-height: 16px; }
-.create-hint code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 13px; }
-.create-hint--error { color: var(--status-failed-text); }
-.create-hint--ok { color: var(--accent-green); }
-.create-spawn {
-  margin-top: var(--space-6);
-  padding: var(--space-4);
+/* Mobile: tighten the toolbar so all four children + the send button
+ * fit inside the composer card without the send circle clipping the
+ * rounded right corner. Caps select to 80 px, cuts toolbar gap to
+ * 4 px, and ensures the send button never shrinks. */
+@media (max-width: 720px) {
+  .create-composer__toolbar { gap: var(--space-1); }
+  .create-composer__lead,
+  .create-composer__trail { gap: var(--space-1); min-width: 0; }
+  .create-composer__pill { padding: 0 var(--space-2); }
+  .create-composer__pill select { max-width: 88px; }
+  .create-composer__send { flex-shrink: 0; }
+}
+.create-composer__send {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
   background: var(--cta-bg);
   color: var(--cta-text);
-  border-radius: var(--radius-pill);
-  font-size: 16px;
-  font-weight: 600;
-  width: 100%;
-  text-align: center;
-  transition: opacity var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
 }
-.create-spawn:hover:not(:disabled) { opacity: 0.92; }
-.create-spawn:disabled {
-  background: var(--bg-surface);
+.create-composer__send:hover:not(:disabled) { opacity: 0.92; }
+.create-composer__send:disabled {
+  background: var(--bg-elevated);
   color: var(--text-faint);
   cursor: not-allowed;
 }
-/* Light mode: --bg-surface == --bg-base == #FFFFFF, so the disabled fill
- * collapses into the page. Add a hairline outline so the button keeps a
- * readable geometry. Dark mode is unchanged — dark --bg-surface (#181B22)
- * already sits one step above --bg-base (#0B0E14). */
-[data-theme="light"] .create-spawn:disabled {
+
+/* Folder pill is now a label-wrapped real <input> (no hidden input).
+ * Browsers refuse to open a <datalist> popup from a clip-hidden input
+ * — the popup has nothing to anchor to — so the input itself must be
+ * visible. The label styles the input + folder icon + chevron as a
+ * single pill; cursor: text on the input lets the user type a path,
+ * focus + click triggers the native datalist suggestions popup. */
+.create-folder-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 13px;
+  align-self: flex-start;
+  background: transparent;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  cursor: text;
+  min-width: 220px;
+}
+.create-folder-pill:hover,
+.create-folder-pill:focus-within { color: var(--text-secondary); background: var(--bg-surface); }
+/* Empty-folder state — draw attention so the user knows this is the
+ * required first step. The send button is disabled until folder is
+ * set; without this cue users assume the harness/skill pills are also
+ * gated, which they're not. Soft ring + colour shift, no jiggle. */
+.create-folder-pill--empty {
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px var(--border-hover);
+}
+.create-folder-pill svg { width: 16px; height: 16px; opacity: 0.8; flex-shrink: 0; }
+.create-folder-pill__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+.create-folder-pill__input::placeholder { color: var(--text-muted); }
+/* The folder input has list="folder-suggestions" so Chrome injects a
+ * hover-only datalist indicator (a second chevron) into the input.
+ * The pill already renders an explicit chevron SVG after the input —
+ * hide Chrome's pseudo-element so only the styled chevron shows. */
+.create-folder-pill__input::-webkit-calendar-picker-indicator {
+  display: none !important;
+  opacity: 0;
+}
+
+.create-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 16px;
+  align-self: flex-start;
+  margin-top: calc(var(--space-2) * -1);
+  padding-left: var(--space-3);
+}
+.create-hint code { background: var(--bg-code); color: var(--code-text); padding: 1px 6px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px; }
+.create-hint--error { color: var(--status-failed-text); }
+.create-hint--ok { color: var(--accent-green); }
+
+.create-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+/* auto-fit so 1 recent folder = 1 column, 2 = 2 cols, 3+ = 3 cols.
+ * Avoids the ghost third slot when the user has fewer than 3 cwds. */
+@media (min-width: 720px) {
+  .create-actions { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+}
+.create-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  cursor: pointer;
+  min-height: 96px;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.create-action:hover {
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+.create-action__icon {
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.create-action__icon svg { width: 20px; height: 20px; }
+.create-action__title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.create-action__sub {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 16px;
+  word-break: break-all;
+}
+
+/* Light-mode parity: against a white page, --bg-surface ≈ --bg-base, so the
+ * composer and action cards collapse into the page. Add a hairline border
+ * (matches the .create-spawn:disabled pattern that lived here before). */
+[data-theme="light"] .create-composer,
+[data-theme="light"] .create-action {
   border: 1px solid var(--border-default);
+}
+[data-theme="light"] .create-composer__send:disabled {
+  border: 1px solid var(--border-default);
+}
+[data-theme="light"] .create-action:hover {
+  transform: none;
+  border-color: var(--border-hover);
 }
 
 /* Modal action buttons — used by modal.js, supersede old UI.btn */
@@ -1005,7 +1430,14 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .detail-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; padding-bottom: var(--space-5); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-.action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
+/* Action bar (composer container) — pad below so the composer card's
+ * rounded bottom corners aren't clipped by the viewport edge. The mobile
+ * pad needs to clear the composer card's drop shadow (24 px blur) + the
+ * iOS home indicator (env safe area). */
+.action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-5) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
+@media (min-width: 900px) {
+  .action-bar { padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom)); }
+}
 /* Labeled action panel — wraps state-specific chips ("Pull request",
  * "Permission request", …) above the composer. Gives the floating
  * pills context + a surface that visually pairs with the composer
@@ -1994,9 +2426,11 @@ button.btn-ghost.btn-sm {
   --bg-code: #F4F4F5;
   --bg-overlay: rgba(0, 0, 0, 0.3);
 
-  /* Desktop tokens — sidebar/selected/hover (register addendum line 31-34). */
+  /* Desktop tokens — sidebar/selected/hover (register addendum line 31-34).
+   * --bg-selected darkened from #E4E4E7 → #D4D4D8 so the selected fill
+   * reads against the #F4F4F5 sidebar without needing an accent bar. */
   --bg-sidebar: #F4F4F5;
-  --bg-selected: #E4E4E7;
+  --bg-selected: #D4D4D8;
   --bg-hover: #ECECEE;
 
   /* CTA — invert dark theme: dark fill, white text. */
@@ -2136,6 +2570,7 @@ button.btn-ghost.btn-sm {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
 .tool-call {
@@ -2143,12 +2578,15 @@ button.btn-ghost.btn-sm {
   border-left: 1px solid var(--border-default);
   margin-left: 6px;
   margin-top: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tool-call__name {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--code-text);
+  overflow-wrap: anywhere;
 }
 
 .tool-call__status {
@@ -2202,10 +2640,6 @@ button.btn-ghost.btn-sm {
 .tool-group-summary::before { content: '\25B6'; font-size: 8px; transition: transform var(--transition-default); display: inline-block; }
 details[open] > .tool-group-summary::before { transform: rotate(90deg); }
 .tool-group-summary:hover { color: var(--text-muted); }
-
-/* ============================================
-   VIEW: Usage
-   ============================================ */
 
 /* ============================================================
  * DESKTOP TWO-PANE SHELL — Phase B
@@ -2399,65 +2833,6 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
    * and toggles body.can-install (Samsung/Chromium-only signal). */
   .app-sidebar__install { display: none; }
   body.can-install .app-sidebar__install { display: block; }
-
-  /* Create view — vertically centered composition block on a wide main pane,
-   * with Folder / Harness / Skill rendered as a row of secondary chips below
-   * the textarea (matches Codex codex-dark-04-new-chat-create-agent.png). */
-  .create-shell {
-    min-height: calc(100vh - 64px); /* viewport minus app bar */
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 12vh var(--space-6) var(--space-6);
-    gap: var(--space-5);
-  }
-  .create-display {
-    margin: 0;
-    text-align: left;
-  }
-  .create-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  /* Hide the section labels above the secondary chips — the chips' values
-   * carry the meaning inline. */
-  .create-secondary > .create-secondary__group > .ui-section-label { display: none; }
-
-  /* One-row chip strip. */
-  .create-secondary {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .create-secondary__group { flex: 0 0 auto; }
-  .create-secondary__group .create-field { display: flex; }
-  .create-secondary__group .ui-input {
-    width: auto;
-    min-width: 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-pill);
-    background: var(--bg-elevated);
-    font-size: 13px;
-  }
-  .create-secondary__group select.ui-input {
-    padding-right: var(--space-7);
-  }
-  /* Hide hint text below chips on desktop — the chip is self-explanatory. */
-  .create-secondary .create-hint { display: none; }
-
-  /* Spawn stays full-width but tightly coupled to the chip strip above
-   * via a small margin-top — without this the gap between secondary chips
-   * (short) and full-width spawn reads as disconnected (E1). */
-  .create-spawn {
-    align-self: stretch;
-    margin-top: var(--space-2);
-  }
 
   /* The create view's mobile app-bar (back-arrow + "New agent" title) is
    * redundant on desktop — the sidebar's "+ New agent" CTA already signals
@@ -2705,10 +3080,13 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     width: 32px;
     height: 32px;
   }
+  /* Composer card already provides the focused-state affordance via its
+   * box-shadow + border. An inner textarea outline on top reads as a
+   * second, conflicting frame — the "awkward border line" inside the
+   * composer when the user clicks. Drop the inner outline; rely on the
+   * outer surface. */
   .ui-composer.detail-composer .ui-composer__input:focus-visible {
-    outline: 1px solid var(--text-faint);
-    outline-offset: -1px;
-    border-radius: 8px;
+    outline: none;
   }
 
   /* --------------------------------------------------------------
@@ -2742,13 +3120,15 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     border-color: var(--border-hover);
   }
 
-  /* Sidebar selected row — light only. The accent is rendered as an
-   * inset left-border so the row's overall geometry (height, padding)
-   * is unchanged; the border eats 2px of the left padding visually. */
+  /* Sidebar selected row — light only. The 2 px dark left-border the
+   * earlier pass used read as a botched shadow, especially in light
+   * mode where the rule put a hard #1C1A17 strip against #F4F4F5.
+   * Replace with a deeper fill (--bg-selected darkened below) so the
+   * affordance carries without an accent bar — matches register.md
+   * "refined-minimal, no decorative gestures." */
   [data-theme="light"] .app-sidebar__nav-row--selected .ui-row,
   [data-theme="light"] .app-sidebar__row--selected .ui-row {
-    border-left: 2px solid var(--text-primary);
-    padding-left: calc(var(--space-3) - 2px);
+    background: var(--bg-selected);
   }
 }
 

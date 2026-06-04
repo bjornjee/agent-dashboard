@@ -1,5 +1,13 @@
-// Unit tests for UI primitives in ui.js.
+// Unit tests for UI.message() and stripLocalCommandTags() in ui.js.
 // Run via `node --test internal/web/static/js/ui.test.js` (chained from `make test`).
+//
+// Coverage:
+//   - UI.message() guards the three rendering branches (user pill,
+//     assistant card with avatar, tool footer) against regressions
+//     as the assistant branch grew an avatar + optional timestamp.
+//   - stripLocalCommandTags() unwraps Claude Code's
+//     <local-command-{caveat,stdout,stderr}> tags from user messages
+//     before display.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -18,6 +26,69 @@ test('load module', async () => {
   assert.equal(typeof UI.message, 'function');
   assert.equal(typeof stripLocalCommandTags, 'function');
 });
+
+// -- UI.message regression coverage --
+
+test('user branch — pill markup is preserved (regression)', () => {
+  const html = UI.message('user', 'hi');
+  assert.match(html, /class="ui-msg ui-msg--user"/);
+  assert.match(html, /class="ui-msg__bubble">hi</);
+});
+
+test('user branch — HTML in user content is escaped', () => {
+  const html = UI.message('user', '<script>x</script>');
+  assert.match(html, /&lt;script&gt;x&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+});
+
+test('assistant — default avatar is "A" and prose is escaped', () => {
+  const html = UI.message('assistant', 'plain text');
+  assert.match(html, /class="ui-msg ui-msg--assistant"/);
+  assert.match(html, /class="ui-msg__avatar"[^>]*>A</);
+  assert.match(html, /class="ui-msg__card"/);
+  assert.match(html, /class="ui-msg__prose">plain text</);
+  // Default copy button present.
+  assert.match(html, /class="ui-msg__copy"/);
+});
+
+test('assistant — html:true bypasses prose escape', () => {
+  const html = UI.message('assistant', '<p>x</p>', { html: true });
+  assert.match(html, /class="ui-msg__prose"><p>x<\/p></);
+});
+
+test('assistant — custom avatar + timestamp render', () => {
+  const html = UI.message('assistant', 'x', { avatar: 'C', timestamp: '12:34' });
+  assert.match(html, /class="ui-msg__avatar"[^>]*>C</);
+  assert.match(html, /class="ui-msg__meta">12:34</);
+});
+
+test('assistant — copyable:false omits copy button', () => {
+  const html = UI.message('assistant', 'x', { copyable: false });
+  assert.doesNotMatch(html, /class="ui-msg__copy"/);
+});
+
+test('assistant — avatar text is HTML-escaped', () => {
+  const html = UI.message('assistant', 'x', { avatar: '<b>' });
+  assert.match(html, /class="ui-msg__avatar"[^>]*>&lt;b&gt;</);
+});
+
+test('assistant — timestamp text is HTML-escaped', () => {
+  const html = UI.message('assistant', 'x', { timestamp: '<i>now</i>' });
+  assert.match(html, /class="ui-msg__meta">&lt;i&gt;now&lt;\/i&gt;</);
+});
+
+test('tool footer branch — markup is preserved (regression)', () => {
+  const html = UI.message('assistant', '', { tool: { label: 'bash' } });
+  assert.match(html, /class="ui-msg__tool"/);
+  assert.match(html, /<span>bash<\/span>/);
+});
+
+test('tool footer — label is HTML-escaped', () => {
+  const html = UI.message('assistant', '', { tool: { label: '<x>' } });
+  assert.match(html, /<span>&lt;x&gt;<\/span>/);
+});
+
+// -- stripLocalCommandTags coverage --
 
 test('stripLocalCommandTags unwraps <local-command-caveat>', () => {
   const input = '<local-command-caveat>be careful</local-command-caveat>';
@@ -62,7 +133,6 @@ test('stripLocalCommandTags handles null/undefined safely', () => {
 
 test('UI.message user role strips local-command-stdout wrapper before escaping', () => {
   const html = UI.message('user', '<local-command-stdout>hello</local-command-stdout>');
-  // The wrapper must be gone (no escaped <local-command-stdout> in output).
   assert.ok(!html.includes('local-command-stdout'), 'wrapper tag should be stripped');
   assert.ok(html.includes('hello'), 'inner text should survive');
 });
