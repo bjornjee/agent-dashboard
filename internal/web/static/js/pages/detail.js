@@ -813,10 +813,12 @@ async function refreshConversation(agentId, agent) {
   // re-attach the same Node so checked radios / focus survive.
   // tool_use_id may be empty when the agent state hook stamped
   // pending_question from a PermissionRequest payload that lacked the
-  // upstream id. Fall back to the question signature as the stable
-  // identifier so the card still renders, preserves across polls, and
-  // can be looked up by submitQuestionCard.
-  const pendingId = (pending && (pending.tool_use_id || questionCardSignature(pending))) || '';
+  // upstream id. Fall back to a literal sentinel so the card still
+  // renders, preserves across polls, and can be looked up by
+  // submitQuestionCard. The data-sig attribute (questionCardSignature)
+  // is what actually detects content drift across polls, so the id
+  // only needs to be stable + JS-safe (not unique per question).
+  const pendingId = (pending && (pending.tool_use_id || 'pending')) || '';
   const existingCard = container.querySelector('.question-card');
   const sig = pending ? questionCardSignature(pending) : '';
   const reuseCard = !!(pending && pendingId && existingCard
@@ -1230,9 +1232,9 @@ async function loadTabContent(tab, agentId) {
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
-      // Fallback to question signature when upstream tool_use_id is
+      // Fallback to 'pending' sentinel when upstream tool_use_id is
       // missing — matches the refreshConversation guard above.
-      const pendingId2 = (pending && (pending.tool_use_id || questionCardSignature(pending))) || '';
+      const pendingId2 = (pending && (pending.tool_use_id || 'pending')) || '';
       if (pending && pendingId2) {
         const conv = container.querySelector('.conversation');
         if (conv) {
