@@ -233,16 +233,16 @@ export function confirmUserMessageSent() {
   toolBuckets = {};
   lastSeenToolTimestamp = new Date().toISOString();
   // Mount the indicator optimistically so the user doesn't stare at
-  // an empty chat while SSE catches up. PERSIST the synthetic mid-turn
+  // an empty chat while SSE catches up. PERSIST the synthetic running
   // override onto lastKnownAgent so the 2s conversation poll (which
   // also calls refreshWorkingIndicator) doesn't wipe the indicator
-  // before SSE has had a chance to report PreToolUse/PostToolUse. SSE
-  // updates will overwrite lastKnownAgent with real hook events; the
-  // indicator only disappears once last_hook_event === 'Stop'.
+  // before SSE has had a chance to report state=running. SSE updates
+  // will overwrite lastKnownAgent; the indicator clears the moment
+  // agent.state leaves WORKING_STATES.
   if (lastKnownAgent) {
     lastKnownAgent = {
       ...lastKnownAgent,
-      last_hook_event: 'UserPromptSubmit',
+      state: 'running',
       current_tool: '',
     };
     refreshWorkingIndicator(lastKnownAgent);
@@ -355,17 +355,53 @@ function renderToolTally(buckets) {
   return parts.join(' · ');
 }
 
-// Detect whether the agent is BETWEEN turns. agent.state stays
-// "running" for the life of the tmux pane, so it's a coarse signal —
-// the real per-turn signal is last_hook_event, which flips to "Stop"
-// when Claude Code finishes a turn (matching the Stop hook event).
-function isAgentMidTurn(agent) {
+// Extract the user-visible prose of an assistant message for the
+// clipboard. `btn` is the .ui-msg__copy element clicked. Returns '' if
+// the surrounding .ui-msg / .ui-msg__prose can't be located.
+export function getMessageCopyText(btn) {
+  if (!btn) return '';
+  const msg = btn.closest('.ui-msg');
+  if (!msg) return '';
+  const prose = msg.querySelector('.ui-msg__prose');
+  if (!prose) return '';
+  return String(prose.innerText || '').trim();
+}
+
+// Wire the assistant-message copy button via a single document-level
+// delegated click — conversation rerenders replace .ui-msg children, so
+// per-mount listeners would have to be re-registered each refresh.
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('.ui-msg__copy');
+    if (!btn) return;
+    e.preventDefault();
+    const text = getMessageCopyText(btn);
+    if (!text) return;
+    const showCopied = () => {
+      btn.classList.add('ui-msg__copy--copied');
+      btn.innerHTML = ICONS.check || ICONS.copy;
+      setTimeout(() => {
+        btn.classList.remove('ui-msg__copy--copied');
+        btn.innerHTML = ICONS.copy;
+      }, 1200);
+    };
+    const onFail = () => { try { toast('Copy failed'); } catch {} };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(showCopied, onFail);
+    } else {
+      onFail();
+    }
+  });
+}
+
+// Detect whether the agent is BETWEEN turns. Deterministic on agent.state:
+// the backend transitions out of WORKING_STATES (running/permission/plan/
+// question/error) the moment the turn ends, and SSE pushes that state
+// change. Relying on last_hook_event === 'Stop' was racy — a dropped or
+// late Stop event left the indicator stuck on a non-working state.
+export function isAgentMidTurn(agent) {
   if (!agent) return false;
-  if (!WORKING_STATES.has(effectiveState(agent))) return false;
-  // "Stop" = turn ended, awaiting user. Anything else (PreToolUse,
-  // PostToolUse, UserPromptSubmit, etc.) = mid-turn.
-  const hook = agent.last_hook_event || '';
-  return hook !== 'Stop';
+  return WORKING_STATES.has(effectiveState(agent));
 }
 
 // Mounts / updates / removes the inline "working" block at the end of

@@ -502,8 +502,13 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: var(--bg-base);
 }
 .ui-msg:hover .ui-msg__copy,
-.ui-msg__copy:focus-visible { opacity: 1; }
+.ui-msg__copy:focus-visible,
+.ui-msg__copy--copied { opacity: 1; }
 .ui-msg__copy:hover { color: var(--text-secondary); }
+/* Touch surfaces (no hover) — keep the button visible so tap targets
+ * are discoverable on phones. */
+@media (hover: none) { .ui-msg__copy { opacity: 1; } }
+.ui-msg__copy--copied { color: var(--accent-green); }
 
 /* Optimistic user bubble — muted until the POST resolves and
  * confirmUserMessageSent() lifts the flag. */
