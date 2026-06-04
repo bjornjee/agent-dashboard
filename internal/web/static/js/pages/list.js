@@ -74,7 +74,7 @@ export function renderList(app, agents) {
   document.querySelectorAll('.ui-dock').forEach(el => el.remove());
   const dock = document.createElement('div');
   dock.innerHTML = UI.dock({
-    search: { label: 'Search agents', onclick: 'Dashboard.searchAgents()' },
+    search: { label: 'Search', onclick: 'Dashboard.searchAgents()' },
     cta: { label: '+ New', icon: ICONS.pencil, onclick: 'Dashboard.showCreate()' },
   });
   document.body.appendChild(dock.firstElementChild);

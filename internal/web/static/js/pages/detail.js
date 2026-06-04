@@ -1,8 +1,8 @@
-// Agent detail view with tabs and inline subagents.
-import { UI } from '../ui.js';
+// Agent detail view with tabs and stats disclosure.
+import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { effectiveState, stateGroup, prTag, hasOpenPR } from '../state.js';
-import { escapeHtml, repoName, duration, durationFromTimestamp, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
+import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
 import { Theme } from '../theme.js';
@@ -191,6 +191,10 @@ let conversationScrolledThisSession = false;
 // While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
 // and is followed by a "Sending…" caption sibling. Dashboard.sendInput
 // clears the flag (and removes the caption) once the POST resolves OK.
+//
+// The bubble is stamped with data-optimistic="1" so refreshConversation
+// can find it (after confirmUserMessageSent strips the visual class) and
+// remove it once the API echoes the message back as a real entry.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   pendingMessageAcked = false;
@@ -200,6 +204,7 @@ export function appendUserMessage(text) {
   wrap.innerHTML = UI.message('user', text);
   const msgEl = wrap.firstElementChild;
   if (msgEl) {
+    msgEl.dataset.optimistic = '1';
     msgEl.classList.add('ui-msg--optimistic');
     container.appendChild(msgEl);
     const caption = document.createElement('div');
@@ -300,6 +305,41 @@ function parseToolName(content) {
   return m ? m[1] : '';
 }
 
+// Pure helper: turn a latest-tool entry into the short display string for
+// the "ui-msg-status__latest" line. Two failure modes we explicitly guard
+// against:
+//   1. Playwright/MCP browser calls dump their raw JS payload (often an
+//      arrow-function body) into `arg`. We drop it and surface the bare
+//      method name instead (e.g. `browser_click`).
+//   2. Bash calls that wrap JS / heredocs / multi-line scripts blow past
+//      the truncation budget and look like noise. We replace with the
+//      literal `<inline code>` label.
+// Exported so node tests can exercise it without a DOM.
+export function formatLatestToolDisplay(entry) {
+  if (!entry || !entry.content) return '';
+  const raw = String(entry.content).replace(/^→\s*/, '');
+  const m = raw.match(/^([^:]+):\s*([\s\S]*)$/);
+  const tool = m ? m[1].trim() : raw;
+  const arg = m ? m[2].trim() : '';
+  const c = classifyTool(tool);
+  const friendly = c ? c.live : tool;
+  let argSnip;
+  if (c && c.bucket === 'browser') {
+    // Drop the JS payload — surface the bare method name (e.g.
+    // `mcp__plugin_playwright__browser_click` → `browser_click`).
+    const parts = tool.split('__');
+    argSnip = parts.length > 1 ? parts[parts.length - 1] : tool;
+  } else if (
+    c && c.bucket === 'command' &&
+    (arg.indexOf('\n') !== -1 || /^\(\s*\)\s*=>/.test(arg) || /^function\b/.test(arg))
+  ) {
+    argSnip = '<inline code>';
+  } else {
+    argSnip = arg.length > 64 ? arg.slice(0, 62) + '…' : arg;
+  }
+  return argSnip ? friendly + ' · ' + argSnip : friendly;
+}
+
 // Render the tally as "Read 3 files · ran 2 commands · edited 1 file".
 function renderToolTally(buckets) {
   const parts = [];
@@ -375,20 +415,15 @@ export function refreshWorkingIndicator(agent) {
     return;
   }
   // Latest activity line — shows what the agent most recently *finished*.
-  // Strips the "→ Tool: " prefix and the long arg tail; e.g.
-  //   "→ Bash: ls -la /Users/bjornjee/Code/bjornjee/worktrees/..."
-  // renders as "Bash · ls -la /Users/bjornjee/Code/…"
+  // Display rendering (incl. bucket-aware sanitisation for browser MCP
+  // calls and inline-code bash payloads) lives in formatLatestToolDisplay
+  // so it can be unit-tested without a DOM.
   let latestHtml = '';
   if (latestToolEntry) {
-    const raw = String(latestToolEntry.content || '').replace(/^→\s*/, '');
-    const m = raw.match(/^([^:]+):\s*(.*)$/);
-    const tool = m ? m[1].trim() : raw;
-    const arg = m ? m[2].trim() : '';
-    const c = classifyTool(tool);
-    const friendly = c ? c.live : tool;
-    const argSnip = arg.length > 64 ? arg.slice(0, 62) + '…' : arg;
-    const display = argSnip ? friendly + ' · ' + argSnip : friendly;
-    latestHtml = '<div class="ui-msg-status__latest">' + escapeHtml(display) + '</div>';
+    const display = formatLatestToolDisplay(latestToolEntry);
+    if (display) {
+      latestHtml = '<div class="ui-msg-status__latest">' + escapeHtml(display) + '</div>';
+    }
   }
   const html =
     tallyHtml +
@@ -408,10 +443,8 @@ export function refreshWorkingIndicator(agent) {
     el.innerHTML = html;
     container.appendChild(el);
     // Only pull the indicator into view if the user was already at the
-    // bottom. refreshConversation re-runs every 2s and wipes the
-    // indicator (innerHTML rewrite), so this mount path fires every
-    // poll while an agent is working — an unconditional scroll here
-    // overrides whatever scroll position the user just chose.
+    // bottom. An unconditional scroll here would override whatever
+    // scroll position the user just chose.
     if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
   }
   // Lazy-start the activity poll so the tool count keeps incrementing
@@ -542,13 +575,16 @@ function renderActionBar(agent) {
   }
 
   // Composer is always present so the user can ask follow-up questions
-  // regardless of the agent's terminal state. The stop button only appears
-  // while the agent is actively processing; otherwise the send button.
-  const STOP_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+  // regardless of the agent's terminal state. Stop only fits while the
+  // agent's own stream can be interrupted (running) or while a paired
+  // action-panel chip is the primary affordance (permission, plan). For
+  // idle reply-expecting states (question, error) the placeholder below
+  // says "Type a reply…" — the trailing button must agree and offer send.
+  const STOP_STATES = new Set(['running', 'permission', 'plan']);
   const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
     : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
   const trailing = STOP_STATES.has(st)
-    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')"><span></span></button>`
+    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`
     : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
   const modelLabel = agent.model ? escapeHtml(agent.model) : 'auto';
   const branchLabel = agent.branch ? escapeHtml(agent.branch) : 'no branch';
@@ -611,40 +647,48 @@ function renderPlanLinkCard() {
   return `<div class="ui-msg ui-msg--assistant ui-msg--plan-link"><div class="ui-msg__card ui-msg__card--plan-link">${inner}</div></div>`;
 }
 
+// Drop entries the renderer wouldn't display (internal notifications,
+// empty content). plan-saved synthetic entries pass through (no
+// content body — they render the plan-link card from their role
+// alone). Pure — exported for unit tests so the same predicate
+// drives appendNewEntries' count math.
+export function visibleEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  const out = [];
+  for (const entry of entries) {
+    if (entry.IsNotification) continue;
+    const role = entry.Role || entry.role;
+    if (role === 'plan-saved') { out.push(entry); continue; }
+    const content = entry.Content || entry.content || '';
+    if (!content) continue;
+    out.push(entry);
+  }
+  return out;
+}
+
+// Render a single visible entry to HTML. Extracted so both the initial
+// full-render path (renderConversationHtml) and the incremental poll
+// path (appendNewEntries) emit identical markup.
+function renderEntryHtml(entry) {
+  const role = entry.Role || entry.role;
+  if (role === 'plan-saved') return renderPlanLinkCard();
+  const content = entry.Content || entry.content || '';
+  if (role === 'human') return UI.message('user', content);
+  return UI.message('assistant', renderMarkdown(content), { html: true });
+}
+
 // Build conversation HTML from an array of message entries — Codex flat-prose.
 function renderConversationHtml(entries) {
   let html = '<div class="conversation">';
-  for (const entry of entries) {
-    // Skip task-notification messages (internal agent-to-agent noise)
-    if (entry.IsNotification) continue;
-    const role = entry.Role || entry.role;
-    // plan-saved is a backend-emitted synthetic entry per ExitPlanMode
-    // tool_use. Render the chat-stream plan-link card at this timeline
-    // position — append-only, scrolls with conversation history.
-    if (role === 'plan-saved') {
-      html += renderPlanLinkCard();
-      continue;
-    }
-    const content = entry.Content || entry.content || '';
-    if (!content) continue;
-    if (role === 'human') {
-      html += UI.message('user', content);
-    } else {
-      // Assistant prose with rendered markdown — keep HTML, don't escape again
-      const body = renderMarkdown(content);
-      html += UI.message('assistant', body, { html: true });
-    }
-  }
+  for (const entry of visibleEntries(entries)) html += renderEntryHtml(entry);
   html += '</div>';
   return html;
 }
 
 // Signature of every field renderQuestionCard() reads. If this string is
-// unchanged across a poll tick, the rebuilt card would be byte-identical
-// — and rebuilding anyway would wipe the user's picked radio / typed
-// freeform text. refreshConversation uses this to detach-and-re-attach
-// the same DOM node across the container.innerHTML wipe. Same pattern
-// as actionBarSignature (commit 8106661).
+// unchanged across a poll tick, reconcileQuestionCard leaves the existing
+// DOM node in place — preserving the user's picked radio / typed freeform
+// text. Same pattern as actionBarSignature.
 function questionCardSignature(pending) {
   if (!pending || !Array.isArray(pending.questions)) return '';
   const parts = [pending.tool_use_id || ''];
@@ -656,15 +700,33 @@ function questionCardSignature(pending) {
   return parts.join('|');
 }
 
+function hasPendingQuestionPayload(pending) {
+  return !!(pending && Array.isArray(pending.questions) && pending.questions.length > 0);
+}
+
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < String(s || '').length; i++) {
+    h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+export function questionCardId(pending) {
+  if (pending && pending.tool_use_id) return pending.tool_use_id;
+  const sig = questionCardSignature(pending);
+  return sig ? `qc-${hashString(sig)}` : '';
+}
+
 // Anatomy matches docs/design/codex-screenshots/mobile/photo_2026-06-01_17-44-47.jpg —
 // elevated surface, per-question small-caps category label, radio list with
 // bold title + muted description, optional freeform answer input, single
 // white submit chip. Submission posts the composed answer to the existing
 // /input endpoint; the agent reads it as the user's next message and the
 // card disappears on the next poll once HasPendingQuestion clears.
-function renderQuestionCard(pending, agentId) {
-  if (!pending || !Array.isArray(pending.questions) || pending.questions.length === 0) return '';
-  const tid = escapeHtml(pending.tool_use_id || '');
+export function renderQuestionCard(pending, agentId) {
+  if (!hasPendingQuestionPayload(pending)) return '';
+  const tid = escapeHtml(questionCardId(pending));
   const sig = escapeHtml(questionCardSignature(pending));
   const blocks = pending.questions.map((q, qi) => {
     const header = q.header ? `<div class="question-card__label">${escapeHtml(q.header)}</div>` : '';
@@ -781,8 +843,134 @@ function cssEscape(s) {
   return String(s).replace(/([^a-zA-Z0-9_-])/g, '\\$1');
 }
 
-// Re-fetch and re-render the conversation tab if it is currently active.
-// Called by the SSE handler to keep the chat view up to date.
+// Where new entries should be inserted: ahead of any decoration node
+// (question card, optimistic-message bubble + caption, working
+// indicator) so the rendered chat order stays
+//   entries → question card → optimistic msg → caption → working indicator
+// the way appendUserMessage and the original full-render path lay it out.
+// Returns null when nothing decorates the bottom yet, meaning "append".
+function entryInsertAnchor(conv) {
+  return conv.querySelector(
+    '.question-card, [data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working'
+  );
+}
+
+// Idempotent: append every visible entry past data-rendered-count to
+// `conv`, stamp the new count back. Entries the API has already shown
+// us are never touched, so their DOM (focus, caret, :checked, scroll)
+// survives the poll. If the conversation rewinds (history reset, agent
+// switch), falls back to a full rebuild of just the entry nodes — leaves
+// decoration siblings alone.
+function appendNewEntries(conv, entries) {
+  const visible = visibleEntries(entries);
+  const rendered = parseInt(conv.dataset.renderedCount || '0', 10);
+
+  if (visible.length < rendered) {
+    // Conversation got shorter — strip rendered entries and rebuild,
+    // keeping decoration siblings in place.
+    conv.querySelectorAll(':scope > [data-entry-idx]').forEach(el => el.remove());
+    const anchor = entryInsertAnchor(conv);
+    visible.forEach((entry, i) => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = renderEntryHtml(entry);
+      const el = wrap.firstElementChild;
+      if (!el) return;
+      el.dataset.entryIdx = String(i);
+      conv.insertBefore(el, anchor);
+    });
+    conv.dataset.renderedCount = String(visible.length);
+    return;
+  }
+
+  const anchor = entryInsertAnchor(conv);
+  for (let i = rendered; i < visible.length; i++) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderEntryHtml(visible[i]);
+    const el = wrap.firstElementChild;
+    if (!el) continue;
+    el.dataset.entryIdx = String(i);
+    conv.insertBefore(el, anchor);
+  }
+  conv.dataset.renderedCount = String(visible.length);
+}
+
+// Reconcile the AskUserQuestion card without touching it when the
+// pending payload is unchanged. This is the core of the fix: the card's
+// DOM node is preserved across polls, so focus, caret, input.value and
+// :checked all survive instead of being wiped + manually re-applied.
+function reconcileQuestionCard(conv, pending, agentId) {
+  const existing = conv.querySelector('.question-card');
+  if (!hasPendingQuestionPayload(pending)) {
+    if (existing) existing.remove();
+    return;
+  }
+  const sig = questionCardSignature(pending);
+  const pendingCardId = questionCardId(pending);
+  if (existing
+      && existing.dataset.toolUseId === pendingCardId
+      && existing.dataset.sig === sig) {
+    return; // identical card — leave it alone
+  }
+  if (existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderQuestionCard(pending, agentId);
+  const cardEl = wrap.firstElementChild;
+  if (!cardEl) return;
+  // Insert ahead of optimistic msg / caption / working indicator, after
+  // all entry messages — same slot the original full-render path used.
+  const anchor = conv.querySelector('[data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working');
+  conv.insertBefore(cardEl, anchor);
+}
+
+// Reconcile the in-flight optimistic user message. Three states:
+//   1. No pending message      → remove any leftover bubble / caption
+//   2. Pending + not yet acked → ensure bubble + "Sending…" caption present
+//   3. Pending + acked         → bubble present without caption (acked but
+//                                API hasn't echoed yet)
+// The bubble persists across polls — we never tear it down just to put
+// it back, so the .ui-msg--optimistic class transitions cleanly without
+// the bubble flickering.
+function reconcileOptimisticMessage(conv) {
+  const bubble = conv.querySelector('[data-optimistic="1"]');
+  const caption = conv.querySelector('.ui-msg__caption--sending');
+  if (!pendingUserMessage) {
+    if (bubble) bubble.remove();
+    if (caption) caption.remove();
+    return;
+  }
+  if (!bubble) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = UI.message('user', pendingUserMessage);
+    const el = wrap.firstElementChild;
+    if (el) {
+      el.dataset.optimistic = '1';
+      if (!pendingMessageAcked) el.classList.add('ui-msg--optimistic');
+      const anchor = conv.querySelector('.ui-msg__caption--sending, .ui-msg-status--working');
+      conv.insertBefore(el, anchor);
+    }
+  } else {
+    bubble.classList.toggle('ui-msg--optimistic', !pendingMessageAcked);
+  }
+  if (!pendingMessageAcked) {
+    if (!caption) {
+      const c = document.createElement('div');
+      c.className = 'ui-msg__caption ui-msg__caption--sending';
+      c.textContent = 'Sending…';
+      const anchor = conv.querySelector('.ui-msg-status--working');
+      conv.insertBefore(c, anchor);
+    }
+  } else if (caption) {
+    caption.remove();
+  }
+}
+
+// Re-fetch and incrementally update the conversation tab if it is currently
+// active. Called by the 2s poll and by the SSE handler.
+//
+// Incremental by design: only new entries are appended; the question card,
+// any optimistic message, and the working indicator are reconciled in
+// place. Nothing already in the DOM is detached, which is what lets focus,
+// caret position, :checked radios, and input.value survive every poll.
 async function refreshConversation(agentId, agent) {
   if (currentDetailTab !== 'conversation' || currentDetailAgentId !== agentId) return;
   const container = document.getElementById('tab-conversation');
@@ -795,103 +983,32 @@ async function refreshConversation(agentId, agent) {
   const scrollParent = container.closest('.detail-scroll');
   const wasAtBottom = isAtBottom(scrollParent);
 
-  // Check if the API has caught up with our optimistic message
+  // Detect API catching up with our optimistic message before deciding
+  // whether to render an optimistic bubble; the bubble removal happens
+  // inside reconcileOptimisticMessage on the next line.
   if (pendingUserMessage) {
     const lastHuman = [...entries].reverse().find(e => (e.Role || e.role) === 'human');
     const lastContent = lastHuman ? (lastHuman.Content || lastHuman.content || '') : '';
     if (lastContent.includes(pendingUserMessage)) {
-      pendingUserMessage = null;       // API caught up, clear optimistic state
+      pendingUserMessage = null;
       pendingMessageAcked = false;
     }
   }
 
-  // Preserve the AskUserQuestion card DOM node across the container wipe
-  // when the pending question is unchanged. Rebuilding the card every 2s
-  // poll detaches its event listeners and resets any picked option or
-  // freeform text the user was filling in — making the card feel
-  // "unclickable". Detach first so innerHTML doesn't destroy it, then
-  // re-attach the same Node so checked radios / focus survive.
-  // tool_use_id may be empty when the agent state hook stamped
-  // pending_question from a PermissionRequest payload that lacked the
-  // upstream id. Fall back to a literal sentinel so the card still
-  // renders, preserves across polls, and can be looked up by
-  // submitQuestionCard. The data-sig attribute (questionCardSignature)
-  // is what actually detects content drift across polls, so the id
-  // only needs to be stable + JS-safe (not unique per question).
-  const pendingId = (pending && (pending.tool_use_id || 'pending')) || '';
-  const existingCard = container.querySelector('.question-card');
-  const sig = pending ? questionCardSignature(pending) : '';
-  const reuseCard = !!(pending && pendingId && existingCard
-    && existingCard.dataset.toolUseId === pendingId
-    && existingCard.dataset.sig === sig);
-  if (reuseCard) existingCard.remove();
-
-  // Snapshot horizontal scroll positions of tables inside chat bubbles
-  // BEFORE the innerHTML wipe. Without this, every 2 s poll resets
-  // scrollLeft to 0 — the user reports the table "keeps auto scrolling
-  // to the left" while they're trying to read the right-side columns.
-  // Restored below by index (entry order is stable across polls; new
-  // tables only append at the bottom).
-  const tableScrolls = [];
-  container.querySelectorAll('.ui-msg__prose table').forEach(t => tableScrolls.push(t.scrollLeft));
-
-  container.innerHTML = renderConversationHtml(entries);
-
-  // Restore the snapshotted scrollLeft on each table that survived
-  // (length match → 1:1 by index). When a new table appears it lands
-  // at the end; the existing tables keep their position.
-  const tablesAfter = container.querySelectorAll('.ui-msg__prose table');
-  for (let i = 0; i < Math.min(tableScrolls.length, tablesAfter.length); i++) {
-    tablesAfter[i].scrollLeft = tableScrolls[i];
+  // First poll after the empty-state placeholder ran — initialise the
+  // .conversation skeleton so the incremental path has somewhere to
+  // write. Main's appendNewEntries is incremental and doesn't wipe DOM,
+  // so tables / cards / focused inputs persist naturally across polls
+  // (replaces the earlier snapshot-and-restore-scrollLeft hack).
+  let conv = container.querySelector('.conversation');
+  if (!conv) {
+    container.innerHTML = '<div class="conversation"></div>';
+    conv = container.querySelector('.conversation');
   }
 
-  // Append the AskUserQuestion card inline after the last assistant
-  // message when one is pending. The card is part of the chat stream,
-  // not the action bar — visitors keep prior context in view. Use the
-  // tool_use_id when available, otherwise the question signature, so
-  // the card renders even when the agent state hook lacks the id.
-  if (pending && pendingId) {
-    const conv = container.querySelector('.conversation');
-    if (conv) {
-      if (reuseCard) {
-        conv.appendChild(existingCard);
-      } else {
-        // Pass pendingId down so the card carries the fallback id
-        // when the upstream tool_use_id is empty.
-        const wrap = document.createElement('div');
-        wrap.innerHTML = renderQuestionCard({ ...pending, tool_use_id: pendingId }, agentId);
-        const cardEl = wrap.firstElementChild;
-        if (cardEl) conv.appendChild(cardEl);
-      }
-    }
-  }
-
-  // Re-append optimistic message if API hasn't caught up yet. The
-  // "Sending…" caption (and the muted opacity) ONLY apply while the
-  // POST is still in flight (pendingMessageAcked === false). After ack
-  // the bubble re-renders at full opacity, no caption — just a normal
-  // user message waiting for the API echo.
-  if (pendingUserMessage) {
-    const conv = container.querySelector('.conversation');
-    if (conv) {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = UI.message('user', pendingUserMessage);
-      const msgEl = wrap.firstElementChild;
-      if (msgEl) {
-        if (!pendingMessageAcked) msgEl.classList.add('ui-msg--optimistic');
-        conv.appendChild(msgEl);
-        if (!pendingMessageAcked) {
-          const caption = document.createElement('div');
-          caption.className = 'ui-msg__caption ui-msg__caption--sending';
-          caption.textContent = 'Sending…';
-          conv.appendChild(caption);
-        }
-      }
-    }
-  }
-
-  // Re-mount the working indicator if the agent is processing — the
-  // innerHTML rewrite above wiped any previous indicator.
+  appendNewEntries(conv, entries);
+  reconcileQuestionCard(conv, pending, agentId);
+  reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
 
   if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
@@ -957,10 +1074,18 @@ export function refreshDetailHeader(agent) {
     if (fresh) pill.replaceWith(fresh);
   }
 
+  // Update duration — pick the last non-separator span (B1 split each
+  // meta token into its own <span>, separated by .detail-meta__sep nodes).
+  const meta = document.querySelector('.detail-meta');
+  if (meta && agent.started_at) {
+    const spans = meta.querySelectorAll('span:not(.detail-meta__sep)');
+    const last = spans[spans.length - 1];
+    if (last) last.textContent = duration(agent);
+  }
+
   // Refresh vital signs only on state change
   if (prev !== null && prev !== st) {
     loadVitalSigns(agent.session_id, agent);
-    loadSubagentSummary(agent.session_id);
   }
 }
 
@@ -991,16 +1116,24 @@ export async function renderDetail(app, agents, agentId, setView) {
   const branchPart = agent.branch ? escapeHtml(agent.branch) : '';
   const modelPart = agent.model ? escapeHtml(agent.model) : '';
   const durationPart = agent.started_at ? duration(agent) : '';
-  const subline = [branchPart, modelPart, durationPart].filter(Boolean).join(' · ');
+  // Render each meta token as its own <span> so refreshDetailHeader()
+  // can poke the *last* span (the live duration) without rebuilding the
+  // whole row.
+  const metaSpans = [branchPart, modelPart, durationPart]
+    .filter(Boolean)
+    .map(t => `<span>${t}</span>`)
+    .join('<span class="detail-meta__sep">·</span>');
 
+  // appBar carries only the back arrow + trailing chrome (spinner / theme
+  // / more / dock). The repo title moves below into `.detail-title` so it
+  // can share a row with the status pill + PR tag (B1 — restores visual
+  // hierarchy: title and state on one line, metadata below).
   const appBar = UI.appBar({
     back: true,
-    title: repoName(agent),
-    subtitle: subline,
     trailing: [
       ...(st === 'running' ? ['spinner'] : []),
       Theme.trailingEntry(),
-      { icon: ICONS.kebab, ariaLabel: 'More', onclick: 'Dashboard.openKebab()' },
+      { icon: ICONS.kebab, ariaLabel: 'More', onclick: `Dashboard.openDetailKebab('${agent.session_id}')` },
     ],
   });
 
@@ -1010,9 +1143,18 @@ export async function renderDetail(app, agents, agentId, setView) {
   const prChip = (prTag(agent) && st !== 'pr')
     ? `<span class="ui-row__tag detail-header__tag">${escapeHtml(prTag(agent))}</span>`
     : '';
+  const titleText = escapeHtml(repoName(agent));
+  const metaLine = metaSpans
+    ? `<div class="detail-meta">${metaSpans}</div>`
+    : '';
   const detailHeader = `
     <div class="detail-header">
-      <div class="detail-title">${inlineStatusPill(st)}${prChip}</div>
+      <div class="detail-title">
+        <span class="detail-title__text">${titleText}</span>
+        ${inlineStatusPill(st)}
+        ${prChip}
+      </div>
+      ${metaLine}
     </div>
   `;
 
@@ -1032,8 +1174,14 @@ export async function renderDetail(app, agents, agentId, setView) {
 
   const isMobile = window.innerWidth <= 480;
   const vitalOpen = !isMobile && sessionStorage.getItem('collapse-vital-signs-container-' + agentId) !== 'true';
-  const subagentOpen = !isMobile && sessionStorage.getItem('collapse-subagent-summary-' + agentId) !== 'true';
   const activeCls = (key) => key === savedTab ? ' active' : '';
+
+  // STATS disclosure is metadata about the current conversation
+  // (elapsed / tokens / cost) — only meaningful on the Chat tab. It's
+  // CSS-scoped to the active Chat tab in style.css (.detail-scroll
+  // rules), so it stays hidden on Activity / Diff / Plan (C1b).
+  // Subagents disclosure removed entirely (C1) — subagent activity is
+  // implied by the live tool-tally line.
 
   app.innerHTML = `
     <div class="detail-layout">
@@ -1045,7 +1193,6 @@ export async function renderDetail(app, agents, agentId, setView) {
       <div class="detail-scroll">
         <div class="detail-supplementary">
           ${inlineDisclosure('vital-signs-container', 'Stats', vitalOpen)}
-          ${inlineDisclosure('subagent-summary', 'Subagents', subagentOpen)}
         </div>
         <div id="tab-conversation" class="tab-content${activeCls('conversation')}">${savedTab === 'conversation' ? skeletonLoading(4) : ''}</div>
         <div id="tab-activity" class="tab-content${activeCls('activity')}">${savedTab === 'activity' ? skeletonLoading(6) : ''}</div>
@@ -1114,9 +1261,8 @@ export async function renderDetail(app, agents, agentId, setView) {
     });
   });
 
-  // Load initial tab + subagents + vital signs in parallel
+  // Load initial tab + vital signs in parallel
   loadTabContent(savedTab, agentId);
-  loadSubagentSummary(agentId);
   loadVitalSigns(agentId, agent);
 
   // Mount the working indicator if the agent is currently processing.
@@ -1167,51 +1313,6 @@ async function loadVitalSigns(agentId, agent) {
   }
 }
 
-async function loadSubagentSummary(agentId) {
-  const container = document.getElementById('subagent-summary');
-  if (!container) return;
-  let subs;
-  try {
-    subs = await get('/api/agents/' + agentId + '/subagents');
-  } catch {
-    container.innerHTML = '';
-    return;
-  }
-  if (!subs || subs.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-
-  const MAX_VISIBLE = 3;
-  const visible = subs.slice(-MAX_VISIBLE);
-  const hidden = subs.length - visible.length;
-
-  let html = '';
-
-  html += '<div class="subagent-summary-list">';
-  if (hidden > 0) {
-    html += `<div class="subagent-pill subagent-pill--muted"><span class="subagent-type">+${hidden} more</span></div>`;
-  }
-  for (const sub of visible) {
-    const isDone = sub.Completed || sub.completed;
-    const type = sub.AgentType || sub.agent_type || 'agent';
-    const desc = sub.InstructionHead || sub.instruction_head || sub.Description || sub.description || '';
-    const mode = sub.Mode || sub.mode || '';
-    const startedAt = sub.StartedAt || sub.started_at || '';
-    const dotClass = isDone ? 'status-dot--completed' : 'status-dot--running';
-    html += `<div class="subagent-pill">`;
-    html += `<span class="status-dot ${dotClass}"></span>`;
-    html += `<span class="subagent-type">${escapeHtml(type)}</span>`;
-    if (desc) html += `<span class="subagent-desc">${escapeHtml(desc)}</span>`;
-    if (mode) html += `<span class="subagent-mode">${escapeHtml(mode)}</span>`;
-    if (startedAt) html += `<span class="subagent-time">${durationFromTimestamp(startedAt)}</span>`;
-    html += '</div>';
-  }
-  html += '</div>';
-
-  container.innerHTML = html;
-}
-
 async function loadTabContent(tab, agentId) {
   const signal = newNavSignal();
   const container = document.getElementById('tab-' + tab);
@@ -1232,14 +1333,21 @@ async function loadTabContent(tab, agentId) {
         return;
       }
       container.innerHTML = renderConversationHtml(entries);
-      // Fallback to 'pending' sentinel when upstream tool_use_id is
-      // missing — matches the refreshConversation guard above.
-      const pendingId2 = (pending && (pending.tool_use_id || 'pending')) || '';
-      if (pending && pendingId2) {
-        const conv = container.querySelector('.conversation');
-        if (conv) {
+      const conv = container.querySelector('.conversation');
+      if (conv) {
+        // Seed the incremental-render bookkeeping so the next poll's
+        // appendNewEntries knows what's already in the DOM. Stamping
+        // data-entry-idx on each rendered message keeps the rewind
+        // fallback (history shrank) able to find and prune them.
+        const visible = visibleEntries(entries);
+        const msgs = conv.querySelectorAll(':scope > .ui-msg');
+        for (let i = 0; i < msgs.length && i < visible.length; i++) {
+          msgs[i].dataset.entryIdx = String(i);
+        }
+        conv.dataset.renderedCount = String(visible.length);
+        if (hasPendingQuestionPayload(pending)) {
           const wrap = document.createElement('div');
-          wrap.innerHTML = renderQuestionCard({ ...pending, tool_use_id: pendingId2 }, agentId);
+          wrap.innerHTML = renderQuestionCard(pending, agentId);
           const cardEl = wrap.firstElementChild;
           if (cardEl) conv.appendChild(cardEl);
         }
@@ -1303,8 +1411,12 @@ async function loadTabContent(tab, agentId) {
             toolGroup = [];
           }
 
-          const truncated = content.length > 200;
-          const displayContent = truncated ? content.substring(0, 200) + '...' : content;
+          // Strip <local-command-*> wrappers from human entries — same
+          // surface as the Chat tab (C3). Assistant content is markdown
+          // and never carries those tags.
+          const cleanContent = kind === 'human' ? stripLocalCommandTags(content) : content;
+          const truncated = cleanContent.length > 200;
+          const displayContent = truncated ? cleanContent.substring(0, 200) + '...' : cleanContent;
           html += `<div class="timeline-entry activity-entry" data-kind="${kind}">`;
           html += timelineIcon(kind);
           html += '<div class="timeline-content">';
@@ -1315,7 +1427,7 @@ async function loadTabContent(tab, agentId) {
             html += `<div class="timeline-detail">${escapeHtml(displayContent)}</div>`;
           }
           if (truncated) {
-            html += `<span data-full="${escapeHtml(content)}" data-truncated="true" style="display:none"></span>`;
+            html += `<span data-full="${escapeHtml(cleanContent)}" data-truncated="true" style="display:none"></span>`;
             html += `<button class="btn btn-ghost btn-sm" onclick="Dashboard.toggleExpand(this)">Show more</button>`;
           }
           html += '</div></div>';
@@ -1653,7 +1765,7 @@ async function loadTabContent(tab, agentId) {
       const data = await get('/api/agents/' + agentId + '/plan');
       if (signal.aborted) return;
       if (!data || !data.content) {
-        container.innerHTML = inlineEmptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing');
+        container.innerHTML = inlineEmptyState(ICONS.clipboard, 'No plan available', 'Plans appear when the agent outlines its approach before executing.');
         markLoaded();
         return;
       }

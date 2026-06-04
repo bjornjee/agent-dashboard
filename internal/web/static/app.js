@@ -163,6 +163,17 @@ window.Dashboard = {
     document.body.appendChild(wrap.firstElementChild);
   },
 
+  openDetailKebab(agentId) {
+    document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
+    const wrap = document.createElement('div');
+    wrap.innerHTML = UI.sheet([
+      { icon: ICONS.spark, label: 'Usage', onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
+      { icon: ICONS.bell, label: 'Notifications', onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
+      { icon: ICONS.close, label: 'Terminate agent', onclick: `Dashboard.dismissSheet();Dashboard.confirmClose('${agentId}')` },
+    ]);
+    document.body.appendChild(wrap.firstElementChild);
+  },
+
   dismissSheet() {
     document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
   },
