@@ -1268,6 +1268,41 @@ type ConversationEntryLite struct {
 	Timestamp string
 }
 
+// /agent-dashboard:feature stamps a plan slug on JSONL entries (skill
+// writes the plan directory on disk) AND calls ExitPlanMode at the plan
+// phase. The chat must show ONE plan-link card anchored to the
+// ExitPlanMode position — not two cards (slug + ExitPlanMode), and not a
+// premature card from the first-slug entry where the plan didn't exist
+// yet.
+func TestReadConversation_SlugAndExitPlanMode_EmitsSinglePlanSavedAtExitPlanMode(t *testing.T) {
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "proj")
+	os.MkdirAll(projDir, 0755)
+	sessionID := "sess-slug-and-exitplan"
+
+	jsonl := `{"type":"user","message":{"role":"user","content":"/agent-dashboard:feature do X"},"timestamp":"2026-03-28T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"setting up"}]},"timestamp":"2026-03-28T10:00:01Z"}
+{"type":"attachment","slug":"happy-cat","timestamp":"2026-03-28T10:00:02Z"}
+{"type":"user","slug":"happy-cat","message":{"role":"user","content":"continuing"},"timestamp":"2026-03-28T10:00:03Z"}
+{"type":"assistant","slug":"happy-cat","message":{"role":"assistant","content":[{"type":"text","text":"plan ready"},{"type":"tool_use","id":"t1","name":"ExitPlanMode","input":{"plan":"# Title\n\nbody"}}]},"timestamp":"2026-03-28T10:00:04Z"}
+`
+	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
+
+	got := ReadConversation(projDir, sessionID, 100)
+	var planEntries []ConversationEntryLite
+	for i := range got {
+		if got[i].Role == "plan-saved" {
+			planEntries = append(planEntries, ConversationEntryLite{Role: got[i].Role, Timestamp: got[i].Timestamp})
+		}
+	}
+	if len(planEntries) != 1 {
+		t.Fatalf("got %d plan-saved entries, want exactly 1 (ExitPlanMode supersedes slug); entries=%+v", len(planEntries), planEntries)
+	}
+	if planEntries[0].Timestamp != "2026-03-28T10:00:04Z" {
+		t.Errorf("plan-saved timestamp = %q, want ExitPlanMode timestamp 2026-03-28T10:00:04Z", planEntries[0].Timestamp)
+	}
+}
+
 func TestReadConversation_NoPlanSavedWithoutExitPlanMode(t *testing.T) {
 	dir := t.TempDir()
 	projDir := filepath.Join(dir, "proj")

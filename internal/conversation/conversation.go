@@ -217,6 +217,18 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		prevLen = len(all)
 	}
 
+	// Slug-based plan-saved emission is deferred to end-of-scan. /agent-
+	// dashboard:feature stamps a slug on JSONL entries as soon as the
+	// plan directory is created on disk — well BEFORE the agent actually
+	// presents the plan via ExitPlanMode. Emitting at first-slug produces
+	// a premature card pointing to an empty plan, plus a second card when
+	// ExitPlanMode later fires. ExitPlanMode is the canonical plan
+	// position, so we hold the slug position in reserve and only insert
+	// it post-scan if no ExitPlanMode fired.
+	slugFirstIdx := -1
+	slugFirstTimestamp := ""
+	exitPlanEmitted := false
+
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -243,22 +255,28 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 			// append-only, scrolls with history.
 			if planEntry := extractPlanSavedEntry(entry); planEntry != nil {
 				all = append(all, *planEntry)
+				exitPlanEmitted = true
 			}
 		}
-		// Slug-based plan creation (e.g. /agent-dashboard:feature writes a
-		// plan markdown file to disk; subsequent JSONL entries carry a
-		// `slug` field referencing it). The slug doesn't surface as an
-		// ExitPlanMode tool_use, so the per-assistant-message handler
-		// above wouldn't fire. Emit one plan-saved entry at the first
-		// slug occurrence so the chat-stream plan-link card still mounts
-		// at the correct timeline position. Guarded so we don't emit a
-		// duplicate when ExitPlanMode + slug appear in the same session.
-		if entry.Slug != "" && !planSavedEmitted(all) {
-			all = append(all, domain.ConversationEntry{
-				Role:      "plan-saved",
-				Timestamp: entry.Timestamp,
-			})
+		if entry.Slug != "" && slugFirstIdx < 0 {
+			slugFirstIdx = len(all)
+			slugFirstTimestamp = entry.Timestamp
 		}
+	}
+
+	// No ExitPlanMode in this scan AND no plan-saved carried in from a
+	// prior incremental read → fall back to the slug position so skill-
+	// based plans (e.g. /agent-dashboard:feature) still get a card when
+	// the agent never reached ExitPlanMode.
+	if slugFirstIdx >= 0 && !exitPlanEmitted && !planSavedEmitted(all) {
+		if slugFirstIdx > len(all) {
+			slugFirstIdx = len(all)
+		}
+		slugEntry := domain.ConversationEntry{
+			Role:      "plan-saved",
+			Timestamp: slugFirstTimestamp,
+		}
+		all = append(all[:slugFirstIdx], append([]domain.ConversationEntry{slugEntry}, all[slugFirstIdx:]...)...)
 	}
 
 	// Only mark notifications on new entries + the boundary entry from prev
