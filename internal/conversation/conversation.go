@@ -217,14 +217,10 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		prevLen = len(all)
 	}
 
-	// Slug-based plan-saved emission is deferred to end-of-scan. /agent-
-	// dashboard:feature stamps a slug on JSONL entries as soon as the
-	// plan directory is created on disk — well BEFORE the agent actually
-	// presents the plan via ExitPlanMode. Emitting at first-slug produces
-	// a premature card pointing to an empty plan, plus a second card when
-	// ExitPlanMode later fires. ExitPlanMode is the canonical plan
-	// position, so we hold the slug position in reserve and only insert
-	// it post-scan if no ExitPlanMode fired.
+	// Slug-based plan-saved emission is deferred to end-of-scan because
+	// slug appears on JSONL entries as soon as the plan directory is
+	// created, before ExitPlanMode fires. Emit at first-slug only when no
+	// ExitPlanMode was found; otherwise anchor the card to ExitPlanMode.
 	slugFirstIdx := -1
 	slugFirstTimestamp := ""
 	exitPlanEmitted := false
@@ -264,10 +260,9 @@ func ReadConversationIncremental(projDir, sessionID string, limit int, prev []do
 		}
 	}
 
-	// No ExitPlanMode in this scan AND no plan-saved carried in from a
-	// prior incremental read → fall back to the slug position so skill-
-	// based plans (e.g. /agent-dashboard:feature) still get a card when
-	// the agent never reached ExitPlanMode.
+	// No ExitPlanMode seen → fall back to slug position so skill-based
+	// plans still get a card. planSavedEmitted guards against re-inserting
+	// on incremental reads that already have the entry from a prior scan.
 	if slugFirstIdx >= 0 && !exitPlanEmitted && !planSavedEmitted(all) {
 		if slugFirstIdx > len(all) {
 			slugFirstIdx = len(all)

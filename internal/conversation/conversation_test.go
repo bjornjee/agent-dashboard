@@ -1247,25 +1247,19 @@ func TestReadConversation_EmitsPlanSavedOnFirstSlug(t *testing.T) {
 
 	got := ReadConversation(projDir, sessionID, 100)
 	count := 0
-	var planEntry *ConversationEntryLite
+	var planIdx int = -1
 	for i := range got {
 		if got[i].Role == "plan-saved" {
 			count++
-			pe := ConversationEntryLite{Role: got[i].Role, Timestamp: got[i].Timestamp}
-			planEntry = &pe
+			planIdx = i
 		}
 	}
 	if count != 1 {
 		t.Fatalf("got %d plan-saved entries, want exactly 1 (one per session for slug-driven plans)", count)
 	}
-	if planEntry.Timestamp != "2026-03-28T10:00:02Z" {
-		t.Errorf("plan-saved timestamp = %q, want first-slug timestamp 2026-03-28T10:00:02Z", planEntry.Timestamp)
+	if got[planIdx].Timestamp != "2026-03-28T10:00:02Z" {
+		t.Errorf("plan-saved timestamp = %q, want first-slug timestamp 2026-03-28T10:00:02Z", got[planIdx].Timestamp)
 	}
-}
-
-type ConversationEntryLite struct {
-	Role      string
-	Timestamp string
 }
 
 // /agent-dashboard:feature stamps a plan slug on JSONL entries (skill
@@ -1289,10 +1283,10 @@ func TestReadConversation_SlugAndExitPlanMode_EmitsSinglePlanSavedAtExitPlanMode
 	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
 
 	got := ReadConversation(projDir, sessionID, 100)
-	var planEntries []ConversationEntryLite
+	var planEntries []domain.ConversationEntry
 	for i := range got {
 		if got[i].Role == "plan-saved" {
-			planEntries = append(planEntries, ConversationEntryLite{Role: got[i].Role, Timestamp: got[i].Timestamp})
+			planEntries = append(planEntries, got[i])
 		}
 	}
 	if len(planEntries) != 1 {
