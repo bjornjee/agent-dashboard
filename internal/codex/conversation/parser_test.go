@@ -168,6 +168,76 @@ func TestReadPlanContent_MissingFileReturnsEmpty(t *testing.T) {
 	}
 }
 
+// ReadPendingQuestion returns the parsed payload of the most recent
+// unanswered request_user_input function_call in a codex rollout. A
+// matching function_call_output (same call_id) means the question was
+// answered — return nil.
+func TestReadPendingQuestion_ReturnsLatestUnanswered(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"2026-06-06T06:39:26.092Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"fmt_target\",\"header\":\"Fmt target\",\"question\":\"Add make fmt?\",\"options\":[{\"label\":\"Add target (Recommended)\",\"description\":\"Adds a fmt gate.\"},{\"label\":\"Skip formatting\",\"description\":\"Proceed without.\"}]}]}","call_id":"call_xyz"}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := conversation.ReadPendingQuestion(path)
+	if got == nil {
+		t.Fatal("expected non-nil PendingQuestion")
+	}
+	if got.ToolUseID != "call_xyz" {
+		t.Errorf("ToolUseID = %q, want %q", got.ToolUseID, "call_xyz")
+	}
+	if len(got.Questions) != 1 {
+		t.Fatalf("Questions len = %d, want 1", len(got.Questions))
+	}
+	q := got.Questions[0]
+	if q.ID != "fmt_target" {
+		t.Errorf("Questions[0].ID = %q, want %q", q.ID, "fmt_target")
+	}
+	if q.Question != "Add make fmt?" {
+		t.Errorf("Questions[0].Question = %q", q.Question)
+	}
+	if q.Header != "Fmt target" {
+		t.Errorf("Questions[0].Header = %q", q.Header)
+	}
+	if len(q.Options) != 2 || q.Options[0].Label != "Add target (Recommended)" {
+		t.Errorf("Questions[0].Options unexpected: %+v", q.Options)
+	}
+}
+
+func TestReadPendingQuestion_AnsweredReturnsNil(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"2026-06-06T06:39:26.092Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"question\":\"x\",\"options\":[{\"label\":\"a\"}]}]}","call_id":"call_ans"}}
+{"timestamp":"2026-06-06T06:39:30.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_ans","output":"{\"answers\":{\"q1\":{\"answers\":[\"a\"]}}}"}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := conversation.ReadPendingQuestion(path); got != nil {
+		t.Errorf("expected nil for answered question, got %+v", got)
+	}
+}
+
+func TestReadPendingQuestion_MissingFileReturnsNil(t *testing.T) {
+	if got := conversation.ReadPendingQuestion(filepath.Join(t.TempDir(), "nope.jsonl")); got != nil {
+		t.Errorf("expected nil for missing file, got %+v", got)
+	}
+}
+
+func TestReadPendingQuestion_NoQuestionReturnsNil(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"t1","type":"event_msg","payload":{"type":"user_message","message":"hi"}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := conversation.ReadPendingQuestion(path); got != nil {
+		t.Errorf("expected nil with no request_user_input, got %+v", got)
+	}
+}
+
 // Malformed JSON lines and unrecognized event types are skipped without
 // affecting valid entries (resilient to partial tail writes from codex).
 func TestRead_SkipsMalformedAndUnknown(t *testing.T) {

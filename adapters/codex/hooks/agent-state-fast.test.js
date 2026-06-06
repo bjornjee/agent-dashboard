@@ -48,6 +48,14 @@ describe('resolveState', () => {
     assert.equal(resolveState('PreToolUse', 'AskUserQuestion', ''), 'question');
   });
 
+  it('codex: returns "question" for PreToolUse with request_user_input', () => {
+    // Codex's interactive prompt tool. Emits the same payload shape as
+    // claude's AskUserQuestion (questions[].{question,header,options[]}),
+    // so the dashboard treats it as the codex equivalent.
+    assert.equal(resolveState('PreToolUse', 'request_user_input', ''), 'question');
+    assert.equal(resolveState('PermissionRequest', 'request_user_input', ''), 'question');
+  });
+
   it('returns "plan" for PreToolUse with ExitPlanMode', () => {
     assert.equal(resolveState('PreToolUse', 'ExitPlanMode'), 'plan');
   });
@@ -273,6 +281,88 @@ describe('fast hook state updates (per-agent files)', () => {
     const result = readAgentState('main:1.0', agentsDir);
     assert.equal(result.state, 'running');
     assert.equal(result.current_tool, 'Bash');
+  });
+
+  it('codex: stamps pending_question on PreToolUse request_user_input', () => {
+    // Codex's request_user_input is the codex equivalent of claude's
+    // AskUserQuestion. Its tool_input.questions array carries the same
+    // {question, header, options:[{label,description}]} shape plus a
+    // codex-specific per-question `id` that the answer path needs to
+    // construct the function_call_output. The hook normalizes the array
+    // verbatim and lets the dashboard PendingQuestionPrompt.ID field
+    // (omitempty for claude) carry the id forward.
+    const codexQuestions = [
+      {
+        id: 'fmt_target',
+        question: 'No `make fmt` target found. Should I add one?',
+        header: 'Fmt target',
+        options: [
+          { label: 'Add target (Recommended)', description: 'Adds a fmt gate.' },
+          { label: 'Skip formatting', description: 'Proceed without fmt gate.' },
+        ],
+      },
+    ];
+    const existing = { target: 'main:1.0', state: 'running', current_tool: '' };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'request_user_input',
+        tool_use_id: 'call_RUI_xyz',
+        tool_input: { questions: codexQuestions },
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.state, 'question');
+    assert.equal(update.current_tool, 'request_user_input');
+    assert.ok(update.pending_question, 'pending_question must be stamped');
+    assert.equal(update.pending_question.tool_use_id, 'call_RUI_xyz');
+    assert.deepEqual(update.pending_question.questions, codexQuestions);
+  });
+
+  it('codex: clears pending_question on PostToolUse request_user_input', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'question',
+      current_tool: 'request_user_input',
+      pending_question: { tool_use_id: 'call_RUI_xyz', questions: [{ id: 'q1' }] },
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'request_user_input',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.pending_question, null, 'pending_question must clear');
+  });
+
+  it('codex: does NOT stamp pending_question without a questions array', () => {
+    // Defensive: a malformed tool_input must not crash or write garbage.
+    const existing = { target: 'main:1.0', state: 'running', current_tool: '' };
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'request_user_input',
+        tool_input: {},
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+    assert.equal(update?.pending_question, undefined);
   });
 
   it('buildUpdate does not include cwd in update', () => {

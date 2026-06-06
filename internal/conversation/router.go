@@ -82,6 +82,27 @@ func ReadPlan(agent domain.Agent, roots Roots, plansDir string) string {
 	}
 }
 
+// ReadPendingQuestion returns the most recent unanswered question for
+// agent, routing by harness. Codex scans the rollout JSONL for an
+// unmatched request_user_input function_call; claude scans the projDir
+// JSONL for an unmatched AskUserQuestion tool_use. Both return nil when
+// no question is pending.
+func ReadPendingQuestion(agent domain.Agent, roots Roots) *domain.PendingQuestion {
+	switch agent.Harness {
+	case "codex":
+		path, err := codexconv.LocateRollout(roots.CodexSessionsRoot, agent.SessionID)
+		if err != nil || path == "" {
+			return nil
+		}
+		return codexconv.ReadPendingQuestion(path)
+	default:
+		if agent.ProjDir == "" {
+			return nil
+		}
+		return readPendingQuestionClaude(agent.ProjDir, agent.SessionID)
+	}
+}
+
 func ReadSubagents(agent domain.Agent, roots Roots) []domain.SubagentInfo {
 	switch agent.Harness {
 	case "codex":

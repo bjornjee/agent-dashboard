@@ -211,6 +211,115 @@ func TestTopLevelAgents_CodexParentWithoutRolloutKept(t *testing.T) {
 	}
 }
 
+// ReadPendingQuestion must dispatch by harness — codex agents read from
+// the rollout JSONL (request_user_input function_call), claude agents
+// from the projDir JSONL (AskUserQuestion tool_use). The router gates
+// on agent.Harness; this test pins that contract end-to-end so a future
+// refactor that adds a new harness can't silently break codex.
+func TestReadPendingQuestion_RoutesCodexAgentToRolloutParser(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
+	root := t.TempDir()
+	sid := "019e9bee-cad4-7da0-b0a7-7ccb4892bab0"
+	contents := `{"timestamp":"2026-06-06T08:10:04.987Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"pr_scope\",\"header\":\"PR Scope\",\"question\":\"Several small PRs or one big?\",\"options\":[{\"label\":\"Several smaller PRs (Recommended)\",\"description\":\"reviewable\"},{\"label\":\"One big PR\",\"description\":\"unified\"}]}]}","call_id":"call_codex_router"}}` + "\n"
+	writeCodexRollout(t, root, sid, contents)
+
+	agent := domain.Agent{SessionID: sid, Harness: "codex"}
+	got := conversation.ReadPendingQuestion(agent, conversation.Roots{CodexSessionsRoot: root})
+
+	if got == nil {
+		t.Fatal("ReadPendingQuestion returned nil for codex agent with pending question")
+	}
+	if got.ToolUseID != "call_codex_router" {
+		t.Errorf("ToolUseID = %q, want call_codex_router", got.ToolUseID)
+	}
+	if len(got.Questions) != 1 || got.Questions[0].ID != "pr_scope" {
+		t.Errorf("Questions = %+v, want [{ID:pr_scope ...}]", got.Questions)
+	}
+	if got.Questions[0].Header != "PR Scope" || got.Questions[0].Question != "Several small PRs or one big?" {
+		t.Errorf("Header/Question mismatch: %+v", got.Questions[0])
+	}
+	if len(got.Questions[0].Options) != 2 || got.Questions[0].Options[0].Label != "Several smaller PRs (Recommended)" {
+		t.Errorf("Options unexpected: %+v", got.Questions[0].Options)
+	}
+}
+
+// Codex agent answered the question — the function_call_output erases
+// the pending state. Asserts the router propagates that into nil.
+func TestReadPendingQuestion_CodexAnsweredReturnsNil(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
+	root := t.TempDir()
+	sid := "answered-codex"
+	contents := `{"timestamp":"t1","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"question\":\"x\",\"options\":[{\"label\":\"a\"}]}]}","call_id":"call_done"}}
+{"timestamp":"t2","type":"response_item","payload":{"type":"function_call_output","call_id":"call_done","output":"{\"answers\":{\"q1\":{\"answers\":[\"a\"]}}}"}}
+`
+	writeCodexRollout(t, root, sid, contents)
+
+	agent := domain.Agent{SessionID: sid, Harness: "codex"}
+	if got := conversation.ReadPendingQuestion(agent, conversation.Roots{CodexSessionsRoot: root}); got != nil {
+		t.Errorf("expected nil after function_call_output, got %+v", got)
+	}
+}
+
+// Claude agents go through the legacy projDir path. The router gates
+// on agent.ProjDir for that path; absent ProjDir returns nil without
+// trying to read a codex rollout (which would crash with the wrong
+// schema).
+func TestReadPendingQuestion_RoutesClaudeAgentToProjDirParser(t *testing.T) {
+	proj := t.TempDir()
+	sid := "claude-pq-1"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu_xyz","name":"AskUserQuestion","input":{"questions":[{"question":"Pick","header":"H","multiSelect":false,"options":[{"label":"A"},{"label":"B"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	if err := os.WriteFile(filepath.Join(proj, sid+".jsonl"), []byte(jsonl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent := domain.Agent{SessionID: sid, ProjDir: proj, Harness: "claude"}
+	got := conversation.ReadPendingQuestion(agent, conversation.Roots{})
+
+	if got == nil {
+		t.Fatal("ReadPendingQuestion returned nil for claude agent with pending question")
+	}
+	if got.ToolUseID != "tu_xyz" {
+		t.Errorf("ToolUseID = %q, want tu_xyz", got.ToolUseID)
+	}
+	if len(got.Questions) != 1 || got.Questions[0].Header != "H" {
+		t.Errorf("Questions = %+v", got.Questions)
+	}
+}
+
+// Empty harness ("" — pre-codex legacy state files) must default to the
+// claude path so existing claude agents don't lose their question card
+// after the router refactor.
+func TestReadPendingQuestion_EmptyHarnessDefaultsToClaude(t *testing.T) {
+	proj := t.TempDir()
+	sid := "legacy-pq"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu_legacy","name":"AskUserQuestion","input":{"questions":[{"question":"Q","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	if err := os.WriteFile(filepath.Join(proj, sid+".jsonl"), []byte(jsonl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent := domain.Agent{SessionID: sid, ProjDir: proj} // Harness omitted
+	if got := conversation.ReadPendingQuestion(agent, conversation.Roots{}); got == nil {
+		t.Error("ReadPendingQuestion returned nil for legacy claude agent")
+	}
+}
+
+// Codex agent without a rollout file must return nil cleanly, not
+// crash on a missing path. Mirrors how the dashboard handles a session
+// that's mid-startup — sidecar exists, rollout not yet flushed.
+func TestReadPendingQuestion_CodexMissingRolloutReturnsNil(t *testing.T) {
+	t.Cleanup(codexconv.InvalidateCacheForTest)
+
+	root := t.TempDir() // empty — no rollout file
+	agent := domain.Agent{SessionID: "no-rollout", Harness: "codex"}
+	if got := conversation.ReadPendingQuestion(agent, conversation.Roots{CodexSessionsRoot: root}); got != nil {
+		t.Errorf("expected nil for missing rollout, got %+v", got)
+	}
+}
+
 func writeCodexRollout(t *testing.T, root, sessionID, contents string) string {
 	t.Helper()
 
