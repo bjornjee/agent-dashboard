@@ -6,44 +6,16 @@ const assert = require('node:assert/strict');
 const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 
-let previewLine;
 let metaLine;
 let rowBadges;
 
 test('load module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'list.js')).href;
   const mod = await import(url);
-  previewLine = mod.previewLine;
   metaLine = mod.metaLine;
   rowBadges = mod.rowBadges;
-  assert.equal(typeof previewLine, 'function');
   assert.equal(typeof metaLine, 'function');
   assert.equal(typeof rowBadges, 'function');
-});
-
-// -- previewLine --
-
-test('previewLine: empty when agent has no preview source', () => {
-  assert.equal(previewLine({ branch: 'feat/x' }), '');
-});
-
-test('previewLine: returns assistant preview text', () => {
-  assert.equal(
-    previewLine({ last_message_preview: 'Refactoring the auth module' }),
-    'Refactoring the auth module',
-  );
-});
-
-test('previewLine: surfaces the pending question when state=question', () => {
-  // Tool-based questions: the actual question text is what the user needs to
-  // see at a glance, not the assistant message that came before the tool call.
-  const agent = {
-    state: 'question',
-    pending_question: {
-      questions: [{ question: 'Should I add tests for the migration?' }],
-    },
-  };
-  assert.equal(previewLine(agent), 'Should I add tests for the migration?');
 });
 
 // -- metaLine --

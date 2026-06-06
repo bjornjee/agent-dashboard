@@ -13,14 +13,6 @@ function statusDot(state) {
   return `<span class="${cls}"></span>`;
 }
 
-// previewLine is the row subtitle. Mirrors notify.js: if the agent paused
-// on a tool-based question, surface the question text; otherwise fall back
-// to the slow reporter's last_message_preview. Empty when neither is set
-// (older state files), so callers fall back to metaLine.
-export function previewLine(agent) {
-  return lastMessagePreview(agent);
-}
-
 // metaLine is the demoted "branch · model · duration" line. Lives under
 // the preview when there is one; replaces the subtitle when there isn't,
 // so older state files keep their pre-fix appearance.
@@ -74,7 +66,7 @@ export function renderList(app, agents) {
     body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
-      const preview = previewLine(agent);
+      const preview = lastMessagePreview(agent);
       const meta = metaLine(agent);
       // Preview wins the subtitle slot; meta drops to the muted line below.
       // Without a preview (older state files) the meta stays in the subtitle
