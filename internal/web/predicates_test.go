@@ -24,8 +24,9 @@ func TestPausedOnQuestion_PrefersSidecar(t *testing.T) {
 	}
 }
 
-func TestPausedOnQuestion_FallsBackToJSONL(t *testing.T) {
-	// No sidecar → scan the claude JSONL.
+func TestPausedOnQuestion_FallsBackToJSONLWhenStateIsQuestion(t *testing.T) {
+	// No sidecar + state="question" (set by ApplyIdleOverrides) → scan
+	// the claude JSONL.
 	projDir := t.TempDir()
 	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_jsonl","name":"AskUserQuestion","input":{"questions":[{"question":"from jsonl","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
 `
@@ -35,6 +36,7 @@ func TestPausedOnQuestion_FallsBackToJSONL(t *testing.T) {
 		SessionID: "p2",
 		ProjDir:   projDir,
 		Harness:   "", // default = claude
+		State:     "question",
 	}
 	got := PausedOnQuestion(agent, conversation.Roots{})
 	if got == nil {
@@ -42,6 +44,34 @@ func TestPausedOnQuestion_FallsBackToJSONL(t *testing.T) {
 	}
 	if got.ToolUseID != "tool_jsonl" {
 		t.Errorf("ToolUseID = %q, want tool_jsonl", got.ToolUseID)
+	}
+}
+
+func TestPausedOnQuestion_SkipsJSONLScanWhenStateNotQuestion(t *testing.T) {
+	// Perf contract: state != "question" guarantees no I/O. The poll
+	// hitting /api/agents/{id}/pending-question every 2s for a running
+	// or done agent must short-circuit to nil without scanning the
+	// JSONL — ApplyIdleOverrides would have already promoted state to
+	// "question" if the JSONL had a pending question.
+	//
+	// We assert this by pointing ProjDir at a JSONL that DOES have an
+	// unanswered AskUserQuestion; if the gate works, the scan never
+	// runs and we get nil.
+	projDir := t.TempDir()
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_jsonl","name":"AskUserQuestion","input":{"questions":[{"question":"would find this","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+`
+	os.WriteFile(filepath.Join(projDir, "p_running.jsonl"), []byte(jsonl), 0644)
+
+	for _, state := range []string{"running", "done", "idle_prompt", "permission", "pr", "merged", "error", "plan"} {
+		agent := domain.Agent{
+			SessionID: "p_running",
+			ProjDir:   projDir,
+			Harness:   "",
+			State:     state,
+		}
+		if got := PausedOnQuestion(agent, conversation.Roots{}); got != nil {
+			t.Errorf("state=%q: expected nil (gate should skip scan), got %+v", state, got)
+		}
 	}
 }
 
