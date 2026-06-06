@@ -75,3 +75,13 @@ export function subagentBadge(agent) {
   if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return '';
   return '↳ ' + n;
 }
+
+// questionBadge returns 'ASK 1/N' when the agent has a pending question.
+// Independent of state group — an agent with pinned_state='pr' that's
+// also asking still has a blocking question. Mirrors the TUI's
+// "Question 1/1 (1 unanswered)" affordance in compact form.
+export function questionBadge(agent) {
+  const q = agent && agent.pending_question;
+  if (!q || !Array.isArray(q.questions) || q.questions.length === 0) return '';
+  return 'ASK 1/' + q.questions.length;
+}

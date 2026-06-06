@@ -58,16 +58,16 @@ export function durationFromUpdate(agent) {
 }
 
 // lastMessagePreview returns a short, plain-text summary suitable for a
-// list-row subtitle. Mirrors notify.js shortDescription: when the agent is
-// paused on a tool-based question (AskUserQuestion / request_user_input)
-// the actual question text wins; otherwise we fall back to the slow
+// list-row subtitle. Whenever pending_question is populated, the question
+// text wins — the question is the blocking thing and must be visible
+// regardless of state group (a pinned_state=pr agent that's also asking
+// still needs the ask surfaced). Otherwise we fall back to the slow
 // reporter's last_message_preview. The returned string is markdown-stripped
 // and truncated to maxChars with a trailing ellipsis.
 export function lastMessagePreview(agent, maxChars = 80) {
   if (!agent) return '';
   let src = '';
-  if (agent.state === 'question'
-      && agent.pending_question
+  if (agent.pending_question
       && Array.isArray(agent.pending_question.questions)
       && agent.pending_question.questions.length > 0) {
     src = agent.pending_question.questions[0].question || '';

@@ -7,14 +7,17 @@ const path = require('node:path');
 
 let planBadge;
 let subagentBadge;
+let questionBadge;
 
 test('load state module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'state.js')).href;
   const mod = await import(url);
   planBadge = mod.planBadge;
   subagentBadge = mod.subagentBadge;
+  questionBadge = mod.questionBadge;
   assert.equal(typeof planBadge, 'function');
   assert.equal(typeof subagentBadge, 'function');
+  assert.equal(typeof questionBadge, 'function');
 });
 
 // -- planBadge --
@@ -60,4 +63,32 @@ test('subagentBadge: rejects non-numeric or negative', () => {
   // Defensive: a malformed state file shouldn't render garbage.
   assert.equal(subagentBadge({ subagent_count: -1 }), '');
   assert.equal(subagentBadge({ subagent_count: 'x' }), '');
+});
+
+// -- questionBadge --
+
+test('questionBadge: empty when no pending_question', () => {
+  assert.equal(questionBadge({}), '');
+  assert.equal(questionBadge({ pending_question: null }), '');
+});
+
+test('questionBadge: returns "ASK 1/1" for a single pending question', () => {
+  const agent = {
+    pending_question: { questions: [{ question: 'A?' }] },
+  };
+  assert.equal(questionBadge(agent), 'ASK 1/1');
+});
+
+test('questionBadge: returns "ASK 1/N" for multi-question batches', () => {
+  const agent = {
+    pending_question: {
+      questions: [{ question: 'A?' }, { question: 'B?' }, { question: 'C?' }],
+    },
+  };
+  assert.equal(questionBadge(agent), 'ASK 1/3');
+});
+
+test('questionBadge: empty when pending_question has no questions array', () => {
+  assert.equal(questionBadge({ pending_question: {} }), '');
+  assert.equal(questionBadge({ pending_question: { questions: [] } }), '');
 });

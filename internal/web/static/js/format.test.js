@@ -50,27 +50,29 @@ test('lastMessagePreview: truncates with ellipsis past max', () => {
   assert.equal(out.endsWith('…'), true);
 });
 
-test('lastMessagePreview: prefers pending_question over last_message_preview when state=question', () => {
-  // Mirrors notify.js shortDescription: if the agent is paused on a tool-based
-  // question, the question text is more relevant than the assistant message
-  // that preceded the tool call.
-  const agent = {
-    state: 'question',
-    pending_question: {
-      questions: [{ question: 'Which database driver should I use?' }],
-    },
-    last_message_preview: 'I will now ask about the driver.',
-  };
-  assert.equal(
-    lastMessagePreview(agent),
-    'Which database driver should I use?',
-  );
+test('lastMessagePreview: prefers pending_question whenever it is populated, regardless of state', () => {
+  // The question is the blocking thing — surface it even when the agent's
+  // state group has been overridden (e.g. pinned_state=pr → state=pr, but
+  // the agent is still asking). last_message_preview holds the assistant
+  // message that preceded the tool call, which is NOT the question.
+  for (const state of ['question', 'pr', 'running', 'permission', 'merged', 'done']) {
+    const agent = {
+      state,
+      pending_question: { questions: [{ question: 'Which database driver should I use?' }] },
+      last_message_preview: 'I will now ask about the driver.',
+    };
+    assert.equal(
+      lastMessagePreview(agent),
+      'Which database driver should I use?',
+      `state=${state}`,
+    );
+  }
 });
 
-test('lastMessagePreview: ignores pending_question when state is not question', () => {
+test('lastMessagePreview: falls back to last_message_preview when pending_question is null', () => {
   const agent = {
     state: 'running',
-    pending_question: { questions: [{ question: 'stale' }] },
+    pending_question: null,
     last_message_preview: 'Working on tests',
   };
   assert.equal(lastMessagePreview(agent), 'Working on tests');

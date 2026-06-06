@@ -2,7 +2,7 @@
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
-import { effectiveState, stateGroup, prTag, planBadge, subagentBadge } from '../state.js';
+import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge } from '../state.js';
 import { escapeHtml, repoName, durationFromUpdate, lastMessagePreview } from '../format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
@@ -30,6 +30,11 @@ export function metaLine(agent) {
 // keeps its dedicated `tag` slot in UI.row.
 export function rowBadges(agent) {
   let html = '';
+  // ASK chip first — questions are the most blocking signal; they should
+  // be the first thing the eye lands on, even when the agent also has a
+  // PR pin or is in plan mode.
+  const ask = questionBadge(agent);
+  if (ask) html += `<span class="chip chip--ask">${escapeHtml(ask)}</span>`;
   const plan = planBadge(agent);
   if (plan) html += `<span class="chip chip--plan">${escapeHtml(plan)}</span>`;
   const sub = subagentBadge(agent);

@@ -488,6 +488,14 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   border: 1px solid color-mix(in srgb, var(--accent-red) 55%, transparent);
   background: color-mix(in srgb, var(--accent-red) 12%, transparent);
 }
+/* ASK chip — amber palette matches STATE_BORDER.question so the question
+ * signal reads as the WAITING-group "needs reply" affordance even on rows
+ * whose state group has been overridden (pinned_state=pr, running, etc). */
+.chip--ask {
+  color: var(--accent-amber);
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
+}
 /* Subagent chip — muted; informational, not a blocking signal. */
 .chip--sub {
   color: var(--text-muted);
