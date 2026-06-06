@@ -27,6 +27,23 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
+// requestUserInputArgs is the parsed shape of codex's request_user_input
+// function_call arguments — a JSON-encoded string carried on the wire as
+// payload.arguments. Mirrors the codex CLI 0.130+ schema. Used by
+// ReadPendingQuestion to normalize codex's question shape into the
+// dashboard's domain.PendingQuestion.
+type requestUserInputArgs struct {
+	Questions []struct {
+		ID       string `json:"id"`
+		Question string `json:"question"`
+		Header   string `json:"header"`
+		Options  []struct {
+			Label       string `json:"label"`
+			Description string `json:"description"`
+		} `json:"options"`
+	} `json:"questions"`
+}
+
 // Read parses path as a codex rollout JSONL and returns the conversation
 // entries in original order. A missing file returns an empty slice and
 // nil error — codex sessions may appear in the index before their
@@ -212,4 +229,93 @@ func ReadPlanContent(path string) string {
 		}
 	}
 	return latest
+}
+
+// ReadPendingQuestion returns the parsed payload of the most recent
+// unanswered request_user_input function_call in a codex rollout JSONL,
+// or nil if no such question is pending. A function_call_output with the
+// same call_id means the question was answered — we drop it.
+//
+// Missing files return nil without error so the handler can fall through
+// to the empty state.
+func ReadPendingQuestion(path string) *domain.PendingQuestion {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	type payload struct {
+		Type      string `json:"type"`
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+		CallID    string `json:"call_id"`
+	}
+	type line struct {
+		Type    string  `json:"type"`
+		Payload payload `json:"payload"`
+	}
+
+	// Scan once; track the last unanswered request_user_input. Answered
+	// status is "saw a function_call_output with the same call_id later
+	// in the file" — codex appends both in order.
+	type pending struct {
+		callID string
+		args   string
+	}
+	var open []pending
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 4096), 8*1024*1024)
+	for scanner.Scan() {
+		raw := scanner.Bytes()
+		if len(raw) == 0 {
+			continue
+		}
+		var l line
+		if json.Unmarshal(raw, &l) != nil {
+			continue
+		}
+		if l.Type != "response_item" {
+			continue
+		}
+		switch l.Payload.Type {
+		case "function_call":
+			if l.Payload.Name != "request_user_input" {
+				continue
+			}
+			open = append(open, pending{callID: l.Payload.CallID, args: l.Payload.Arguments})
+		case "function_call_output":
+			for i := range open {
+				if open[i].callID == l.Payload.CallID {
+					open = append(open[:i], open[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+	if len(open) == 0 {
+		return nil
+	}
+
+	latest := open[len(open)-1]
+	var args requestUserInputArgs
+	if err := json.Unmarshal([]byte(latest.args), &args); err != nil {
+		return nil
+	}
+	out := &domain.PendingQuestion{ToolUseID: latest.callID}
+	for _, q := range args.Questions {
+		prompt := domain.PendingQuestionPrompt{
+			ID:       q.ID,
+			Question: q.Question,
+			Header:   q.Header,
+		}
+		for _, o := range q.Options {
+			prompt.Options = append(prompt.Options, domain.PendingQuestionOption{
+				Label:       o.Label,
+				Description: o.Description,
+			})
+		}
+		out.Questions = append(out.Questions, prompt)
+	}
+	return out
 }

@@ -128,17 +128,20 @@ type ConversationEntry struct {
 }
 
 // PendingQuestion is the parsed payload of the most recent unanswered
-// AskUserQuestion tool_use in a Claude session. The web/mobile dashboard
-// renders this as an interactive question card; nil when no question is
-// pending (or for codex sessions, which use a different mechanism).
+// AskUserQuestion / request_user_input tool call. The web/mobile
+// dashboard renders this as an interactive question card; nil when no
+// question is pending.
 type PendingQuestion struct {
 	ToolUseID string                  `json:"tool_use_id"`
 	Questions []PendingQuestionPrompt `json:"questions"`
 }
 
-// PendingQuestionPrompt mirrors one entry in the AskUserQuestion tool's
-// `questions` array.
+// PendingQuestionPrompt mirrors one entry in the AskUserQuestion /
+// request_user_input tool's `questions` array. ID is codex-only — codex
+// keys its function_call_output answers by question id, so the answer
+// path must round-trip it. Claude leaves it empty.
 type PendingQuestionPrompt struct {
+	ID          string                  `json:"id,omitempty"`
 	Question    string                  `json:"question"`
 	Header      string                  `json:"header,omitempty"`
 	MultiSelect bool                    `json:"multi_select"`
