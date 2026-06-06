@@ -137,6 +137,56 @@ test('UI.message user role strips local-command-stdout wrapper before escaping',
   assert.ok(html.includes('hello'), 'inner text should survive');
 });
 
+// -- UI.row meta + badges (PWA state-gap fix) --
+
+test('UI.row baseline: no meta or badges → unchanged title/subtitle/tag layout', () => {
+  const html = UI.row({ title: 'foo', subtitle: 'bar', tag: 'PR open' });
+  assert.match(html, /class="ui-row__title">foo</);
+  assert.match(html, /class="ui-row__subtitle">bar</);
+  assert.match(html, /class="ui-row__tag">PR open</);
+  assert.doesNotMatch(html, /class="ui-row__meta"/);
+  assert.doesNotMatch(html, /class="ui-row__badges"/);
+});
+
+test('UI.row meta: renders a separate meta line under subtitle', () => {
+  const html = UI.row({ title: 'foo', subtitle: 'preview text', meta: 'branch · model · 3m' });
+  assert.match(html, /class="ui-row__meta">branch · model · 3m</);
+  // meta must come after subtitle in the body for correct visual stacking
+  const subIdx = html.indexOf('ui-row__subtitle');
+  const metaIdx = html.indexOf('ui-row__meta');
+  assert.ok(subIdx !== -1 && metaIdx > subIdx, 'meta should follow subtitle');
+});
+
+test('UI.row meta: HTML in meta string is escaped', () => {
+  const html = UI.row({ title: 'foo', meta: '<script>x</script>' });
+  assert.match(html, /class="ui-row__meta">&lt;script&gt;x&lt;\/script&gt;</);
+});
+
+test('UI.row meta: empty meta does not render the span', () => {
+  const html = UI.row({ title: 'foo', meta: '' });
+  assert.doesNotMatch(html, /class="ui-row__meta"/);
+});
+
+test('UI.row badges: renders chip HTML on title line after the tag', () => {
+  // badges is pre-rendered chip HTML — caller owns escape, matches how `tag` works.
+  const badges = '<span class="chip chip--plan">PLAN</span><span class="chip chip--sub">↳ 3</span>';
+  const html = UI.row({ title: 'foo', tag: 'PR open', badges });
+  assert.match(html, /class="ui-row__badges"/);
+  assert.match(html, /chip chip--plan">PLAN</);
+  assert.match(html, /chip chip--sub">↳ 3</);
+  // Badges should appear inside the title line, not the body or trailing.
+  const titleLine = html.match(/class="ui-row__title-line">[\s\S]*?<\/span><\/span>/);
+  // Looser check: tag and badges both come before the closing of title-line span structure.
+  const tagIdx = html.indexOf('ui-row__tag');
+  const badgesIdx = html.indexOf('ui-row__badges');
+  assert.ok(tagIdx !== -1 && badgesIdx > tagIdx, 'badges should follow tag');
+});
+
+test('UI.row badges: empty badges string does not render the wrapper', () => {
+  const html = UI.row({ title: 'foo', badges: '' });
+  assert.doesNotMatch(html, /class="ui-row__badges"/);
+});
+
 test('UI.message user role strips local-command-caveat wrapper', () => {
   const html = UI.message('user', '<local-command-caveat>warning</local-command-caveat>');
   assert.ok(!html.includes('local-command-caveat'));

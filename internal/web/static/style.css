@@ -449,6 +449,51 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Muted meta line under the subtitle (e.g. branch · model · 3m). Renders
+ * only when UI.row is called with `meta:` — older list rows stay single-
+ * subtitle so the pre-fix layout is unchanged for state files without a
+ * preview source. */
+.ui-row__meta {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+/* Stateful chips appended to the title line (PLAN, ↳ N). Sit next to the
+ * PR tag; the wrapper just adds horizontal spacing so chips don't kiss the
+ * tag or each other. */
+.ui-row__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+.chip {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+/* Plan chip — red palette matches STATE_BORDER.plan so the visual signal
+ * lines up with the BLOCKED group's dot. */
+.chip--plan {
+  color: var(--accent-red);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+}
+/* Subagent chip — muted; informational, not a blocking signal. */
+.chip--sub {
+  color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+}
 .ui-row__trailing {
   display: inline-flex;
   align-items: center;
@@ -1533,6 +1578,11 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
  * pad needs to clear the composer card's drop shadow (24 px blur) + the
  * iOS home indicator (env safe area). */
 .action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-5) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
+/* Status row above the action panel — currently only the PLAN chip,
+ * surfaced whenever planBadge(agent) fires (state='plan' or
+ * permission_mode='plan'). Lives in its own row so the chip sits visibly
+ * above the composer instead of being lost inside the action-panel label. */
+.action-bar__status { display: flex; align-items: center; padding: 0 var(--space-3) var(--space-2); }
 @media (min-width: 900px) {
   .action-bar { padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom)); }
 }

@@ -104,18 +104,25 @@ export const UI = {
 
   // 4. Tappable row — list + create form rows.
   // `tag` (optional): small inline chip rendered after the title (e.g. "PR open").
+  // `meta` (optional): muted line under the subtitle (e.g. branch · model · 3m).
+  //   Plain text; HTML-escaped before render.
+  // `badges` (optional): pre-rendered chip HTML appended to the title line after
+  //   the tag. Caller owns escape — same contract as the inner HTML of `leading`
+  //   and `trailing`. Used for stateful chips (PLAN, ↳ N) styled by .chip rules.
   row(opts) {
     const o = opts || {};
     const click = o.onclick ? ` onclick="${o.onclick}"` : '';
     const lead = o.leading ? `<div class="ui-row__leading">${o.leading}</div>` : '';
     const sub = o.subtitle ? `<span class="ui-row__subtitle">${escapeHtml(o.subtitle)}</span>` : '';
+    const meta = o.meta ? `<span class="ui-row__meta">${escapeHtml(o.meta)}</span>` : '';
     const tagChip = o.tag ? `<span class="ui-row__tag">${escapeHtml(o.tag)}</span>` : '';
+    const badges = o.badges ? `<span class="ui-row__badges">${o.badges}</span>` : '';
     const chevron = (o.onclick && o.chevron !== false) ? `<span class="ui-row__chevron">${ICONS.chevronRight}</span>` : '';
     const trail = (o.trailing || chevron)
       ? `<div class="ui-row__trailing">${o.trailing || ''}${chevron}</div>` : '';
     const el = o.onclick ? 'button' : 'div';
     return `<${el} class="ui-row"${click}>${lead}
-      <div class="ui-row__body"><span class="ui-row__title-line"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${tagChip}</span>${sub}</div>
+      <div class="ui-row__body"><span class="ui-row__title-line"><span class="ui-row__title">${escapeHtml(o.title || '')}</span>${tagChip}${badges}</span>${sub}${meta}</div>
       ${trail}
     </${el}>`;
   },

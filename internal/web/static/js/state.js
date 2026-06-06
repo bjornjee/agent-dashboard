@@ -56,3 +56,22 @@ export function prTag(agent) {
 export function hasOpenPR(agent) {
   return !!(agent && agent.pinned_state === 'pr');
 }
+
+// planBadge returns 'PLAN' when the agent is operating in plan mode by
+// either signal: the hook-set state='plan' (ExitPlanMode pending) or
+// Claude Code's permission_mode='plan' (EnterPlanMode active). Keeps the
+// doctrine from ~/.claude/rules/core.md ("dashboard renders a visible
+// plan badge") in one place so list and detail render the same chip.
+export function planBadge(agent) {
+  if (!agent) return '';
+  return agent.state === 'plan' || agent.permission_mode === 'plan' ? 'PLAN' : '';
+}
+
+// subagentBadge returns '↳ N' when the agent has at least one live
+// subagent (subagent_count > 0). Empty otherwise. Defensive against
+// malformed state files: rejects non-numeric / negative counts.
+export function subagentBadge(agent) {
+  const n = agent && agent.subagent_count;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return '';
+  return '↳ ' + n;
+}

@@ -2,8 +2,8 @@
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
-import { effectiveState, stateGroup, prTag } from '../state.js';
-import { escapeHtml, repoName, durationShort } from '../format.js';
+import { effectiveState, stateGroup, prTag, planBadge, subagentBadge } from '../state.js';
+import { escapeHtml, repoName, durationFromUpdate, lastMessagePreview } from '../format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
@@ -13,12 +13,36 @@ function statusDot(state) {
   return `<span class="${cls}"></span>`;
 }
 
-function metaLine(agent) {
+// previewLine is the row subtitle. Mirrors notify.js: if the agent paused
+// on a tool-based question, surface the question text; otherwise fall back
+// to the slow reporter's last_message_preview. Empty when neither is set
+// (older state files), so callers fall back to metaLine.
+export function previewLine(agent) {
+  return lastMessagePreview(agent);
+}
+
+// metaLine is the demoted "branch · model · duration" line. Lives under
+// the preview when there is one; replaces the subtitle when there isn't,
+// so older state files keep their pre-fix appearance.
+export function metaLine(agent) {
   const parts = [];
   if (agent.branch) parts.push(escapeHtml(agent.branch));
   if (agent.model) parts.push(escapeHtml(agent.model));
-  if (agent.started_at) parts.push(escapeHtml(durationShort(agent)));
+  const dur = durationFromUpdate(agent);
+  if (dur) parts.push(escapeHtml(dur));
   return parts.join(' · ');
+}
+
+// rowBadges concatenates stateful chips for the title line. PLAN and
+// subagent chips both come from state.js helpers; the existing PR tag
+// keeps its dedicated `tag` slot in UI.row.
+export function rowBadges(agent) {
+  let html = '';
+  const plan = planBadge(agent);
+  if (plan) html += `<span class="chip chip--plan">${escapeHtml(plan)}</span>`;
+  const sub = subagentBadge(agent);
+  if (sub) html += `<span class="chip chip--sub">${escapeHtml(sub)}</span>`;
+  return html;
 }
 
 export function renderList(app, agents) {
@@ -50,11 +74,19 @@ export function renderList(app, agents) {
     body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
+      const preview = previewLine(agent);
+      const meta = metaLine(agent);
+      // Preview wins the subtitle slot; meta drops to the muted line below.
+      // Without a preview (older state files) the meta stays in the subtitle
+      // so the row keeps its pre-fix appearance and we never render an empty
+      // line.
       body += UI.row({
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
-        subtitle: metaLine(agent),
+        subtitle: preview || meta,
+        meta: preview ? meta : '',
         tag: prTag(agent),
+        badges: rowBadges(agent),
         onclick: `Dashboard.selectAgent('${id}')`,
       });
     }
