@@ -800,7 +800,7 @@ export function renderQuestionCard(pending, agentId) {
   const pager = total > 1
     ? `<div class="question-card__pager" role="tablist" aria-label="${total} questions">
         ${Array.from({ length: total }, (_, i) =>
-          `<span class="question-card__pager-dot${i === 0 ? ' question-card__pager-dot--active' : ''}" data-pager-i="${i}" aria-hidden="true"></span>`
+          `<span class="question-card__pager-dot${i === 0 ? ' question-card__pager-dot--active' : ''}" aria-hidden="true"></span>`
         ).join('')}
       </div>`
     : '';
