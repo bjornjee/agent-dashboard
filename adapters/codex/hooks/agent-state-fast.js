@@ -90,7 +90,7 @@ function resolveState(hookEvent, toolName, _permissionMode, toolInput) {
     return 'plan';
   }
   if ((hookEvent === 'PermissionRequest' || hookEvent === 'PreToolUse')
-      && toolName === 'AskUserQuestion') {
+      && (toolName === 'AskUserQuestion' || toolName === 'request_user_input')) {
     return 'question';
   }
   if (hookEvent === 'PermissionRequest') {
@@ -204,12 +204,28 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     state = 'permission';
   }
 
+  // Codex's request_user_input is the analog of claude's AskUserQuestion.
+  // The function_call line lands in the rollout JSONL once the user answers
+  // — during the pending window the sidecar is the only place the questions
+  // payload lives. Mirrors the claude hook's stamp/clear pair.
+  const isQuestionTool = toolName === 'request_user_input' || toolName === 'AskUserQuestion';
+  const stampPendingQ = (hookEvent === 'PreToolUse' || hookEvent === 'PermissionRequest')
+    && isQuestionTool
+    && Array.isArray(toolInput.questions);
+  const clearPendingQ = !stampPendingQ
+    && existing.pending_question != null
+    && (
+      (hookEvent === 'PostToolUse' && isQuestionTool)
+      || (hookEvent === 'PreToolUse' && !isQuestionTool)
+    );
+
   // Stop-derived states must not be overwritten by a late PostToolUse.
   // PreToolUse (next turn) is allowed through to correctly resume "running".
   if (hookEvent === 'PostToolUse' && STOP_STATES.has(existing.state)) {
     const guardedUpdate = {};
     if (consumeBlocked) guardedUpdate.hook_blocked = '';
     if (newEffort) guardedUpdate.effort = newEffort;
+    if (clearPendingQ) guardedUpdate.pending_question = null;
     if (Object.keys(guardedUpdate).length > 0) {
       return { changed: true, update: guardedUpdate, dispatchEffort };
     }
@@ -236,6 +252,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || consumeBlocked
     || stampDelegatedPlanId
     || clearDelegatedPlanId
+    || stampPendingQ
+    || clearPendingQ
     || !!newEffort
     || (existing.harness || '') !== harness;
 
@@ -262,6 +280,15 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     update.delegated_plan_tool_use_id = input.tool_use_id;
   } else if (clearDelegatedPlanId) {
     update.delegated_plan_tool_use_id = '';
+  }
+
+  if (stampPendingQ) {
+    update.pending_question = {
+      tool_use_id: input.tool_use_id || '',
+      questions: toolInput.questions,
+    };
+  } else if (clearPendingQ) {
+    update.pending_question = null;
   }
 
   // Clear hook_blocked after consuming it (one-shot signal from blocking hooks).
