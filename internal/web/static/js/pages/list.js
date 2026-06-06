@@ -3,7 +3,7 @@ import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
 import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge } from '../state.js';
-import { escapeHtml, repoName, durationFromUpdate, lastMessagePreview } from '../format.js';
+import { escapeHtml, repoName, durationFromUpdate } from '../format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
@@ -71,17 +71,14 @@ export function renderList(app, agents) {
     body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
-      const preview = lastMessagePreview(agent);
-      const meta = metaLine(agent);
-      // Preview wins the subtitle slot; meta drops to the muted line below.
-      // Without a preview (older state files) the meta stays in the subtitle
-      // so the row keeps its pre-fix appearance and we never render an empty
-      // line.
+      // Subtitle is branch · model · duration — the identifying signal the
+      // user actually scans for. Question text lives in the detail view's
+      // question card; the ASK chip in the title-line tag stack is enough
+      // of a "this agent needs you" signal here.
       body += UI.row({
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
-        subtitle: preview || meta,
-        meta: preview ? meta : '',
+        subtitle: metaLine(agent),
         tag: prTag(agent),
         badges: rowBadges(agent),
         onclick: `Dashboard.selectAgent('${id}')`,

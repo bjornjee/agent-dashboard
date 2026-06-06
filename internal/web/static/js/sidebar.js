@@ -6,7 +6,7 @@ import { UI } from './ui.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
 import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge } from './state.js';
-import { escapeHtml, repoName, durationFromUpdate, lastMessagePreview } from './format.js';
+import { escapeHtml, repoName, durationFromUpdate } from './format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
@@ -92,13 +92,13 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
       // Wrap UI.row in a marker div so we can target selection without
       // touching the primitive's signature.
       html += `<div class="app-sidebar__row${selectedCls}" data-agent-id="${escapeHtml(id)}">`;
-      const preview = lastMessagePreview(agent);
-      const meta = metaLine(agent);
+      // Subtitle is branch · model · duration — the identifying signal the
+      // user actually scans for. Question text lives in the detail view's
+      // question card; the ASK chip is the at-a-glance signal here.
       html += UI.row({
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
-        subtitle: preview || meta,
-        meta: preview ? meta : '',
+        subtitle: metaLine(agent),
         tag: prTag(agent),
         badges: rowBadges(agent),
         onclick: `Dashboard.selectAgent('${id}')`,
