@@ -3358,13 +3358,11 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 .question-card__block {
   overflow-y: auto;
   scrollbar-width: none;
-}
-.question-card__block::-webkit-scrollbar { display: none; }
-.question-card__block {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
+.question-card__block::-webkit-scrollbar { display: none; }
 .question-card__label {
   font-size: 12px;
   line-height: 16px;

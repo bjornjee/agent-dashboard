@@ -299,7 +299,6 @@ func TestHandleAnswerQuestionRejectsWrongHarness(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
-	_ = m
 }
 
 // TestHandleAnswerQuestionRejectsNonQuestionState asserts the endpoint refuses
@@ -332,7 +331,6 @@ func TestHandleAnswerQuestionRejectsNonQuestionState(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
-	_ = m
 }
 
 // TestHandleAnswerQuestionMidSequenceFailureAbortsPicker asserts that when a
