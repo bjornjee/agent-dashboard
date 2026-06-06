@@ -90,6 +90,10 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
+	if req.Text == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "text required"})
+		return
+	}
 	if len(req.Text) > 4096 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "input too long (max 4096 chars)"})
 		return

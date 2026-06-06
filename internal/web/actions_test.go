@@ -98,6 +98,40 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 	}
 }
 
+// TestHandleInputRejectsEmptyText asserts that an empty text body is
+// rejected with 400 before any tmux call is attempted. Without the guard,
+// the codex branch's set-buffer with empty data fails and surfaces a
+// cryptic 500 "exit status 1" — see verification of PR #293 mirror.
+func TestHandleInputRejectsEmptyText(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+	m.On("Output", mock.Anything,
+		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}",
+	).Return([]byte(""), nil)
+
+	agent := domain.Agent{
+		SessionID:  "send-empty",
+		State:      "idle_prompt",
+		Harness:    "codex",
+		TmuxPaneID: "%1",
+		Cwd:        "/tmp/repo",
+	}
+	ts, _ := createTestServer(t, agent)
+
+	req, _ := http.NewRequest("POST", ts.URL+"/api/agents/send-empty/input",
+		strings.NewReader(`{"text":""}`))
+	req.Header.Set("X-Requested-With", "dashboard")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
 // mockExpector is the subset of *mocks.MockRunner we use to register
 // expectations — keeps the case table free of the full mock type import.
 type mockExpector interface {
