@@ -1245,24 +1245,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   flex-shrink: 0;
 }
 .create-composer__send:hover:not(:disabled) { opacity: 0.92; }
-.create-composer__hint {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-faint);
-  display: none;
-  align-items: center;
-  gap: 4px;
-  user-select: none;
-  margin-right: 4px;
-}
-.create-composer:focus-within .create-composer__hint { display: inline-flex; }
-.create-composer__hint kbd {
-  font: inherit;
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-}
 .create-composer__send:disabled {
   background: var(--cta-bg);
   color: var(--cta-text);

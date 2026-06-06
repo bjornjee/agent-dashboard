@@ -187,7 +187,9 @@ function isAtBottom(scrollParent) {
 // position instead of re-snapping.
 let conversationScrolledThisSession = false;
 
-// Optimistically append a Codex-style user message pill to the chat.
+// Optimistically append a Codex-style user message pill to the chat AND
+// mount the pulsing-orb working indicator in the same frame, so the
+// visitor never sees their bubble sit alone while the POST round-trips.
 // While in flight (pre-POST-ack) the bubble carries .ui-msg--optimistic
 // and is followed by a "Sending…" caption sibling. Dashboard.sendInput
 // clears the flag (and removes the caption) once the POST resolves OK.
@@ -195,6 +197,15 @@ let conversationScrolledThisSession = false;
 // The bubble is stamped with data-optimistic="1" so refreshConversation
 // can find it (after confirmUserMessageSent strips the visual class) and
 // remove it once the API echoes the message back as a real entry.
+//
+// The orb mount is synthetic: we override lastKnownAgent.state='running'
+// before calling refreshWorkingIndicator so isAgentMidTurn returns true
+// even if the agent's last known state was idle_prompt/done. SSE updates
+// will overwrite lastKnownAgent; the orb clears the moment agent.state
+// leaves WORKING_STATES. Persisting the override onto lastKnownAgent
+// (rather than just passing it inline) keeps the 2s conversation poll
+// — which calls refreshWorkingIndicator(lastKnownAgent) — from wiping
+// the orb before SSE has reported the real running state.
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   pendingMessageAcked = false;
@@ -212,33 +223,15 @@ export function appendUserMessage(text) {
     caption.textContent = 'Sending…';
     container.appendChild(caption);
   }
-  const scrollParent = container.closest('.detail-scroll');
-  if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
-}
-
-// Called by Dashboard.sendInput when POST resolves OK. Three jobs:
-//   1. Lift the in-flight affordance from the optimistic bubble.
-//   2. Reset the per-turn tool tally — a new turn just started.
-//   3. Optimistically mount the Thinking indicator so the user sees
-//      feedback immediately, without waiting for the next SSE tick
-//      (~1-2s after POST). The next SSE update confirms or replaces.
-export function confirmUserMessageSent() {
-  pendingMessageAcked = true;
-  const container = document.querySelector('#tab-conversation .conversation');
-  if (!container) return;
-  container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
-  container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
-  // New turn — reset tally and the seen-tool watermark so only tools
-  // fired AFTER this moment count for this turn.
+  // Mount the working indicator in the same frame as the bubble.
+  // Reset the per-turn tally, the seen-tool watermark, AND the latest-
+  // activity entry from the prior turn so the pre-tool orb branch in
+  // refreshWorkingIndicator fires (it gates on all three being empty).
+  // A new turn just started; the prior turn's "Last: …" line would read
+  // stale beside the visitor's fresh message.
   toolBuckets = {};
   lastSeenToolTimestamp = new Date().toISOString();
-  // Mount the indicator optimistically so the user doesn't stare at
-  // an empty chat while SSE catches up. PERSIST the synthetic running
-  // override onto lastKnownAgent so the 2s conversation poll (which
-  // also calls refreshWorkingIndicator) doesn't wipe the indicator
-  // before SSE has had a chance to report state=running. SSE updates
-  // will overwrite lastKnownAgent; the indicator clears the moment
-  // agent.state leaves WORKING_STATES.
+  latestToolEntry = null;
   if (lastKnownAgent) {
     lastKnownAgent = {
       ...lastKnownAgent,
@@ -247,6 +240,20 @@ export function confirmUserMessageSent() {
     };
     refreshWorkingIndicator(lastKnownAgent);
   }
+  const scrollParent = container.closest('.detail-scroll');
+  if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+}
+
+// Called by Dashboard.sendInput when POST resolves OK. Lifts the
+// in-flight affordance from the optimistic bubble; the orb mount + tally
+// reset already happened synchronously in appendUserMessage so the
+// visitor saw immediate feedback.
+export function confirmUserMessageSent() {
+  pendingMessageAcked = true;
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (!container) return;
+  container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
+  container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
 }
 
 // Last-known agent for the currently-mounted detail view. Used by the
@@ -548,7 +555,7 @@ function startToolStreamPoll(agentId) {
       const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
       // Only count tools fired after the turn boundary. lastSeenToolTimestamp
       // is set either by seedTallyFromTurnBoundary() on mount (latest human
-      // message timestamp) or by confirmUserMessageSent() on a fresh send.
+      // message timestamp) or by appendUserMessage() on a fresh send.
       const fresh = lastSeenToolTimestamp
         ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
         : [];

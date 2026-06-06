@@ -96,10 +96,18 @@ window.addEventListener('popstate', (e) => {
 });
 
 // Wrap an async action with button spinner feedback.
-async function withSpinner(evt, fn) {
+//   default          — append spinner as sibling (text buttons: "Save" → "Save ●")
+//   { replace: true } — swap content for the spinner (icon-only round CTAs,
+//                       where a second glyph would shove the first off-centre)
+async function withSpinner(evt, fn, opts) {
   const btn = evt && evt.target ? evt.target.closest('button') : null;
+  const replace = !!(opts && opts.replace);
   let origHtml;
-  if (btn) { origHtml = btn.innerHTML; btn.disabled = true; btn.innerHTML += UI.spinner(); }
+  if (btn) {
+    origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = replace ? UI.spinner() : (origHtml + UI.spinner());
+  }
   try { await fn(); } finally { if (btn) { btn.innerHTML = origHtml; btn.disabled = false; } }
 }
 
@@ -401,7 +409,7 @@ window.Dashboard = {
       } else {
         toast('Failed: ' + (result?.error || 'unknown'), 'error');
       }
-    });
+    }, { replace: true });
   },
 
   toggleExpand(btn) {

@@ -110,8 +110,7 @@ export function renderCreate(app, agents) {
             </label>
           </div>
           <div class="create-composer__trail">
-            <span class="create-composer__hint" aria-hidden="true"><kbd>⌘</kbd><kbd>↵</kbd></span>
-            <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn (Cmd/Ctrl+Enter)" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
+            <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn (Cmd/Ctrl+Enter)" title="Spawn (Cmd/Ctrl+Enter)" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
           </div>
         </div>
       </div>
