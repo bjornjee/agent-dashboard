@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
@@ -168,16 +169,29 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 	if agent.Harness == "codex" {
 		wantTool = "request_user_input"
 	}
-	// Pin overrides (ApplyPinnedStates) can rewrite State from "question" to
-	// "pr" for an agent that has both a pending question and an open PR.
-	// CurrentTool + a non-nil PendingQuestion are the durable signal that
-	// the agent is actually paused on the tool — accept either route in.
-	pausedOnTool := agent.CurrentTool == wantTool && agent.PendingQuestion != nil
-	if !pausedOnTool && agent.State != "question" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
-		return
+	// The agent counts as "paused on the tool" via any of three signals:
+	//  1. State == "question" — the hook layer or ApplyIdleOverrides set it.
+	//  2. CurrentTool == wantTool + PendingQuestion != nil — sidecar still
+	//     carries the tool snapshot even when ApplyPinnedStates rewrote
+	//     State to e.g. "pr".
+	//  3. The JSONL has an unanswered question — covers codex agents whose
+	//     Stop hook fired (state=done, current_tool="") before the user
+	//     answered the inline picker. Same logic as handlePendingQuestion's
+	//     JSONL fallback: the dashboard would render a question card, so
+	//     accepting the answer click is correct, not stale.
+	pausedOnTool := agent.State == "question"
+	if !pausedOnTool && agent.CurrentTool == wantTool && agent.PendingQuestion != nil {
+		pausedOnTool = true
 	}
-	if agent.CurrentTool != wantTool {
+	if !pausedOnTool && agent.SessionID != "" {
+		pq := conversation.ReadPendingQuestion(agent, conversation.Roots{
+			CodexSessionsRoot: s.codexSessionsRootDir,
+		})
+		if pq != nil {
+			pausedOnTool = true
+		}
+	}
+	if !pausedOnTool {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
 		return
 	}

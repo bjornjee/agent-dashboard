@@ -168,15 +168,23 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 // request_user_input), and neither harness flushes the matching tool
 // line to its JSONL until the user answers — so during the pending
 // window the sidecar is the only source of truth. Falls back to a JSONL
-// scan (routed by harness) for resumed sessions whose sidecar predates
-// this code.
+// scan (routed by harness) for cases the hook missed.
 //
-// The JSONL fallback is gated on agent.State == "question" so the
-// expensive full-file scan only fires when the hook layer or
-// ApplyIdleOverrides confirms the agent is actually paused on a question.
-// The sidecar-populated PendingQuestion short-circuits BEFORE that gate
-// — pinned_state can override agent.State (e.g. 'pr'), but the question
-// payload is still on the wire and the detail view needs the card.
+// The fallback does NOT gate on agent.State == "question". For claude
+// agents, ApplyIdleOverrides has already promoted state=idle_prompt to
+// state=question via LastPendingBlockingTool, so the gate was redundant.
+// For codex agents there is no equivalent override path — the codex CLI
+// may have produced a request_user_input call without the PreToolUse
+// hook firing (version skew, race, missed event), leaving state=done
+// while the rollout contains an unanswered question. The detail
+// endpoint is the only place that needs this answer and the JSONL scan
+// is bounded (early-exits on the first human reply after the last
+// tool_use), so the cost of always scanning is acceptable.
+//
+// The sidecar-populated PendingQuestion still short-circuits ahead of
+// the fallback — pinned_state can override agent.State (e.g. 'pr'), but
+// the question payload is still on the wire and the detail view needs
+// the card without doing any I/O.
 func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
@@ -187,7 +195,7 @@ func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, agent.PendingQuestion)
 		return
 	}
-	if agent.SessionID == "" || agent.State != "question" {
+	if agent.SessionID == "" {
 		writeJSON(w, http.StatusOK, nil)
 		return
 	}

@@ -575,33 +575,36 @@ func TestPendingQuestionEndpoint_EmptyWhenNone(t *testing.T) {
 	}
 }
 
-func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
-	// Pins the cost-saving gate: even when a pending AskUserQuestion sits
-	// in the JSONL, the endpoint must return null while agent.State is not
-	// "question". The hook layer flips state the moment AskUserQuestion
-	// fires; gating on that avoids a full JSONL scan on every 2s poll for
-	// the 99% case where the agent isn't paused on a question.
+func TestPendingQuestionEndpoint_ScansJSONLEvenWhenStateNotQuestion(t *testing.T) {
+	// Regression: the previous version gated the JSONL fallback on
+	// agent.State == "question" as a cost optimization. That gate locked
+	// out codex agents whose Stop hook landed before the dashboard had
+	// a chance to read the unanswered request_user_input — state stays
+	// "done" but the rollout still carries the question. The endpoint
+	// must now scan the JSONL regardless of state when sidecar
+	// PendingQuestion is nil, so the detail view's question card can
+	// still render.
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()
 	projectsDir := t.TempDir()
 	cfg.Profile.StateDir = stateDir
 	cfg.Profile.ProjectsDir = projectsDir
 
-	cwd := "/tmp/pq-gate-repo"
+	cwd := "/tmp/pq-stop-repo"
 	projDir := filepath.Join(projectsDir, conversation.ProjectSlug(cwd))
 	os.MkdirAll(projDir, 0755)
 	agentsDir := filepath.Join(stateDir, "agents")
 	os.MkdirAll(agentsDir, 0700)
 
-	sessionID := "pq-gate"
-	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_xyz","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+	sessionID := "pq-stop"
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_stop","name":"AskUserQuestion","input":{"questions":[{"question":"Which approach?","options":[{"label":"A"},{"label":"B"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
 `
 	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
 
 	agent := domain.Agent{
 		SessionID: sessionID,
 		ProjDir:   projDir,
-		State:     "running",
+		State:     "done", // Stop hook landed before the question was surfaced
 		Cwd:       cwd,
 	}
 	data, _ := json.Marshal(agent)
@@ -617,11 +620,15 @@ func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	buf := make([]byte, 4096)
-	n, _ := resp.Body.Read(buf)
-	trimmed := strings.TrimSpace(string(buf[:n]))
-	if trimmed != "null" {
-		t.Errorf("expected null (gate should skip scan when state != question), got %q", trimmed)
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "tool_stop" {
+		t.Errorf("ToolUseID = %q, want tool_stop", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 || pq.Questions[0].Question != "Which approach?" {
+		t.Errorf("Questions = %+v, want Which approach?", pq.Questions)
 	}
 }
 
