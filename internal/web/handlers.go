@@ -153,26 +153,25 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePendingQuestion serves GET /api/agents/{id}/pending-question.
-// Codex sessions return null — codex has its own interactive prompt mechanism.
 //
 // Reads from the agent sidecar first: agent-state-fast.js stamps the
-// AskUserQuestion payload on PreToolUse, and Claude Code does not flush
-// the matching tool_use line to the JSONL until the user answers — so
-// during the pending window the sidecar is the only source of truth.
-// Falls back to a JSONL scan for resumed sessions whose sidecar predates
-// this code (no pending_question field) but whose JSONL eventually
-// receives the tool_use line.
+// question payload on PreToolUse (claude's AskUserQuestion or codex's
+// request_user_input), and neither harness flushes the matching tool
+// line to its JSONL until the user answers — so during the pending
+// window the sidecar is the only source of truth. Falls back to a JSONL
+// scan (routed by harness) for resumed sessions whose sidecar predates
+// this code.
 //
 // Still gated on agent.State == "question" so the JSONL fallback skips
 // the full scan unless the hook layer or ApplyIdleOverrides confirms the
-// agent is actually paused on AskUserQuestion.
+// agent is actually paused on a question.
 func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.Harness == "codex" || agent.SessionID == "" || agent.State != "question" {
+	if agent.SessionID == "" || agent.State != "question" {
 		writeJSON(w, http.StatusOK, nil)
 		return
 	}
@@ -180,11 +179,9 @@ func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, agent.PendingQuestion)
 		return
 	}
-	if agent.ProjDir == "" {
-		writeJSON(w, http.StatusOK, nil)
-		return
-	}
-	pq := conversation.ReadPendingQuestion(agent.ProjDir, agent.SessionID)
+	pq := conversation.ReadPendingQuestion(agent, conversation.Roots{
+		CodexSessionsRoot: s.codexSessionsRootDir,
+	})
 	writeJSON(w, http.StatusOK, pq)
 }
 

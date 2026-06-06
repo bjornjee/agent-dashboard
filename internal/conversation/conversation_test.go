@@ -1534,7 +1534,7 @@ func TestReadPendingQuestion_MultiQuestionPayload(t *testing.T) {
 		t.Fatalf("write jsonl: %v", err)
 	}
 
-	got := ReadPendingQuestion(projDir, sessionID)
+	got := readPendingQuestionClaude(projDir, sessionID)
 	if got == nil {
 		t.Fatal("ReadPendingQuestion = nil, want populated PendingQuestion")
 	}
@@ -1582,7 +1582,7 @@ func TestReadPendingQuestion_NoneWhenAnswered(t *testing.T) {
 		t.Fatalf("write jsonl: %v", err)
 	}
 
-	if got := ReadPendingQuestion(projDir, sessionID); got != nil {
+	if got := readPendingQuestionClaude(projDir, sessionID); got != nil {
 		t.Errorf("ReadPendingQuestion = %+v, want nil after human reply", got)
 	}
 }
@@ -1599,13 +1599,13 @@ func TestReadPendingQuestion_NilWhenNoQuestion(t *testing.T) {
 		t.Fatalf("write jsonl: %v", err)
 	}
 
-	if got := ReadPendingQuestion(projDir, sessionID); got != nil {
+	if got := readPendingQuestionClaude(projDir, sessionID); got != nil {
 		t.Errorf("ReadPendingQuestion = %+v, want nil", got)
 	}
 }
 
 func TestReadPendingQuestion_NilForMissingFile(t *testing.T) {
-	if got := ReadPendingQuestion("/nonexistent", "no-such"); got != nil {
+	if got := readPendingQuestionClaude("/nonexistent", "no-such"); got != nil {
 		t.Errorf("ReadPendingQuestion = %+v, want nil for missing file", got)
 	}
 }
@@ -1636,7 +1636,7 @@ func TestReadPendingQuestion_FindsEntryBeyondTailWindow(t *testing.T) {
 		t.Fatalf("write jsonl: %v", err)
 	}
 
-	got := ReadPendingQuestion(projDir, sessionID)
+	got := readPendingQuestionClaude(projDir, sessionID)
 	if got == nil {
 		t.Fatal("ReadPendingQuestion = nil, want populated payload even when AskUserQuestion is far from EOF")
 	}

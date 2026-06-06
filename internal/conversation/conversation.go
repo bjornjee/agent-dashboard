@@ -855,15 +855,18 @@ func HasPendingQuestion(projDir, sessionID string) bool {
 	return hasPendingToolCall(projDir, sessionID, "AskUserQuestion")
 }
 
-// ReadPendingQuestion returns the parsed input of the most recent
-// AskUserQuestion tool_use in the session JSONL when it has no human
-// reply after it. Returns nil otherwise.
+// readPendingQuestionClaude returns the parsed input of the most recent
+// AskUserQuestion tool_use in a claude session JSONL when it has no
+// human reply after it. Returns nil otherwise.
 //
 // Scans the entire file: a sibling subagent can keep writing isSidechain
 // entries to the parent's JSONL while the parent is paused on
 // AskUserQuestion, pushing the question line arbitrarily far before EOF.
 // A tail-only scan misses it.
-func ReadPendingQuestion(projDir, sessionID string) *domain.PendingQuestion {
+//
+// Unexported because the router (ReadPendingQuestion) is the canonical
+// entry point — callers should route by agent.Harness, not skip it.
+func readPendingQuestionClaude(projDir, sessionID string) *domain.PendingQuestion {
 	path := filepath.Join(projDir, sessionID+".jsonl")
 	f, err := os.Open(path)
 	if err != nil {
@@ -1003,7 +1006,7 @@ func toolUseID(line []byte) string {
 // is pending. This resolves the ambiguity when both tools are pending —
 // the most recent one wins.
 //
-// Scans the entire file for the same reason ReadPendingQuestion does:
+// Scans the entire file for the same reason readPendingQuestionClaude does:
 // a sibling subagent can pad the JSONL with isSidechain entries while
 // the parent is paused on the blocking tool, pushing the relevant
 // tool_use arbitrarily far before EOF. Called from ApplyIdleOverrides,

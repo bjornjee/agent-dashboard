@@ -564,6 +564,70 @@ func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
 	}
 }
 
+// Codex agents must surface their pending request_user_input through the
+// same /api/agents/{id}/pending-question endpoint as claude — same JSON
+// shape so the frontend doesn't need a harness-specific branch.
+func TestPendingQuestionEndpoint_Codex(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = t.TempDir()
+
+	sessionID := "019e9ba2-84c1-77a0-8bb4-ee9e88264f58"
+	rolloutDir := filepath.Join(codexHome, "sessions", "2026", "06", "06")
+	if err := os.MkdirAll(rolloutDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rolloutPath := filepath.Join(rolloutDir, "rollout-2026-06-06T14-32-59-"+sessionID+".jsonl")
+	contents := `{"timestamp":"2026-06-06T06:39:26.092Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"fmt_target\",\"header\":\"Fmt target\",\"question\":\"Add fmt?\",\"options\":[{\"label\":\"Yes\",\"description\":\"good\"},{\"label\":\"No\"}]}]}","call_id":"call_codex_q"}}` + "\n"
+	if err := os.WriteFile(rolloutPath, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+	agent := domain.Agent{
+		SessionID: sessionID,
+		State:     "question",
+		Cwd:       "/tmp/codex-repo",
+		Harness:   "codex",
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET pending-question: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "call_codex_q" {
+		t.Errorf("ToolUseID = %q, want call_codex_q", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 || pq.Questions[0].ID != "fmt_target" {
+		t.Errorf("Questions unexpected: %+v", pq.Questions)
+	}
+	if pq.Questions[0].Header != "Fmt target" || pq.Questions[0].Question != "Add fmt?" {
+		t.Errorf("Question/Header mismatch: %+v", pq.Questions[0])
+	}
+	if len(pq.Questions[0].Options) != 2 || pq.Questions[0].Options[0].Label != "Yes" {
+		t.Errorf("Options unexpected: %+v", pq.Questions[0].Options)
+	}
+}
+
 // withMockCommandRunner swaps the package-level cmdRunner with a mock
 // and restores the original on test cleanup.
 func withMockCommandRunner(t *testing.T) *mocks.MockCommandRunner {
