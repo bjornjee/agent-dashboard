@@ -65,6 +65,23 @@ export function renderCreate(app, agents) {
       <h1 class="create-hero">What should we work on?</h1>
 
       <div class="create-composer">
+        <label class="create-folder-pill create-folder-pill--inside" for="create-folder">
+          ${ICONS.folder}
+          <input
+            id="create-folder"
+            class="create-folder-pill__input"
+            type="text"
+            placeholder="Work in a project"
+            list="folder-suggestions"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Project folder">
+          ${CHEVRON_DOWN}
+        </label>
+        <datalist id="folder-suggestions">
+          ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
+        </datalist>
+
         <textarea
           class="create-composer__input"
           id="create-message"
@@ -76,44 +93,28 @@ export function renderCreate(app, agents) {
         <div class="create-composer__toolbar">
           <div class="create-composer__lead">
             <button class="create-composer__icon" type="button" aria-label="More" tabindex="-1">${ICONS.attach}</button>
-            <label class="create-composer__pill" title="Harness">
+            <label class="create-composer__pill" title="Harness — which CLI runs the agent. Default uses Claude Code.">
               ${ICONS.gear}
-              <select id="create-harness" aria-label="Harness">
+              <select id="create-harness" aria-label="Harness — which CLI runs the agent">
                 <option value="">Default</option>
                 <option value="claude">Claude Code</option>
                 <option value="codex">Codex CLI</option>
               </select>
               ${CHEVRON_DOWN}
             </label>
-          </div>
-          <div class="create-composer__trail">
-            <label class="create-composer__pill" title="Skill">
-              <select id="create-skill" aria-label="Skill">
+            <label class="create-composer__pill" title="Skill — a workflow the agent loads on startup (e.g. agent-dashboard:feature).">
+              <select id="create-skill" aria-label="Skill — a workflow the agent loads on startup">
                 <option value="">Skill</option>
               </select>
               ${CHEVRON_DOWN}
             </label>
-            <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
+          </div>
+          <div class="create-composer__trail">
+            <span class="create-composer__hint" aria-hidden="true"><kbd>⌘</kbd><kbd>↵</kbd></span>
+            <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn (Cmd/Ctrl+Enter)" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
           </div>
         </div>
       </div>
-
-      <label class="create-folder-pill" for="create-folder">
-        ${ICONS.folder}
-        <input
-          id="create-folder"
-          class="create-folder-pill__input"
-          type="text"
-          placeholder="Work in a project"
-          list="folder-suggestions"
-          autocomplete="off"
-          spellcheck="false"
-          aria-label="Project folder">
-        ${CHEVRON_DOWN}
-      </label>
-      <datalist id="folder-suggestions">
-        ${agentFolders.map(f => `<option value="${escapeHtml(f)}">`).join('')}
-      </datalist>
       <div class="create-hint" id="folder-hint">Pick a folder to spawn in.</div>
 
       ${recents.length ? `<div class="create-actions">${recents.map(actionCard).join('')}</div>` : ''}

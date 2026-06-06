@@ -178,6 +178,28 @@ window.Dashboard = {
     document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
   },
 
+  openShortcuts() {
+    const rows = [
+      ['⌘', 'K', 'Search agents'],
+      ['?', '', 'Keyboard shortcuts'],
+      ['↵', '', 'Send (chat composer)'],
+      ['⌘', '↵', 'Spawn agent (new-agent composer)'],
+      ['Esc', '', 'Close overlay'],
+    ];
+    const list = rows.map(r => `<li class="ui-shortcuts__row"><span class="ui-shortcuts__keys"><kbd>${r[0]}</kbd>${r[1] ? `<kbd>${r[1]}</kbd>` : ''}</span><span class="ui-shortcuts__label">${r[2]}</span></li>`).join('');
+    const wrap = document.createElement('div');
+    wrap.className = 'ui-shortcuts';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', 'Keyboard shortcuts');
+    wrap.innerHTML = `<div class="ui-shortcuts__backdrop" onclick="Dashboard.dismissShortcuts()"></div><div class="ui-shortcuts__panel"><div class="ui-shortcuts__title">Keyboard shortcuts</div><ul class="ui-shortcuts__list">${list}</ul></div>`;
+    document.body.appendChild(wrap);
+  },
+
+  dismissShortcuts() {
+    document.querySelectorAll('.ui-shortcuts').forEach(el => el.remove());
+  },
+
   searchAgents() {
     openSearch(agents);
   },
@@ -433,6 +455,22 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   if (isSearchOpen()) closeSearch();
   else openSearch(agents);
+});
+
+// "?" opens the keyboard cheatsheet from anywhere when not typing.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '?' || e.repeat) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  e.preventDefault();
+  if (document.querySelector('.ui-shortcuts')) Dashboard.dismissShortcuts();
+  else Dashboard.openShortcuts();
+});
+
+// Esc closes the cheatsheet when it's open.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (document.querySelector('.ui-shortcuts')) Dashboard.dismissShortcuts();
 });
 
 // --- Init ---
