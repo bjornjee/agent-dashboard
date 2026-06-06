@@ -26,7 +26,7 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 Before every action, identify the current phase and check its gate. If a gate is not satisfied, stop instead of falling back. If you violate phase order, halt and report the violated gate.
 
-If the feature touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` progressively at planning, environment setup, verification, delegation, and cleanup points.
+If the feature touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` at planning, environment setup, verification, delegation, and cleanup points.
 
 ---
 
@@ -242,7 +242,7 @@ Review all changes for correctness, security, and convention adherence. Apply al
 Triggered when the user indicates the feature has been merged upstream.
 
 1. Verify the branch is merged (warn if unmerged commits remain)
-2. Tear down environment resources: remove symlinks, stop dev servers or emulators, release browser leases, remove worktree-local UI scratch state, delete `.env-setup-done` / `.env-setup-failed` / `.feature-plan-path` sentinel files
+2. Tear down environment resources: remove symlinks, stop dev servers or emulators, release any browser lease, remove worktree-local UI scratch state, delete `.env-setup-done` / `.env-setup-failed` / `.feature-plan-path` sentinel files
 3. Remove worktree and delete branch
 4. Confirm cleanup is complete
 

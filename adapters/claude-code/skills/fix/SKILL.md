@@ -13,7 +13,7 @@ Bug description: $ARGUMENTS
 
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied. Apply all project rules and conventions that are in your context.
 
-If the bug involves browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` progressively at evidence gathering, environment setup, reproduction, verification, delegation, and cleanup points.
+If the bug involves browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` at evidence gathering, environment setup, reproduction, verification, delegation, and cleanup points.
 
 ---
 
@@ -160,6 +160,6 @@ For UI fixes, prefer headless Playwright with worktree-local resources. Use inte
 Triggered when the user indicates the fix has been merged upstream.
 
 1. Verify the branch is merged (warn if unmerged commits remain)
-2. Tear down environment resources: remove symlinks, stop dev servers or emulators, release browser leases, remove worktree-local UI scratch state, delete `.env-setup-done`/`.env-setup-failed` sentinel files
+2. Tear down environment resources: remove symlinks, stop dev servers or emulators, release any browser lease, remove worktree-local UI scratch state, delete `.env-setup-done`/`.env-setup-failed` sentinel files
 3. Remove worktree and delete branch
 4. Confirm cleanup is complete

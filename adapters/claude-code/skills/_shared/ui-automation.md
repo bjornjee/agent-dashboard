@@ -5,7 +5,7 @@ Use this policy when a task plans, sets up, verifies, delegates, or cleans up UI
 ## Resource Model
 
 - Headless Playwright test runs are parallel work and should stay per-worktree.
-- Interactive Browser/Chrome inspection is a shared resource and must be leased or queued when a lease mechanism is available.
+- Interactive Browser/Chrome inspection is a shared resource; use a lease or queue when the project provides one.
 - Persistent browser profiles are never shared between agents, worktrees, or test workers.
 
 ## Agent Rules
@@ -19,8 +19,8 @@ Use this policy when a task plans, sets up, verifies, delegates, or cleans up UI
    - unique browser `userDataDir` when persistent context is required
 4. Do not reuse another agent's running dev server unless the user explicitly asks.
 5. Do not use the default Chrome profile or a shared persistent Playwright profile.
-6. If an interactive browser lease is unavailable, report the wait state instead of retrying in a loop.
-7. Release browser leases and remove worktree-local UI scratch state during cleanup.
+6. When a lease mechanism exists and no lease is available, report the wait state instead of retrying in a loop.
+7. Release any browser lease and remove worktree-local UI scratch state during cleanup.
 
 ## Environment Hints
 
