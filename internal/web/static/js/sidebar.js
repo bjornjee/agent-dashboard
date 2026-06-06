@@ -5,8 +5,9 @@
 import { UI } from './ui.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
-import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge, stateLabel } from './state.js';
-import { escapeHtml, repoName, durationFromUpdate } from './format.js';
+import { effectiveState, stateGroup } from './state.js';
+import { escapeHtml } from './format.js';
+import { agentRowOpts } from './agent-row.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
@@ -14,38 +15,6 @@ export const DESKTOP_MQ = '(min-width: 900px)';
 
 export function isDesktop() {
   return typeof window !== 'undefined' && window.matchMedia(DESKTOP_MQ).matches;
-}
-
-function statusDot(state) {
-  const group = stateGroup(state);
-  const label = stateLabel(state);
-  const aria = label ? ` role="img" aria-label="${escapeHtml(label)}"` : '';
-  return `<span class="status-dot status-dot--${group.toLowerCase()}"${aria}></span>`;
-}
-
-function chip(cls, visible, srText) {
-  return `<span class="chip ${cls}">`
-    + `<span aria-hidden="true">${escapeHtml(visible)}</span>`
-    + `<span class="visually-hidden">${escapeHtml(srText)}</span>`
-    + `</span>`;
-}
-
-function metaLine(agent) {
-  const parts = [];
-  if (agent.branch) parts.push(escapeHtml(agent.branch));
-  if (agent.model) parts.push(escapeHtml(agent.model));
-  const dur = durationFromUpdate(agent);
-  if (dur) parts.push(escapeHtml(dur));
-  return parts.join(' · ');
-}
-
-function rowBadges(agent) {
-  let html = '';
-  if (questionBadge(agent)) html += chip('chip--ask', 'ASK', 'agent is asking a question');
-  if (planBadge(agent))     html += chip('chip--plan', 'PLAN', 'agent is in plan mode');
-  const sub = subagentBadge(agent);
-  if (sub) html += chip('chip--sub', sub, 'live subagents');
-  return html;
 }
 
 // Renders the sidebar into #app-sidebar. Pass the currently selected
@@ -97,18 +66,10 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
       // Wrap UI.row in a marker div so we can target selection without
       // touching the primitive's signature.
       html += `<div class="app-sidebar__row${selectedCls}" data-agent-id="${escapeHtml(id)}">`;
-      // Subtitle is branch · model · duration — the identifying signal the
-      // user actually scans for. Question text lives in the detail view's
-      // question card; the ASK chip is the at-a-glance signal here.
-      html += UI.row({
-        leading: statusDot(effectiveState(agent)),
-        title: repoName(agent),
-        subtitle: metaLine(agent),
-        tag: prTag(agent),
-        badges: rowBadges(agent),
+      html += UI.row(agentRowOpts(agent, {
         onclick: `Dashboard.selectAgent('${id}')`,
         chevron: false,
-      });
+      }));
       html += '</div>';
     }
   }

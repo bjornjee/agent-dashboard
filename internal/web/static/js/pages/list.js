@@ -1,58 +1,13 @@
 // Agent list — Codex-iOS register. Thin glue over the primitives.
+// Row rendering lives in agent-row.js; this file owns mobile-list
+// chrome (app bar, group iteration, dock).
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
-import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge, stateLabel } from '../state.js';
-import { escapeHtml, repoName, durationFromUpdate } from '../format.js';
+import { effectiveState, stateGroup } from '../state.js';
+import { agentRowOpts } from '../agent-row.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
-
-function statusDot(state) {
-  const group = stateGroup(state);
-  const cls = `status-dot status-dot--${group.toLowerCase()}`;
-  // aria-label expands the color-only signal for screen readers.
-  const label = stateLabel(state);
-  const aria = label ? ` role="img" aria-label="${escapeHtml(label)}"` : '';
-  return `<span class="${cls}"${aria}></span>`;
-}
-
-// Pre-rendered chip helper — visible label + sr-only expansion. Used by
-// rowBadges so each chip exposes its meaning to assistive tech without
-// changing the visible 3-char token.
-function chip(cls, visible, srText) {
-  return `<span class="chip ${cls}">`
-    + `<span aria-hidden="true">${escapeHtml(visible)}</span>`
-    + `<span class="visually-hidden">${escapeHtml(srText)}</span>`
-    + `</span>`;
-}
-
-// metaLine is the demoted "branch · model · duration" line. Lives under
-// the preview when there is one; replaces the subtitle when there isn't,
-// so older state files keep their pre-fix appearance.
-export function metaLine(agent) {
-  const parts = [];
-  if (agent.branch) parts.push(escapeHtml(agent.branch));
-  if (agent.model) parts.push(escapeHtml(agent.model));
-  const dur = durationFromUpdate(agent);
-  if (dur) parts.push(escapeHtml(dur));
-  return parts.join(' · ');
-}
-
-// rowBadges concatenates stateful chips for the title line. PLAN and
-// subagent chips both come from state.js helpers; the existing PR tag
-// keeps its dedicated `tag` slot in UI.row.
-export function rowBadges(agent) {
-  let html = '';
-  // ASK first — questions are the most blocking signal. PLAN second
-  // (also blocking, but less common). ↳N last (informational).
-  // prTag now suppresses itself when ASK fires so the pill pileup
-  // (PR + ASK) cannot happen on the same row.
-  if (questionBadge(agent)) html += chip('chip--ask', 'ASK', 'agent is asking a question');
-  if (planBadge(agent))     html += chip('chip--plan', 'PLAN', 'agent is in plan mode');
-  const sub = subagentBadge(agent);
-  if (sub) html += chip('chip--sub', sub, 'live subagents');
-  return html;
-}
 
 export function renderList(app, agents) {
   const grouped = {};
@@ -83,18 +38,9 @@ export function renderList(app, agents) {
     body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
-      // Subtitle is branch · model · duration — the identifying signal the
-      // user actually scans for. Question text lives in the detail view's
-      // question card; the ASK chip in the title-line tag stack is enough
-      // of a "this agent needs you" signal here.
-      body += UI.row({
-        leading: statusDot(effectiveState(agent)),
-        title: repoName(agent),
-        subtitle: metaLine(agent),
-        tag: prTag(agent),
-        badges: rowBadges(agent),
+      body += UI.row(agentRowOpts(agent, {
         onclick: `Dashboard.selectAgent('${id}')`,
-      });
+      }));
     }
   }
 
