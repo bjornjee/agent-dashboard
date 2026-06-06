@@ -55,6 +55,33 @@ func ReadIncremental(agent domain.Agent, roots Roots, limit int, prev []domain.C
 	}
 }
 
+// ReadPlan returns the markdown body of the most recent finalized plan
+// for agent, routing by harness. Codex stores the plan text inline in the
+// rollout JSONL (event_msg payload.item.type=="Plan"); claude stores it
+// as a slug-named file under plansDir referenced from the projDir JSONL.
+// Both paths return "" when no plan exists.
+func ReadPlan(agent domain.Agent, roots Roots, plansDir string) string {
+	switch agent.Harness {
+	case "codex":
+		path, err := codexconv.LocateRollout(roots.CodexSessionsRoot, agent.SessionID)
+		if err != nil || path == "" {
+			return ""
+		}
+		return codexconv.ReadPlanContent(path)
+	default:
+		if agent.DelegatedPlanToolUseID != "" {
+			if content := ReadDelegatedPlanContent(agent.ProjDir, agent.SessionID, agent.DelegatedPlanToolUseID); content != "" {
+				return content
+			}
+		}
+		slug := ReadPlanSlug(agent.ProjDir, agent.SessionID)
+		if slug == "" {
+			return ""
+		}
+		return ReadPlanContent(plansDir, slug)
+	}
+}
+
 func ReadSubagents(agent domain.Agent, roots Roots) []domain.SubagentInfo {
 	switch agent.Harness {
 	case "codex":

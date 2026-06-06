@@ -412,31 +412,20 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handlePlan returns the plan markdown for an agent.
+// handlePlan returns the plan markdown for an agent, routed by harness.
 func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.ProjDir == "" || agent.SessionID == "" {
+	if agent.SessionID == "" {
 		writeJSON(w, http.StatusOK, map[string]string{"content": ""})
 		return
 	}
-	// Prefer the delegated-Plan-subagent pointer if set; the plan is persisted
-	// only inside the parent JSONL as a tool_result.
-	if agent.DelegatedPlanToolUseID != "" {
-		if content := conversation.ReadDelegatedPlanContent(agent.ProjDir, agent.SessionID, agent.DelegatedPlanToolUseID); content != "" {
-			writeJSON(w, http.StatusOK, map[string]string{"content": content})
-			return
-		}
-	}
-	planSlug := conversation.ReadPlanSlug(agent.ProjDir, agent.SessionID)
-	if planSlug == "" {
-		writeJSON(w, http.StatusOK, map[string]string{"content": ""})
-		return
-	}
-	content := conversation.ReadPlanContent(s.cfg.Profile.PlansDir, planSlug)
+	content := conversation.ReadPlan(agent, conversation.Roots{
+		CodexSessionsRoot: s.codexSessionsRootDir,
+	}, s.cfg.Profile.PlansDir)
 	writeJSON(w, http.StatusOK, map[string]string{"content": content})
 }
 

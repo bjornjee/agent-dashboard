@@ -91,9 +91,14 @@ func ReadIncremental(path string, limit int, prev []domain.ConversationEntry, pr
 		}
 	}
 
+	type item struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
 	type payload struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
+		Item    item   `json:"item"`
 	}
 	type line struct {
 		Timestamp string  `json:"timestamp"`
@@ -119,6 +124,17 @@ func ReadIncremental(path string, limit int, prev []domain.ConversationEntry, pr
 			continue
 		}
 		if l.Type != "event_msg" {
+			continue
+		}
+		// Plan finalization: codex emits item_completed with item.type
+		// "Plan" when an agent commits a <proposed_plan>. Mirrors claude's
+		// ExitPlanMode handling — frontend renders a chat-stream "View
+		// plan" card at this timeline position.
+		if l.Payload.Type == "item_completed" && l.Payload.Item.Type == "Plan" {
+			out = append(out, domain.ConversationEntry{
+				Role:      "plan-saved",
+				Timestamp: l.Timestamp,
+			})
 			continue
 		}
 		var role string
@@ -147,4 +163,53 @@ func ReadIncremental(path string, limit int, prev []domain.ConversationEntry, pr
 		out = out[len(out)-limit:]
 	}
 	return out, fileSize, nil
+}
+
+// ReadPlanContent returns the text of the most recent finalized plan in a
+// codex rollout — the item.text of the latest event_msg whose
+// payload.type is "item_completed" and payload.item.type is "Plan".
+// Missing files and sessions without a plan return "" without error.
+func ReadPlanContent(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	type item struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	type payload struct {
+		Type string `json:"type"`
+		Item item   `json:"item"`
+	}
+	type line struct {
+		Type    string  `json:"type"`
+		Payload payload `json:"payload"`
+	}
+
+	var latest string
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 4096), 8*1024*1024)
+	for scanner.Scan() {
+		raw := scanner.Bytes()
+		if len(raw) == 0 {
+			continue
+		}
+		var l line
+		if json.Unmarshal(raw, &l) != nil {
+			continue
+		}
+		if l.Type != "event_msg" {
+			continue
+		}
+		if l.Payload.Type != "item_completed" || l.Payload.Item.Type != "Plan" {
+			continue
+		}
+		if l.Payload.Item.Text != "" {
+			latest = l.Payload.Item.Text
+		}
+	}
+	return latest
 }
