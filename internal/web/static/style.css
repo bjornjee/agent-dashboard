@@ -1288,7 +1288,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: transparent;
   transition: color var(--transition-fast), background var(--transition-fast);
   cursor: text;
-  min-width: 220px;
 }
 /* Folder pill rendered inside the composer card (P2 fix): primary
  * affordance, sits above the textarea, full-width so it reads as the
@@ -1319,7 +1318,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .create-folder-pill--empty {
   color: var(--text-secondary);
   background: var(--bg-surface);
-  box-shadow: 0 0 0 1px var(--border-hover);
 }
 .create-folder-pill svg { width: 16px; height: 16px; opacity: 0.8; flex-shrink: 0; }
 .create-folder-pill__input {
