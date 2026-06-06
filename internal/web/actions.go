@@ -148,28 +148,28 @@ type askAnswerRequest struct {
 	OptionCounts []int            `json:"option_counts"`
 }
 
-// handleAnswerQuestion drives Claude Code's AskUserQuestion picker via a
-// translated key sequence. Number keys are global option shortcuts in the
-// picker: pressing "k" picks (single-select) or toggles (multi-select) the
-// k-th option. The Other / Type-something option lives at option_count+1
-// and opens a freeform text input. After all answers land the handler
-// presses Enter once to commit the Submit tab.
+// handleAnswerQuestion drives the harness-appropriate question picker
+// via a translated key sequence.
 //
-// Codex has no AskUserQuestion picker — codex answers must go through
-// /input instead. Non-question / non-AskUserQuestion agent states are
-// rejected to avoid sending stray digits into a chat composer.
+// Claude Code's AskUserQuestion uses digit shortcuts (k picks/toggles
+// option k; Other lives at option_count+1; final Enter commits Submit).
+//
+// Codex's request_user_input has no digit shortcuts — its footer is
+// "tab to add notes | enter to submit". The driver navigates with Down
+// arrows and commits per-question with Enter; codex advances on Enter
+// so no final Submit-tab is needed.
 func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
+	wantTool := "AskUserQuestion"
 	if agent.Harness == "codex" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "codex has no AskUserQuestion picker"})
-		return
+		wantTool = "request_user_input"
 	}
-	if agent.State != "question" || agent.CurrentTool != "AskUserQuestion" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on AskUserQuestion"})
+	if agent.State != "question" || agent.CurrentTool != wantTool {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
 		return
 	}
 	if !tmux.TmuxIsAvailable() {
@@ -216,7 +216,11 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := driveAskUserQuestionPicker(target, req); err != nil {
+	driver := driveAskUserQuestionPicker
+	if agent.Harness == "codex" {
+		driver = driveCodexRequestUserInputPicker
+	}
+	if err := driver(target, req); err != nil {
 		// Abort the picker so it returns to a clean cancelled state
 		// instead of half-answered. Best-effort — if Escape also fails
 		// the user can ESC manually from the terminal.
@@ -225,6 +229,63 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "answered"})
+}
+
+// driveCodexRequestUserInputPicker translates a validated answer payload
+// into the tmux send-keys sequence codex's request_user_input picker
+// accepts.
+//
+// Each question in codex's picker:
+//   - The first option is highlighted on entry.
+//   - Down arrow moves the highlight; codex shows no digit shortcut.
+//   - Enter submits the current question and codex advances to the next.
+//   - Tab opens an "add notes" freeform input on the highlighted option;
+//     subsequent text + Enter commits the note. The SKILL doc confirms
+//     codex auto-appends an "Other"/"None of the above" entry as the
+//     last selectable row — freeform answers navigate to it first.
+//
+// Codex's request_user_input has no multi_select; ans.Multi is ignored.
+// The first entry in OptionIndices is the picked option for that
+// question. After all questions land, no final Enter is sent — codex
+// already advanced past the last question on its own Enter.
+func driveCodexRequestUserInputPicker(target string, req askAnswerRequest) error {
+	for i, ans := range req.Answers {
+		optCount := req.OptionCounts[i]
+		if ans.Freeform != "" {
+			// Navigate to the auto-added Other entry: it sits one row
+			// past the labeled options. From the first row that means
+			// optCount Down presses.
+			for j := 0; j < optCount; j++ {
+				if err := tmux.TmuxSendRaw(target, "Down"); err != nil {
+					return err
+				}
+			}
+			if err := tmux.TmuxSendRaw(target, "Tab"); err != nil {
+				return err
+			}
+			// TmuxSendKeys sends the literal text and follows with Enter
+			// automatically, so no separate submit keystroke is needed.
+			if err := tmux.TmuxSendKeys(target, ans.Freeform); err != nil {
+				return err
+			}
+			continue
+		}
+		// Single-select: first OptionIndex is the pick. Move Down (idx)
+		// times from the default first-row highlight, then Enter.
+		idx := 0
+		if len(ans.OptionIndices) > 0 {
+			idx = ans.OptionIndices[0]
+		}
+		for j := 0; j < idx; j++ {
+			if err := tmux.TmuxSendRaw(target, "Down"); err != nil {
+				return err
+			}
+		}
+		if err := tmux.TmuxSendRaw(target, "Enter"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // driveAskUserQuestionPicker translates a validated askAnswerRequest into
