@@ -12,22 +12,57 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.ready.then(reg => { swReg = reg; });
 }
 
-// States that warrant a notification when an agent transitions INTO them
+// States that warrant a notification when an agent transitions INTO them.
+// Labels stay short so the title fits on a narrow lock screen.
 const NOTIFY_STATES = {
   permission: 'Needs permission',
-  plan:       'Plan ready for review',
-  question:   'Has a question',
-  error:      'Hit an error',
+  plan:       'Plan ready',
+  question:   'Question',
+  error:      'Error',
   done:       'Finished',
   idle_prompt:'Finished',
   pr:         'PR ready',
 };
 
-function agentLabel(agent) {
-  return agent.task || agent.worktree || agent.session_id;
+const DESC_MAX = 140;
+
+function basename(p) {
+  if (!p) return '';
+  const trimmed = p.replace(/\/+$/, '');
+  const i = trimmed.lastIndexOf('/');
+  return i === -1 ? trimmed : trimmed.slice(i + 1);
 }
 
-function fireBrowserNotification(agent, body) {
+function shortDescription(agent) {
+  let src = '';
+  if (agent.state === 'question') {
+    const q = agent.pending_question && agent.pending_question.questions && agent.pending_question.questions[0];
+    if (q && q.question) src = q.question;
+  }
+  if (!src) src = agent.last_message_preview || '';
+  src = src.trim();
+  if (src.length > DESC_MAX) src = src.slice(0, DESC_MAX - 1) + '…';
+  return src;
+}
+
+export function formatNotification(agent, stateLabel) {
+  const branch = (agent.branch || '').trim();
+  const sid = agent.session_id || '';
+  const head = branch || sid.slice(0, 7);
+  const title = stateLabel ? `${head} · ${stateLabel}` : head;
+
+  const dir = basename(agent.worktree_cwd || agent.cwd || '');
+  const desc = shortDescription(agent);
+
+  const lines = [];
+  if (dir) lines.push(dir);
+  if (desc) lines.push(desc);
+  const body = lines.length ? lines.join('\n') : stateLabel;
+
+  return { title, body };
+}
+
+function fireBrowserNotification(agent, stateLabel) {
   const enabled = isBrowserNotifyEnabled();
   const hasAPI = typeof Notification !== 'undefined';
   const perm = hasAPI ? Notification.permission : 'no-api';
@@ -35,7 +70,7 @@ function fireBrowserNotification(agent, body) {
   if (!enabled || !hasAPI || perm !== 'granted') return;
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
 
-  const title = agentLabel(agent);
+  const { title, body } = formatNotification(agent, stateLabel);
   const opts = {
     body,
     icon: '/icons/icon-192.png',
@@ -87,9 +122,10 @@ export function processNotifications(newAgents) {
     const oldState = prevStateMap.get(id);
     prevStateMap.set(id, newState);
 
-    if (newState !== oldState && NOTIFY_STATES[newState]) {
+    const label = NOTIFY_STATES[newState];
+    if (newState !== oldState && label) {
       console.log('[notify] transition:', id, oldState, '→', newState);
-      fireBrowserNotification(agent, NOTIFY_STATES[newState]);
+      fireBrowserNotification(agent, label);
     }
   }
 
