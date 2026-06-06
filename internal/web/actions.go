@@ -626,7 +626,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// the background with its own context tied to trustWatchBudget so
 	// the HTTP handler returns immediately.
 	if paneID != "" {
-		go s.watchTrustPrompt(context.Background(), paneID, target, trustWatchBudget, trustWatchTick)
+		go s.watchTrustPrompt(context.Background(), paneID, target, folder, trustWatchBudget, trustWatchTick)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})

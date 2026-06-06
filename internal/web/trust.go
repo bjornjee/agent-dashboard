@@ -6,9 +6,20 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
-	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
+
+// trustPaneRecord carries the metadata needed to synthesize a
+// placeholder agent for a trust-blocked pane. We track folder + target
+// here rather than reading them back from the SpawnPin because
+// StageSpawnPin only populates WorktreeCwd for git folders — non-git
+// trust-prompt targets (Library/Sounds, mktemp dirs, fresh home subdirs)
+// leave the pin's WorktreeCwd empty and the placeholder would render
+// as "unknown".
+type trustPaneRecord struct {
+	Folder string
+	Target string
+}
 
 // trustWatchBudget is how long the post-spawn poller waits for a folder
 // trust prompt before giving up. Long enough for slow harness startups,
@@ -21,12 +32,15 @@ const trustWatchBudget = 30 * time.Second
 const trustWatchTick = 300 * time.Millisecond
 
 // markTrustPane records that paneID is waiting on a folder-trust prompt.
-func (s *Server) markTrustPane(paneID string) {
+// folder + target are needed so applyTrustFlags can synthesize a
+// placeholder agent before the harness's SessionStart hook fires (which
+// happens AFTER the user accepts trust — too late for the dashboard).
+func (s *Server) markTrustPane(paneID, folder, target string) {
 	if paneID == "" {
 		return
 	}
 	s.trustMu.Lock()
-	s.trustPanes[paneID] = struct{}{}
+	s.trustPanes[paneID] = trustPaneRecord{Folder: folder, Target: target}
 	s.trustMu.Unlock()
 }
 
@@ -60,11 +74,11 @@ func (s *Server) clearTrustPane(paneID string) {
 // agent record yet. Without the placeholder, the chip + toast surface
 // has no row to land on and the user sees nothing.
 //
-// Placeholder data is read from the spawn pin staged by handleCreate.
-// Synthetic SessionID is derived from the pane_id so the placeholder
-// remains stable across SSE ticks; when the real state file later
-// appears with the same TmuxPaneID, this function stamps that agent
-// directly and skips the placeholder.
+// Placeholder data is read from the trustPaneRecord (folder + target)
+// captured at markTrustPane time. Synthetic SessionID is derived from
+// the pane_id so the placeholder remains stable across SSE ticks; when
+// the real state file later appears with the same TmuxPaneID, this
+// function stamps that agent directly and skips the placeholder.
 func (s *Server) applyTrustFlags(agents []domain.Agent) []domain.Agent {
 	s.trustMu.Lock()
 	defer s.trustMu.Unlock()
@@ -82,23 +96,19 @@ func (s *Server) applyTrustFlags(agents []domain.Agent) []domain.Agent {
 		}
 	}
 	var placeholders []domain.Agent
-	for paneID := range s.trustPanes {
+	for paneID, rec := range s.trustPanes {
 		if matched[paneID] {
 			continue
 		}
-		pin, ok := state.ReadSpawnPin(s.cfg.Profile.StateDir, paneID)
-		if !ok {
-			continue
-		}
-		sess, win, pane, _ := tmux.ParseTarget(pin.Target)
+		sess, win, pane, _ := tmux.ParseTarget(rec.Target)
 		placeholders = append(placeholders, domain.Agent{
 			SessionID:           "trust-pending-" + paneID,
 			TmuxPaneID:          paneID,
-			Target:              pin.Target,
+			Target:              rec.Target,
 			Session:             sess,
 			Window:              win,
 			Pane:                pane,
-			Cwd:                 pin.WorktreeCwd,
+			Cwd:                 rec.Folder,
 			State:               "running",
 			TrustPromptDetected: true,
 			Harness:             s.cfg.Harness.Name(),
@@ -117,7 +127,7 @@ func (s *Server) applyTrustFlags(agents []domain.Agent) []domain.Agent {
 // hub on first detection. Exits early on context cancellation,
 // detection, or repeated capture errors. Designed to be called as a
 // goroutine right after a successful spawn.
-func (s *Server) watchTrustPrompt(ctx context.Context, paneID, target string, budget, tick time.Duration) {
+func (s *Server) watchTrustPrompt(ctx context.Context, paneID, target, folder string, budget, tick time.Duration) {
 	if paneID == "" || target == "" {
 		return
 	}
@@ -132,7 +142,7 @@ func (s *Server) watchTrustPrompt(ctx context.Context, paneID, target string, bu
 			return true
 		}
 		if tmux.ContainsTrustPrompt(lines) {
-			s.markTrustPane(paneID)
+			s.markTrustPane(paneID, folder, target)
 			if data, mErr := json.Marshal(s.readAgentState()); mErr == nil {
 				s.hub.broadcast(data)
 			}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
-	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -27,7 +26,7 @@ func TestServer_TrustPaneRoundtrip(t *testing.T) {
 	if s.isTrustPane("%7") {
 		t.Fatalf("expected fresh server to have no trust panes")
 	}
-	s.markTrustPane("%7")
+	s.markTrustPane("%7", "/some/folder", "main:1.0")
 	if !s.isTrustPane("%7") {
 		t.Fatalf("markTrustPane should set the flag")
 	}
@@ -42,7 +41,7 @@ func TestServer_TrustPaneRoundtrip(t *testing.T) {
 // and leaves others untouched.
 func TestServer_ApplyTrustFlags(t *testing.T) {
 	s := newTrustTestServer(t)
-	s.markTrustPane("%2")
+	s.markTrustPane("%2", "/x", "main:0.0")
 
 	agents := []domain.Agent{
 		{SessionID: "a", TmuxPaneID: "%1"},
@@ -74,15 +73,10 @@ func TestServer_ApplyTrustFlags(t *testing.T) {
 // chip + toast even without a real state file.
 func TestServer_ApplyTrustFlagsSynthesizesPlaceholder(t *testing.T) {
 	s := newTrustTestServer(t)
-	// Stage a spawn pin so the placeholder can pick up the folder.
-	if err := state.WriteSpawnPin(s.cfg.Profile.StateDir, state.SpawnPin{
-		PaneID:      "%99",
-		Target:      "main:1.0",
-		WorktreeCwd: "/Users/me/Library/Sounds",
-	}); err != nil {
-		t.Fatalf("write spawn pin: %v", err)
-	}
-	s.markTrustPane("%99")
+	// markTrustPane carries folder + target — needed because non-git
+	// folders (Library/Sounds, mktemp dirs, etc.) have no spawn-pin
+	// WorktreeCwd. Without the folder the placeholder renders as "unknown".
+	s.markTrustPane("%99", "/Users/me/Library/Sounds", "main:1.0")
 
 	out := s.applyTrustFlags(nil)
 	if len(out) != 1 {
@@ -114,10 +108,7 @@ func TestServer_ApplyTrustFlagsSynthesizesPlaceholder(t *testing.T) {
 // placeholder is NOT injected — the real agent gets stamped instead.
 func TestServer_ApplyTrustFlagsNoPlaceholderWhenAgentExists(t *testing.T) {
 	s := newTrustTestServer(t)
-	_ = state.WriteSpawnPin(s.cfg.Profile.StateDir, state.SpawnPin{
-		PaneID: "%99", Target: "main:1.0", WorktreeCwd: "/x",
-	})
-	s.markTrustPane("%99")
+	s.markTrustPane("%99", "/x", "main:1.0")
 
 	agents := []domain.Agent{
 		{SessionID: "real", TmuxPaneID: "%99", State: "running"},
@@ -153,7 +144,7 @@ func TestServer_WatchTrustPromptDetectsAndBroadcasts(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	s.watchTrustPrompt(ctx, "%9", "main:1.0", 1*time.Second, 50*time.Millisecond)
+	s.watchTrustPrompt(ctx, "%9", "main:1.0", "/x", 1*time.Second, 50*time.Millisecond)
 
 	if !s.isTrustPane("%9") {
 		t.Fatalf("expected pane %%9 to be marked trust after watchTrustPrompt detected the prompt")
@@ -180,7 +171,7 @@ func TestServer_WatchTrustPromptTimesOutCleanly(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	s.watchTrustPrompt(ctx, "%11", "main:2.0", 300*time.Millisecond, 50*time.Millisecond)
+	s.watchTrustPrompt(ctx, "%11", "main:2.0", "/x", 300*time.Millisecond, 50*time.Millisecond)
 
 	if s.isTrustPane("%11") {
 		t.Fatalf("expected pane %%11 to NOT be marked when prompt never appears")

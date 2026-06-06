@@ -52,7 +52,7 @@ type Server struct {
 	// handleCreate, surfaced via readAgentState so SSE/REST clients see
 	// TrustPromptDetected on the affected agent. Cleared by handleClose.
 	trustMu    sync.Mutex
-	trustPanes map[string]struct{}
+	trustPanes map[string]trustPaneRecord
 }
 
 // NewServer creates a new web dashboard server.
@@ -63,7 +63,7 @@ func NewServer(cfg domain.Config, database *db.DB, opts ServerOptions) *Server {
 		opts:                 opts,
 		hub:                  newSSEHub(),
 		codexSessionsRootDir: resolveCodexSessionsRoot(cfg.Profile.HomeDir),
-		trustPanes:           make(map[string]struct{}),
+		trustPanes:           make(map[string]trustPaneRecord),
 	}
 	if opts.GoogleClientID != "" {
 		s.auth = newAuthHandler(opts)
