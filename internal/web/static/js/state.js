@@ -51,6 +51,21 @@ export function prTag(agent) {
   return agent && agent.pinned_state === 'pr' ? 'PR open' : '';
 }
 
+// Returns a "⚿ Trust" tag when the dashboard's post-spawn poller has
+// seen a harness folder-trust dialog and the user has not accepted yet.
+// Same single-source pattern as prTag — the backend sets the flag and
+// clears it on close; the frontend just surfaces it.
+export function trustTag(agent) {
+  return agent && agent.trust_prompt_detected ? '⚿ Trust' : '';
+}
+
+// rowTag picks the most actionable tag to render on a list row. Trust
+// supersedes PR because it blocks the agent from making any progress
+// until the user accepts in tmux.
+export function rowTag(agent) {
+  return trustTag(agent) || prTag(agent);
+}
+
 // True when the agent has an open PR — used to gate Open PR / Merge
 // action chips. Same single signal as prTag.
 export function hasOpenPR(agent) {

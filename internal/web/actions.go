@@ -371,6 +371,7 @@ func (s *Server) handleClose(w http.ResponseWriter, r *http.Request) {
 			tmux.TmuxKillPane(target)
 		}
 	}
+	s.clearTrustPane(agent.TmuxPaneID)
 
 	// Remove state file
 	if err := state.RemoveAgent(s.cfg.Profile.StateDir, id); err != nil {
@@ -618,6 +619,15 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// Stage the worktree/branch pin keyed by the new pane_id so the dashboard
 	// renders correctly *before* the agent's first hook event fires.
 	_ = state.StageSpawnPin(s.cfg.Profile.StateDir, folder, paneID, target)
+
+	// Mirror the TUI's post-spawn trust-folder detection so the web
+	// dashboard surfaces the harness's "trust this folder?" dialog
+	// instead of leaving the agent silently stuck. The watcher runs in
+	// the background with its own context tied to trustWatchBudget so
+	// the HTTP handler returns immediately.
+	if paneID != "" {
+		go s.watchTrustPrompt(context.Background(), paneID, target, trustWatchBudget, trustWatchTick)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
 }

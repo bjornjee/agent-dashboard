@@ -5,7 +5,7 @@
 import { UI } from './ui.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
-import { effectiveState, stateGroup, prTag } from './state.js';
+import { effectiveState, stateGroup, rowTag } from './state.js';
 import { escapeHtml, repoName, durationShort } from './format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
@@ -82,7 +82,7 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
         subtitle: metaLine(agent),
-        tag: prTag(agent),
+        tag: rowTag(agent),
         onclick: `Dashboard.selectAgent('${id}')`,
         chevron: false,
       });

@@ -1,9 +1,15 @@
 // Notification system — state transition detection and browser Notification API.
 
+import { toast } from './modal.js';
+
 const STORAGE_KEY = 'notify-enabled';
 
 // Previous state map: sessionId → state
 const prevStateMap = new Map();
+// Previous trust-prompt flag map: sessionId → bool, used to toast once
+// per false→true transition (so the in-app hint doesn't re-fire on every
+// SSE tick while the agent stays stuck on trust).
+const prevTrustMap = new Map();
 let seeded = false;
 
 // Cache the SW registration so we don't await navigator.serviceWorker.ready on every notification
@@ -102,6 +108,7 @@ export function initNotify(agents) {
   if (seeded) return;
   for (const agent of agents) {
     prevStateMap.set(agent.session_id, agent.state);
+    prevTrustMap.set(agent.session_id, !!agent.trust_prompt_detected);
   }
   seeded = true;
   console.log('[notify] seeded with', agents.length, 'agents');
@@ -127,11 +134,22 @@ export function processNotifications(newAgents) {
       console.log('[notify] transition:', id, oldState, '→', newState);
       fireBrowserNotification(agent, label);
     }
+
+    const newTrust = !!agent.trust_prompt_detected;
+    const oldTrust = !!prevTrustMap.get(id);
+    prevTrustMap.set(id, newTrust);
+    if (newTrust && !oldTrust) {
+      const dir = basename(agent.worktree_cwd || agent.cwd || '') || 'this folder';
+      toast(`Trust prompt in ${dir} — accept in tmux to continue`, 'error');
+    }
   }
 
   // Clean up removed agents
   for (const id of prevStateMap.keys()) {
-    if (!currentIds.has(id)) prevStateMap.delete(id);
+    if (!currentIds.has(id)) {
+      prevStateMap.delete(id);
+      prevTrustMap.delete(id);
+    }
   }
 }
 
