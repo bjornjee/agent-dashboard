@@ -140,7 +140,7 @@ export function processNotifications(newAgents) {
     prevTrustMap.set(id, newTrust);
     if (newTrust && !oldTrust) {
       const dir = basename(agent.worktree_cwd || agent.cwd || '') || 'this folder';
-      toast(`Trust prompt in ${dir} — accept in tmux to continue`, 'error');
+      toast(`Trust prompt in ${dir} — accept in tmux to continue`, 'warn');
     }
   }
 

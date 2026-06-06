@@ -29,7 +29,7 @@ export function showModal(title, message, onConfirm, opts) {
 }
 
 export function toast(msg, type) {
-  const variant = type === 'error' ? 'error' : 'success';
+  const variant = type === 'error' || type === 'warn' ? type : 'success';
   const el = document.createElement('div');
   el.className = 'ui-toast ui-toast--' + variant;
   el.setAttribute('role', variant === 'error' ? 'alert' : 'status');

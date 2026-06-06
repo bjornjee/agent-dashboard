@@ -51,12 +51,12 @@ export function prTag(agent) {
   return agent && agent.pinned_state === 'pr' ? 'PR open' : '';
 }
 
-// Returns a "⚿ Trust" tag when the dashboard's post-spawn poller has
+// Returns a "Trust" tag when the dashboard's post-spawn poller has
 // seen a harness folder-trust dialog and the user has not accepted yet.
-// Same single-source pattern as prTag — the backend sets the flag and
-// clears it on close; the frontend just surfaces it.
+// Text-only to match the PR open precedent; the amber toast carries the
+// folder name, the chip carries the verb.
 export function trustTag(agent) {
-  return agent && agent.trust_prompt_detected ? '⚿ Trust' : '';
+  return agent && agent.trust_prompt_detected ? 'Trust' : '';
 }
 
 // rowTag picks the most actionable tag to render on a list row. Trust
