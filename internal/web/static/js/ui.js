@@ -21,14 +21,6 @@ function actionsHtml(items) {
   let out = '';
   for (const a of items) {
     if (!a) continue;
-    if (a === 'spinner') {
-      // Wrap in the same shell as theme/more action buttons so the
-      // header toolbar reads as a single visual rhythm (B2).
-      out += '<span class="ui-app-bar__action ui-app-bar__action--passive" aria-label="Running" role="status">' +
-        '<span class="ui-app-bar__spinner" aria-hidden="true"></span>' +
-        '</span>';
-      continue;
-    }
     const click = a.onclick ? ` onclick="${a.onclick}"` : '';
     const label = a.ariaLabel || a.label || 'action';
     const extraCls = a.cls ? ' ' + a.cls : '';
@@ -82,16 +74,31 @@ export const UI = {
   },
 
   // 3. Action sheet — kebab-driven, modal focus. Structural exception.
+  //
+  // Per-item opts:
+  //   navigating: false → drop the chevron-right glyph (it's a navigation
+  //     affordance and lies when the row opens a modal, toggles state, or
+  //     fires a destructive confirm).
+  //   variant: 'danger' → add .ui-sheet__item--danger for destructive
+  //     rows (color + hairline separator from the neutral items above).
+  //
+  // Panel carries tabindex="-1" so the opener can move focus into the
+  // dialog at open time — required for keyboard + screen-reader users
+  // because role="dialog" implies focus lives inside the dialog.
   sheet(items, opts) {
     const o = opts || {};
     let body = '';
     for (const it of items) {
       const click = it.onclick ? ` onclick="${it.onclick}"` : '';
-      body += `<button class="ui-sheet__item"${click}>${it.icon || ''}<span>${escapeHtml(it.label)}</span><span class="ui-sheet__chevron">${ICONS.chevronRight}</span></button>`;
+      const mod = it.variant === 'danger' ? ' ui-sheet__item--danger' : '';
+      const chevron = it.navigating === false
+        ? ''
+        : `<span class="ui-sheet__chevron">${ICONS.chevronRight}</span>`;
+      body += `<button class="ui-sheet__item${mod}"${click}>${it.icon || ''}<span>${escapeHtml(it.label)}</span>${chevron}</button>`;
     }
     return `<div class="ui-sheet" role="dialog" aria-modal="true">
       <div class="ui-sheet__backdrop" onclick="${o.onDismiss || 'Dashboard.dismissSheet()'}"></div>
-      <div class="ui-sheet__panel">${body}</div>
+      <div class="ui-sheet__panel" tabindex="-1">${body}</div>
     </div>`;
   },
 

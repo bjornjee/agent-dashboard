@@ -24,6 +24,39 @@ let selectedAgentId = null;
 let currentView = 'list'; // 'list' | 'detail' | 'usage' | 'create'
 let eventSource = null;
 
+// Sheet focus management — `aria-modal="true"` implies focus lives inside
+// the dialog while it is open. We move focus to the first row on mount,
+// trap Tab within the sheet, and restore focus to the opener on dismiss.
+let sheetOpener = null;
+let sheetKeydownHandler = null;
+
+function mountSheet(html) {
+  document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
+  sheetOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const sheet = wrap.firstElementChild;
+  document.body.appendChild(sheet);
+  const items = sheet.querySelectorAll('.ui-sheet__item');
+  if (items.length > 0) items[0].focus();
+  sheetKeydownHandler = (e) => {
+    if (e.key !== 'Tab' || items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  sheet.addEventListener('keydown', sheetKeydownHandler);
+}
+
+function restoreSheetFocus() {
+  if (sheetOpener && typeof sheetOpener.focus === 'function') {
+    try { sheetOpener.focus(); } catch {}
+  }
+  sheetOpener = null;
+  sheetKeydownHandler = null;
+}
+
 function setView(view, agentId) {
   currentView = view;
   selectedAgentId = agentId || null;
@@ -162,28 +195,23 @@ window.Dashboard = {
   },
 
   openKebab() {
-    document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
-    const wrap = document.createElement('div');
-    wrap.innerHTML = UI.sheet([
-      { icon: ICONS.spark, label: 'Usage', onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
-      { icon: ICONS.bell, label: 'Notifications', onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
-    ]);
-    document.body.appendChild(wrap.firstElementChild);
+    mountSheet(UI.sheet([
+      { icon: ICONS.spark, label: 'Usage', navigating: false, onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
+      { icon: ICONS.bell, label: 'Notifications', navigating: false, onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
+    ]));
   },
 
   openDetailKebab(agentId) {
-    document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
-    const wrap = document.createElement('div');
-    wrap.innerHTML = UI.sheet([
-      { icon: ICONS.spark, label: 'Usage', onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
-      { icon: ICONS.bell, label: 'Notifications', onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
-      { icon: ICONS.close, label: 'Terminate agent', onclick: `Dashboard.dismissSheet();Dashboard.confirmClose('${agentId}')` },
-    ]);
-    document.body.appendChild(wrap.firstElementChild);
+    mountSheet(UI.sheet([
+      { icon: ICONS.spark, label: 'Usage', navigating: false, onclick: 'Dashboard.dismissSheet();Dashboard.showUsage()' },
+      { icon: ICONS.bell, label: 'Notifications', navigating: false, onclick: 'Dashboard.toggleNotifications();Dashboard.dismissSheet()' },
+      { icon: ICONS.close, label: 'Terminate agent', navigating: false, variant: 'danger', onclick: `Dashboard.dismissSheet();Dashboard.confirmClose('${agentId}')` },
+    ]));
   },
 
   dismissSheet() {
     document.querySelectorAll('.ui-sheet').forEach(el => el.remove());
+    restoreSheetFocus();
   },
 
   openShortcuts() {
@@ -475,10 +503,12 @@ document.addEventListener('keydown', (e) => {
   else Dashboard.openShortcuts();
 });
 
-// Esc closes the cheatsheet when it's open.
+// Esc closes the cheatsheet or any open action sheet. Sheet dismissal
+// also restores focus to the element that opened it (see mountSheet).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (document.querySelector('.ui-shortcuts')) Dashboard.dismissShortcuts();
+  if (document.querySelector('.ui-shortcuts')) { Dashboard.dismissShortcuts(); return; }
+  if (document.querySelector('.ui-sheet')) Dashboard.dismissSheet();
 });
 
 // --- Init ---

@@ -1332,14 +1332,18 @@ export async function renderDetail(app, agents, agentId, setView) {
     .map(t => `<span>${t}</span>`)
     .join('<span class="detail-meta__sep">·</span>');
 
-  // appBar carries only the back arrow + trailing chrome (spinner / theme
-  // / more / dock). The repo title moves below into `.detail-title` so it
-  // can share a row with the status pill + PR tag (B1 — restores visual
-  // hierarchy: title and state on one line, metadata below).
+  // App bar: back arrow + title + trailing (theme / more). The running
+  // spinner used to live in the trailing slot; it has been removed because
+  // (a) it duplicated the "● Working" status pill already in the row
+  // below, and (b) it rendered at identical visual weight to the theme +
+  // kebab buttons, fusing passive status with interactive controls and
+  // causing the 3-icon huddle that read as "weird and unnatural."
+  // Status of the session remains visible via the inline status pill in
+  // `.detail-title`.
   const appBar = UI.appBar({
     back: true,
+    title: repoName(agent),
     trailing: [
-      ...(st === 'running' ? ['spinner'] : []),
       Theme.trailingEntry(),
       { icon: ICONS.kebab, ariaLabel: 'More', onclick: `Dashboard.openDetailKebab('${agent.session_id}')` },
     ],
@@ -1351,14 +1355,15 @@ export async function renderDetail(app, agents, agentId, setView) {
   const prChip = (prTag(agent) && st !== 'pr')
     ? `<span class="ui-row__tag detail-header__tag">${escapeHtml(prTag(agent))}</span>`
     : '';
-  const titleText = escapeHtml(repoName(agent));
+  // Title moved to the app bar; this row carries only status + meta now,
+  // so the page reads top-to-bottom as [Back · Title · Actions] →
+  // [Status pill · PR chip] → [branch · model · duration].
   const metaLine = metaSpans
     ? `<div class="detail-meta">${metaSpans}</div>`
     : '';
   const detailHeader = `
     <div class="detail-header">
       <div class="detail-title">
-        <span class="detail-title__text">${titleText}</span>
         ${inlineStatusPill(st)}
         ${prChip}
       </div>

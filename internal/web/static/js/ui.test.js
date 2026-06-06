@@ -153,3 +153,42 @@ test('UI.message user role leaves bare text unchanged', () => {
   const html = UI.message('user', 'plain message');
   assert.ok(html.includes('plain message'));
 });
+
+// -- UI.sheet a11y + affordance coverage --
+//
+// Catches three regressions surfaced by the impeccable audit:
+//   1. chevron-right is rendered on rows that don't navigate (lies about
+//      pushing a deeper view);
+//   2. destructive items render with the same weight as neutral items;
+//   3. the panel needs a focusable handle for the open-time focus move
+//      that traps Tab inside the dialog.
+
+test('UI.sheet — default item renders a chevron (back-compat)', () => {
+  const html = UI.sheet([{ label: 'Open' }]);
+  assert.match(html, /class="ui-sheet__chevron"/);
+});
+
+test('UI.sheet — navigating:false suppresses the chevron', () => {
+  const html = UI.sheet([{ label: 'Toggle', navigating: false }]);
+  assert.doesNotMatch(html, /class="ui-sheet__chevron"/);
+});
+
+test('UI.sheet — variant:"danger" adds the danger class', () => {
+  const html = UI.sheet([{ label: 'Terminate', variant: 'danger', navigating: false }]);
+  assert.match(html, /class="ui-sheet__item ui-sheet__item--danger"/);
+});
+
+test('UI.sheet — neutral items in the same sheet keep the base class only', () => {
+  const html = UI.sheet([
+    { label: 'Usage', navigating: false },
+    { label: 'Terminate', variant: 'danger', navigating: false },
+  ]);
+  // Neutral row matches the base class but NOT the danger modifier.
+  assert.match(html, /class="ui-sheet__item"[^>]*><span>Usage</);
+  assert.match(html, /class="ui-sheet__item ui-sheet__item--danger"[^>]*><span>Terminate</);
+});
+
+test('UI.sheet — panel exposes a tabindex handle for focus management', () => {
+  const html = UI.sheet([{ label: 'Anything' }]);
+  assert.match(html, /class="ui-sheet__panel" tabindex="-1"/);
+});
