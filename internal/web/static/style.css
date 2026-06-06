@@ -878,39 +878,23 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 }
 [data-theme="light"] .chat-plan-link:hover { transform: none; border-color: var(--border-hover); }
 
-/* Inline approve/reject buttons on the chat-stream plan link card.
-   Visually anchor to the card so the contract is clear: this plan
-   needs a decision. Reuses the modal-button pill treatment so the
-   buttons match the action-panel buttons one-for-one — same shape,
-   spacing, palette. The card sits in the conversation flow with
-   the same .ui-msg surface as a regular reply, so the buttons need
-   to look at home in that surface. */
+/* Approve/reject row on the chat-stream plan card. Buttons inside are
+   .ui-modal-btn (same primitive the action panel uses) AND inherit the
+   action-panel's down-scaled padding/font-size + auto-width pill layout
+   so the in-card and action-panel button instances are visually
+   identical — not just class-identical. Right-aligned via margin-left
+   on the row, matching .action-panel__chips's layout pattern. */
 .chat-plan-link__actions {
   display: flex;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  margin-top: -2px;
+  padding: var(--space-3) 0 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
-.chat-plan-link__btn {
-  flex: 1;
+.chat-plan-link__actions .ui-modal-btn {
   padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-pill);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 0;
-  transition: background var(--transition-fast), opacity var(--transition-fast);
+  font-size: 13px;
 }
-.chat-plan-link__btn--approve {
-  background: var(--cta-bg);
-  color: var(--cta-text);
-}
-.chat-plan-link__btn--approve:hover { opacity: 0.92; }
-.chat-plan-link__btn--reject {
-  background: rgba(255, 68, 68, 0.18);
-  color: #ff5c5c;
-}
-.chat-plan-link__btn--reject:hover { background: rgba(255, 68, 68, 0.26); }
 .ui-msg__tool > svg:first-child { color: var(--accent-green); width: 14px; height: 14px; }
 .ui-msg__tool > svg:last-child { color: var(--text-muted); }
 .ui-msg__tool > span { flex: 1; }
