@@ -23,6 +23,8 @@ Opt-in. Invoked after `$agent-dashboard:feature` (or a sibling task skill) probe
 
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
 
+If a dispatched phase touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, include `../_shared/ui-automation.md` in the subagent context and pass the resolved worktree-local UI resources explicitly.
+
 ---
 
 ### Phase 1: Locate worktree + plan
@@ -58,6 +60,8 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 3. **Pick the next pending phase** (`- [ ]`) in checklist order. If all phases are `[x]`, skip to Phase 3.
 
 4. **Slice the phase body.** Find the matching `### Phase X: name` heading; capture through the next `### ` heading or end-of-file. This is the dispatch unit.
+
+   If the phase body mentions UI automation, browser testing, Playwright, screenshots, or interactive inspection, also read `../_shared/ui-automation.md` and include its relevant rules in the subagent prompt.
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
@@ -105,6 +109,7 @@ Rules:
      git commit -m "feat({phase-id-kebab}): <one-line description>"
 4. Do NOT modify the plan file. Do NOT update checkboxes — the orchestrator owns that.
 5. If the phase is ambiguous or blocked, STOP and report a question instead of guessing.
+6. If this phase touches UI automation, apply the provided UI automation policy and use only the worktree-local port/base URL/profile/output paths.
 
 Report back with:
 - Commit SHA

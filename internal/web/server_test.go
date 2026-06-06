@@ -1495,12 +1495,19 @@ func TestSkillsEndpointWithSkills(t *testing.T) {
 	cfg.Profile.StateDir = t.TempDir()
 
 	// Create fake plugin cache structure:
-	// <cacheDir>/agent-dashboard/agent-dashboard/0.1.0/skills/{bugfix,feature}/
+	// <cacheDir>/agent-dashboard/agent-dashboard/0.1.0/skills/{bugfix,feature}/SKILL.md
 	cacheDir := t.TempDir()
 	cfg.Profile.PluginCacheDir = cacheDir
 	skillsBase := filepath.Join(cacheDir, "agent-dashboard", "agent-dashboard", "0.1.0", "skills")
-	os.MkdirAll(filepath.Join(skillsBase, "bugfix"), 0700)
-	os.MkdirAll(filepath.Join(skillsBase, "feature"), 0700)
+	for _, skill := range []string{"bugfix", "feature"} {
+		skillDir := filepath.Join(skillsBase, skill)
+		if err := os.MkdirAll(skillDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: "+skill+"\n---\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	srv := NewServer(cfg, nil, ServerOptions{})
 	ts := httptest.NewServer(srv.Handler())
