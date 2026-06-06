@@ -1881,6 +1881,7 @@ func TestPWAManifestServesValidJSON(t *testing.T) {
 		StartURL        string `json:"start_url"`
 		Scope           string `json:"scope"`
 		Display         string `json:"display"`
+		Orientation     string `json:"orientation"`
 		BackgroundColor string `json:"background_color"`
 		ThemeColor      string `json:"theme_color"`
 		Icons           []struct {
@@ -1900,6 +1901,14 @@ func TestPWAManifestServesValidJSON(t *testing.T) {
 
 	if m.Display != "standalone" {
 		t.Errorf("display: got %q, want standalone", m.Display)
+	}
+	// Explicit orientation prevents Chrome on Android from rotating the
+	// installed PWA when the OS auto-rotate lock is off. An absent
+	// orientation defaults to "any" per the W3C App Manifest spec, which
+	// bypasses the system lock — see PR #361 for the original (incomplete)
+	// fix that only deleted "orientation": "any".
+	if m.Orientation != "portrait" {
+		t.Errorf("orientation: got %q, want portrait (respects OS auto-rotate)", m.Orientation)
 	}
 	if m.ThemeColor != "#000000" {
 		t.Errorf("theme_color: got %q, want #000000 (must match index.html meta)", m.ThemeColor)
