@@ -132,7 +132,7 @@ body {
  * hover/focus transitions on individual elements keep their own
  * timings the rest of the time. prefers-reduced-motion no-ops. */
 html.theme-cycling,
-html.theme-cycling *:not(.spinner):not(.spinner *):not(.ui-msg-status__label):not(.ui-msg-status__orb):not(.ui-app-bar__spinner) {
+html.theme-cycling *:not(.spinner):not(.spinner *):not(.ui-msg-status__label):not(.ui-msg-status__orb) {
   transition: background-color 240ms ease, color 240ms ease, border-color 240ms ease, fill 240ms ease, box-shadow 240ms ease !important;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -180,8 +180,10 @@ a { color: inherit; }
 }
 .ui-app-bar__back,
 .ui-app-bar__action {
-  width: 40px;
-  height: 40px;
+  /* 44px hits the WCAG 2.5.5 AA touch-target floor. The icon SVG inside
+   * stays at its declared optical size (20px); only the pill grows. */
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-primary);
@@ -192,7 +194,7 @@ a { color: inherit; }
 }
 .ui-app-bar__action:hover { background: var(--bg-elevated); }
 .ui-app-bar__action:active { transform: scale(0.96); }
-.ui-app-bar__spacer { width: 40px; height: 40px; }
+.ui-app-bar__spacer { width: 44px; height: 44px; }
 .ui-app-bar__spacer--grow { flex: 1 1 auto; width: auto; }
 
 /* Keyboard cheatsheet — opened with "?", closed with Esc or backdrop click. */
@@ -257,25 +259,9 @@ a { color: inherit; }
   white-space: nowrap;
   max-width: 100%;
 }
-.ui-app-bar__trailing { display: flex; align-items: center; gap: 2px; }
-/* Non-interactive variant of the action shell — same pill geometry as
- * theme/more, but no hover/active feedback. Used to wrap the running
- * spinner so the header toolbar reads as one rhythm (B2). Keeps a
- * subtle surface so the running state still reads against the now-flat
- * neighbours. */
-.ui-app-bar__action--passive { cursor: default; background: var(--bg-surface); }
-.ui-app-bar__action--passive:hover { background: var(--bg-surface); }
-.ui-app-bar__action--passive:active { transform: none; }
-.ui-app-bar__spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--text-muted);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: ui-spin 1s linear infinite;
-  display: inline-block;
-}
-@keyframes ui-spin { to { transform: rotate(360deg); } }
+/* Trailing-slot gap was 2px and read as one perceptual blob; widening
+ * to space-2 lets theme + more sit as distinct affordances. */
+.ui-app-bar__trailing { display: flex; align-items: center; gap: var(--space-2); }
 
 /* ============================================================
  * PRIMITIVE 2 — DOCK (floating bottom, list view only)
@@ -388,6 +374,13 @@ a { color: inherit; }
 .ui-sheet__item + .ui-sheet__item { box-shadow: inset 0 1px 0 0 var(--border-default); }
 .ui-sheet__item:hover { background: var(--bg-elevated); }
 .ui-sheet__item:active { background: var(--bg-elevated); }
+/* Destructive row — gets a warning color so "Terminate agent" doesn't
+ * read with the same weight as "Usage" / "Notifications". The hairline
+ * above is reinforced (uses the same shadow seam as the default item
+ * separator) so the destructive row visibly breaks off the neutral
+ * stack above it. */
+.ui-sheet__item--danger { color: var(--accent-red); }
+.ui-sheet__item--danger:hover { background: rgba(255, 69, 58, 0.10); }
 @keyframes ui-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
@@ -1528,17 +1521,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   gap: var(--space-3);
   flex-wrap: wrap;
   row-gap: var(--space-2);
-}
-.detail-title__text {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 22px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  max-width: 100%;
 }
 .detail-meta__sep { color: var(--text-faint); }
 .detail-layout { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
