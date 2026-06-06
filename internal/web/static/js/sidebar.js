@@ -5,8 +5,8 @@
 import { UI } from './ui.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
-import { effectiveState, stateGroup, prTag } from './state.js';
-import { escapeHtml, repoName, durationShort } from './format.js';
+import { effectiveState, stateGroup, prTag, planBadge, subagentBadge } from './state.js';
+import { escapeHtml, repoName, durationFromUpdate, lastMessagePreview } from './format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 
@@ -25,8 +25,18 @@ function metaLine(agent) {
   const parts = [];
   if (agent.branch) parts.push(escapeHtml(agent.branch));
   if (agent.model) parts.push(escapeHtml(agent.model));
-  if (agent.started_at) parts.push(escapeHtml(durationShort(agent)));
+  const dur = durationFromUpdate(agent);
+  if (dur) parts.push(escapeHtml(dur));
   return parts.join(' · ');
+}
+
+function rowBadges(agent) {
+  let html = '';
+  const plan = planBadge(agent);
+  if (plan) html += `<span class="chip chip--plan">${escapeHtml(plan)}</span>`;
+  const sub = subagentBadge(agent);
+  if (sub) html += `<span class="chip chip--sub">${escapeHtml(sub)}</span>`;
+  return html;
 }
 
 // Renders the sidebar into #app-sidebar. Pass the currently selected
@@ -78,11 +88,15 @@ export function renderSidebar(agents, selectedAgentId, currentView) {
       // Wrap UI.row in a marker div so we can target selection without
       // touching the primitive's signature.
       html += `<div class="app-sidebar__row${selectedCls}" data-agent-id="${escapeHtml(id)}">`;
+      const preview = lastMessagePreview(agent);
+      const meta = metaLine(agent);
       html += UI.row({
         leading: statusDot(effectiveState(agent)),
         title: repoName(agent),
-        subtitle: metaLine(agent),
+        subtitle: preview || meta,
+        meta: preview ? meta : '',
         tag: prTag(agent),
+        badges: rowBadges(agent),
         onclick: `Dashboard.selectAgent('${id}')`,
         chevron: false,
       });
