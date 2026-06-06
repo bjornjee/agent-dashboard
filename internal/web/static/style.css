@@ -175,6 +175,7 @@ a { color: inherit; }
   position: sticky;
   top: 0;
   background: var(--bg-base);
+  border-bottom: 1px solid var(--bg-surface);
   z-index: 10;
 }
 .ui-app-bar__back,
@@ -182,7 +183,7 @@ a { color: inherit; }
   width: 40px;
   height: 40px;
   border-radius: var(--radius-pill);
-  background: var(--bg-elevated);
+  background: transparent;
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
@@ -219,12 +220,14 @@ a { color: inherit; }
   white-space: nowrap;
   max-width: 100%;
 }
-.ui-app-bar__trailing { display: flex; align-items: center; gap: var(--space-2); }
+.ui-app-bar__trailing { display: flex; align-items: center; gap: 2px; }
 /* Non-interactive variant of the action shell — same pill geometry as
  * theme/more, but no hover/active feedback. Used to wrap the running
- * spinner so the header toolbar reads as one rhythm (B2). */
-.ui-app-bar__action--passive { cursor: default; }
-.ui-app-bar__action--passive:hover { background: var(--bg-elevated); }
+ * spinner so the header toolbar reads as one rhythm (B2). Keeps a
+ * subtle surface so the running state still reads against the now-flat
+ * neighbours. */
+.ui-app-bar__action--passive { cursor: default; background: var(--bg-surface); }
+.ui-app-bar__action--passive:hover { background: var(--bg-surface); }
 .ui-app-bar__action--passive:active { transform: none; }
 .ui-app-bar__spinner {
   width: 18px;
@@ -990,7 +993,22 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   padding: 0 var(--space-5) var(--space-3);
   color: var(--text-muted);
   font-size: 13px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
 }
+.detail-meta > span:not(.detail-meta__sep) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.detail-meta > span:first-child {
+  flex-shrink: 1;
+  min-width: 40px;
+}
+.detail-meta__sep { flex-shrink: 0; }
 .detail-disclosure { padding: 0 var(--space-4); }
 .detail-disclosure summary {
   display: flex;
@@ -1080,16 +1098,19 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .create-composer {
   width: 100%;
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
   border-radius: var(--radius-xl);
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .create-composer:focus-within {
-  background: var(--bg-elevated);
-  box-shadow: 0 0 0 1px var(--border-hover);
+  border-color: var(--border-hover);
+}
+[data-theme="light"] .create-composer {
+  border-color: rgba(0, 0, 0, 0.06);
 }
 .create-composer__input {
   width: 100%;
@@ -1188,8 +1209,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 }
 .create-composer__send:hover:not(:disabled) { opacity: 0.92; }
 .create-composer__send:disabled {
-  background: var(--bg-elevated);
-  color: var(--text-faint);
+  background: var(--cta-bg);
+  color: var(--cta-text);
+  opacity: 0.32;
   cursor: not-allowed;
 }
 
@@ -1302,8 +1324,24 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--text-faint);
   font-size: 12px;
   line-height: 16px;
-  word-break: break-all;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
 }
+.create-action__sub-count { flex-shrink: 0; }
+.create-action__sub-path {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.create-action__sub-path > bdi { unicode-bidi: bidi-override; direction: ltr; }
 
 /* Light-mode parity: against a white page, --bg-surface ≈ --bg-base, so the
  * composer and action cards collapse into the page. Add a hairline border
@@ -2884,7 +2922,7 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     border-radius: 0;
     max-width: none;
     display: inline-flex;
-    gap: var(--space-2);
+    gap: 2px;
     z-index: auto;
   }
   .ui-dock--header__search {
@@ -2893,7 +2931,7 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     padding: 0;
     min-width: 0;
     border-radius: var(--radius-pill);
-    background: var(--bg-elevated);
+    background: transparent;
     color: var(--text-secondary);
     display: inline-flex;
     align-items: center;

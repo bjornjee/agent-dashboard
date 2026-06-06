@@ -44,11 +44,14 @@ const CHEVRON_DOWN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none
 function actionCard(folder) {
   const path = escapeHtml(folder.cwd);
   const label = escapeHtml(folder.label || folder.cwd);
-  const sub = `${folder.count} agent${folder.count === 1 ? '' : 's'} · ${path}`;
+  const countLabel = `${folder.count} agent${folder.count === 1 ? '' : 's'} ·`;
   return `<button class="create-action" type="button" data-folder="${path}">
     <span class="create-action__icon">${ICONS.folder}</span>
     <span class="create-action__title">${label}</span>
-    <span class="create-action__sub">${sub}</span>
+    <span class="create-action__sub">
+      <span class="create-action__sub-count">${countLabel}</span>
+      <span class="create-action__sub-path" title="${path}"><bdi>${path}</bdi></span>
+    </span>
   </button>`;
 }
 
