@@ -390,6 +390,67 @@ func TestPendingQuestionEndpoint_ReturnsPayload(t *testing.T) {
 	}
 }
 
+func TestPendingQuestionEndpoint_ReturnsPayloadWhenStateOverridden(t *testing.T) {
+	// Regression: when an agent has a PendingQuestion populated by the
+	// fast hook AND its State has been overridden by ApplyPinnedStates
+	// (e.g. pinned_state='pr' → state='pr'), the endpoint MUST still
+	// return the question — the user is being asked something and the
+	// detail view needs to render the card. The previous gate
+	// (`agent.State != "question"`) silently dropped the payload.
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	projectsDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = projectsDir
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	sessionID := "pq-override-1"
+	agent := domain.Agent{
+		SessionID:   sessionID,
+		State:       "pr", // overridden — pinned_state took precedence
+		PinnedState: "pr",
+		Cwd:         "/tmp/pq-override-repo",
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_xyz",
+			Questions: []domain.PendingQuestionPrompt{{
+				Question: "Confirm or override?",
+				Header:   "Register",
+				Options: []domain.PendingQuestionOption{
+					{Label: "Confirm refined-minimal", Description: "match PRODUCT.md"},
+					{Label: "Industrial", Description: "data-dense"},
+				},
+			}},
+		},
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET pending-question: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "tool_xyz" {
+		t.Errorf("ToolUseID = %q, want tool_xyz", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 || pq.Questions[0].Question != "Confirm or override?" {
+		t.Errorf("Questions = %+v, want Confirm or override?", pq.Questions)
+	}
+}
+
 func TestPendingQuestionEndpoint_ReadsFromSidecarBeforeJSONL(t *testing.T) {
 	// Claude Code doesn't flush the AskUserQuestion tool_use line to the JSONL
 	// until the user answers; while the agent is paused on the question, the

@@ -171,21 +171,24 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 // scan (routed by harness) for resumed sessions whose sidecar predates
 // this code.
 //
-// Still gated on agent.State == "question" so the JSONL fallback skips
-// the full scan unless the hook layer or ApplyIdleOverrides confirms the
-// agent is actually paused on a question.
+// The JSONL fallback is gated on agent.State == "question" so the
+// expensive full-file scan only fires when the hook layer or
+// ApplyIdleOverrides confirms the agent is actually paused on a question.
+// The sidecar-populated PendingQuestion short-circuits BEFORE that gate
+// — pinned_state can override agent.State (e.g. 'pr'), but the question
+// payload is still on the wire and the detail view needs the card.
 func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.SessionID == "" || agent.State != "question" {
-		writeJSON(w, http.StatusOK, nil)
-		return
-	}
 	if agent.PendingQuestion != nil {
 		writeJSON(w, http.StatusOK, agent.PendingQuestion)
+		return
+	}
+	if agent.SessionID == "" || agent.State != "question" {
+		writeJSON(w, http.StatusOK, nil)
 		return
 	}
 	pq := conversation.ReadPendingQuestion(agent, conversation.Roots{
