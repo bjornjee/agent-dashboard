@@ -686,7 +686,12 @@ let conversationPollTimer = null;
 // plan-saved synthetic entry's timestamp (ExitPlanMode tool_use or
 // first-slug entry) so the bubble stays in its chronological slot
 // across subsequent polls.
-function renderPlanLinkCard() {
+//
+// Approve/Reject buttons live on the card itself so they persist with
+// the message — the action panel above the composer disappears once
+// state moves on (and for codex never appears at all, since codex has
+// no ExitPlanMode-equivalent state transition).
+function renderPlanLinkCard(agentId) {
   const inner = `<button class="chat-plan-link" type="button" onclick="Dashboard.openDetailTab('plan')">
     <span class="chat-plan-link__icon">${ICONS.clipboard}</span>
     <span class="chat-plan-link__body">
@@ -695,7 +700,11 @@ function renderPlanLinkCard() {
     </span>
     <span class="chat-plan-link__chevron">${ICONS.chevronRight}</span>
   </button>`;
-  return `<div class="ui-msg ui-msg--assistant ui-msg--plan-link"><div class="ui-msg__card ui-msg__card--plan-link">${inner}</div></div>`;
+  const actions = agentId ? `<div class="chat-plan-link__actions">
+    <button class="chat-plan-link__btn chat-plan-link__btn--approve" type="button" onclick="Dashboard.approve('${agentId}', event)">Approve</button>
+    <button class="chat-plan-link__btn chat-plan-link__btn--reject" type="button" onclick="Dashboard.reject('${agentId}', event)">Reject</button>
+  </div>` : '';
+  return `<div class="ui-msg ui-msg--assistant ui-msg--plan-link"><div class="ui-msg__card ui-msg__card--plan-link">${inner}${actions}</div></div>`;
 }
 
 // Drop entries the renderer wouldn't display (internal notifications,
@@ -719,19 +728,21 @@ export function visibleEntries(entries) {
 
 // Render a single visible entry to HTML. Extracted so both the initial
 // full-render path (renderConversationHtml) and the incremental poll
-// path (appendNewEntries) emit identical markup.
-function renderEntryHtml(entry) {
+// path (appendNewEntries) emit identical markup. agentId is threaded
+// through so plan-saved entries can render their inline approve/reject
+// buttons against the right session.
+function renderEntryHtml(entry, agentId) {
   const role = entry.Role || entry.role;
-  if (role === 'plan-saved') return renderPlanLinkCard();
+  if (role === 'plan-saved') return renderPlanLinkCard(agentId);
   const content = entry.Content || entry.content || '';
   if (role === 'human') return UI.message('user', content);
   return UI.message('assistant', renderMarkdown(content), { html: true });
 }
 
 // Build conversation HTML from an array of message entries — Codex flat-prose.
-function renderConversationHtml(entries) {
+function renderConversationHtml(entries, agentId) {
   let html = '<div class="conversation">';
-  for (const entry of visibleEntries(entries)) html += renderEntryHtml(entry);
+  for (const entry of visibleEntries(entries)) html += renderEntryHtml(entry, agentId);
   html += '</div>';
   return html;
 }
@@ -1059,7 +1070,7 @@ function entryInsertAnchor(conv) {
 // survives the poll. If the conversation rewinds (history reset, agent
 // switch), falls back to a full rebuild of just the entry nodes — leaves
 // decoration siblings alone.
-function appendNewEntries(conv, entries) {
+function appendNewEntries(conv, entries, agentId) {
   const visible = visibleEntries(entries);
   const rendered = parseInt(conv.dataset.renderedCount || '0', 10);
 
@@ -1070,7 +1081,7 @@ function appendNewEntries(conv, entries) {
     const anchor = entryInsertAnchor(conv);
     visible.forEach((entry, i) => {
       const wrap = document.createElement('div');
-      wrap.innerHTML = renderEntryHtml(entry);
+      wrap.innerHTML = renderEntryHtml(entry, agentId);
       const el = wrap.firstElementChild;
       if (!el) return;
       el.dataset.entryIdx = String(i);
@@ -1083,7 +1094,7 @@ function appendNewEntries(conv, entries) {
   const anchor = entryInsertAnchor(conv);
   for (let i = rendered; i < visible.length; i++) {
     const wrap = document.createElement('div');
-    wrap.innerHTML = renderEntryHtml(visible[i]);
+    wrap.innerHTML = renderEntryHtml(visible[i], agentId);
     const el = wrap.firstElementChild;
     if (!el) continue;
     el.dataset.entryIdx = String(i);
@@ -1211,7 +1222,7 @@ async function refreshConversation(agentId, agent) {
     conv = container.querySelector('.conversation');
   }
 
-  appendNewEntries(conv, entries);
+  appendNewEntries(conv, entries, agentId);
   reconcileQuestionCard(conv, pending, agentId);
   reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
@@ -1547,7 +1558,7 @@ async function loadTabContent(tab, agentId) {
         markLoaded();
         return;
       }
-      container.innerHTML = renderConversationHtml(entries);
+      container.innerHTML = renderConversationHtml(entries, agentId);
       const conv = container.querySelector('.conversation');
       if (conv) {
         // Seed the incremental-render bookkeeping so the next poll's

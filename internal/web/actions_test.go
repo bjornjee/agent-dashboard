@@ -451,3 +451,147 @@ func TestHandleAnswerQuestionMidSequenceFailureAbortsPicker(t *testing.T) {
 		t.Fatalf("expected 500, got %d", resp.StatusCode)
 	}
 }
+
+// TestHandleApprove_HarnessRouting locks the approve/reject keystroke
+// semantics per harness.
+//
+// Claude uses single-letter shortcuts at its permission/plan picker —
+// "y" approves, "n" rejects. Codex has no equivalent picker; the plan
+// is just a chat artifact and the user advances by sending a chat
+// message. Sending "y" into a codex pane would just type a literal "y"
+// into the composer. For codex, the approve/reject actions send a
+// short literal text that codex's agent can interpret as the user's
+// decision.
+func TestHandleApprove_HarnessRouting(t *testing.T) {
+	t.Run("claude sends y", func(t *testing.T) {
+		m := withMockTmuxRunner(t)
+		mockReadAgentState(m)
+		m.On("Output", mock.Anything,
+			"display-message", "-p", "-t", "%1",
+			"#{session_name}:#{window_index}.#{pane_index}",
+		).Return([]byte("main:0.0\n"), nil)
+		m.On("Run", mock.Anything, "send-keys", "-l", "-t", "main:0.0", "y").Return(nil).Once()
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+		agent := domain.Agent{
+			SessionID:  "ap-claude",
+			State:      "plan",
+			Harness:    "",
+			TmuxPaneID: "%1",
+			Cwd:        "/tmp/repo",
+		}
+		ts, _ := createTestServer(t, agent)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/agents/ap-claude/approve", nil)
+		req.Header.Set("X-Requested-With", "dashboard")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("codex sends Approve text via paste-buffer", func(t *testing.T) {
+		m := withMockTmuxRunner(t)
+		mockReadAgentState(m)
+		m.On("Output", mock.Anything,
+			"display-message", "-p", "-t", "%1",
+			"#{session_name}:#{window_index}.#{pane_index}",
+		).Return([]byte("main:0.0\n"), nil)
+		// Codex needs paste-buffer + bracketed-paste so the text lands in
+		// the input box. State="running" → Tab+Enter (queues the reply
+		// behind the in-flight turn); idle → Enter alone. Mirrors
+		// handleInput's codex path.
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "C-u").Return(nil).Once()
+		m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", "Approve").Return(nil).Once()
+		m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:0.0").Return(nil).Once()
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Tab").Return(nil).Once()
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+		agent := domain.Agent{
+			SessionID:  "ap-codex",
+			State:      "running",
+			Harness:    "codex",
+			TmuxPaneID: "%1",
+			Cwd:        "/tmp/repo",
+		}
+		ts, _ := createTestServer(t, agent)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/agents/ap-codex/approve", nil)
+		req.Header.Set("X-Requested-With", "dashboard")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestHandleReject_HarnessRouting(t *testing.T) {
+	t.Run("claude sends n", func(t *testing.T) {
+		m := withMockTmuxRunner(t)
+		mockReadAgentState(m)
+		m.On("Output", mock.Anything,
+			"display-message", "-p", "-t", "%1",
+			"#{session_name}:#{window_index}.#{pane_index}",
+		).Return([]byte("main:0.0\n"), nil)
+		m.On("Run", mock.Anything, "send-keys", "-l", "-t", "main:0.0", "n").Return(nil).Once()
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+		agent := domain.Agent{
+			SessionID:  "rj-claude",
+			State:      "plan",
+			Harness:    "",
+			TmuxPaneID: "%1",
+			Cwd:        "/tmp/repo",
+		}
+		ts, _ := createTestServer(t, agent)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/agents/rj-claude/reject", nil)
+		req.Header.Set("X-Requested-With", "dashboard")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("codex sends Reject text via paste-buffer", func(t *testing.T) {
+		m := withMockTmuxRunner(t)
+		mockReadAgentState(m)
+		m.On("Output", mock.Anything,
+			"display-message", "-p", "-t", "%1",
+			"#{session_name}:#{window_index}.#{pane_index}",
+		).Return([]byte("main:0.0\n"), nil)
+		// Idle state → Enter alone (no Tab queue).
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "C-u").Return(nil).Once()
+		m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", "Reject — please revise the plan").Return(nil).Once()
+		m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:0.0").Return(nil).Once()
+		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+		agent := domain.Agent{
+			SessionID:  "rj-codex",
+			State:      "idle_prompt",
+			Harness:    "codex",
+			TmuxPaneID: "%1",
+			Cwd:        "/tmp/repo",
+		}
+		ts, _ := createTestServer(t, agent)
+		req, _ := http.NewRequest("POST", ts.URL+"/api/agents/rj-codex/reject", nil)
+		req.Header.Set("X-Requested-With", "dashboard")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+}

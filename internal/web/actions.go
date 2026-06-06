@@ -21,33 +21,23 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
-// handleApprove sends approval ("y") to an agent's tmux pane.
+// handleApprove sends a plan / permission approval to an agent's tmux
+// pane. Claude uses the single-letter "y" shortcut at its picker. Codex
+// has no equivalent picker, so the approval is sent as a literal chat
+// message via the same paste-buffer + bracketed-paste path used by
+// handleInput — the agent then reads the message and continues.
 func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
-	agent, ok := s.lookupAgent(r.PathValue("id"))
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
-		return
-	}
-	if !tmux.TmuxIsAvailable() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "tmux not available"})
-		return
-	}
-	target := tmux.ResolveTarget(agent.TmuxPaneID)
-	if target == "" {
-		writeJSON(w, http.StatusGone, map[string]string{"error": "pane no longer exists"})
-		return
-	}
-
-	key := "y"
-	if err := tmux.TmuxSendKeys(target, key); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"ok": "approved"})
+	s.sendApprovalKeystroke(w, r, "y", "Approve", "approved")
 }
 
-// handleReject sends rejection ("n") to an agent's tmux pane.
+// handleReject sends a plan / permission rejection. Same harness split
+// as handleApprove — claude takes "n", codex takes a literal explanatory
+// message so the agent revises its plan.
 func (s *Server) handleReject(w http.ResponseWriter, r *http.Request) {
+	s.sendApprovalKeystroke(w, r, "n", "Reject — please revise the plan", "rejected")
+}
+
+func (s *Server) sendApprovalKeystroke(w http.ResponseWriter, r *http.Request, claudeKey, codexText, okMessage string) {
 	agent, ok := s.lookupAgent(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
@@ -62,11 +52,21 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, map[string]string{"error": "pane no longer exists"})
 		return
 	}
-	if err := tmux.TmuxSendKeys(target, "n"); err != nil {
+	var err error
+	if agent.Harness == "codex" {
+		submit := []string{"Enter"}
+		if agent.State == "running" {
+			submit = []string{"Tab", "Enter"}
+		}
+		err = tmux.TmuxPasteKeysClearingInput(target, codexText, submit...)
+	} else {
+		err = tmux.TmuxSendKeys(target, claudeKey)
+	}
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"ok": "rejected"})
+	writeJSON(w, http.StatusOK, map[string]string{"ok": okMessage})
 }
 
 // inputRequest is the JSON body for the input endpoint.
