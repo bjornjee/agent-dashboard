@@ -3358,7 +3358,19 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.question-card__label--answer { margin-top: var(--space-3); }
+/* Soft prompt for the freeform input — sentence-case, regular weight,
+   secondary color. Replaces the tracked-uppercase "ANSWER" eyebrow so
+   the card has one eyebrow (the category) not two. Associates the
+   <input> with a real <label for> for screen readers + autofill. */
+.question-card__answer-label {
+  display: block;
+  margin-top: var(--space-3);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+}
 .question-card__question {
   font-size: 16px;
   line-height: 24px;
@@ -3453,7 +3465,8 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   color: var(--cta-text, #000);
   border: none;
   border-radius: var(--radius-pill);
-  padding: 8px 16px;
+  padding: 10px 18px;
+  min-height: 44px;
   font-size: 15px;
   line-height: 20px;
   font-weight: 600;
@@ -3527,13 +3540,25 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     height: 6px;
     border-radius: var(--radius-pill);
     background: var(--text-muted);
-    opacity: 0.5;
-    transition: opacity 160ms ease-out, background-color 160ms ease-out, transform 160ms ease-out;
+    opacity: 0.45;
+    transition: opacity 160ms ease-out, background-color 160ms ease-out;
   }
   .question-card__pager-dot--active {
     background: var(--text-primary);
     opacity: 1;
-    transform: scale(1.15);
+  }
+}
+
+/* Reduced-motion opt-out. Users with vestibular sensitivity get a
+   no-motion variant: smooth scroll snaps instantly, transitions are
+   reduced to a perceptible threshold. The carousel still works; the
+   choreography just goes away. */
+@media (prefers-reduced-motion: reduce) {
+  .question-card__track { scroll-behavior: auto; }
+  .question-card__radio,
+  .question-card__submit,
+  .question-card__pager-dot {
+    transition-duration: 0.001ms;
   }
 }
 

@@ -766,10 +766,19 @@ export function renderQuestionCard(pending, agentId) {
   const sig = escapeHtml(questionCardSignature(pending));
   const total = pending.questions.length;
   const blocks = pending.questions.map((q, qi) => {
-    const header = q.header ? `<div class="question-card__label">${escapeHtml(q.header)}</div>` : '';
-    const text = q.question ? `<div class="question-card__question">${escapeHtml(q.question)}</div>` : '';
+    const headerId = `qc-h-${qi}`;
+    const questionId = `qc-q-${qi}`;
+    const header = q.header ? `<div class="question-card__label" id="${headerId}">${escapeHtml(q.header)}</div>` : '';
+    const text = q.question ? `<div class="question-card__question" id="${questionId}">${escapeHtml(q.question)}</div>` : '';
     const inputType = q.multi_select ? 'checkbox' : 'radio';
+    const groupRole = q.multi_select ? 'group' : 'radiogroup';
     const name = `qc-${qi}`;
+    // aria-labelledby chains the visible category label + question text as
+    // the group's accessible name, so screen readers announce "Auth method,
+    // Which auth method should we use for the new admin route, radio group,
+    // Session cookie, 1 of 3" instead of an unanchored "Session cookie".
+    const groupLabelledBy = [q.header ? headerId : '', q.question ? questionId : '']
+      .filter(Boolean).join(' ');
     const opts = (q.options || []).map((o, oi) => {
       const label = escapeHtml(o.label || '');
       const desc = o.description ? `<div class="question-card__option-desc">${escapeHtml(o.description)}</div>` : '';
@@ -789,23 +798,24 @@ export function renderQuestionCard(pending, agentId) {
     return `<div class="question-card__block" data-qi="${qi}">
       ${header}
       ${text}
-      <div class="question-card__options">${opts}</div>
-      <div class="question-card__label question-card__label--answer">Answer</div>
+      <div class="question-card__options" role="${groupRole}"${groupLabelledBy ? ` aria-labelledby="${groupLabelledBy}"` : ''}>${opts}</div>
+      <label class="question-card__answer-label" for="${freeId}">Or type a response</label>
       <input type="text" id="${freeId}" name="qc-free-${qi}" class="question-card__answer-input" placeholder="Type a response" oninput="window.Dashboard.questionCardUpdate('${tid}')" />
     </div>`;
   }).join('');
-  // Pager dots only render when the payload carries more than one question.
-  // On desktop the carousel CSS collapses to a vertical stack and the dots
-  // are display:none — same DOM, register-correct on either viewport.
+  // Pager rendered as a status indicator (not a tablist). The dots are
+  // decorative; the accessible name "Question 1 of N" is the actual signal
+  // for screen-reader users and is kept current by the IntersectionObserver
+  // in attachQuestionCardInteractions.
   const pager = total > 1
-    ? `<div class="question-card__pager" role="tablist" aria-label="${total} questions">
+    ? `<div class="question-card__pager" role="status" aria-live="polite" aria-atomic="true" aria-label="Question 1 of ${total}">
         ${Array.from({ length: total }, (_, i) =>
           `<span class="question-card__pager-dot${i === 0 ? ' question-card__pager-dot--active' : ''}" aria-hidden="true"></span>`
         ).join('')}
       </div>`
     : '';
   const submitId = `qc-submit-${tid}`;
-  return `<div class="question-card" data-tool-use-id="${tid}" data-sig="${sig}" data-agent-id="${escapeHtml(agentId)}">
+  return `<div class="question-card" role="region" aria-label="Agent question" data-tool-use-id="${tid}" data-sig="${sig}" data-agent-id="${escapeHtml(agentId)}">
     <div class="question-card__track">${blocks}</div>
     ${pager}
     <div class="question-card__footer">
@@ -849,10 +859,15 @@ function attachQuestionCardInteractions(cardEl, agentId, toolUseId) {
   }
 
   const track = cardEl.querySelector('.question-card__track');
+  const pager = cardEl.querySelector('.question-card__pager');
   const dots = cardEl.querySelectorAll('.question-card__pager-dot');
   if (track && dots.length > 1 && typeof IntersectionObserver === 'function') {
+    const total = dots.length;
     const setActive = (i) => {
       dots.forEach((d, di) => d.classList.toggle('question-card__pager-dot--active', di === i));
+      // Keep the screen-reader-visible status aligned with the visible
+      // dot. aria-live="polite" announces the change without interrupting.
+      if (pager) pager.setAttribute('aria-label', `Question ${i + 1} of ${total}`);
     };
     const io = new IntersectionObserver((entries) => {
       // Pick the entry with the largest intersectionRatio — the slide most
@@ -902,7 +917,7 @@ export async function submitQuestionCard(agentId, toolUseId) {
   const blocks = card.querySelectorAll('.question-card__block');
   const parts = [];
   blocks.forEach((block) => {
-    const headerEl = block.querySelector('.question-card__label:not(.question-card__label--answer)');
+    const headerEl = block.querySelector('.question-card__label');
     const qEl = block.querySelector('.question-card__question');
     const header = headerEl ? headerEl.textContent.trim() : '';
     const question = qEl ? qEl.textContent.trim() : '';
