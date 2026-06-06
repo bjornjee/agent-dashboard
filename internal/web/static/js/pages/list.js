@@ -2,7 +2,7 @@
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
-import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge } from '../state.js';
+import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge, stateLabel } from '../state.js';
 import { escapeHtml, repoName, durationFromUpdate } from '../format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
@@ -10,7 +10,20 @@ const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
 function statusDot(state) {
   const group = stateGroup(state);
   const cls = `status-dot status-dot--${group.toLowerCase()}`;
-  return `<span class="${cls}"></span>`;
+  // aria-label expands the color-only signal for screen readers.
+  const label = stateLabel(state);
+  const aria = label ? ` role="img" aria-label="${escapeHtml(label)}"` : '';
+  return `<span class="${cls}"${aria}></span>`;
+}
+
+// Pre-rendered chip helper — visible label + sr-only expansion. Used by
+// rowBadges so each chip exposes its meaning to assistive tech without
+// changing the visible 3-char token.
+function chip(cls, visible, srText) {
+  return `<span class="chip ${cls}">`
+    + `<span aria-hidden="true">${escapeHtml(visible)}</span>`
+    + `<span class="visually-hidden">${escapeHtml(srText)}</span>`
+    + `</span>`;
 }
 
 // metaLine is the demoted "branch · model · duration" line. Lives under
@@ -30,15 +43,14 @@ export function metaLine(agent) {
 // keeps its dedicated `tag` slot in UI.row.
 export function rowBadges(agent) {
   let html = '';
-  // ASK chip first — questions are the most blocking signal; they should
-  // be the first thing the eye lands on, even when the agent also has a
-  // PR pin or is in plan mode.
-  const ask = questionBadge(agent);
-  if (ask) html += `<span class="chip chip--ask">${escapeHtml(ask)}</span>`;
-  const plan = planBadge(agent);
-  if (plan) html += `<span class="chip chip--plan">${escapeHtml(plan)}</span>`;
+  // ASK first — questions are the most blocking signal. PLAN second
+  // (also blocking, but less common). ↳N last (informational).
+  // prTag now suppresses itself when ASK fires so the pill pileup
+  // (PR + ASK) cannot happen on the same row.
+  if (questionBadge(agent)) html += chip('chip--ask', 'ASK', 'agent is asking a question');
+  if (planBadge(agent))     html += chip('chip--plan', 'PLAN', 'agent is in plan mode');
   const sub = subagentBadge(agent);
-  if (sub) html += `<span class="chip chip--sub">${escapeHtml(sub)}</span>`;
+  if (sub) html += chip('chip--sub', sub, 'live subagents');
   return html;
 }
 

@@ -54,18 +54,49 @@ test('rowBadges: empty when no badge signals', () => {
 
 test('rowBadges: renders PLAN chip when permission_mode=plan', () => {
   const html = rowBadges({ permission_mode: 'plan' });
-  assert.match(html, /class="chip chip--plan">PLAN</);
+  assert.match(html, /class="chip chip--plan"/);
+  assert.match(html, /aria-hidden="true">PLAN</);
+  assert.match(html, /class="visually-hidden">agent is in plan mode</);
 });
 
 test('rowBadges: renders subagent chip when subagent_count > 0', () => {
   const html = rowBadges({ subagent_count: 3 });
-  assert.match(html, /class="chip chip--sub">↳ 3</);
+  assert.match(html, /class="chip chip--sub"/);
+  assert.match(html, /aria-hidden="true">↳ 3</);
 });
 
 test('rowBadges: combines PLAN + subagent chips', () => {
   const html = rowBadges({ permission_mode: 'plan', subagent_count: 2 });
-  assert.match(html, /chip--plan">PLAN</);
-  assert.match(html, /chip--sub">↳ 2</);
+  assert.match(html, /chip--plan"/);
+  assert.match(html, /chip--sub"/);
+  assert.match(html, /aria-hidden="true">PLAN</);
+  assert.match(html, /aria-hidden="true">↳ 2</);
+});
+
+test('rowBadges: ASK chip exposes "asking" expansion to screen readers', () => {
+  // The 3-char "ASK" token is meaningless to a screen reader; the
+  // visually-hidden span carries the meaning.
+  const html = rowBadges({
+    pending_question: { questions: [{ question: 'A?' }] },
+  });
+  assert.match(html, /class="chip chip--ask"/);
+  assert.match(html, /aria-hidden="true">ASK</);
+  assert.match(html, /class="visually-hidden">agent is asking a question</);
+});
+
+test('rowBadges: ASK precedes PLAN precedes ↳N in render order', () => {
+  // Most-blocking signal first — the eye lands on the badge that needs
+  // the user soonest.
+  const html = rowBadges({
+    pending_question: { questions: [{ question: 'A?' }] },
+    permission_mode: 'plan',
+    subagent_count: 2,
+  });
+  const askIdx = html.indexOf('chip--ask');
+  const planIdx = html.indexOf('chip--plan');
+  const subIdx = html.indexOf('chip--sub');
+  assert.ok(askIdx !== -1 && planIdx !== -1 && subIdx !== -1, 'all three chips render');
+  assert.ok(askIdx < planIdx && planIdx < subIdx, 'order: ASK < PLAN < ↳N');
 });
 
 test('rowBadges: chips are not double-escaped', () => {

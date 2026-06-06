@@ -43,12 +43,37 @@ export function effectiveState(agent) {
   return agent.state;
 }
 
-// Returns a "PR open" tag when the user has pinned a PR on this agent.
+// Returns a "PR" tag when the user has pinned a PR on this agent.
 // `pinned_state === 'pr'` is the single source of truth — it persists
 // across state transitions (running, idle_prompt, …) so the tag shows
 // alongside the live state regardless of what the agent is doing.
+//
+// Suppressed when a pending question is active: a row with both PR and
+// ASK chips is the pill-pileup anti-pattern — question always beats PR.
+// The PR indicator survives in the status dot (status-dot--pr) so the
+// signal is not lost.
 export function prTag(agent) {
-  return agent && agent.pinned_state === 'pr' ? 'PR open' : '';
+  if (!agent || agent.pinned_state !== 'pr') return '';
+  if (questionBadge(agent)) return '';
+  return 'PR';
+}
+
+// stateLabel returns the human-readable label for a state group, used as
+// the aria-label on .status-dot so screen readers announce the meaning
+// of the color signal. Mirrors STATE_BADGE keys.
+export function stateLabel(state) {
+  switch (state) {
+    case 'permission':  return 'Needs approval';
+    case 'plan':        return 'Plan review';
+    case 'question':    return 'Needs reply';
+    case 'error':       return 'Error';
+    case 'running':     return 'Running';
+    case 'idle_prompt': return 'Ready for review';
+    case 'done':        return 'Done';
+    case 'pr':          return 'PR open';
+    case 'merged':      return 'Merged';
+    default:            return '';
+  }
 }
 
 // True when the agent has an open PR — used to gate Open PR / Merge

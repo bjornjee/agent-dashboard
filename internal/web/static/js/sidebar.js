@@ -5,7 +5,7 @@
 import { UI } from './ui.js';
 import { ICONS } from './icons.js';
 import { Theme } from './theme.js';
-import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge } from './state.js';
+import { effectiveState, stateGroup, prTag, planBadge, subagentBadge, questionBadge, stateLabel } from './state.js';
 import { escapeHtml, repoName, durationFromUpdate } from './format.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
@@ -18,7 +18,16 @@ export function isDesktop() {
 
 function statusDot(state) {
   const group = stateGroup(state);
-  return `<span class="status-dot status-dot--${group.toLowerCase()}"></span>`;
+  const label = stateLabel(state);
+  const aria = label ? ` role="img" aria-label="${escapeHtml(label)}"` : '';
+  return `<span class="status-dot status-dot--${group.toLowerCase()}"${aria}></span>`;
+}
+
+function chip(cls, visible, srText) {
+  return `<span class="chip ${cls}">`
+    + `<span aria-hidden="true">${escapeHtml(visible)}</span>`
+    + `<span class="visually-hidden">${escapeHtml(srText)}</span>`
+    + `</span>`;
 }
 
 function metaLine(agent) {
@@ -32,14 +41,10 @@ function metaLine(agent) {
 
 function rowBadges(agent) {
   let html = '';
-  // ASK chip first — questions are the most blocking signal; surface them
-  // even when state group is already PR or running.
-  const ask = questionBadge(agent);
-  if (ask) html += `<span class="chip chip--ask">${escapeHtml(ask)}</span>`;
-  const plan = planBadge(agent);
-  if (plan) html += `<span class="chip chip--plan">${escapeHtml(plan)}</span>`;
+  if (questionBadge(agent)) html += chip('chip--ask', 'ASK', 'agent is asking a question');
+  if (planBadge(agent))     html += chip('chip--plan', 'PLAN', 'agent is in plan mode');
   const sub = subagentBadge(agent);
-  if (sub) html += `<span class="chip chip--sub">${escapeHtml(sub)}</span>`;
+  if (sub) html += chip('chip--sub', sub, 'live subagents');
   return html;
 }
 

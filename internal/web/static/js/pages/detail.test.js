@@ -226,13 +226,16 @@ test('renderActionBar: surfaces PLAN chip when permission_mode=plan', () => {
     branch: 'feat/x',
   };
   const html = renderActionBar(agent);
-  assert.match(html, /chip chip--plan">PLAN</);
+  assert.match(html, /class="chip chip--plan"/);
+  assert.match(html, /aria-hidden="true">PLAN</);
+  assert.match(html, /class="visually-hidden">agent is in plan mode</);
 });
 
 test('renderActionBar: surfaces PLAN chip when state=plan', () => {
   const agent = { session_id: 'a1', state: 'plan', branch: 'feat/x' };
   const html = renderActionBar(agent);
-  assert.match(html, /chip chip--plan">PLAN</);
+  assert.match(html, /class="chip chip--plan"/);
+  assert.match(html, /aria-hidden="true">PLAN</);
 });
 
 test('renderActionBar: no PLAN chip in plain running state', () => {

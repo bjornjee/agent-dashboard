@@ -28,7 +28,7 @@ const STATE_LABELS = {
   plan: 'Plan ready',
   question: 'Needs reply',
   error: 'Errored',
-  pr: 'PR open',
+  pr: 'PR',
   merged: 'Merged',
   done: 'Done',
   idle_prompt: 'Idle',
@@ -614,7 +614,11 @@ export function renderActionBar(agent) {
   // case (running inside plan mode but ExitPlanMode hasn't fired) which
   // would otherwise have no visible badge in detail.
   const planChip = planBadge(agent)
-    ? `<div class="action-bar__status"><span class="chip chip--plan">${escapeHtml(planBadge(agent))}</span></div>`
+    ? `<div class="action-bar__status">`
+      + `<span class="chip chip--plan">`
+      + `<span aria-hidden="true">${escapeHtml(planBadge(agent))}</span>`
+      + `<span class="visually-hidden">agent is in plan mode</span>`
+      + `</span></div>`
     : '';
 
   // State-specific chips live above the composer (Codex pattern: action chips stacked above input).

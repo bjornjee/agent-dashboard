@@ -27,8 +27,13 @@
   --accent-green: #30D158;
   --accent-amber: #FF9F0A;
   --accent-red: #FF453A;
-  --accent-blue: #98989A;
-  --accent-indigo: #98989A;
+  --accent-blue: #0A84FF;
+  /* Was #98989A — that gray collapsed the PR pill (.ui-row__tag) and PR
+   * status dot into near-invisible on the #000 base. #5E5CE6 is the iOS
+   * dark-mode indigo (Apple HIG); pairs ≥4.5:1 against #000 and gives
+   * sighted dark-mode users a real PR signal. Light mode has its own
+   * --accent-indigo (#4F46E5) and is unaffected. */
+  --accent-indigo: #5E5CE6;
 
   /* Status colors (token names preserved for legacy usage/diff CSS) */
   --status-running-bg: rgba(60, 203, 107, 0.10);
@@ -402,7 +407,11 @@ a { color: inherit; }
 button.ui-row { cursor: pointer; border: none; outline: none; }
 button.ui-row:hover { background: var(--bg-surface); }
 button.ui-row:active { background: var(--bg-elevated); }
-button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
+/* Focus ring uses --text-secondary instead of --text-faint so the WCAG 1.4.11
+ * non-text contrast floor (3:1) is met in both themes. text-faint sits at
+ * ~2.3:1 in light mode against #FFF — fails the floor. text-secondary clears
+ * 3:1 in both palettes. */
+button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary); }
 .ui-row__leading {
   display: inline-flex;
   align-items: center;
@@ -416,6 +425,24 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  /* flex-wrap prevents pill pileup from truncating the repo title at
+   * narrow widths (≤390px): chips wrap onto a second line instead. */
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.ui-row__title-line .ui-row__title { min-width: 0; flex: 0 1 auto; }
+/* Visually-hidden utility — used to expose chip/dot meaning to screen
+ * readers without affecting layout. WCAG-safe clip pattern. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .ui-row__title {
   font-size: 16px;
