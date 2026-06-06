@@ -169,29 +169,24 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 	if agent.Harness == "codex" {
 		wantTool = "request_user_input"
 	}
-	// The agent counts as "paused on the tool" via any of three signals:
-	//  1. State == "question" — the hook layer or ApplyIdleOverrides set it.
-	//  2. CurrentTool == wantTool + PendingQuestion != nil — sidecar still
-	//     carries the tool snapshot even when ApplyPinnedStates rewrote
-	//     State to e.g. "pr".
-	//  3. The JSONL has an unanswered question — covers codex agents whose
-	//     Stop hook fired (state=done, current_tool="") before the user
-	//     answered the inline picker. Same logic as handlePendingQuestion's
-	//     JSONL fallback: the dashboard would render a question card, so
-	//     accepting the answer click is correct, not stale.
-	pausedOnTool := agent.State == "question"
-	if !pausedOnTool && agent.CurrentTool == wantTool && agent.PendingQuestion != nil {
-		pausedOnTool = true
+	// Single paused-on-tool predicate shared with handlePendingQuestion.
+	// Driving the picker is safe iff one of:
+	//   1. JSONL/rollout fallback says unanswered — authoritative; the
+	//      CLI is blocked at the picker (covers the codex Stop race
+	//      where the hook missed PreToolUse).
+	//   2. Sidecar PendingQuestion is set AND CurrentTool matches —
+	//      the hook just stamped both and hasn't cleared them.
+	// Sidecar set + CurrentTool mismatch means a stale snapshot; reject
+	// to avoid sending picker keys into whatever buffer the CLI is
+	// actually showing.
+	roots := conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir}
+	pq := PausedOnQuestion(agent, roots)
+	if pq == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
+		return
 	}
-	if !pausedOnTool && agent.SessionID != "" {
-		pq := conversation.ReadPendingQuestion(agent, conversation.Roots{
-			CodexSessionsRoot: s.codexSessionsRootDir,
-		})
-		if pq != nil {
-			pausedOnTool = true
-		}
-	}
-	if !pausedOnTool {
+	sidecarStale := agent.PendingQuestion != nil && agent.CurrentTool != wantTool
+	if sidecarStale {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
 		return
 	}

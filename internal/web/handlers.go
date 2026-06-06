@@ -191,15 +191,7 @@ func (s *Server) handlePendingQuestion(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
-	if agent.PendingQuestion != nil {
-		writeJSON(w, http.StatusOK, agent.PendingQuestion)
-		return
-	}
-	if agent.SessionID == "" {
-		writeJSON(w, http.StatusOK, nil)
-		return
-	}
-	pq := conversation.ReadPendingQuestion(agent, conversation.Roots{
+	pq := PausedOnQuestion(agent, conversation.Roots{
 		CodexSessionsRoot: s.codexSessionsRootDir,
 	})
 	writeJSON(w, http.StatusOK, pq)

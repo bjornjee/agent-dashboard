@@ -245,6 +245,13 @@ func TestHandleAnswerQuestionDrivesPicker(t *testing.T) {
 				Harness:     "",
 				TmuxPaneID:  "%1",
 				Cwd:         "/tmp/repo",
+				// Sidecar payload — the hook layer stamps state + tool +
+				// PendingQuestion together; the test fixture mirrors that
+				// so PausedOnQuestion's free path resolves without I/O.
+				PendingQuestion: &domain.PendingQuestion{
+					ToolUseID: "tool_aq",
+					Questions: []domain.PendingQuestionPrompt{{Question: "Which?"}},
+				},
 			}
 			ts, _ := createTestServer(t, agent)
 
@@ -356,6 +363,10 @@ func TestHandleAnswerQuestion_CodexDrivesPicker(t *testing.T) {
 				Harness:     "codex",
 				TmuxPaneID:  "%1",
 				Cwd:         "/tmp/repo",
+				PendingQuestion: &domain.PendingQuestion{
+					ToolUseID: "tool_codex",
+					Questions: []domain.PendingQuestionPrompt{{Question: "Which?"}},
+				},
 			}
 			ts, _ := createTestServer(t, agent)
 
@@ -536,6 +547,10 @@ func TestHandleAnswerQuestionMidSequenceFailureAbortsPicker(t *testing.T) {
 		Harness:     "",
 		TmuxPaneID:  "%1",
 		Cwd:         "/tmp/repo",
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_fail",
+			Questions: []domain.PendingQuestionPrompt{{Question: "Which?"}},
+		},
 	}
 	ts, _ := createTestServer(t, agent)
 
