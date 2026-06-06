@@ -106,6 +106,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/agents/{id}/approve", s.requireAuth(s.requireCSRF(s.handleApprove)))
 	mux.HandleFunc("POST /api/agents/{id}/reject", s.requireAuth(s.requireCSRF(s.handleReject)))
 	mux.HandleFunc("POST /api/agents/{id}/input", s.requireAuth(s.requireCSRF(s.handleInput)))
+	mux.HandleFunc("POST /api/agents/{id}/answer-question", s.requireAuth(s.requireCSRF(s.handleAnswerQuestion)))
 	mux.HandleFunc("POST /api/agents/{id}/stop", s.requireAuth(s.requireCSRF(s.handleStop)))
 	mux.HandleFunc("POST /api/agents/{id}/close", s.requireAuth(s.requireCSRF(s.handleClose)))
 	mux.HandleFunc("POST /api/agents/{id}/merge", s.requireAuth(s.requireCSRF(s.handleMerge)))

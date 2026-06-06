@@ -443,7 +443,12 @@ export function refreshWorkingIndicator(agent) {
       el.className = 'ui-msg-status ui-msg-status--working';
       el.innerHTML = orbHtml;
       container.appendChild(el);
-      if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+      // When a question card is pending, the visitor's focus belongs at
+      // the card (the workflow gate), not the running-status caption
+      // below it. The initial conv-load scroll already positioned the
+      // card top; do not overwrite that here.
+      const hasCard = !!container.querySelector('.question-card');
+      if (scrollParent && wasAtBottom && !hasCard) scrollParent.scrollTop = scrollParent.scrollHeight;
     }
     if (!toolStreamPollTimer && agent.session_id) {
       startToolStreamPoll(agent.session_id);
@@ -480,8 +485,11 @@ export function refreshWorkingIndicator(agent) {
     container.appendChild(el);
     // Only pull the indicator into view if the user was already at the
     // bottom. An unconditional scroll here would override whatever
-    // scroll position the user just chose.
-    if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+    // scroll position the user just chose. When a question card is
+    // mounted, the visitor's focus belongs at the card, not the running
+    // caption below it — keep the existing scroll position regardless.
+    const hasCard = !!container.querySelector('.question-card');
+    if (scrollParent && wasAtBottom && !hasCard) scrollParent.scrollTop = scrollParent.scrollHeight;
   }
   // Lazy-start the activity poll so the tool count keeps incrementing
   // while the agent is working. The poll auto-stops itself when the
@@ -795,7 +803,12 @@ export function renderQuestionCard(pending, agentId) {
     const freeId = `qc-free-${qi}`;
     // data-qi is the snap-target index (0..N-1) that the pager observer
     // reads to update the active dot.
-    return `<div class="question-card__block" data-qi="${qi}">
+    // data-option-count and data-multi feed submitQuestionCard's POST body
+    // — the server needs the option count to compute the picker's "Other"
+    // digit (= options.length + 1) and the multi flag to know whether to
+    // append Tab between per-option digit keys.
+    const optCount = (q.options || []).length;
+    return `<div class="question-card__block" data-qi="${qi}" data-option-count="${optCount}" data-multi="${q.multi_select ? '1' : '0'}">
       ${header}
       ${text}
       <div class="question-card__options" role="${groupRole}"${groupLabelledBy ? ` aria-labelledby="${groupLabelledBy}"` : ''}>${opts}</div>
@@ -803,21 +816,32 @@ export function renderQuestionCard(pending, agentId) {
       <input type="text" id="${freeId}" name="qc-free-${qi}" class="question-card__answer-input" placeholder="Type a response" oninput="window.Dashboard.questionCardUpdate('${tid}')" />
     </div>`;
   }).join('');
-  // Pager rendered as a status indicator (not a tablist). The dots are
-  // decorative; the accessible name "Question 1 of N" is the actual signal
-  // for screen-reader users and is kept current by the IntersectionObserver
-  // in attachQuestionCardInteractions.
+  // Pager has three visible elements: a count label ("1 of N"), a row of
+  // dot buttons for direct navigation, and prev/next chevrons that
+  // advance one question per click. The label gives scope at a glance;
+  // the dots give position; the chevrons give an explicit nav affordance
+  // that desktop users expect. The whole pager is a role="status"
+  // aria-live region so its accessible name — kept current by the
+  // IntersectionObserver in attachQuestionCardInteractions — announces
+  // the active question to screen readers.
   const pager = total > 1
     ? `<div class="question-card__pager" role="status" aria-live="polite" aria-atomic="true" aria-label="Question 1 of ${total}">
-        ${Array.from({ length: total }, (_, i) =>
-          `<span class="question-card__pager-dot${i === 0 ? ' question-card__pager-dot--active' : ''}" aria-hidden="true"></span>`
-        ).join('')}
+        <span class="question-card__pager-count" aria-hidden="true">1 of ${total}</span>
+        <div class="question-card__pager-dots">
+          ${Array.from({ length: total }, (_, i) =>
+            `<button type="button" class="question-card__pager-dot${i === 0 ? ' question-card__pager-dot--active' : ''}" aria-label="Go to question ${i + 1}" data-qi-target="${i}"></button>`
+          ).join('')}
+        </div>
+        <div class="question-card__pager-nav">
+          <button type="button" class="question-card__pager-prev" aria-label="Previous question" data-qi-step="-1" disabled>‹</button>
+          <button type="button" class="question-card__pager-next" aria-label="Next question" data-qi-step="1">›</button>
+        </div>
       </div>`
     : '';
   const submitId = `qc-submit-${tid}`;
   return `<div class="question-card" role="region" aria-label="Agent question" data-tool-use-id="${tid}" data-sig="${sig}" data-agent-id="${escapeHtml(agentId)}">
-    <div class="question-card__track">${blocks}</div>
     ${pager}
+    <div class="question-card__track">${blocks}</div>
     <div class="question-card__footer">
       <button type="button" id="${submitId}" class="question-card__submit" disabled>Send answer</button>
     </div>
@@ -860,14 +884,23 @@ function attachQuestionCardInteractions(cardEl, agentId, toolUseId) {
 
   const track = cardEl.querySelector('.question-card__track');
   const pager = cardEl.querySelector('.question-card__pager');
+  const count = cardEl.querySelector('.question-card__pager-count');
   const dots = cardEl.querySelectorAll('.question-card__pager-dot');
   if (track && dots.length > 1 && typeof IntersectionObserver === 'function') {
     const total = dots.length;
+    const blocks = track.querySelectorAll('.question-card__block');
+    const prev = cardEl.querySelector('.question-card__pager-prev');
+    const next = cardEl.querySelector('.question-card__pager-next');
+    let activeIdx = 0;
     const setActive = (i) => {
+      activeIdx = i;
       dots.forEach((d, di) => d.classList.toggle('question-card__pager-dot--active', di === i));
       // Keep the screen-reader-visible status aligned with the visible
       // dot. aria-live="polite" announces the change without interrupting.
       if (pager) pager.setAttribute('aria-label', `Question ${i + 1} of ${total}`);
+      if (count) count.textContent = `${i + 1} of ${total}`;
+      if (prev) prev.disabled = i <= 0;
+      if (next) next.disabled = i >= total - 1;
     };
     const io = new IntersectionObserver((entries) => {
       // Pick the entry with the largest intersectionRatio — the slide most
@@ -880,8 +913,31 @@ function attachQuestionCardInteractions(cardEl, agentId, toolUseId) {
       const idx = parseInt(best.target.dataset.qi || '0', 10);
       setActive(idx);
     }, { root: track, threshold: [0.5, 0.75, 0.95] });
-    track.querySelectorAll('.question-card__block').forEach((b) => io.observe(b));
+    blocks.forEach((b) => io.observe(b));
     cardEl._qcPagerObserver = io;
+    // Click a dot → scroll the matching block into view. Desktop users
+    // can't swipe and rely on this; mobile users get it as a bonus tap
+    // target. The block's scroll-snap-align: start handles the snap.
+    const scrollToIdx = (i) => {
+      const target = blocks[i];
+      if (target && typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+      }
+    };
+    dots.forEach((dot) => {
+      dot.addEventListener('click', (e) => {
+        e.preventDefault();
+        scrollToIdx(parseInt(dot.dataset.qiTarget || '0', 10));
+      });
+    });
+    if (prev) prev.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (activeIdx > 0) scrollToIdx(activeIdx - 1);
+    });
+    if (next) next.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (activeIdx < total - 1) scrollToIdx(activeIdx + 1);
+    });
   }
 }
 
@@ -904,10 +960,20 @@ export function updateQuestionCardSubmit(toolUseId) {
   if (btn) btn.disabled = !allAnswered;
 }
 
-// Collect the composed answer text from a question card and POST it to
-// the agent's input endpoint. Format mirrors the TUI's serialisation:
-// one block per question, header + question text + picked options +
-// freeform text, separated by blank lines.
+// Read structured answers from a question card and POST them to the
+// agent's /answer-question endpoint. Each block contributes one
+// askAnswerEntry — option_indices (0-based picks against the original
+// payload), freeform text (used when the user typed instead of/in
+// addition to picking), and the multi-select flag. The server translates
+// the payload into Claude Code's picker keystroke sequence: per-question
+// digit keys (auto-advance on single-select, Tab to advance on
+// multi-select), Other digit + text + Enter for freeform, final Enter on
+// the Submit tab.
+//
+// We POST a structured payload — not formatted text — because Claude
+// Code's AskUserQuestion is a native picker that reads number/arrow keys,
+// not stdin text. The previous text-based path was silently dropped by
+// the picker (regression caught only after #366 shipped).
 export async function submitQuestionCard(agentId, toolUseId) {
   const card = document.querySelector(`.question-card[data-tool-use-id="${cssEscape(toolUseId)}"]`);
   if (!card) return false;
@@ -915,30 +981,34 @@ export async function submitQuestionCard(agentId, toolUseId) {
   if (btn) btn.disabled = true;
 
   const blocks = card.querySelectorAll('.question-card__block');
-  const parts = [];
+  const answers = [];
+  const optionCounts = [];
   blocks.forEach((block) => {
-    const headerEl = block.querySelector('.question-card__label');
-    const qEl = block.querySelector('.question-card__question');
-    const header = headerEl ? headerEl.textContent.trim() : '';
-    const question = qEl ? qEl.textContent.trim() : '';
-    const picks = Array.from(block.querySelectorAll('.question-card__radio-input:checked'))
-      .map(i => i.value);
+    const optCount = parseInt(block.dataset.optionCount || '0', 10);
+    const multi = block.dataset.multi === '1';
+    // Picker options are rendered in original payload order, so the
+    // checked input's index-in-its-NodeList is exactly the 0-based
+    // option_index the server expects.
+    const inputs = Array.from(block.querySelectorAll('.question-card__radio-input'));
+    const optionIndices = inputs.reduce((acc, input, idx) => {
+      if (input.checked) acc.push(idx);
+      return acc;
+    }, []);
     const free = block.querySelector('.question-card__answer-input');
-    const freeText = free && free.value.trim() ? free.value.trim() : '';
-    let body = '';
-    if (picks.length) body += picks.join(', ');
-    if (freeText) body += (body ? ' — ' : '') + freeText;
-    const label = header ? `${header}: ${question}` : question;
-    parts.push(`${label}\n${body}`);
+    const freeform = free && free.value.trim() ? free.value.trim() : '';
+    answers.push({ option_indices: optionIndices, freeform, multi });
+    optionCounts.push(optCount);
   });
-  const text = parts.join('\n\n');
 
   // Optimistic transition: collapse to "answered" snapshot so the user
   // sees their submission landed even before the polling loop catches up.
   card.classList.add('question-card--answered');
 
   try {
-    const result = await post('/api/agents/' + agentId + '/input', { text });
+    const result = await post('/api/agents/' + agentId + '/answer-question', {
+      answers,
+      option_counts: optionCounts,
+    });
     if (!result || !result.ok) {
       toast('Failed: ' + (result?.error || 'unknown'), 'error');
       card.classList.remove('question-card--answered');
@@ -1139,7 +1209,10 @@ async function refreshConversation(agentId, agent) {
   reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
 
-  if (scrollParent && wasAtBottom) scrollParent.scrollTop = scrollParent.scrollHeight;
+  // Don't snap to bottom when a question card is mounted — the visitor
+  // is filling out the card and must keep it in view.
+  const hasCard = !!conv.querySelector('.question-card');
+  if (scrollParent && wasAtBottom && !hasCard) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
 // Poll conversation every 2s while the chat tab is active.
@@ -1491,7 +1564,23 @@ async function loadTabContent(tab, agentId) {
       // detail view mounts.
       if (!conversationScrolledThisSession) {
         const scrollParent = container.closest('.detail-scroll');
-        if (scrollParent) scrollParent.scrollTop = scrollParent.scrollHeight;
+        if (scrollParent) {
+          // When a question card is present, prefer aligning the card's
+          // TOP rather than snapping to the conversation bottom — the
+          // card is the workflow gate and its first eye-stop (the pager
+          // count + question header) must be in view, not its Submit
+          // footer. rAF lets layout settle before measuring.
+          const card = conv && conv.querySelector('.question-card');
+          if (card && typeof card.getBoundingClientRect === 'function') {
+            requestAnimationFrame(() => {
+              const parentRect = scrollParent.getBoundingClientRect();
+              const cardRect = card.getBoundingClientRect();
+              scrollParent.scrollTop += (cardRect.top - parentRect.top) - 12;
+            });
+          } else {
+            scrollParent.scrollTop = scrollParent.scrollHeight;
+          }
+        }
         conversationScrolledThisSession = true;
       }
       break;
