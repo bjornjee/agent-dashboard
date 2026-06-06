@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.33.0](https://github.com/bjornjee/agent-dashboard/compare/v0.32.0...v0.33.0) (2026-06-06)
+
+
+### Features
+
+* add UI automation isolation policy ([#371](https://github.com/bjornjee/agent-dashboard/issues/371)) ([f209a3c](https://github.com/bjornjee/agent-dashboard/commit/f209a3c33ba2b373725c76b4805b44214e22f6ae))
+* codex composer for new-agent page + chat bubble redesign ([#359](https://github.com/bjornjee/agent-dashboard/issues/359)) ([76c067c](https://github.com/bjornjee/agent-dashboard/commit/76c067cf96df3f4ada126e1e9625d7cc32765bbb))
+* codex parity — request_user_input, skill discovery, plan card approve/reject ([#372](https://github.com/bjornjee/agent-dashboard/issues/372)) ([b1dcca7](https://github.com/bjornjee/agent-dashboard/commit/b1dcca799a0f9eac0b7a1c1860c368db3002aa58))
+* codex-style polish for new-agent + chat pages, hot-reload dev ([#364](https://github.com/bjornjee/agent-dashboard/issues/364)) ([10b5665](https://github.com/bjornjee/agent-dashboard/commit/10b56657bb376a189c1ca9c1808ae81cf6f8b70c))
+* informative mobile push notifications ([#365](https://github.com/bjornjee/agent-dashboard/issues/365)) ([55d5d32](https://github.com/bjornjee/agent-dashboard/commit/55d5d32ddae2b5aa338747c7ce55cd326c145394))
+* instant orb on send, single-glyph spawn spinner, drop kbd hint ([#369](https://github.com/bjornjee/agent-dashboard/issues/369)) ([d50a395](https://github.com/bjornjee/agent-dashboard/commit/d50a395bb0a2806ec4d3bca296f8f696a412cc8c))
+* mobile PWA polish — respect auto-rotate, copy buttons, deterministic loading ([#361](https://github.com/bjornjee/agent-dashboard/issues/361)) ([7d8de4e](https://github.com/bjornjee/agent-dashboard/commit/7d8de4ed1b38851128b62d4e7ce64b4832ac00f2))
+* polish UI/UX broken windows across web dashboard ([#358](https://github.com/bjornjee/agent-dashboard/issues/358)) ([08cf52a](https://github.com/bjornjee/agent-dashboard/commit/08cf52a74a738e57668d4d3c690445eabfd5ac0f))
+* skip skill-body user messages in chat view ([#360](https://github.com/bjornjee/agent-dashboard/issues/360)) ([61c7044](https://github.com/bjornjee/agent-dashboard/commit/61c70447969b7ecd34fbd053bef948a4f8ec69e9))
+* terminate agent option in PWA detail kebab ([#357](https://github.com/bjornjee/agent-dashboard/issues/357)) ([d263f72](https://github.com/bjornjee/agent-dashboard/commit/d263f72b0cc33de44c09bc15e8f0c176068e6c58))
+* update favicon to pink-axolotl illustration ([#353](https://github.com/bjornjee/agent-dashboard/issues/353)) ([266683a](https://github.com/bjornjee/agent-dashboard/commit/266683a4cdf16e7aea3dd4403abeec451159a3f8))
+
+
+### Bug Fixes
+
+* AskUserQuestion submit + desktop carousel ([#367](https://github.com/bjornjee/agent-dashboard/issues/367)) ([eea0f8e](https://github.com/bjornjee/agent-dashboard/commit/eea0f8ed67f3151c12405580873c24e64447d800))
+* dedupe plan-link cards when slug + ExitPlanMode coexist ([#362](https://github.com/bjornjee/agent-dashboard/issues/362)) ([085930c](https://github.com/bjornjee/agent-dashboard/commit/085930c6cfb9f94a9bd5397823b8efc9a940a126))
+* deliver PWA chat to codex via paste-buffer + Tab/Enter ([#363](https://github.com/bjornjee/agent-dashboard/issues/363)) ([e30b139](https://github.com/bjornjee/agent-dashboard/commit/e30b139f3bd497781c5310cfc80fbe048172eb3b))
+* emit plan-saved card and serve plan tab content for codex agents ([#370](https://github.com/bjornjee/agent-dashboard/issues/370)) ([80b7e70](https://github.com/bjornjee/agent-dashboard/commit/80b7e70a956ab2e96c73e393757711bff8db5870))
+* mobile AskUserQuestion swipe carousel + reliable Send ([#366](https://github.com/bjornjee/agent-dashboard/issues/366)) ([e181a41](https://github.com/bjornjee/agent-dashboard/commit/e181a41745cd421749c755587889aa1a982252bb))
+* PWA orientation lock + chat detail a11y / register cleanup ([#368](https://github.com/bjornjee/agent-dashboard/issues/368)) ([4fc72a4](https://github.com/bjornjee/agent-dashboard/commit/4fc72a43dd6140ba8507e82fc697c9be93b78cca))
+* render question cards without tool ids ([#355](https://github.com/bjornjee/agent-dashboard/issues/355)) ([c43c1ef](https://github.com/bjornjee/agent-dashboard/commit/c43c1ef25e6d91c0b6eba7875c8f46a88d1dc558))
+* stop wiping the chat container every poll so freeform inputs survive ([#356](https://github.com/bjornjee/agent-dashboard/issues/356)) ([917afd3](https://github.com/bjornjee/agent-dashboard/commit/917afd33e1fae0ec53b0a4cf9d67c6d4ccdce79f))
+
 ## [0.32.0](https://github.com/bjornjee/agent-dashboard/compare/v0.31.0...v0.32.0) (2026-06-02)
 
 
