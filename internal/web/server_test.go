@@ -1610,9 +1610,10 @@ func TestSkillsEndpoint_HarnessCodex(t *testing.T) {
 	cfg.Profile.PluginCacheDir = claudeCache
 	cfg.Profile.CodexPluginCacheDir = codexCache
 
-	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "claude-only"), 0700)
+	writeSkillDir(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "claude-only")
+	codexSkills := filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills")
 	for _, name := range []string{"feature", "fix", "implement", "rca", "pr"} {
-		os.MkdirAll(filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", name), 0700)
+		writeSkillDir(t, codexSkills, name)
 	}
 
 	srv := NewServer(cfg, nil, ServerOptions{})
@@ -1646,9 +1647,10 @@ func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
 	cfg.Profile.PluginCacheDir = claudeCache
 	cfg.Profile.CodexPluginCacheDir = codexCache
 
-	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "feature"), 0700)
-	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "implement"), 0700)
-	os.MkdirAll(filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "codex-only"), 0700)
+	claudeSkills := filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills")
+	writeSkillDir(t, claudeSkills, "feature")
+	writeSkillDir(t, claudeSkills, "implement")
+	writeSkillDir(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "codex-only")
 
 	srv := NewServer(cfg, nil, ServerOptions{})
 	ts := httptest.NewServer(srv.Handler())
@@ -1665,6 +1667,20 @@ func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
 	want := []string{"feature", "implement"}
 	if len(skills) != len(want) {
 		t.Fatalf("got %v, want %v", skills, want)
+	}
+}
+
+// writeSkillDir creates skillsBase/<name>/SKILL.md so DiscoverSkills sees a
+// valid skill directory (skills.go:DiscoverSkills filters on SKILL.md
+// existence). Mirrors the writeSkill helper in internal/skills/skills_test.go.
+func writeSkillDir(t *testing.T, skillsBase, name string) {
+	t.Helper()
+	dir := filepath.Join(skillsBase, name)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+name+"\n---\n"), 0600); err != nil {
+		t.Fatal(err)
 	}
 }
 
