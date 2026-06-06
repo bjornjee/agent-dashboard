@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -114,11 +115,54 @@ func (s *Server) Handler() http.Handler {
 	// SSE endpoint
 	mux.HandleFunc("GET /events", s.requireAuth(s.handleSSE))
 
-	// Static files
-	staticSub, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /", http.FileServer(http.FS(staticSub)))
+	// Static files. In dev mode (DASHBOARD_DEV=1 or DASHBOARD_DEV_STATIC=<path>),
+	// serve from disk with no-cache headers so CSS/JS/HTML edits show up on
+	// reload without rebuilding the binary. Otherwise serve the embed.FS
+	// snapshot baked into the binary.
+	mux.Handle("GET /", s.staticHandler())
 
 	return mux
+}
+
+// staticHandler returns the file-server handler for the embedded UI.
+// Honours DASHBOARD_DEV_STATIC (absolute path) and DASHBOARD_DEV=1
+// (auto-detect `internal/web/static` relative to CWD) for hot-reload dev.
+func (s *Server) staticHandler() http.Handler {
+	if devDir := devStaticDir(); devDir != "" {
+		log.Printf("dev mode: serving static files from disk: %s", devDir)
+		return noCache(http.FileServer(http.Dir(devDir)))
+	}
+	staticSub, _ := fs.Sub(staticFS, "static")
+	return http.FileServer(http.FS(staticSub))
+}
+
+// devStaticDir returns the on-disk dev path for static assets, or "" if
+// dev mode is not enabled / the path does not exist.
+func devStaticDir() string {
+	if p := os.Getenv("DASHBOARD_DEV_STATIC"); p != "" {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return p
+		}
+		log.Printf("dev mode: DASHBOARD_DEV_STATIC=%q not a directory; falling back to embed", p)
+	}
+	if os.Getenv("DASHBOARD_DEV") == "1" {
+		if info, err := os.Stat("internal/web/static"); err == nil && info.IsDir() {
+			return "internal/web/static"
+		}
+		log.Printf("dev mode: DASHBOARD_DEV=1 set but ./internal/web/static not found; falling back to embed")
+	}
+	return ""
+}
+
+// noCache disables HTTP and browser-side caching on the wrapped handler.
+// Used in dev mode so CSS/JS/HTML edits show up on the next reload.
+func noCache(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		h.ServeHTTP(w, r)
+	})
 }
 
 // requireAuth wraps a handler with authentication if auth is configured.

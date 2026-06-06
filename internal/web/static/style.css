@@ -175,6 +175,7 @@ a { color: inherit; }
   position: sticky;
   top: 0;
   background: var(--bg-base);
+  border-bottom: 1px solid var(--bg-surface);
   z-index: 10;
 }
 .ui-app-bar__back,
@@ -182,7 +183,7 @@ a { color: inherit; }
   width: 40px;
   height: 40px;
   border-radius: var(--radius-pill);
-  background: var(--bg-elevated);
+  background: transparent;
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
@@ -192,6 +193,43 @@ a { color: inherit; }
 .ui-app-bar__action:hover { background: var(--bg-elevated); }
 .ui-app-bar__action:active { transform: scale(0.96); }
 .ui-app-bar__spacer { width: 40px; height: 40px; }
+.ui-app-bar__spacer--grow { flex: 1 1 auto; width: auto; }
+
+/* Keyboard cheatsheet — opened with "?", closed with Esc or backdrop click. */
+.ui-shortcuts { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; }
+.ui-shortcuts__backdrop { position: absolute; inset: 0; background: var(--bg-overlay, rgba(0,0,0,0.5)); }
+.ui-shortcuts__panel {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  min-width: 280px;
+  max-width: 360px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.ui-shortcuts__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+  letter-spacing: -0.01em;
+}
+.ui-shortcuts__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ui-shortcuts__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.ui-shortcuts__keys { display: inline-flex; gap: 4px; }
+.ui-shortcuts__keys kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  min-width: 18px;
+  text-align: center;
+}
+.ui-shortcuts__label { font-size: 13px; color: var(--text-secondary); }
+[data-theme="light"] .ui-shortcuts__backdrop { background: rgba(0, 0, 0, 0.32); }
 .ui-app-bar__titles {
   flex: 1;
   display: flex;
@@ -219,12 +257,14 @@ a { color: inherit; }
   white-space: nowrap;
   max-width: 100%;
 }
-.ui-app-bar__trailing { display: flex; align-items: center; gap: var(--space-2); }
+.ui-app-bar__trailing { display: flex; align-items: center; gap: 2px; }
 /* Non-interactive variant of the action shell — same pill geometry as
  * theme/more, but no hover/active feedback. Used to wrap the running
- * spinner so the header toolbar reads as one rhythm (B2). */
-.ui-app-bar__action--passive { cursor: default; }
-.ui-app-bar__action--passive:hover { background: var(--bg-elevated); }
+ * spinner so the header toolbar reads as one rhythm (B2). Keeps a
+ * subtle surface so the running state still reads against the now-flat
+ * neighbours. */
+.ui-app-bar__action--passive { cursor: default; background: var(--bg-surface); }
+.ui-app-bar__action--passive:hover { background: var(--bg-surface); }
 .ui-app-bar__action--passive:active { transform: none; }
 .ui-app-bar__spinner {
   width: 18px;
@@ -990,7 +1030,22 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   padding: 0 var(--space-5) var(--space-3);
   color: var(--text-muted);
   font-size: 13px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
 }
+.detail-meta > span:not(.detail-meta__sep) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.detail-meta > span:first-child {
+  flex-shrink: 1;
+  min-width: 40px;
+}
+.detail-meta__sep { flex-shrink: 0; }
 .detail-disclosure { padding: 0 var(--space-4); }
 .detail-disclosure summary {
   display: flex;
@@ -1080,16 +1135,19 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .create-composer {
   width: 100%;
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
   border-radius: var(--radius-xl);
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .create-composer:focus-within {
-  background: var(--bg-elevated);
-  box-shadow: 0 0 0 1px var(--border-hover);
+  border-color: var(--border-hover);
+}
+[data-theme="light"] .create-composer {
+  border-color: rgba(0, 0, 0, 0.06);
 }
 .create-composer__input {
   width: 100%;
@@ -1187,9 +1245,28 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   flex-shrink: 0;
 }
 .create-composer__send:hover:not(:disabled) { opacity: 0.92; }
-.create-composer__send:disabled {
-  background: var(--bg-elevated);
+.create-composer__hint {
+  font-size: 11px;
+  font-family: var(--font-mono);
   color: var(--text-faint);
+  display: none;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  margin-right: 4px;
+}
+.create-composer:focus-within .create-composer__hint { display: inline-flex; }
+.create-composer__hint kbd {
+  font: inherit;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+}
+.create-composer__send:disabled {
+  background: var(--cta-bg);
+  color: var(--cta-text);
+  opacity: 0.32;
   cursor: not-allowed;
 }
 
@@ -1211,7 +1288,26 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   background: transparent;
   transition: color var(--transition-fast), background var(--transition-fast);
   cursor: text;
-  min-width: 220px;
+}
+/* Folder pill rendered inside the composer card (P2 fix): primary
+ * affordance, sits above the textarea, full-width so it reads as the
+ * gating decision before the message. */
+.create-folder-pill--inside {
+  align-self: stretch;
+  min-width: 0;
+  margin: 0 calc(var(--space-2) * -1) 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+.create-folder-pill--inside.create-folder-pill--empty {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+.create-folder-pill--inside.create-folder-pill--empty .create-folder-pill__input::placeholder {
+  color: var(--text-secondary);
 }
 .create-folder-pill:hover,
 .create-folder-pill:focus-within { color: var(--text-secondary); background: var(--bg-surface); }
@@ -1222,7 +1318,6 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
 .create-folder-pill--empty {
   color: var(--text-secondary);
   background: var(--bg-surface);
-  box-shadow: 0 0 0 1px var(--border-hover);
 }
 .create-folder-pill svg { width: 16px; height: 16px; opacity: 0.8; flex-shrink: 0; }
 .create-folder-pill__input {
@@ -1302,8 +1397,24 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   color: var(--text-faint);
   font-size: 12px;
   line-height: 16px;
-  word-break: break-all;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
 }
+.create-action__sub-count { flex-shrink: 0; }
+.create-action__sub-path {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.create-action__sub-path > bdi { unicode-bidi: bidi-override; direction: ltr; }
 
 /* Light-mode parity: against a white page, --bg-surface ≈ --bg-base, so the
  * composer and action cards collapse into the page. Add a hairline border
@@ -1655,7 +1766,7 @@ button.btn-ghost.btn-sm {
 .markdown-body ul, .markdown-body ol { padding-left: 20px; margin: 4px 0; }
 .markdown-body li { margin: 2px 0; }
 .markdown-body p { margin: 4px 0; }
-.markdown-body blockquote { border-left: 3px solid var(--border-hover); padding-left: 12px; color: var(--text-secondary); margin: 8px 0; }
+.markdown-body blockquote { padding-left: 16px; color: var(--text-secondary); margin: 8px 0; font-style: italic; }
 .markdown-body a { color: var(--code-text); text-decoration: none; }
 .markdown-body a:hover { text-decoration: underline; }
 .markdown-body table { border-collapse: collapse; margin: 8px 0; width: 100%; }
@@ -2884,7 +2995,7 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     border-radius: 0;
     max-width: none;
     display: inline-flex;
-    gap: var(--space-2);
+    gap: 2px;
     z-index: auto;
   }
   .ui-dock--header__search {
@@ -2893,7 +3004,7 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     padding: 0;
     min-width: 0;
     border-radius: var(--radius-pill);
-    background: var(--bg-elevated);
+    background: transparent;
     color: var(--text-secondary);
     display: inline-flex;
     align-items: center;
@@ -3065,10 +3176,14 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     white-space: nowrap;
   }
   .ui-composer.detail-composer .ui-composer__chip::after {
-    content: "▾";
-    font-size: 9px;
-    color: var(--text-muted);
+    content: "";
+    width: 10px;
+    height: 10px;
     margin-left: 2px;
+    background-color: currentColor;
+    color: var(--text-muted);
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>") center / contain no-repeat;
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>") center / contain no-repeat;
   }
   .ui-composer.detail-composer .ui-composer__mic {
     width: 32px;

@@ -1,4 +1,4 @@
-.PHONY: build build-web fmt vet test test-js test-race test-e2e playwright-install install install-web uninstall clean seed web docs icons help
+.PHONY: build build-web dev-web fmt vet test test-js test-race test-e2e playwright-install install install-web uninstall clean seed web docs icons help
 
 VERSION := $(shell v=$$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//'); [ -n "$$v" ] && echo "$$v" || awk '{print $$1}' VERSION)
 LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
@@ -11,6 +11,11 @@ build: ## Build the dashboard binary
 build-web: ## Build the web server binary
 	go build -o bin/agent-dashboard-web ./cmd/web/
 	@if [ "$$(uname)" = "Darwin" ]; then codesign -f -s - bin/agent-dashboard-web; fi
+
+dev-web: build-web ## Run the web server in hot-reload mode (serves static from disk, no cache)
+	@echo "Hot-reload mode: CSS / JS / HTML edits served from disk on reload."
+	@echo "Stop with Ctrl+C."
+	DASHBOARD_DEV=1 ./bin/agent-dashboard-web -port 8391 -bind 127.0.0.1
 
 fmt: ## Auto-format Go source files
 	gofmt -w .

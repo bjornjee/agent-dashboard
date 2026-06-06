@@ -50,7 +50,7 @@ export const UI = {
     const sub = o.subtitle ? `<span class="ui-app-bar__subtitle">${escapeHtml(o.subtitle)}</span>` : '';
     const title = o.title
       ? `<div class="ui-app-bar__titles"><span class="ui-app-bar__title">${escapeHtml(o.title)}</span>${sub}</div>`
-      : '<span class="ui-app-bar__spacer"></span>';
+      : '<span class="ui-app-bar__spacer ui-app-bar__spacer--grow"></span>';
     return `<header class="ui-app-bar">${lead}${title}<div class="ui-app-bar__trailing">${actionsHtml(o.trailing)}</div></header>`;
   },
 
