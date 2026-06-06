@@ -3340,11 +3340,26 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   margin: var(--space-3) 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-4);
   max-width: 720px;
   width: 100%;
   align-self: flex-start;
+  /* Cap height to ~65vh so the pager (header of the card) and the Send
+     footer are both visible on a 900px viewport, even after the
+     dashboard's outer header + tabs + composer (~330px combined) eat
+     into the available height. The pager and footer are flex-shrink:0
+     so they stay anchored; the track in between scrolls vertically when
+     a question's content is taller than the card body. */
+  max-height: 58vh;
 }
+.question-card__pager,
+.question-card__footer { flex-shrink: 0; }
+.question-card__track { flex: 1 1 auto; min-height: 0; }
+.question-card__block {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.question-card__block::-webkit-scrollbar { display: none; }
 .question-card__block {
   display: flex;
   flex-direction: column;
@@ -3458,7 +3473,10 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 .question-card__footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   margin-top: var(--space-2, 8px);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--bg-elevated);
 }
 .question-card__submit {
   background: var(--cta-bg);
@@ -3486,66 +3504,147 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 .question-card--answered .question-card__option-desc { display: none; }
 .question-card--answered .question-card__radio { display: none; }
 
-/* On desktop the track is a transparent wrapper — the existing vertical
-   flex layout of the parent .question-card still owns spacing. The pager
-   is hidden because horizontal swipe makes no sense on desktop. */
-.question-card__track { display: contents; }
-.question-card__pager { display: none; }
+/* Multi-question payload renders as a horizontal scroll-snap carousel on
+   every viewport. Single-column stacking forfeits the desktop affordance
+   per .uiux-loop/register.md; carousel + pager + visible "X of N" label
+   keeps the scope honest at every width.
+
+   The track is the snap viewport; each block is a snap slide. Block width
+   is `100% - 32px` so the next slide's left edge peeks by ~32px — the
+   visitor's primary "more questions exist" signal. Negative inline margin
+   lets the track bleed to the card's padding edges so the peek aligns
+   with the card frame rather than a gutter. */
+.question-card__track {
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  gap: 12px;
+  scrollbar-width: none;
+  /* Desktop default: track sits exactly inside the card padding box;
+     each block is 100% of that width so only one question is in view.
+     Mobile redefines margin/padding/scroll-padding inside the @media
+     block below to bleed the track to the card edges and create a peek
+     of the next slide. */
+}
+.question-card__track::-webkit-scrollbar { display: none; }
+.question-card__block {
+  /* Desktop default: one question per slide, full width. The pager dots
+     are the navigation affordance — no peek needed on a viewport that
+     can render explicit controls. */
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-width: 0;
+}
+/* Single-question payload — no peek, full width. The pager is already
+   not rendered (renderQuestionCard omits it when N === 1). */
+.question-card__track:has(> .question-card__block:only-child) > .question-card__block {
+  flex-basis: 100%;
+}
+/* Pager: a compact "1 of N" label + a row of dots, centred. The label
+   gives the count explicitly (rubric: user-flow-fidelity needs scope at
+   a glance); the dots give position. Dots are interactive on desktop —
+   click to jump to a slide — and remain decorative on touch where swipe
+   carries the same gesture. */
+.question-card__pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: var(--space-2, 8px);
+  border-bottom: 1px solid var(--bg-elevated);
+  margin-bottom: var(--space-2, 8px);
+  flex-wrap: wrap;
+}
+.question-card__pager-count {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.question-card__pager-dots {
+  display: flex;
+  gap: 8px;
+}
+.question-card__pager-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+  opacity: 0.45;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 160ms ease-out, background-color 160ms ease-out;
+}
+.question-card__pager-dot:hover,
+.question-card__pager-dot:focus-visible {
+  opacity: 0.85;
+  outline: none;
+}
+.question-card__pager-dot--active {
+  background: var(--text-primary);
+  opacity: 1;
+}
+/* Explicit prev/next navigation: visible chevron buttons make the
+   "advance through the questions" affordance honest without relying on
+   visitors to discover the dot-click pattern. Hidden on mobile (swipe
+   carries the same gesture); visible on desktop. */
+.question-card__pager-nav {
+  display: none;
+  gap: 4px;
+}
+.question-card__pager-prev,
+.question-card__pager-next {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--bg-elevated);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 120ms ease-out, opacity 120ms ease-out;
+}
+.question-card__pager-prev:hover:not(:disabled),
+.question-card__pager-next:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+.question-card__pager-prev:disabled,
+.question-card__pager-next:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+@media (min-width: 641px) {
+  .question-card__pager-nav { display: inline-flex; }
+}
 
 @media (max-width: 640px) {
   .question-card { max-width: 100%; padding: 16px; gap: var(--space-4); }
   .question-card__option-title { font-size: 16px; line-height: 21px; }
-
-  /* Multi-question payload becomes a horizontal scroll-snap carousel.
-     The track is the snap viewport; each block is a snap slide sized to
-     ~90% of the card content width so the next slide's left edge peeks
-     by ~10% — the visitor's primary "more questions exist" signal.
-     Negative inline margin lets the track bleed to the card's padding
-     edges while keeping the parent card's 16px gutter visible. */
+  /* Mobile uses 16px card padding; re-align the track's negative margin
+     and scroll-padding to that gutter so the peek lands on the card edge.
+     Mobile also keeps a ~32px peek of the next question — the swipe
+     gesture is the primary nav affordance and the peek is its discovery
+     cue. Desktop drops the peek because the pager dots carry the same
+     signal more readably at that width. */
   .question-card__track {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-    gap: 12px;
     margin: 0 -16px;
     padding: 0 16px;
     scroll-padding-left: 16px;
-    scrollbar-width: none;
   }
-  .question-card__track::-webkit-scrollbar { display: none; }
   .question-card__block {
-    flex: 0 0 calc(100% - 32px);
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    min-width: 0;
-  }
-  /* Single-question payload — no peek, full width. The pager is already
-     not rendered (renderQuestionCard omits it when N === 1). */
-  .question-card__track:has(> .question-card__block:only-child) > .question-card__block {
-    flex-basis: 100%;
-  }
-  /* Pager dots: tracking status, not a control. Small low-contrast
-     circles that adopt --text-primary when active. */
-  .question-card__pager {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    padding-top: var(--space-1, 4px);
-  }
-  .question-card__pager-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--text-muted);
-    opacity: 0.45;
-    transition: opacity 160ms ease-out, background-color 160ms ease-out;
-  }
-  .question-card__pager-dot--active {
-    background: var(--text-primary);
-    opacity: 1;
+    flex-basis: calc(100% - 32px);
   }
 }
 
