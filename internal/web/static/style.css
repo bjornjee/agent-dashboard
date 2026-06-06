@@ -193,6 +193,7 @@ a { color: inherit; }
 .ui-app-bar__action:hover { background: var(--bg-elevated); }
 .ui-app-bar__action:active { transform: scale(0.96); }
 .ui-app-bar__spacer { width: 40px; height: 40px; }
+.ui-app-bar__spacer--grow { flex: 1 1 auto; width: auto; }
 .ui-app-bar__titles {
   flex: 1;
   display: flex;
