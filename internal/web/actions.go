@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -124,6 +125,150 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "sent"})
+}
+
+// askAnswerEntry is one question's answer in an /answer-question payload.
+// option_indices are 0-based positions into the original AskUserQuestion
+// options array. freeform is non-empty when the user picked the "Other" /
+// Type-something path. multi mirrors the question's multi_select flag and
+// tells the handler whether to append Tab after the option-number keys
+// (single-select auto-advances; multi-select needs an explicit advance).
+type askAnswerEntry struct {
+	OptionIndices []int  `json:"option_indices"`
+	Freeform      string `json:"freeform"`
+	Multi         bool   `json:"multi"`
+}
+
+// askAnswerRequest is the JSON body for /answer-question.
+// answers[i] is the answer for the i-th question in the pending payload;
+// option_counts[i] is that question's original options.length, used to
+// compute the "Other" digit (= option_counts[i] + 1).
+type askAnswerRequest struct {
+	Answers      []askAnswerEntry `json:"answers"`
+	OptionCounts []int            `json:"option_counts"`
+}
+
+// handleAnswerQuestion drives Claude Code's AskUserQuestion picker via a
+// translated key sequence. Number keys are global option shortcuts in the
+// picker: pressing "k" picks (single-select) or toggles (multi-select) the
+// k-th option. The Other / Type-something option lives at option_count+1
+// and opens a freeform text input. After all answers land the handler
+// presses Enter once to commit the Submit tab.
+//
+// Codex has no AskUserQuestion picker — codex answers must go through
+// /input instead. Non-question / non-AskUserQuestion agent states are
+// rejected to avoid sending stray digits into a chat composer.
+func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
+	agent, ok := s.lookupAgent(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	if agent.Harness == "codex" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "codex has no AskUserQuestion picker"})
+		return
+	}
+	if agent.State != "question" || agent.CurrentTool != "AskUserQuestion" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on AskUserQuestion"})
+		return
+	}
+	if !tmux.TmuxIsAvailable() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "tmux not available"})
+		return
+	}
+
+	var req askAnswerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if len(req.Answers) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answers required"})
+		return
+	}
+	if len(req.Answers) != len(req.OptionCounts) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "answers and option_counts length mismatch"})
+		return
+	}
+	// Validate every answer up-front. Partial keystroke delivery would
+	// leave the picker in a half-answered state — refuse before sending.
+	for i, ans := range req.Answers {
+		optCount := req.OptionCounts[i]
+		if optCount <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("answer %d: option_count must be > 0", i)})
+			return
+		}
+		if ans.Freeform == "" && len(ans.OptionIndices) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("answer %d: no option picked and no freeform text", i)})
+			return
+		}
+		for _, idx := range ans.OptionIndices {
+			if idx < 0 || idx >= optCount {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("answer %d: option_index %d out of range [0,%d)", i, idx, optCount)})
+				return
+			}
+		}
+	}
+
+	target := tmux.ResolveTarget(agent.TmuxPaneID)
+	if target == "" {
+		writeJSON(w, http.StatusGone, map[string]string{"error": "pane no longer exists"})
+		return
+	}
+
+	if err := driveAskUserQuestionPicker(target, req); err != nil {
+		// Abort the picker so it returns to a clean cancelled state
+		// instead of half-answered. Best-effort — if Escape also fails
+		// the user can ESC manually from the terminal.
+		_ = tmux.TmuxSendRaw(target, "Escape")
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "answered"})
+}
+
+// driveAskUserQuestionPicker translates a validated askAnswerRequest into
+// the exact tmux send-keys sequence Claude Code's picker expects.
+//
+// For each answer:
+//   - Freeform: press the Other digit (optCount+1) to open the text input,
+//     then send the text + Enter via the literal-text path.
+//   - Single-select with N picks: press each picked option's digit; the
+//     picker auto-advances on each single-select pick.
+//   - Multi-select: press each picked option's digit (toggles), then press
+//     Tab to advance to the next question.
+//
+// After all answers, one final Enter commits the Submit tab. Returns the
+// first tmux error encountered; the caller is responsible for sending
+// Escape to abort the picker on failure.
+func driveAskUserQuestionPicker(target string, req askAnswerRequest) error {
+	for i, ans := range req.Answers {
+		optCount := req.OptionCounts[i]
+		switch {
+		case ans.Freeform != "":
+			otherDigit := strconv.Itoa(optCount + 1)
+			if err := tmux.TmuxSendRaw(target, otherDigit); err != nil {
+				return err
+			}
+			if err := tmux.TmuxSendKeys(target, ans.Freeform); err != nil {
+				return err
+			}
+		default:
+			for _, idx := range ans.OptionIndices {
+				digit := strconv.Itoa(idx + 1)
+				if err := tmux.TmuxSendRaw(target, digit); err != nil {
+					return err
+				}
+			}
+			if ans.Multi {
+				if err := tmux.TmuxSendRaw(target, "Tab"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// Commit the Submit tab.
+	return tmux.TmuxSendRaw(target, "Enter")
 }
 
 // handleStop sends Ctrl+C to an agent's tmux pane.

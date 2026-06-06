@@ -795,7 +795,12 @@ export function renderQuestionCard(pending, agentId) {
     const freeId = `qc-free-${qi}`;
     // data-qi is the snap-target index (0..N-1) that the pager observer
     // reads to update the active dot.
-    return `<div class="question-card__block" data-qi="${qi}">
+    // data-option-count and data-multi feed submitQuestionCard's POST body
+    // — the server needs the option count to compute the picker's "Other"
+    // digit (= options.length + 1) and the multi flag to know whether to
+    // append Tab between per-option digit keys.
+    const optCount = (q.options || []).length;
+    return `<div class="question-card__block" data-qi="${qi}" data-option-count="${optCount}" data-multi="${q.multi_select ? '1' : '0'}">
       ${header}
       ${text}
       <div class="question-card__options" role="${groupRole}"${groupLabelledBy ? ` aria-labelledby="${groupLabelledBy}"` : ''}>${opts}</div>
@@ -904,10 +909,20 @@ export function updateQuestionCardSubmit(toolUseId) {
   if (btn) btn.disabled = !allAnswered;
 }
 
-// Collect the composed answer text from a question card and POST it to
-// the agent's input endpoint. Format mirrors the TUI's serialisation:
-// one block per question, header + question text + picked options +
-// freeform text, separated by blank lines.
+// Read structured answers from a question card and POST them to the
+// agent's /answer-question endpoint. Each block contributes one
+// askAnswerEntry — option_indices (0-based picks against the original
+// payload), freeform text (used when the user typed instead of/in
+// addition to picking), and the multi-select flag. The server translates
+// the payload into Claude Code's picker keystroke sequence: per-question
+// digit keys (auto-advance on single-select, Tab to advance on
+// multi-select), Other digit + text + Enter for freeform, final Enter on
+// the Submit tab.
+//
+// We POST a structured payload — not formatted text — because Claude
+// Code's AskUserQuestion is a native picker that reads number/arrow keys,
+// not stdin text. The previous text-based path was silently dropped by
+// the picker (regression caught only after #366 shipped).
 export async function submitQuestionCard(agentId, toolUseId) {
   const card = document.querySelector(`.question-card[data-tool-use-id="${cssEscape(toolUseId)}"]`);
   if (!card) return false;
@@ -915,30 +930,34 @@ export async function submitQuestionCard(agentId, toolUseId) {
   if (btn) btn.disabled = true;
 
   const blocks = card.querySelectorAll('.question-card__block');
-  const parts = [];
+  const answers = [];
+  const optionCounts = [];
   blocks.forEach((block) => {
-    const headerEl = block.querySelector('.question-card__label');
-    const qEl = block.querySelector('.question-card__question');
-    const header = headerEl ? headerEl.textContent.trim() : '';
-    const question = qEl ? qEl.textContent.trim() : '';
-    const picks = Array.from(block.querySelectorAll('.question-card__radio-input:checked'))
-      .map(i => i.value);
+    const optCount = parseInt(block.dataset.optionCount || '0', 10);
+    const multi = block.dataset.multi === '1';
+    // Picker options are rendered in original payload order, so the
+    // checked input's index-in-its-NodeList is exactly the 0-based
+    // option_index the server expects.
+    const inputs = Array.from(block.querySelectorAll('.question-card__radio-input'));
+    const optionIndices = inputs.reduce((acc, input, idx) => {
+      if (input.checked) acc.push(idx);
+      return acc;
+    }, []);
     const free = block.querySelector('.question-card__answer-input');
-    const freeText = free && free.value.trim() ? free.value.trim() : '';
-    let body = '';
-    if (picks.length) body += picks.join(', ');
-    if (freeText) body += (body ? ' — ' : '') + freeText;
-    const label = header ? `${header}: ${question}` : question;
-    parts.push(`${label}\n${body}`);
+    const freeform = free && free.value.trim() ? free.value.trim() : '';
+    answers.push({ option_indices: optionIndices, freeform, multi });
+    optionCounts.push(optCount);
   });
-  const text = parts.join('\n\n');
 
   // Optimistic transition: collapse to "answered" snapshot so the user
   // sees their submission landed even before the polling loop catches up.
   card.classList.add('question-card--answered');
 
   try {
-    const result = await post('/api/agents/' + agentId + '/input', { text });
+    const result = await post('/api/agents/' + agentId + '/answer-question', {
+      answers,
+      option_counts: optionCounts,
+    });
     if (!result || !result.ok) {
       toast('Failed: ' + (result?.error || 'unknown'), 'error');
       card.classList.remove('question-card--answered');

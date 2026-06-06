@@ -53,7 +53,7 @@ const PENDING_NO_TOOL_USE_ID = {
 
 async function setupAgent(page, { pending, conversation }) {
   const agent = makeAgent();
-  let inputPosts = [];
+  let answerPosts = [];
   let pendingState = pending;
   await page.route('**/events', (route) => route.abort('connectionrefused'));
   await page.route(/\/api\//, async (route) => {
@@ -75,9 +75,9 @@ async function setupAgent(page, { pending, conversation }) {
     if (path === `/api/agents/${AGENT_ID}/plan`) {
       return route.fulfill({ json: { content: '' } });
     }
-    if (path === `/api/agents/${AGENT_ID}/input` && route.request().method() === 'POST') {
-      inputPosts.push(JSON.parse(route.request().postData() || '{}'));
-      return route.fulfill({ json: { ok: true } });
+    if (path === `/api/agents/${AGENT_ID}/answer-question` && route.request().method() === 'POST') {
+      answerPosts.push(JSON.parse(route.request().postData() || '{}'));
+      return route.fulfill({ json: { ok: 'answered' } });
     }
     if (path === '/api/skills') return route.fulfill({ json: [] });
     if (path === '/api/suggestions') return route.fulfill({ json: [] });
@@ -88,7 +88,7 @@ async function setupAgent(page, { pending, conversation }) {
   // Open the agent detail
   await page.evaluate((id) => window.Dashboard.selectAgent(id), AGENT_ID);
   return {
-    inputPosts,
+    answerPosts,
     setPending(next) { pendingState = next; },
   };
 }
@@ -153,9 +153,12 @@ test.describe('AskUserQuestion card lifecycle', () => {
       const btn = document.querySelector('.question-card__submit');
       btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
-    await expect.poll(() => ctx.inputPosts.length, { timeout: 3000 }).toBeGreaterThan(0);
-    // The POST must carry the picked option — not just any prior request.
-    expect(ctx.inputPosts[0].text).toContain('Red');
+    await expect.poll(() => ctx.answerPosts.length, { timeout: 3000 }).toBeGreaterThan(0);
+    // The POST must carry the picked option_index — not just any prior request.
+    const post = ctx.answerPosts[0];
+    expect(post.answers).toHaveLength(1);
+    expect(post.answers[0].option_indices).toEqual([0]); // Red is index 0
+    expect(post.option_counts).toEqual([3]);
   });
 
   test('multi-question payload renders carousel track + pager dots', async ({ page }) => {
@@ -201,7 +204,7 @@ test.describe('AskUserQuestion card lifecycle', () => {
     await expect(card.locator('.question-card__pager')).toHaveCount(0);
   });
 
-  test('Send Answer posts composed text and triggers card teardown', async ({ page }) => {
+  test('Send Answer posts structured payload and triggers card teardown', async ({ page }) => {
     const ctx = await setupAgent(page, {
       pending: PENDING_NO_TOOL_USE_ID,
       conversation: [{ role: 'human', content: 'plan it', timestamp: '2026-06-04T10:00:00Z' }],
@@ -221,11 +224,16 @@ test.describe('AskUserQuestion card lifecycle', () => {
     const submit = card.locator('.question-card__submit');
     await expect(submit).toBeEnabled({ timeout: 2000 });
     await submit.click();
-    // POST fires with composed text containing the picked option
-    await expect.poll(() => ctx.inputPosts.length, { timeout: 3000 }).toBeGreaterThan(0);
-    const post = ctx.inputPosts[0];
-    expect(post.text).toContain('Color');
-    expect(post.text).toContain('Blue');
+    // POST fires with structured payload — option_index of the picked
+    // Blue radio (index 1 in the original PENDING_NO_TOOL_USE_ID order),
+    // plus the option count for "Other" digit computation server-side.
+    await expect.poll(() => ctx.answerPosts.length, { timeout: 3000 }).toBeGreaterThan(0);
+    const post = ctx.answerPosts[0];
+    expect(post.answers).toHaveLength(1);
+    expect(post.answers[0].option_indices).toEqual([1]); // Blue is index 1
+    expect(post.answers[0].freeform).toBe('');
+    expect(post.answers[0].multi).toBe(false);
+    expect(post.option_counts).toEqual([3]);
     // Simulate the agent resolving the question — subsequent polls return null
     ctx.setPending(null);
     // Card disappears on the next poll tick
