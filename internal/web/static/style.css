@@ -3467,14 +3467,74 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 }
 .question-card--answered .question-card__radio-input,
 .question-card--answered .question-card__answer-input,
-.question-card--answered .question-card__footer { display: none; }
+.question-card--answered .question-card__footer,
+.question-card--answered .question-card__pager { display: none; }
 .question-card--answered .question-card__option { border-bottom: none; padding: 4px 0; }
 .question-card--answered .question-card__option-desc { display: none; }
 .question-card--answered .question-card__radio { display: none; }
 
+/* On desktop the track is a transparent wrapper — the existing vertical
+   flex layout of the parent .question-card still owns spacing. The pager
+   is hidden because horizontal swipe makes no sense on desktop. */
+.question-card__track { display: contents; }
+.question-card__pager { display: none; }
+
 @media (max-width: 640px) {
-  .question-card { max-width: 100%; padding: 16px; }
+  .question-card { max-width: 100%; padding: 16px; gap: var(--space-4); }
   .question-card__option-title { font-size: 16px; line-height: 21px; }
+
+  /* Multi-question payload becomes a horizontal scroll-snap carousel.
+     The track is the snap viewport; each block is a snap slide sized to
+     ~90% of the card content width so the next slide's left edge peeks
+     by ~10% — the visitor's primary "more questions exist" signal.
+     Negative inline margin lets the track bleed to the card's padding
+     edges while keeping the parent card's 16px gutter visible. */
+  .question-card__track {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px;
+    margin: 0 -16px;
+    padding: 0 16px;
+    scroll-padding-left: 16px;
+    scrollbar-width: none;
+  }
+  .question-card__track::-webkit-scrollbar { display: none; }
+  .question-card__block {
+    flex: 0 0 calc(100% - 32px);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    min-width: 0;
+  }
+  /* Single-question payload — no peek, full width. The pager is already
+     not rendered (renderQuestionCard omits it when N === 1). */
+  .question-card__track:has(> .question-card__block:only-child) > .question-card__block {
+    flex-basis: 100%;
+  }
+  /* Pager dots: tracking status, not a control. Small low-contrast
+     circles that adopt --text-primary when active. */
+  .question-card__pager {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding-top: var(--space-1, 4px);
+  }
+  .question-card__pager-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+    opacity: 0.5;
+    transition: opacity 160ms ease-out, background-color 160ms ease-out, transform 160ms ease-out;
+  }
+  .question-card__pager-dot--active {
+    background: var(--text-primary);
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 /* ============================================

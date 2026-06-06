@@ -764,6 +764,7 @@ export function renderQuestionCard(pending, agentId) {
   if (!hasPendingQuestionPayload(pending)) return '';
   const tid = escapeHtml(questionCardId(pending));
   const sig = escapeHtml(questionCardSignature(pending));
+  const total = pending.questions.length;
   const blocks = pending.questions.map((q, qi) => {
     const header = q.header ? `<div class="question-card__label">${escapeHtml(q.header)}</div>` : '';
     const text = q.question ? `<div class="question-card__question">${escapeHtml(q.question)}</div>` : '';
@@ -783,6 +784,8 @@ export function renderQuestionCard(pending, agentId) {
       </label>`;
     }).join('');
     const freeId = `qc-free-${qi}`;
+    // data-qi is the snap-target index (0..N-1) that the pager observer
+    // reads to update the active dot.
     return `<div class="question-card__block" data-qi="${qi}">
       ${header}
       ${text}
@@ -791,13 +794,80 @@ export function renderQuestionCard(pending, agentId) {
       <input type="text" id="${freeId}" name="qc-free-${qi}" class="question-card__answer-input" placeholder="Type a response" oninput="window.Dashboard.questionCardUpdate('${tid}')" />
     </div>`;
   }).join('');
+  // Pager dots only render when the payload carries more than one question.
+  // On desktop the carousel CSS collapses to a vertical stack and the dots
+  // are display:none — same DOM, register-correct on either viewport.
+  const pager = total > 1
+    ? `<div class="question-card__pager" role="tablist" aria-label="${total} questions">
+        ${Array.from({ length: total }, (_, i) =>
+          `<span class="question-card__pager-dot${i === 0 ? ' question-card__pager-dot--active' : ''}" data-pager-i="${i}" aria-hidden="true"></span>`
+        ).join('')}
+      </div>`
+    : '';
   const submitId = `qc-submit-${tid}`;
   return `<div class="question-card" data-tool-use-id="${tid}" data-sig="${sig}" data-agent-id="${escapeHtml(agentId)}">
-    ${blocks}
+    <div class="question-card__track">${blocks}</div>
+    ${pager}
     <div class="question-card__footer">
-      <button type="button" id="${submitId}" class="question-card__submit" disabled onclick="window.Dashboard.answerQuestion('${escapeHtml(agentId)}', '${tid}', event)">Send answer</button>
+      <button type="button" id="${submitId}" class="question-card__submit" disabled>Send answer</button>
     </div>
   </div>`;
+}
+
+// Wire mobile-only carousel pager + the pointerdown Send handler on a
+// freshly-inserted card element. Idempotent — looks for a stamp on the
+// card and bails if already attached.
+//
+// Pointerdown (not click) is required: on iOS Safari PWA, tapping the
+// Send button while a freeform <input> has focus blurs the input first,
+// which dismisses the soft keyboard and triggers a viewport reflow. The
+// button moves off the touch point before `click` fires, so the tap is
+// lost. `pointerdown` fires before that blur cascade — paired with
+// `mousedown`'s preventDefault on desktop Safari, the tap reliably
+// reaches the handler.
+function attachQuestionCardInteractions(cardEl, agentId, toolUseId) {
+  if (!cardEl || cardEl.dataset.qcWired === '1') return;
+  cardEl.dataset.qcWired = '1';
+
+  const btn = cardEl.querySelector('.question-card__submit');
+  if (btn) {
+    const fire = (e) => {
+      if (btn.disabled) return;
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      const dash = (typeof window !== 'undefined') && window.Dashboard;
+      if (dash && typeof dash.answerQuestion === 'function') {
+        dash.answerQuestion(agentId, toolUseId);
+      }
+    };
+    btn.addEventListener('pointerdown', fire);
+    btn.addEventListener('mousedown', (e) => { if (!btn.disabled) e.preventDefault(); });
+    // `click` is the cross-browser fallback for keyboards (Enter/Space) and
+    // Playwright's default action. pointerdown already preventDefault'd the
+    // tap on touch devices; click here lets the same logic run for keyboard
+    // users who never produced a pointer event.
+    btn.addEventListener('click', fire);
+  }
+
+  const track = cardEl.querySelector('.question-card__track');
+  const dots = cardEl.querySelectorAll('.question-card__pager-dot');
+  if (track && dots.length > 1 && typeof IntersectionObserver === 'function') {
+    const setActive = (i) => {
+      dots.forEach((d, di) => d.classList.toggle('question-card__pager-dot--active', di === i));
+    };
+    const io = new IntersectionObserver((entries) => {
+      // Pick the entry with the largest intersectionRatio — the slide most
+      // visible in the track viewport — and mark its dot active.
+      let best = null;
+      for (const e of entries) {
+        if (e.isIntersecting && (!best || e.intersectionRatio > best.intersectionRatio)) best = e;
+      }
+      if (!best) return;
+      const idx = parseInt(best.target.dataset.qi || '0', 10);
+      setActive(idx);
+    }, { root: track, threshold: [0.5, 0.75, 0.95] });
+    track.querySelectorAll('.question-card__block').forEach((b) => io.observe(b));
+    cardEl._qcPagerObserver = io;
+  }
 }
 
 // Re-evaluate the submit-button enabled state for a question card.
@@ -937,7 +1007,10 @@ function appendNewEntries(conv, entries) {
 function reconcileQuestionCard(conv, pending, agentId) {
   const existing = conv.querySelector('.question-card');
   if (!hasPendingQuestionPayload(pending)) {
-    if (existing) existing.remove();
+    if (existing) {
+      if (existing._qcPagerObserver) existing._qcPagerObserver.disconnect();
+      existing.remove();
+    }
     return;
   }
   const sig = questionCardSignature(pending);
@@ -947,7 +1020,10 @@ function reconcileQuestionCard(conv, pending, agentId) {
       && existing.dataset.sig === sig) {
     return; // identical card — leave it alone
   }
-  if (existing) existing.remove();
+  if (existing) {
+    if (existing._qcPagerObserver) existing._qcPagerObserver.disconnect();
+    existing.remove();
+  }
   const wrap = document.createElement('div');
   wrap.innerHTML = renderQuestionCard(pending, agentId);
   const cardEl = wrap.firstElementChild;
@@ -956,6 +1032,7 @@ function reconcileQuestionCard(conv, pending, agentId) {
   // all entry messages — same slot the original full-render path used.
   const anchor = conv.querySelector('[data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working');
   conv.insertBefore(cardEl, anchor);
+  attachQuestionCardInteractions(cardEl, agentId, pendingCardId);
 }
 
 // Reconcile the in-flight optimistic user message. Three states:
@@ -1385,7 +1462,10 @@ async function loadTabContent(tab, agentId) {
           const wrap = document.createElement('div');
           wrap.innerHTML = renderQuestionCard(pending, agentId);
           const cardEl = wrap.firstElementChild;
-          if (cardEl) conv.appendChild(cardEl);
+          if (cardEl) {
+            conv.appendChild(cardEl);
+            attachQuestionCardInteractions(cardEl, agentId, questionCardId(pending));
+          }
         }
       }
       markLoaded();
