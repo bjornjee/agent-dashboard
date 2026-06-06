@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	codexconv "github.com/bjornjee/agent-dashboard/internal/codex/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/git"
@@ -479,27 +480,78 @@ func ApplyPinnedStates(sf *domain.StateFile) {
 	}
 }
 
-// ApplyIdleOverrides checks each idle_prompt or permission agent for a pending
-// plan review (ExitPlanMode) or pending question (AskUserQuestion) and
-// overrides the state accordingly. The most recently seen blocking tool wins —
-// if AskUserQuestion appears after ExitPlanMode, "question" takes precedence.
-// Permission agents are included because the plan selection menu is
-// classified as "permission" by hooks. Running agents are skipped — the
-// PostToolUse hook's stop-state guard prevents the race that used to leave
-// agents stuck at "running" when actually idle.
-func ApplyIdleOverrides(sf *domain.StateFile) {
+// ApplyIdleOverrides checks each idle-candidate agent for a pending plan
+// review (claude's ExitPlanMode) or pending question (claude's
+// AskUserQuestion / codex's request_user_input) and overrides the state
+// accordingly. The most recently seen blocking tool wins — if
+// AskUserQuestion appears after ExitPlanMode in claude, "question" takes
+// precedence.
+//
+// Per-harness dispatch:
+//   - claude: scans the JSONL via conversation.LastPendingBlockingTool;
+//     returns "plan" or "question".
+//   - codex: scans the rollout via codexconv.LastPendingBlockingToolCodex;
+//     returns "question" only (codex has no ExitPlanMode equivalent in
+//     the rollout schema).
+//
+// Idle-candidate states:
+//   - "idle_prompt", "permission" for both harnesses (claude pattern).
+//   - "done" additionally for codex: codex's Stop hook fires while the
+//     model is still blocked at the inline request_user_input picker, so
+//     the agent file lands with state="done" even though the CLI is
+//     waiting. We recover the state here at read time. Claude in
+//     state="done" stays unchanged because LastPendingBlockingTool will
+//     correctly find the human reply in the JSONL and return "".
+//
+// Running agents are skipped — claude's hook-side stop-state guard
+// prevents the PostToolUse race that used to leave agents stuck at
+// "running" when actually idle.
+//
+// codexSessionsRoot is the path the codex CLI writes rollouts under
+// (typically $CODEX_HOME/sessions). Pass "" if codex isn't installed;
+// the codex branch then short-circuits to "" and behavior matches the
+// claude-only loop.
+func ApplyIdleOverrides(sf *domain.StateFile, codexSessionsRoot string) {
 	for key, agent := range sf.Agents {
-		if agent.State != "idle_prompt" && agent.State != "permission" {
+		if !isIdleCandidate(agent) {
 			continue
 		}
-		if agent.ProjDir == "" || agent.SessionID == "" {
+		if agent.SessionID == "" {
 			continue
 		}
-		if override := conversation.LastPendingBlockingTool(agent.ProjDir, agent.SessionID); override != "" {
+		var override string
+		switch agent.Harness {
+		case "codex":
+			path, _ := codexconv.LocateRollout(codexSessionsRoot, agent.SessionID)
+			if path == "" {
+				continue
+			}
+			override = codexconv.LastPendingBlockingToolCodex(path)
+		default:
+			if agent.ProjDir == "" {
+				continue
+			}
+			override = conversation.LastPendingBlockingTool(agent.ProjDir, agent.SessionID)
+		}
+		if override != "" {
 			agent.State = override
 			sf.Agents[key] = agent
 		}
 	}
+}
+
+// isIdleCandidate is the per-harness candidate-state predicate for
+// ApplyIdleOverrides. The "done" case is codex-only because claude's
+// PostToolUse stop-state guard already prevents the equivalent stuck
+// state for claude agents.
+func isIdleCandidate(agent domain.Agent) bool {
+	if agent.State == "idle_prompt" || agent.State == "permission" {
+		return true
+	}
+	if agent.Harness == "codex" && agent.State == "done" {
+		return true
+	}
+	return false
 }
 
 // PinAgentState writes a pinned_state field to the agent's JSON file.
