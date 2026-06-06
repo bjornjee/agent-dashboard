@@ -555,7 +555,7 @@ function startToolStreamPoll(agentId) {
       const tools = entries.filter(e => (e.Kind || e.kind) === 'tool');
       // Only count tools fired after the turn boundary. lastSeenToolTimestamp
       // is set either by seedTallyFromTurnBoundary() on mount (latest human
-      // message timestamp) or by confirmUserMessageSent() on a fresh send.
+      // message timestamp) or by appendUserMessage() on a fresh send.
       const fresh = lastSeenToolTimestamp
         ? tools.filter(t => (t.Timestamp || t.timestamp) > lastSeenToolTimestamp)
         : [];
