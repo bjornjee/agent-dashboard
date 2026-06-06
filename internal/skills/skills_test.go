@@ -110,10 +110,10 @@ func TestBuildSkillList_Empty(t *testing.T) {
 func TestDiscoverSkillsForHarness_CodexScansCodexCache(t *testing.T) {
 	claudeCache := t.TempDir()
 	codexCache := t.TempDir()
-	mkdirAll(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", "claude-only-skill"))
+	writeSkill(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills"), "claude-only-skill")
 	codexSkills := filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills")
 	for _, name := range []string{"feature", "fix", "implement", "rca", "pr"} {
-		mkdirAll(t, filepath.Join(codexSkills, name))
+		writeSkill(t, codexSkills, name)
 	}
 
 	got := DiscoverSkillsForHarness(claudeCache, codexCache, "codex")
@@ -132,10 +132,11 @@ func TestDiscoverSkillsForHarness_CodexScansCodexCache(t *testing.T) {
 func TestDiscoverSkillsForHarness_ClaudeUsesClaudeCache(t *testing.T) {
 	claudeCache := t.TempDir()
 	codexCache := t.TempDir()
+	claudeSkills := filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills")
 	for _, name := range []string{"feature", "fix", "implement"} {
-		mkdirAll(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", name))
+		writeSkill(t, claudeSkills, name)
 	}
-	mkdirAll(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", "codex-only-skill"))
+	writeSkill(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills"), "codex-only-skill")
 
 	got := DiscoverSkillsForHarness(claudeCache, codexCache, "claude")
 	// implement stays — only codex blocks it.
@@ -152,7 +153,7 @@ func TestDiscoverSkillsForHarness_ClaudeUsesClaudeCache(t *testing.T) {
 
 func TestDiscoverSkillsForHarness_EmptyHarnessFallsBackToClaude(t *testing.T) {
 	claudeCache := t.TempDir()
-	mkdirAll(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", "feature"))
+	writeSkill(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills"), "feature")
 	got := DiscoverSkillsForHarness(claudeCache, "", "")
 	if len(got) != 1 || got[0] != "feature" {
 		t.Errorf("got %v, want [feature]", got)
