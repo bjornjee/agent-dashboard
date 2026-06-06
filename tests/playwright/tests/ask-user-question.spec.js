@@ -126,6 +126,81 @@ test.describe('AskUserQuestion card lifecycle', () => {
     expect(tid).toBe('toolu_realID123');
   });
 
+  test('Send fires from pointerdown alone — iOS keyboard-blur regression lock', async ({ page }) => {
+    // On iOS Safari PWA, tapping Send while a freeform <input> has focus
+    // blurs the input → dismisses the soft keyboard → reflows the viewport,
+    // which moves the button off the touch point before `click` fires.
+    // The fix is to wire the Send action on `pointerdown`, which fires
+    // before that blur cascade. This test dispatches a pointerdown event
+    // WITHOUT any preceding click and asserts the POST still fires —
+    // proving the pointerdown path is wired independently of click.
+    const ctx = await setupAgent(page, {
+      pending: PENDING_NO_TOOL_USE_ID,
+      conversation: [{ role: 'human', content: 'plan it', timestamp: '2026-06-04T10:00:00Z' }],
+    });
+    const card = page.locator('.question-card').first();
+    await expect(card).toBeVisible({ timeout: 5000 });
+    // Pick an option so submit becomes enabled.
+    await page.evaluate(() => {
+      const r = document.querySelector('.question-card__radio-input[value="Red"]');
+      r.checked = true;
+      r.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(card.locator('.question-card__submit')).toBeEnabled({ timeout: 2000 });
+    // Dispatch a synthetic pointerdown event ONLY. No click(), no tap().
+    // If the implementation still relies on inline onclick, this won't fire.
+    await page.evaluate(() => {
+      const btn = document.querySelector('.question-card__submit');
+      btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    });
+    await expect.poll(() => ctx.inputPosts.length, { timeout: 3000 }).toBeGreaterThan(0);
+    // The POST must carry the picked option — not just any prior request.
+    expect(ctx.inputPosts[0].text).toContain('Red');
+  });
+
+  test('multi-question payload renders carousel track + pager dots', async ({ page }) => {
+    // Multi-question payload becomes a horizontal scroll-snap carousel on
+    // mobile with one pager dot per question. Render-side assertions only
+    // (CSS scroll-snap behavior is browser-native and out of scope here).
+    const multi = {
+      tool_use_id: 'toolu_multi',
+      questions: [
+        { header: 'A', question: 'Q one?', multi_select: false, options: [{ label: 'a1' }] },
+        { header: 'B', question: 'Q two?', multi_select: false, options: [{ label: 'b1' }] },
+        { header: 'C', question: 'Q three?', multi_select: false, options: [{ label: 'c1' }] },
+      ],
+    };
+    await page.setViewportSize({ width: 390, height: 844 });
+    await setupAgent(page, {
+      pending: multi,
+      conversation: [{ role: 'human', content: 'plan it', timestamp: '2026-06-04T10:00:00Z' }],
+    });
+    const card = page.locator('.question-card').first();
+    await expect(card).toBeVisible({ timeout: 5000 });
+    // Track wraps the blocks
+    await expect(card.locator('.question-card__track')).toHaveCount(1);
+    await expect(card.locator('.question-card__track .question-card__block')).toHaveCount(3);
+    // One pager dot per question; only the first is active on mount
+    await expect(card.locator('.question-card__pager-dot')).toHaveCount(3);
+    await expect(card.locator('.question-card__pager-dot--active')).toHaveCount(1);
+    await expect(card.locator('.question-card__pager-dot').first()).toHaveClass(/question-card__pager-dot--active/);
+  });
+
+  test('single-question payload renders without pager dots', async ({ page }) => {
+    // The carousel still wraps the single block in __track (consistent
+    // DOM shape), but the pager is omitted because there's nothing to
+    // advance through.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await setupAgent(page, {
+      pending: PENDING_NO_TOOL_USE_ID,
+      conversation: [{ role: 'human', content: 'plan it', timestamp: '2026-06-04T10:00:00Z' }],
+    });
+    const card = page.locator('.question-card').first();
+    await expect(card).toBeVisible({ timeout: 5000 });
+    await expect(card.locator('.question-card__track .question-card__block')).toHaveCount(1);
+    await expect(card.locator('.question-card__pager')).toHaveCount(0);
+  });
+
   test('Send Answer posts composed text and triggers card teardown', async ({ page }) => {
     const ctx = await setupAgent(page, {
       pending: PENDING_NO_TOOL_USE_ID,

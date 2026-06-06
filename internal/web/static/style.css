@@ -3358,7 +3358,19 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.question-card__label--answer { margin-top: var(--space-3); }
+/* Soft prompt for the freeform input — sentence-case, regular weight,
+   secondary color. Replaces the tracked-uppercase "ANSWER" eyebrow so
+   the card has one eyebrow (the category) not two. Associates the
+   <input> with a real <label for> for screen readers + autofill. */
+.question-card__answer-label {
+  display: block;
+  margin-top: var(--space-3);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+}
 .question-card__question {
   font-size: 16px;
   line-height: 24px;
@@ -3453,7 +3465,8 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   color: var(--cta-text, #000);
   border: none;
   border-radius: var(--radius-pill);
-  padding: 8px 16px;
+  padding: 10px 18px;
+  min-height: 44px;
   font-size: 15px;
   line-height: 20px;
   font-weight: 600;
@@ -3467,14 +3480,86 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 }
 .question-card--answered .question-card__radio-input,
 .question-card--answered .question-card__answer-input,
-.question-card--answered .question-card__footer { display: none; }
+.question-card--answered .question-card__footer,
+.question-card--answered .question-card__pager { display: none; }
 .question-card--answered .question-card__option { border-bottom: none; padding: 4px 0; }
 .question-card--answered .question-card__option-desc { display: none; }
 .question-card--answered .question-card__radio { display: none; }
 
+/* On desktop the track is a transparent wrapper — the existing vertical
+   flex layout of the parent .question-card still owns spacing. The pager
+   is hidden because horizontal swipe makes no sense on desktop. */
+.question-card__track { display: contents; }
+.question-card__pager { display: none; }
+
 @media (max-width: 640px) {
-  .question-card { max-width: 100%; padding: 16px; }
+  .question-card { max-width: 100%; padding: 16px; gap: var(--space-4); }
   .question-card__option-title { font-size: 16px; line-height: 21px; }
+
+  /* Multi-question payload becomes a horizontal scroll-snap carousel.
+     The track is the snap viewport; each block is a snap slide sized to
+     ~90% of the card content width so the next slide's left edge peeks
+     by ~10% — the visitor's primary "more questions exist" signal.
+     Negative inline margin lets the track bleed to the card's padding
+     edges while keeping the parent card's 16px gutter visible. */
+  .question-card__track {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px;
+    margin: 0 -16px;
+    padding: 0 16px;
+    scroll-padding-left: 16px;
+    scrollbar-width: none;
+  }
+  .question-card__track::-webkit-scrollbar { display: none; }
+  .question-card__block {
+    flex: 0 0 calc(100% - 32px);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    min-width: 0;
+  }
+  /* Single-question payload — no peek, full width. The pager is already
+     not rendered (renderQuestionCard omits it when N === 1). */
+  .question-card__track:has(> .question-card__block:only-child) > .question-card__block {
+    flex-basis: 100%;
+  }
+  /* Pager dots: tracking status, not a control. Small low-contrast
+     circles that adopt --text-primary when active. */
+  .question-card__pager {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding-top: var(--space-1, 4px);
+  }
+  .question-card__pager-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--text-muted);
+    opacity: 0.45;
+    transition: opacity 160ms ease-out, background-color 160ms ease-out;
+  }
+  .question-card__pager-dot--active {
+    background: var(--text-primary);
+    opacity: 1;
+  }
+}
+
+/* Reduced-motion opt-out. Users with vestibular sensitivity get a
+   no-motion variant: smooth scroll snaps instantly, transitions are
+   reduced to a perceptible threshold. The carousel still works; the
+   choreography just goes away. */
+@media (prefers-reduced-motion: reduce) {
+  .question-card__track { scroll-behavior: auto; }
+  .question-card__radio,
+  .question-card__submit,
+  .question-card__pager-dot {
+    transition-duration: 0.001ms;
+  }
 }
 
 /* ============================================
