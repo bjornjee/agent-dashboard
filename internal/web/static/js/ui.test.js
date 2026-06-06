@@ -137,34 +137,14 @@ test('UI.message user role strips local-command-stdout wrapper before escaping',
   assert.ok(html.includes('hello'), 'inner text should survive');
 });
 
-// -- UI.row meta + badges (PWA state-gap fix) --
+// -- UI.row badges slot (PWA state-gap fix) --
 
-test('UI.row baseline: no meta or badges → unchanged title/subtitle/tag layout', () => {
-  const html = UI.row({ title: 'foo', subtitle: 'bar', tag: 'PR open' });
+test('UI.row baseline: no badges → unchanged title/subtitle/tag layout', () => {
+  const html = UI.row({ title: 'foo', subtitle: 'bar', tag: 'PR' });
   assert.match(html, /class="ui-row__title">foo</);
   assert.match(html, /class="ui-row__subtitle">bar</);
-  assert.match(html, /class="ui-row__tag">PR open</);
-  assert.doesNotMatch(html, /class="ui-row__meta"/);
+  assert.match(html, /class="ui-row__tag">PR</);
   assert.doesNotMatch(html, /class="ui-row__badges"/);
-});
-
-test('UI.row meta: renders a separate meta line under subtitle', () => {
-  const html = UI.row({ title: 'foo', subtitle: 'preview text', meta: 'branch · model · 3m' });
-  assert.match(html, /class="ui-row__meta">branch · model · 3m</);
-  // meta must come after subtitle in the body for correct visual stacking
-  const subIdx = html.indexOf('ui-row__subtitle');
-  const metaIdx = html.indexOf('ui-row__meta');
-  assert.ok(subIdx !== -1 && metaIdx > subIdx, 'meta should follow subtitle');
-});
-
-test('UI.row meta: HTML in meta string is escaped', () => {
-  const html = UI.row({ title: 'foo', meta: '<script>x</script>' });
-  assert.match(html, /class="ui-row__meta">&lt;script&gt;x&lt;\/script&gt;</);
-});
-
-test('UI.row meta: empty meta does not render the span', () => {
-  const html = UI.row({ title: 'foo', meta: '' });
-  assert.doesNotMatch(html, /class="ui-row__meta"/);
 });
 
 test('UI.row badges: renders chip HTML on title line after the tag', () => {

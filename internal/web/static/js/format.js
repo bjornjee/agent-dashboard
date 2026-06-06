@@ -57,27 +57,6 @@ export function durationFromUpdate(agent) {
   return mins + 'm';
 }
 
-// lastMessagePreview returns a short, plain-text summary suitable for a
-// list-row subtitle. Whenever pending_question is populated, the question
-// text wins — the question is the blocking thing and must be visible
-// regardless of state group (a pinned_state=pr agent that's also asking
-// still needs the ask surfaced). Otherwise we fall back to the slow
-// reporter's last_message_preview. The returned string is markdown-stripped
-// and truncated to maxChars with a trailing ellipsis.
-export function lastMessagePreview(agent, maxChars = 80) {
-  if (!agent) return '';
-  let src = '';
-  if (agent.pending_question
-      && Array.isArray(agent.pending_question.questions)
-      && agent.pending_question.questions.length > 0) {
-    src = agent.pending_question.questions[0].question || '';
-  }
-  if (!src) src = agent.last_message_preview || '';
-  src = stripMarkdown(src);
-  if (!src) return '';
-  if (src.length > maxChars) return src.slice(0, maxChars - 1) + '…';
-  return src;
-}
 
 export function formatCost(value) {
   if (value == null || value <= 0) return '';
