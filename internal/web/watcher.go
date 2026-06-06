@@ -129,7 +129,7 @@ func (s *Server) readAgentState() []domain.Agent {
 		state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
 		state.GCSpawnPins(s.cfg.Profile.StateDir, 10*time.Minute)
 		state.ApplyPinnedStates(&sf)
-		state.ApplyIdleOverrides(&sf)
+		state.ApplyIdleOverrides(&sf, s.codexSessionsRootDir)
 		return conversation.TopLevelAgents(
 			state.SortedAgents(sf, ""),
 			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},

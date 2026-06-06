@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
@@ -168,7 +169,24 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 	if agent.Harness == "codex" {
 		wantTool = "request_user_input"
 	}
-	if agent.State != "question" || agent.CurrentTool != wantTool {
+	// Single paused-on-tool predicate shared with handlePendingQuestion.
+	// Driving the picker is safe iff one of:
+	//   1. JSONL/rollout fallback says unanswered — authoritative; the
+	//      CLI is blocked at the picker (covers the codex Stop race
+	//      where the hook missed PreToolUse).
+	//   2. Sidecar PendingQuestion is set AND CurrentTool matches —
+	//      the hook just stamped both and hasn't cleared them.
+	// Sidecar set + CurrentTool mismatch means a stale snapshot; reject
+	// to avoid sending picker keys into whatever buffer the CLI is
+	// actually showing.
+	roots := conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir}
+	pq := PausedOnQuestion(agent, roots)
+	if pq == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
+		return
+	}
+	sidecarStale := agent.PendingQuestion != nil && agent.CurrentTool != wantTool
+	if sidecarStale {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
 		return
 	}

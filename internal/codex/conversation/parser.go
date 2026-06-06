@@ -231,6 +231,26 @@ func ReadPlanContent(path string) string {
 	return latest
 }
 
+// LastPendingBlockingToolCodex returns "question" when the codex rollout
+// at path contains an unanswered request_user_input function_call, and
+// "" otherwise. It is the codex symmetric of
+// conversation.LastPendingBlockingTool (which handles claude's
+// AskUserQuestion / ExitPlanMode) and is consumed by
+// state.ApplyIdleOverrides to promote codex agents from state="done" or
+// "idle_prompt" up to state="question" when the rollout shows an
+// outstanding picker.
+//
+// Implementation is a thin wrapper over ReadPendingQuestion: same scan,
+// just discard the payload. Codex has no rollout-side ExitPlanMode
+// equivalent today, so this only returns "question" or "". Missing
+// files return "" without error.
+func LastPendingBlockingToolCodex(path string) string {
+	if ReadPendingQuestion(path) != nil {
+		return "question"
+	}
+	return ""
+}
+
 // ReadPendingQuestion returns the parsed payload of the most recent
 // unanswered request_user_input function_call in a codex rollout JSONL,
 // or nil if no such question is pending. A function_call_output with the

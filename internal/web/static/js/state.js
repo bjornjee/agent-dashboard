@@ -43,16 +43,70 @@ export function effectiveState(agent) {
   return agent.state;
 }
 
-// Returns a "PR open" tag when the user has pinned a PR on this agent.
+// Returns a "PR" tag when the user has pinned a PR on this agent.
 // `pinned_state === 'pr'` is the single source of truth — it persists
 // across state transitions (running, idle_prompt, …) so the tag shows
 // alongside the live state regardless of what the agent is doing.
+//
+// Suppressed when a pending question is active: a row with both PR and
+// ASK chips is the pill-pileup anti-pattern — question always beats PR.
+// The PR indicator survives in the status dot (status-dot--pr) so the
+// signal is not lost.
 export function prTag(agent) {
-  return agent && agent.pinned_state === 'pr' ? 'PR open' : '';
+  if (!agent || agent.pinned_state !== 'pr') return '';
+  if (questionBadge(agent)) return '';
+  return 'PR';
+}
+
+// stateLabel returns the human-readable label for a state group, used as
+// the aria-label on .status-dot so screen readers announce the meaning
+// of the color signal. Mirrors STATE_BADGE keys.
+export function stateLabel(state) {
+  switch (state) {
+    case 'permission':  return 'Needs approval';
+    case 'plan':        return 'Plan review';
+    case 'question':    return 'Needs reply';
+    case 'error':       return 'Error';
+    case 'running':     return 'Running';
+    case 'idle_prompt': return 'Ready for review';
+    case 'done':        return 'Done';
+    case 'pr':          return 'PR open';
+    case 'merged':      return 'Merged';
+    default:            return '';
+  }
 }
 
 // True when the agent has an open PR — used to gate Open PR / Merge
 // action chips. Same single signal as prTag.
 export function hasOpenPR(agent) {
   return !!(agent && agent.pinned_state === 'pr');
+}
+
+// planBadge returns 'PLAN' when the agent is operating in plan mode by
+// either signal: the hook-set state='plan' (ExitPlanMode pending) or
+// Claude Code's permission_mode='plan' (EnterPlanMode active). Keeps the
+// doctrine from ~/.claude/rules/core.md ("dashboard renders a visible
+// plan badge") in one place so list and detail render the same chip.
+export function planBadge(agent) {
+  if (!agent) return '';
+  return agent.state === 'plan' || agent.permission_mode === 'plan' ? 'PLAN' : '';
+}
+
+// subagentBadge returns '↳ N' when the agent has at least one live
+// subagent (subagent_count > 0). Empty otherwise. Defensive against
+// malformed state files: rejects non-numeric / negative counts.
+export function subagentBadge(agent) {
+  const n = agent && agent.subagent_count;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return '';
+  return '↳ ' + n;
+}
+
+// questionBadge returns 'ASK' when the agent has a pending question.
+// Independent of state group — an agent with pinned_state='pr' that's
+// also asking still has a blocking question. No counter: a row badge is
+// a signal, not a status panel; the count lives in the detail view.
+export function questionBadge(agent) {
+  const q = agent && agent.pending_question;
+  if (!q || !Array.isArray(q.questions) || q.questions.length === 0) return '';
+  return 'ASK';
 }

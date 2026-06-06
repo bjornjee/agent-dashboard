@@ -947,7 +947,7 @@ func TestApplyIdleOverrides_OverridesIdlePrompt(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan', got %q", sf.Agents[sessionID].State)
@@ -970,7 +970,7 @@ func TestApplyIdleOverrides_SkipsRunningAgents(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "running" {
 		t.Errorf("expected state 'running' unchanged (running agents should be skipped), got %q", sf.Agents[sessionID].State)
@@ -989,7 +989,7 @@ func TestApplyIdleOverrides_NoOverrideWithoutPlan(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "idle_prompt" {
 		t.Errorf("expected state 'idle_prompt' unchanged, got %q", sf.Agents[sessionID].State)
@@ -1009,7 +1009,7 @@ func TestApplyIdleOverrides_QuestionOverride(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "question" {
 		t.Errorf("expected state 'question', got %q", sf.Agents[sessionID].State)
@@ -1032,7 +1032,7 @@ func TestApplyIdleOverrides_PlanTakesPriorityOverQuestion(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected 'plan' to take priority over 'question', got %q", sf.Agents[sessionID].State)
@@ -1054,7 +1054,7 @@ func TestApplyIdleOverrides_OverridesPermissionWithPendingPlan(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan' (permission agent with pending ExitPlanMode), got %q", sf.Agents[sessionID].State)
@@ -1074,7 +1074,7 @@ func TestApplyIdleOverrides_LeavesPermissionAloneWhenNoPlan(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "permission" {
 		t.Errorf("expected state 'permission' unchanged (real permission, no plan), got %q", sf.Agents[sessionID].State)
@@ -1099,7 +1099,7 @@ func TestApplyIdleOverrides_QuestionAfterPlanWins(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "question" {
 		t.Errorf("expected 'question' (AskUserQuestion after ExitPlanMode), got %q", sf.Agents[sessionID].State)
@@ -1123,10 +1123,97 @@ func TestApplyIdleOverrides_PlanAfterUnansweredQuestionWins(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf)
+	ApplyIdleOverrides(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected 'plan' (ExitPlanMode after AskUserQuestion), got %q", sf.Agents[sessionID].State)
+	}
+}
+
+// codexRolloutSetup writes a codex rollout under codexSessionsRoot's
+// per-day directory tree (matching LocateRollout's expected layout) so
+// the codex branch of ApplyIdleOverrides can resolve it. Returns the
+// codexSessionsRoot path to pass through.
+func codexRolloutSetup(t *testing.T, sessionID, jsonl string) string {
+	t.Helper()
+	root := t.TempDir()
+	dayDir := filepath.Join(root, "2026", "06", "06")
+	if err := os.MkdirAll(dayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dayDir, "rollout-2026-06-06T11-00-00-"+sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(jsonl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// Codex's Stop hook fires when the model emits a request_user_input
+// function_call, leaving the agent file with state="done" while the
+// codex CLI is genuinely blocked at the inline picker. ApplyIdleOverrides
+// recovers by scanning the rollout and promoting state to "question".
+func TestApplyIdleOverrides_CodexPromotesDoneToQuestion(t *testing.T) {
+	sessionID := "019e9c6f-58cf-7fc1-8440-28ff45163db3"
+	jsonl := `{"timestamp":"2026-06-06T11:00:00Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"header\":\"Scope\",\"question\":\"How broad?\",\"options\":[{\"label\":\"A\"},{\"label\":\"B\"}]}]}","call_id":"call_codex_done"}}
+`
+	root := codexRolloutSetup(t, sessionID, jsonl)
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, State: "done", Harness: "codex"},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, root)
+
+	if got := sf.Agents[sessionID].State; got != "question" {
+		t.Errorf("expected 'question' (codex Stop race recovered), got %q", got)
+	}
+}
+
+// Codex agents with an answered request_user_input stay in their original
+// idle state — no false promotion.
+func TestApplyIdleOverrides_CodexLeavesAnsweredAlone(t *testing.T) {
+	sessionID := "019e9c6f-aaaa-1111-2222-333344445555"
+	jsonl := `{"timestamp":"2026-06-06T11:00:00Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"question\":\"x\",\"options\":[{\"label\":\"a\"}]}]}","call_id":"call_ans"}}
+{"timestamp":"2026-06-06T11:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_ans","output":"{\"answers\":{\"q1\":{\"answers\":[\"a\"]}}}"}}
+`
+	root := codexRolloutSetup(t, sessionID, jsonl)
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, State: "done", Harness: "codex"},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, root)
+
+	if got := sf.Agents[sessionID].State; got != "done" {
+		t.Errorf("expected 'done' (answered question is not pending), got %q", got)
+	}
+}
+
+// Claude agents in state="done" are not idle candidates — the
+// PostToolUse stop-state guard already prevented the race for claude.
+// Verify the new "done" branch is codex-only.
+func TestApplyIdleOverrides_ClaudeDoneIsNotCandidate(t *testing.T) {
+	sessionID := "sess-claude-done"
+	// Same JSONL as the codex promotion test but framed as a claude
+	// AskUserQuestion that has NOT been answered (no user message after).
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"AskUserQuestion","input":{"questions":[{"question":"Which?"}]}}]},"timestamp":"2026-03-28T10:00:00Z"}
+`
+	projDir, cwd := planTestSetup(t, sessionID, jsonl)
+
+	sf := domain.StateFile{
+		Agents: map[string]domain.Agent{
+			sessionID: {SessionID: sessionID, State: "done", Harness: "claude", Cwd: cwd, ProjDir: projDir},
+		},
+	}
+
+	ApplyIdleOverrides(&sf, "")
+
+	if got := sf.Agents[sessionID].State; got != "done" {
+		t.Errorf("expected 'done' (claude in done is not an idle candidate), got %q", got)
 	}
 }
 

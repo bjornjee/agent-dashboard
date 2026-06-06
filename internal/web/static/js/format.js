@@ -44,6 +44,20 @@ export function durationShort(agent) {
   return mins + 'm';
 }
 
+// durationFromUpdate mirrors durationShort but prefers updated_at over
+// started_at so list rows show "last activity" age, not session age.
+// Pre-#TODO state files only have started_at — falls back to keep them
+// rendering. Empty when neither timestamp is present.
+export function durationFromUpdate(agent) {
+  const ts = agent.updated_at || agent.started_at;
+  if (!ts) return '';
+  const t = new Date(ts);
+  const mins = Math.floor((new Date() - t) / 60000);
+  if (mins >= 60) return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  return mins + 'm';
+}
+
+
 export function formatCost(value) {
   if (value == null || value <= 0) return '';
   if (value >= 1000) return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
