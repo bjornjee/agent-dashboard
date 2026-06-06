@@ -1,6 +1,7 @@
 package web
 
 import (
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -402,6 +403,52 @@ func TestHandleAnswerQuestionRejectsNonQuestionState(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// TestHandleAnswerQuestion_AcceptsPinnedStateOverride asserts the endpoint
+// still drives the picker when ApplyPinnedStates has rewritten the agent's
+// State from "question" to "pr". CurrentTool + PendingQuestion are the
+// durable signal — agents with an open PR + a pending question must
+// still be answerable.
+func TestHandleAnswerQuestion_AcceptsPinnedStateOverride(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+	m.On("Output", mock.Anything,
+		"display-message", "-p", "-t", "%1",
+		"#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("main:0.0\n"), nil)
+	m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "1").Return(nil).Once()
+	m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+	agent := domain.Agent{
+		SessionID:   "aq-pinned",
+		State:       "pr", // post-ApplyPinnedStates: question → pr override
+		PinnedState: "pr",
+		CurrentTool: "AskUserQuestion",
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_x",
+			Questions: []domain.PendingQuestionPrompt{{Question: "Confirm?"}},
+		},
+		Harness:    "",
+		TmuxPaneID: "%1",
+		Cwd:        "/tmp/repo",
+	}
+	ts, _ := createTestServer(t, agent)
+
+	req, _ := http.NewRequest("POST",
+		ts.URL+"/api/agents/aq-pinned/answer-question",
+		strings.NewReader(`{"answers":[{"option_indices":[0],"freeform":"","multi":false}],"option_counts":[1]}`))
+	req.Header.Set("X-Requested-With", "dashboard")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d (body: %s)", resp.StatusCode, body)
 	}
 }
 

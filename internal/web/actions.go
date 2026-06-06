@@ -168,7 +168,16 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 	if agent.Harness == "codex" {
 		wantTool = "request_user_input"
 	}
-	if agent.State != "question" || agent.CurrentTool != wantTool {
+	// Pin overrides (ApplyPinnedStates) can rewrite State from "question" to
+	// "pr" for an agent that has both a pending question and an open PR.
+	// CurrentTool + a non-nil PendingQuestion are the durable signal that
+	// the agent is actually paused on the tool — accept either route in.
+	pausedOnTool := agent.CurrentTool == wantTool && agent.PendingQuestion != nil
+	if !pausedOnTool && agent.State != "question" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
+		return
+	}
+	if agent.CurrentTool != wantTool {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent is not paused on " + wantTool})
 		return
 	}

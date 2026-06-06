@@ -72,20 +72,13 @@ test('questionBadge: empty when no pending_question', () => {
   assert.equal(questionBadge({ pending_question: null }), '');
 });
 
-test('questionBadge: returns "ASK 1/1" for a single pending question', () => {
-  const agent = {
-    pending_question: { questions: [{ question: 'A?' }] },
-  };
-  assert.equal(questionBadge(agent), 'ASK 1/1');
-});
-
-test('questionBadge: returns "ASK 1/N" for multi-question batches', () => {
-  const agent = {
-    pending_question: {
-      questions: [{ question: 'A?' }, { question: 'B?' }, { question: 'C?' }],
-    },
-  };
-  assert.equal(questionBadge(agent), 'ASK 1/3');
+test('questionBadge: returns "ASK" for any pending question', () => {
+  // No counter — the chip is a presence signal, not a status panel; the
+  // detail view owns the question count.
+  assert.equal(questionBadge({ pending_question: { questions: [{ question: 'A?' }] } }), 'ASK');
+  assert.equal(questionBadge({
+    pending_question: { questions: [{ question: 'A?' }, { question: 'B?' }] },
+  }), 'ASK');
 });
 
 test('questionBadge: empty when pending_question has no questions array', () => {
