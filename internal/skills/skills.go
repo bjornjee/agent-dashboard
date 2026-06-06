@@ -9,7 +9,7 @@ import (
 )
 
 // DiscoverSkills scans the agent-dashboard plugin cache for skill names.
-// It finds the latest version directory, then lists subdirectories under skills/.
+// It finds the latest version directory, then lists skill directories with SKILL.md.
 // Returns nil if the directory doesn't exist or contains no skills.
 func DiscoverSkills(pluginCacheDir string) []string {
 	versionsDir := filepath.Join(pluginCacheDir, "agent-dashboard", "agent-dashboard")
@@ -42,9 +42,17 @@ func DiscoverSkills(pluginCacheDir string) []string {
 
 	var skills []string
 	for _, e := range entries {
-		if e.IsDir() {
-			skills = append(skills, e.Name())
+		if !e.IsDir() {
+			continue
 		}
+		name := e.Name()
+		if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(skillsDir, name, "SKILL.md")); err != nil {
+			continue
+		}
+		skills = append(skills, name)
 	}
 	sort.Strings(skills)
 	if len(skills) == 0 {

@@ -13,11 +13,20 @@ func mkdirAll(t *testing.T, path string) {
 	}
 }
 
+func writeSkill(t *testing.T, skillsDir, name string) {
+	t.Helper()
+	dir := filepath.Join(skillsDir, name)
+	mkdirAll(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+name+"\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDiscoverSkills_ValidDir(t *testing.T) {
 	tmp := t.TempDir()
 	skillsDir := filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.22.1", "skills")
 	for _, name := range []string{"feature", "fix", "chore"} {
-		mkdirAll(t, filepath.Join(skillsDir, name))
+		writeSkill(t, skillsDir, name)
 	}
 	got := DiscoverSkills(tmp)
 	want := []string{"chore", "feature", "fix"}
@@ -49,13 +58,28 @@ func TestDiscoverSkills_EmptySkillsDir(t *testing.T) {
 
 func TestDiscoverSkills_VersionOrdering(t *testing.T) {
 	tmp := t.TempDir()
-	mkdirAll(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.9.0", "skills", "old"))
-	mkdirAll(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.22.1", "skills", "new"))
+	writeSkill(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.9.0", "skills"), "old")
+	writeSkill(t, filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.22.1", "skills"), "new")
 
 	got := DiscoverSkills(tmp)
 	want := []string{"new"}
 	if len(got) != 1 || got[0] != "new" {
 		t.Errorf("expected %v from latest version, got %v", want, got)
+	}
+}
+
+func TestDiscoverSkills_RequiresSkillManifest(t *testing.T) {
+	tmp := t.TempDir()
+	skillsDir := filepath.Join(tmp, "agent-dashboard", "agent-dashboard", "0.22.1", "skills")
+	writeSkill(t, skillsDir, "feature")
+	mkdirAll(t, filepath.Join(skillsDir, "_shared"))
+	mkdirAll(t, filepath.Join(skillsDir, ".cache"))
+	mkdirAll(t, filepath.Join(skillsDir, "notes"))
+
+	got := DiscoverSkills(tmp)
+	want := []string{"feature"}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Errorf("expected %v, got %v", want, got)
 	}
 }
 

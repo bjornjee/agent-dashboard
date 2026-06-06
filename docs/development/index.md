@@ -13,4 +13,5 @@ Build from source, understand the architecture, and learn from the hard-won debu
 
 - **[Contributing](contributing/)** — Setup, make targets, testing, and submission guidelines
 - **[Architecture](architecture/)** — Package structure, data flow, and key dependencies
+- **[UI Automation Isolation](ui-automation-isolation/)** — Per-worktree Playwright resources and shared browser inspection policy
 - **[Learnings](learnings/)** — Debugging war stories: tmux races, macOS AMFI, and more

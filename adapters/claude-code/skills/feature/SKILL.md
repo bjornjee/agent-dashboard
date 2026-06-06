@@ -15,6 +15,8 @@ Feature description: $ARGUMENTS
 
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
 
+If the feature touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` progressively at planning, environment setup, verification, delegation, and cleanup points.
+
 ---
 
 ### Phase 1: Setup
@@ -60,7 +62,7 @@ Start two tracks in parallel:
 
    Ask the user only if no signal matches.
 
-2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed.
+2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed. For browser UI work, allocate worktree-local Playwright/server/profile/output resources per `../_shared/ui-automation.md`.
 3. Symlink large source-content directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying. NEVER symlink build outputs or per-project caches (`.next/`, `dist/`, `build/`, `out/`, `target/`, `.turbo/`, `.cache/`, `.parcel-cache/`, `.vite/`, `__pycache__/`, `.pytest_cache/`, `.gradle/`, `.venv/`, `node_modules/`) — they bake absolute paths and corrupt across worktrees, and must be regenerated per-worktree.
 4. On success, write a sentinel file: `touch .env-setup-done`
    On failure, write the error: `echo "<error message>" > .env-setup-failed`
@@ -216,6 +218,8 @@ Build the feature following strict RED → GREEN → REFACTOR:
 
 3. **REFACTOR.** Clean up. Run `make test` after each meaningful edit. **Tests broke during refactor? Revert that edit and try a smaller step.** Refactor is structure-only — if behavior changed, you're back in RED.
 
+For UI verification, prefer headless Playwright with worktree-local resources. Use interactive Browser/Chrome inspection only when the shared policy says it is warranted.
+
 **Gate:** Environment ready. All tests pass via `make test`. Implementation matches the approved plan.
 
 ---
@@ -242,7 +246,7 @@ Review all changes for correctness, security, and convention adherence. Apply al
 Triggered when the user indicates the feature has been merged upstream.
 
 1. Verify the branch is merged (warn if unmerged commits remain)
-2. Tear down environment resources: remove symlinks, stop dev servers or emulators, delete `.env-setup-done` / `.env-setup-failed` / `.feature-plan-path` sentinel files
+2. Tear down environment resources: remove symlinks, stop dev servers or emulators, release browser leases, remove worktree-local UI scratch state, delete `.env-setup-done` / `.env-setup-failed` / `.feature-plan-path` sentinel files
 3. Remove worktree and delete branch
 4. Confirm cleanup is complete
 
