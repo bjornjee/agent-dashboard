@@ -214,7 +214,13 @@ type AgentProfile struct {
 	PlansDir       string // Plans: ~/.claude/plans
 	SessionsDir    string // Session index: ~/.claude/sessions
 	PluginCacheDir string // Plugin cache: ~/.claude/plugins/cache
-	HomeDir        string // User home directory
+
+	// CodexPluginCacheDir is the codex plugin cache: ~/.codex/plugins/cache
+	// (or $CODEX_HOME/plugins/cache when set). Lives on the claude profile
+	// because /api/skills serves both harnesses from a single server.
+	CodexPluginCacheDir string
+
+	HomeDir string // User home directory
 }
 
 // Config holds all dashboard configuration.

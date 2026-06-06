@@ -17,9 +17,18 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 )
 
-// handleSkills returns the list of discovered plugin skills.
+// handleSkills returns the list of discovered plugin skills, optionally
+// filtered by harness via the ?harness= query param. With no param,
+// returns the claude cache list (back-compat for existing callers).
+// With ?harness=codex, returns the codex cache list minus skills the
+// dashboard cannot spawn on codex (see skills.SupportsHarness).
 func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request) {
-	discovered := skills.DiscoverSkills(s.cfg.Profile.PluginCacheDir)
+	harness := r.URL.Query().Get("harness")
+	discovered := skills.DiscoverSkillsForHarness(
+		s.cfg.Profile.PluginCacheDir,
+		s.cfg.Profile.CodexPluginCacheDir,
+		harness,
+	)
 	if discovered == nil {
 		discovered = []string{}
 	}

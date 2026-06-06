@@ -1591,6 +1591,76 @@ func TestSkillsEndpointWithSkills(t *testing.T) {
 	}
 }
 
+// /api/skills?harness=codex must scan the codex plugin cache and filter
+// out skills the dashboard blocks for codex (implement, rca). Without
+// the harness param, behavior is unchanged: scan the claude cache.
+func TestSkillsEndpoint_HarnessCodex(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	claudeCache := t.TempDir()
+	codexCache := t.TempDir()
+	cfg.Profile.PluginCacheDir = claudeCache
+	cfg.Profile.CodexPluginCacheDir = codexCache
+
+	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "claude-only"), 0700)
+	for _, name := range []string{"feature", "fix", "implement", "rca", "pr"} {
+		os.MkdirAll(filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", name), 0700)
+	}
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/skills?harness=codex")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	var skills []string
+	json.NewDecoder(resp.Body).Decode(&skills)
+	want := []string{"feature", "fix", "pr"}
+	if len(skills) != len(want) {
+		t.Fatalf("got %v, want %v", skills, want)
+	}
+	for i := range want {
+		if skills[i] != want[i] {
+			t.Errorf("skills[%d]=%q, want %q", i, skills[i], want[i])
+		}
+	}
+}
+
+func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	claudeCache := t.TempDir()
+	codexCache := t.TempDir()
+	cfg.Profile.PluginCacheDir = claudeCache
+	cfg.Profile.CodexPluginCacheDir = codexCache
+
+	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "feature"), 0700)
+	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "implement"), 0700)
+	os.MkdirAll(filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "codex-only"), 0700)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/skills")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	var skills []string
+	json.NewDecoder(resp.Body).Decode(&skills)
+	// implement stays — only codex blocks it.
+	want := []string{"feature", "implement"}
+	if len(skills) != len(want) {
+		t.Fatalf("got %v, want %v", skills, want)
+	}
+}
+
 func TestIsSensitivePath(t *testing.T) {
 	tests := []struct {
 		path string

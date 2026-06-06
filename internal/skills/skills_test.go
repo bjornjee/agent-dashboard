@@ -79,6 +79,62 @@ func TestBuildSkillList_Empty(t *testing.T) {
 	}
 }
 
+// Codex agents must surface skills installed under the codex plugin
+// cache (~/.codex/plugins/cache), and must hide skills that the dashboard
+// blocks for codex via SupportsHarness — implement and rca rely on
+// claude-only orchestration primitives.
+func TestDiscoverSkillsForHarness_CodexScansCodexCache(t *testing.T) {
+	claudeCache := t.TempDir()
+	codexCache := t.TempDir()
+	mkdirAll(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", "claude-only-skill"))
+	codexSkills := filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills")
+	for _, name := range []string{"feature", "fix", "implement", "rca", "pr"} {
+		mkdirAll(t, filepath.Join(codexSkills, name))
+	}
+
+	got := DiscoverSkillsForHarness(claudeCache, codexCache, "codex")
+	// implement + rca are blocked for codex; pr/feature/fix must remain.
+	want := []string{"feature", "fix", "pr"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got[%d]=%q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestDiscoverSkillsForHarness_ClaudeUsesClaudeCache(t *testing.T) {
+	claudeCache := t.TempDir()
+	codexCache := t.TempDir()
+	for _, name := range []string{"feature", "fix", "implement"} {
+		mkdirAll(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", name))
+	}
+	mkdirAll(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", "codex-only-skill"))
+
+	got := DiscoverSkillsForHarness(claudeCache, codexCache, "claude")
+	// implement stays — only codex blocks it.
+	want := []string{"feature", "fix", "implement"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got[%d]=%q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestDiscoverSkillsForHarness_EmptyHarnessFallsBackToClaude(t *testing.T) {
+	claudeCache := t.TempDir()
+	mkdirAll(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills", "feature"))
+	got := DiscoverSkillsForHarness(claudeCache, "", "")
+	if len(got) != 1 || got[0] != "feature" {
+		t.Errorf("got %v, want [feature]", got)
+	}
+}
+
 func Test_compareSemver(t *testing.T) {
 	tests := []struct {
 		a, b string

@@ -53,6 +53,36 @@ func DiscoverSkills(pluginCacheDir string) []string {
 	return skills
 }
 
+// DiscoverSkillsForHarness scans the plugin cache appropriate for the
+// given harness and filters out skills the harness does not support
+// (see SupportsHarness). Pass the claude cache and the codex cache; the
+// harness selects which one to scan. Empty harness falls back to claude
+// for backwards compatibility with /api/skills consumers that don't
+// pass a harness query param.
+func DiscoverSkillsForHarness(claudeCacheDir, codexCacheDir, harness string) []string {
+	cacheDir := claudeCacheDir
+	if harness == "codex" {
+		cacheDir = codexCacheDir
+	}
+	all := DiscoverSkills(cacheDir)
+	if len(all) == 0 {
+		return all
+	}
+	if harness != "codex" {
+		return all
+	}
+	filtered := make([]string, 0, len(all))
+	for _, s := range all {
+		if SupportsHarness(s, harness) {
+			filtered = append(filtered, s)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
+}
+
 // BuildSkillList returns a display list with "(none)" prepended to the skills.
 func BuildSkillList(skills []string) []string {
 	if len(skills) == 0 {

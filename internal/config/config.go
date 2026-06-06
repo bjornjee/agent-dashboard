@@ -74,15 +74,21 @@ func defaultClaudeProfile() domain.AgentProfile {
 		stateDir = env
 	}
 
+	codexBase := filepath.Join(home, ".codex")
+	if env := os.Getenv("CODEX_HOME"); env != "" {
+		codexBase = env
+	}
+
 	return domain.AgentProfile{
-		Name:           "Claude Code",
-		Command:        "claude",
-		ConfigDir:      base,
-		StateDir:       stateDir,
-		ProjectsDir:    filepath.Join(base, "projects"),
-		PlansDir:       filepath.Join(base, "plans"),
-		SessionsDir:    filepath.Join(base, "sessions"),
-		PluginCacheDir: filepath.Join(base, "plugins", "cache"),
-		HomeDir:        home,
+		Name:                "Claude Code",
+		Command:             "claude",
+		ConfigDir:           base,
+		StateDir:            stateDir,
+		ProjectsDir:         filepath.Join(base, "projects"),
+		PlansDir:            filepath.Join(base, "plans"),
+		SessionsDir:         filepath.Join(base, "sessions"),
+		PluginCacheDir:      filepath.Join(base, "plugins", "cache"),
+		CodexPluginCacheDir: filepath.Join(codexBase, "plugins", "cache"),
+		HomeDir:             home,
 	}
 }
