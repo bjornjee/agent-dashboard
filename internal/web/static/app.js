@@ -96,10 +96,25 @@ window.addEventListener('popstate', (e) => {
 });
 
 // Wrap an async action with button spinner feedback.
-async function withSpinner(evt, fn) {
+//
+// Default mode (append): the spinner is added as a sibling of the
+// existing content — used by text-label buttons like "Send Ctrl+C"
+// where "Send Ctrl+C ●" reads correctly.
+//
+// opts.replace=true: the spinner replaces the existing content for the
+// duration of the action. Used by icon-only round CTAs (e.g. the new-
+// agent Spawn button) where appending a second child crams two glyphs
+// into a 32×32 flex container and visually shifts the original icon
+// off-centre.
+async function withSpinner(evt, fn, opts) {
   const btn = evt && evt.target ? evt.target.closest('button') : null;
+  const replace = !!(opts && opts.replace);
   let origHtml;
-  if (btn) { origHtml = btn.innerHTML; btn.disabled = true; btn.innerHTML += UI.spinner(); }
+  if (btn) {
+    origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = replace ? UI.spinner() : (origHtml + UI.spinner());
+  }
   try { await fn(); } finally { if (btn) { btn.innerHTML = origHtml; btn.disabled = false; } }
 }
 
@@ -401,7 +416,7 @@ window.Dashboard = {
       } else {
         toast('Failed: ' + (result?.error || 'unknown'), 'error');
       }
-    });
+    }, { replace: true });
   },
 
   toggleExpand(btn) {
