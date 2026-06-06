@@ -120,17 +120,36 @@ export function renderCreate(app, agents) {
     </div>
   `;
 
-  get('/api/skills').then(skills => {
-    if (!Array.isArray(skills)) return;
-    const sel = document.getElementById('create-skill');
-    if (!sel) return;
-    for (const s of skills) {
-      const opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = s;
-      sel.appendChild(opt);
-    }
-  });
+  const skillSel = document.getElementById('create-skill');
+  const harnessSel = document.getElementById('create-harness');
+
+  // Different harnesses have different plugin caches and block-lists.
+  // Refetch when the harness changes so the dropdown matches what the
+  // backend will actually accept on spawn.
+  function reloadSkillsForHarness(harness) {
+    if (!skillSel) return;
+    const url = harness ? `/api/skills?harness=${encodeURIComponent(harness)}` : '/api/skills';
+    return get(url).then(skills => {
+      if (!Array.isArray(skills)) return;
+      // Preserve current selection if still valid; otherwise reset to "Skill".
+      const prev = skillSel.value;
+      while (skillSel.options.length > 1) skillSel.remove(1);
+      let restored = false;
+      for (const s of skills) {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        skillSel.appendChild(opt);
+        if (s === prev) restored = true;
+      }
+      skillSel.value = restored ? prev : '';
+    });
+  }
+
+  reloadSkillsForHarness(harnessSel ? harnessSel.value : '');
+  if (harnessSel) {
+    harnessSel.addEventListener('change', () => reloadSkillsForHarness(harnessSel.value));
+  }
 
   get('/api/suggestions').then(suggestions => {
     if (!suggestions || !Array.isArray(suggestions)) return;

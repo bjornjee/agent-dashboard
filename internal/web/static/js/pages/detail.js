@@ -155,7 +155,7 @@ export function updateActionBar(agent) {
       try { newInput.setSelectionRange(selStart, selEnd); } catch {}
     }
   }
-  if (newInput) attachSlashAutocomplete(newInput);
+  if (newInput) attachSlashAutocomplete(newInput, agent.harness);
 }
 
 // Track optimistic messages so refreshConversation can preserve them
@@ -1485,9 +1485,11 @@ export async function renderDetail(app, agents, agentId, setView) {
     refreshWorkingIndicator(agent);
   });
 
-  // Wire slash-command autocomplete to the composer textarea.
+  // Wire slash-command autocomplete to the composer textarea. Harness
+  // controls the trigger sigil ("/" for claude, "$" for codex) and the
+  // skill list returned from /api/skills?harness=.
   const composerInput = document.getElementById('reply-input');
-  if (composerInput) attachSlashAutocomplete(composerInput);
+  if (composerInput) attachSlashAutocomplete(composerInput, agent.harness);
 
   // Start conversation polling only when the conversation tab is active.
   if (savedTab === 'conversation') startConversationPoll(agentId);

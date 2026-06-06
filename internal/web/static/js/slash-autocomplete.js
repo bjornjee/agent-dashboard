@@ -1,45 +1,51 @@
 // Slash-command autocomplete for the detail composer.
 //
-// Triggered when the user types "/" at the start of the textarea or
-// after whitespace. Fetches /api/skills (cached) and renders a small
-// popup of matching commands. Arrow keys navigate, Enter / Tab inserts,
-// Esc dismisses.
+// Triggered when the user types the harness's command sigil at the start
+// of the textarea or after whitespace ("/" for claude, "$" for codex).
+// Fetches /api/skills (cached per harness) and renders a small popup of
+// matching commands. Arrow keys navigate, Enter / Tab inserts, Esc
+// dismisses.
 
 import { get } from './api.js';
 import { escapeHtml } from './format.js';
 
-let skillsCache = null;
+const skillsCacheByHarness = new Map();
 let activeIndex = 0;
 let currentMatches = [];
 
-// agent-dashboard:* plugin commands. The /api/skills endpoint returns
-// bare skill names; we render them with the plugin prefix the agent
-// expects (Claude Code uses /plugin:skill syntax).
-const COMMAND_PREFIX = '/agent-dashboard:';
-
-async function loadSkills() {
-  if (skillsCache) return skillsCache;
-  try {
-    const skills = await get('/api/skills');
-    skillsCache = Array.isArray(skills) ? skills : [];
-  } catch {
-    skillsCache = [];
+// Claude uses /agent-dashboard:<skill>; codex uses $agent-dashboard:<skill>.
+// commandConfig returns the trigger sigil + rendered prefix for a harness.
+function commandConfig(harness) {
+  if (harness === 'codex') {
+    return { sigil: '$', prefix: '$agent-dashboard:' };
   }
-  return skillsCache;
+  return { sigil: '/', prefix: '/agent-dashboard:' };
 }
 
-// Returns the slash-fragment the user is typing at the cursor, or null
-// if the cursor isn't in a slash context. Recognises "/foo" at the
-// start of the input or directly after whitespace.
-function detectSlashFragment(input) {
+async function loadSkills(harness) {
+  if (skillsCacheByHarness.has(harness)) return skillsCacheByHarness.get(harness);
+  const url = harness ? `/api/skills?harness=${encodeURIComponent(harness)}` : '/api/skills';
+  let skills;
+  try {
+    const res = await get(url);
+    skills = Array.isArray(res) ? res : [];
+  } catch {
+    skills = [];
+  }
+  skillsCacheByHarness.set(harness, skills);
+  return skills;
+}
+
+// Returns the command-fragment the user is typing at the cursor, or null
+// if the cursor isn't in a command context. Recognises "<sigil>foo" at
+// the start of the input or directly after whitespace.
+function detectCommandFragment(input, sigil) {
   const value = input.value || '';
   const cursor = input.selectionStart ?? value.length;
-  // Walk backwards from the cursor to find the start of the current
-  // word. The word starts after the last whitespace or at index 0.
   let start = cursor;
   while (start > 0 && !/\s/.test(value[start - 1])) start--;
   const word = value.slice(start, cursor);
-  if (!word.startsWith('/')) return null;
+  if (!word.startsWith(sigil)) return null;
   return { start, end: cursor, fragment: word };
 }
 
@@ -84,21 +90,20 @@ function positionPopup(popup, input) {
   popup.style.maxWidth = Math.max(280, Math.min(420, r.width)) + 'px';
 }
 
-async function update(input) {
-  const ctx = detectSlashFragment(input);
+async function update(input, harness) {
+  const cfg = commandConfig(harness);
+  const ctx = detectCommandFragment(input, cfg.sigil);
   if (!ctx) {
     hidePopup();
     return;
   }
-  const skills = await loadSkills();
-  // Build the full command set. We support the bare prefix (/) to show
-  // everything, and partial fragments after the colon or prefix.
+  const skills = await loadSkills(harness);
   const all = skills.map((s) => ({
-    full: COMMAND_PREFIX + s,
+    full: cfg.prefix + s,
     skill: s,
     hint: '',
   }));
-  // Filter: match against fragment minus the leading "/".
+  // Filter: match against fragment minus the leading sigil.
   const needle = ctx.fragment.slice(1).toLowerCase();
   currentMatches = all.filter((c) => {
     const hay = c.full.slice(1).toLowerCase();
@@ -114,8 +119,9 @@ async function update(input) {
   positionPopup(popup, input);
 }
 
-function applySelection(input, match) {
-  const ctx = detectSlashFragment(input);
+function applySelection(input, match, harness) {
+  const cfg = commandConfig(harness);
+  const ctx = detectCommandFragment(input, cfg.sigil);
   if (!ctx) return;
   const before = input.value.slice(0, ctx.start);
   const after = input.value.slice(ctx.end);
@@ -130,14 +136,15 @@ function applySelection(input, match) {
 
 // Public — wire up a textarea to drive the popup. Returns a cleanup
 // function. Safe to call multiple times on the same input; subsequent
-// calls replace the prior listeners.
-export function attachSlashAutocomplete(input) {
+// calls replace the prior listeners. The harness argument selects the
+// command sigil ("/" for claude, "$" for codex) and the skill list.
+export function attachSlashAutocomplete(input, harness) {
   if (!input) return () => {};
   // Prevent double-binding.
   if (input.dataset.slashBound === 'true') return () => {};
   input.dataset.slashBound = 'true';
 
-  const onInput = () => update(input);
+  const onInput = () => update(input, harness);
   const onKeyDown = (e) => {
     const popup = document.getElementById('slash-autocomplete');
     const isOpen = popup && !popup.hidden && currentMatches.length;
@@ -155,7 +162,7 @@ export function attachSlashAutocomplete(input) {
       // normal Enter-to-send handler in detail.js takes over.
       e.preventDefault();
       e.stopPropagation();
-      applySelection(input, currentMatches[activeIndex]);
+      applySelection(input, currentMatches[activeIndex], harness);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       hidePopup();
@@ -177,7 +184,7 @@ export function attachSlashAutocomplete(input) {
     if (!item) return;
     e.preventDefault();
     const idx = parseInt(item.dataset.idx, 10);
-    if (currentMatches[idx]) applySelection(input, currentMatches[idx]);
+    if (currentMatches[idx]) applySelection(input, currentMatches[idx], harness);
   });
 
   return () => {
