@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
@@ -52,24 +53,61 @@ func (s *Server) clearTrustPane(paneID string) {
 }
 
 // applyTrustFlags stamps TrustPromptDetected onto agents whose
-// TmuxPaneID is in the trust set. Returns the same slice (mutated in
-// place) so callers can chain through state-resolution pipelines.
+// TmuxPaneID is in the trust set, and synthesizes placeholder agents
+// for trust panes that have no matching state file. Claude Code and
+// codex both block on the harness trust dialog BEFORE firing the
+// SessionStart hook, so a real spawn in an untrusted folder has no
+// agent record yet. Without the placeholder, the chip + toast surface
+// has no row to land on and the user sees nothing.
+//
+// Placeholder data is read from the spawn pin staged by handleCreate.
+// Synthetic SessionID is derived from the pane_id so the placeholder
+// remains stable across SSE ticks; when the real state file later
+// appears with the same TmuxPaneID, this function stamps that agent
+// directly and skips the placeholder.
 func (s *Server) applyTrustFlags(agents []domain.Agent) []domain.Agent {
-	if len(agents) == 0 {
-		return agents
-	}
 	s.trustMu.Lock()
 	defer s.trustMu.Unlock()
 	if len(s.trustPanes) == 0 {
 		return agents
 	}
+	matched := map[string]bool{}
 	for i := range agents {
 		if agents[i].TmuxPaneID == "" {
 			continue
 		}
 		if _, ok := s.trustPanes[agents[i].TmuxPaneID]; ok {
 			agents[i].TrustPromptDetected = true
+			matched[agents[i].TmuxPaneID] = true
 		}
+	}
+	var placeholders []domain.Agent
+	for paneID := range s.trustPanes {
+		if matched[paneID] {
+			continue
+		}
+		pin, ok := state.ReadSpawnPin(s.cfg.Profile.StateDir, paneID)
+		if !ok {
+			continue
+		}
+		sess, win, pane, _ := tmux.ParseTarget(pin.Target)
+		placeholders = append(placeholders, domain.Agent{
+			SessionID:           "trust-pending-" + paneID,
+			TmuxPaneID:          paneID,
+			Target:              pin.Target,
+			Session:             sess,
+			Window:              win,
+			Pane:                pane,
+			Cwd:                 pin.WorktreeCwd,
+			State:               "running",
+			TrustPromptDetected: true,
+			Harness:             s.cfg.Harness.Name(),
+		})
+	}
+	if len(placeholders) > 0 {
+		// Prepend so trust-blocked agents are visually first — they're
+		// the most urgent thing the user can act on.
+		agents = append(placeholders, agents...)
 	}
 	return agents
 }

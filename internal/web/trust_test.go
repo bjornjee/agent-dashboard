@@ -7,6 +7,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -49,14 +50,87 @@ func TestServer_ApplyTrustFlags(t *testing.T) {
 		{SessionID: "c", TmuxPaneID: ""},
 	}
 	out := s.applyTrustFlags(agents)
-	if out[0].TrustPromptDetected {
+	// Find each by SessionID — applyTrustFlags may reorder via placeholder
+	// injection for unmatched trust panes.
+	byID := map[string]domain.Agent{}
+	for _, a := range out {
+		byID[a.SessionID] = a
+	}
+	if byID["a"].TrustPromptDetected {
 		t.Errorf("agent a (pane %%1) should NOT be flagged")
 	}
-	if !out[1].TrustPromptDetected {
+	if !byID["b"].TrustPromptDetected {
 		t.Errorf("agent b (pane %%2) SHOULD be flagged")
 	}
-	if out[2].TrustPromptDetected {
+	if byID["c"].TrustPromptDetected {
 		t.Errorf("agent c (no pane id) should NOT be flagged")
+	}
+}
+
+// TestServer_ApplyTrustFlagsSynthesizesPlaceholder asserts that when a
+// trust pane has no matching agent (because the harness blocks on the
+// trust dialog before writing its SessionStart hook payload), a
+// placeholder Agent is injected so the dashboard can render the trust
+// chip + toast even without a real state file.
+func TestServer_ApplyTrustFlagsSynthesizesPlaceholder(t *testing.T) {
+	s := newTrustTestServer(t)
+	// Stage a spawn pin so the placeholder can pick up the folder.
+	if err := state.WriteSpawnPin(s.cfg.Profile.StateDir, state.SpawnPin{
+		PaneID:      "%99",
+		Target:      "main:1.0",
+		WorktreeCwd: "/Users/me/Library/Sounds",
+	}); err != nil {
+		t.Fatalf("write spawn pin: %v", err)
+	}
+	s.markTrustPane("%99")
+
+	out := s.applyTrustFlags(nil)
+	if len(out) != 1 {
+		t.Fatalf("want 1 synthesized agent, got %d", len(out))
+	}
+	a := out[0]
+	if a.TmuxPaneID != "%99" {
+		t.Errorf("placeholder pane id = %q, want %%99", a.TmuxPaneID)
+	}
+	if !a.TrustPromptDetected {
+		t.Errorf("placeholder should have TrustPromptDetected=true")
+	}
+	if a.Cwd != "/Users/me/Library/Sounds" {
+		t.Errorf("placeholder cwd = %q, want /Users/me/Library/Sounds", a.Cwd)
+	}
+	if a.Target != "main:1.0" {
+		t.Errorf("placeholder target = %q, want main:1.0", a.Target)
+	}
+	if a.State != "running" {
+		t.Errorf("placeholder state = %q, want running", a.State)
+	}
+	if a.SessionID == "" {
+		t.Errorf("placeholder must carry a synthetic SessionID for routing")
+	}
+}
+
+// TestServer_ApplyTrustFlagsNoPlaceholderWhenAgentExists asserts that
+// once the harness writes its state file (post-trust-accept), the
+// placeholder is NOT injected — the real agent gets stamped instead.
+func TestServer_ApplyTrustFlagsNoPlaceholderWhenAgentExists(t *testing.T) {
+	s := newTrustTestServer(t)
+	_ = state.WriteSpawnPin(s.cfg.Profile.StateDir, state.SpawnPin{
+		PaneID: "%99", Target: "main:1.0", WorktreeCwd: "/x",
+	})
+	s.markTrustPane("%99")
+
+	agents := []domain.Agent{
+		{SessionID: "real", TmuxPaneID: "%99", State: "running"},
+	}
+	out := s.applyTrustFlags(agents)
+	if len(out) != 1 {
+		t.Fatalf("want 1 agent (no placeholder), got %d", len(out))
+	}
+	if !out[0].TrustPromptDetected {
+		t.Errorf("real agent should be stamped")
+	}
+	if out[0].SessionID != "real" {
+		t.Errorf("real agent should remain, got %q", out[0].SessionID)
 	}
 }
 
