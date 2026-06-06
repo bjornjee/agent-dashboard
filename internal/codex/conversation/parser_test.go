@@ -96,6 +96,78 @@ func TestRead_LimitTrimsHead(t *testing.T) {
 	}
 }
 
+// Codex emits a clean `item_completed` event with `item.type=="Plan"` when
+// a plan is finalized (the same `<proposed_plan>` content the user sees in
+// the codex TUI, with the wrapper stripped). The parser must emit a
+// synthetic plan-saved ConversationEntry at that timestamp so the frontend
+// can render the chat-stream "View plan" navigation card — mirroring how
+// the claude parser handles ExitPlanMode tool_use.
+func TestRead_EmitsPlanSavedOnItemCompletedPlan(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"2026-06-06T06:33:02.202Z","type":"event_msg","payload":{"type":"user_message","message":"create the migration plan"}}
+{"timestamp":"2026-06-06T06:39:26.092Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"019e9ba2","turn_id":"019e9ba8","item":{"type":"Plan","id":"019e9ba8-plan","text":"# Flatten Move-in Items Checklist\n\nArchive non-table blocks."}}}
+{"timestamp":"2026-06-06T06:39:30.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Plan ready for review."}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := conversation.Read(path, 100)
+	if err != nil {
+		t.Fatalf("Read err = %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d entries, want 3 (human, plan-saved, assistant). entries: %+v", len(got), got)
+	}
+	if got[1].Role != "plan-saved" {
+		t.Errorf("got[1].Role = %q, want \"plan-saved\"", got[1].Role)
+	}
+	if got[1].Timestamp != "2026-06-06T06:39:26.092Z" {
+		t.Errorf("got[1].Timestamp = %q, want plan item_completed timestamp", got[1].Timestamp)
+	}
+}
+
+// ReadPlanContent returns the most recent plan text emitted in this codex
+// session — the `item.text` payload of the latest item_completed event
+// whose item.type is "Plan". Missing files and sessions with no plan
+// return "" without error so the handler can fall through to an empty
+// state.
+func TestReadPlanContent_ReturnsLatestPlanText(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"2026-06-06T06:39:26.092Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"Plan","text":"# First plan\n\nold"}}}
+{"timestamp":"2026-06-06T06:39:30.000Z","type":"event_msg","payload":{"type":"agent_message","message":"chatter"}}
+{"timestamp":"2026-06-06T06:45:00.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"Plan","text":"# Second plan\n\nlatest"}}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := conversation.ReadPlanContent(path)
+	if got != "# Second plan\n\nlatest" {
+		t.Errorf("ReadPlanContent = %q, want second plan text", got)
+	}
+}
+
+func TestReadPlanContent_NoPlanReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"t1","type":"event_msg","payload":{"type":"user_message","message":"hi"}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := conversation.ReadPlanContent(path); got != "" {
+		t.Errorf("ReadPlanContent = %q, want empty", got)
+	}
+}
+
+func TestReadPlanContent_MissingFileReturnsEmpty(t *testing.T) {
+	if got := conversation.ReadPlanContent(filepath.Join(t.TempDir(), "nope.jsonl")); got != "" {
+		t.Errorf("ReadPlanContent = %q, want empty for missing file", got)
+	}
+}
+
 // Malformed JSON lines and unrecognized event types are skipped without
 // affecting valid entries (resilient to partial tail writes from codex).
 func TestRead_SkipsMalformedAndUnknown(t *testing.T) {

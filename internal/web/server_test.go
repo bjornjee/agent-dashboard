@@ -870,6 +870,66 @@ func TestPlanEndpoint(t *testing.T) {
 	}
 }
 
+// Codex agents store plan content inside the rollout JSONL as
+// item_completed events with item.type="Plan". handlePlan must route by
+// harness and surface the latest plan text — claude's projDir-based
+// helpers don't apply to codex sessions.
+func TestPlanEndpoint_Codex(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = t.TempDir()
+	cfg.Profile.PlansDir = t.TempDir()
+
+	sessionID := "019e9ba2-84c1-77a0-8bb4-ee9e88264f58"
+	rolloutDir := filepath.Join(codexHome, "sessions", "2026", "06", "06")
+	if err := os.MkdirAll(rolloutDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rolloutPath := filepath.Join(rolloutDir, "rollout-2026-06-06T14-32-59-"+sessionID+".jsonl")
+	planText := "# Flatten checklist\n\nArchive non-table blocks."
+	contents := `{"timestamp":"2026-06-06T06:39:26.092Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"Plan","text":` + jsonQuoted(planText) + `}}}` + "\n"
+	if err := os.WriteFile(rolloutPath, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+	agent := domain.Agent{
+		SessionID: sessionID,
+		State:     "plan",
+		Cwd:       "/tmp/planrepo",
+		Harness:   "codex",
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/plan")
+	if err != nil {
+		t.Fatalf("GET plan: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result["content"] != planText {
+		t.Errorf("plan content = %q, want %q", result["content"], planText)
+	}
+}
+
+func jsonQuoted(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
 func TestUsageEndpoint(t *testing.T) {
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()
