@@ -1500,6 +1500,14 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-fast), opacity var(--transition-fast);
 }
+.ui-modal-btn:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.ui-modal-btn:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
 .ui-modal-btn--ghost {
   background: transparent;
   color: var(--text-secondary);
@@ -1681,10 +1689,9 @@ button.btn-ghost.btn-sm {
 
 /* === Toast — neutral pill with status dot.
  * Top-anchored so it never lands on the floating dock or sticky bottom
- * actions (Spawn, composer, action-bar). Mobile: top-center.
- * Desktop (>=900px): top-right. Status is signalled by a small dot, not
- * by tinting the whole surface — keeps the register calm and consistent
- * with the rest of the iOS card stack. === */
+ * actions (Spawn, composer, action-bar). Status is signalled by a small
+ * dot, not by tinting the whole surface — keeps the register calm and
+ * consistent with the rest of the iOS card stack. === */
 .ui-toast {
   position: fixed;
   top: calc(56px + var(--space-3) + env(safe-area-inset-top));
@@ -1760,12 +1767,10 @@ button.btn-ghost.btn-sm {
 @media (min-width: 900px) {
   .ui-toast {
     top: var(--space-4);
-    right: var(--space-4);
-    left: auto;
-    transform: translateY(-6px);
-    max-width: 440px;
+    transform: translate(-50%, -6px);
+    max-width: 360px;
   }
-  .ui-toast--visible { transform: translateY(0); }
+  .ui-toast--visible { transform: translate(-50%, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-toast { transition: none; }
@@ -1786,19 +1791,47 @@ button.btn-ghost.btn-sm {
 
 .modal {
   background: var(--bg-elevated);
-  padding: 24px;
+  padding: var(--space-6);
   border-radius: var(--radius-xl);
-  max-width: 340px;
-  width: 90%;
-  text-align: center;
+  max-width: 380px;
+  width: min(calc(100% - var(--space-6)), 380px);
+  text-align: left;
   border: 1px solid var(--border-default);
   box-shadow: 0 4px 12px var(--shadow-medium);
+}
+
+.modal-title {
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 22px;
+  margin-bottom: var(--space-2);
+}
+
+.modal-message {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 20px;
+  margin-bottom: var(--space-5);
 }
 
 .modal-actions {
   display: flex;
   gap: 8px;
-  justify-content: center;
+  justify-content: flex-end;
+}
+
+@media (max-width: 480px) {
+  .modal {
+    padding: var(--space-5);
+  }
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .modal-actions .ui-modal-btn {
+    min-width: 0;
+  }
 }
 
 /* ============================================
@@ -3878,4 +3911,3 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   .search-overlay { padding-top: 6vh; }
   .search-overlay__panel { width: 96vw; max-height: 80vh; }
 }
-

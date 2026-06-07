@@ -247,6 +247,14 @@ func TmuxSendRaw(target, key string) error {
 	return runner.Run(ctx, "send-keys", "-t", target, key)
 }
 
+// TmuxSendRawKeys sends raw keys to a tmux pane without adding Enter.
+func TmuxSendRawKeys(target string, keys ...string) error {
+	if err := ValidateTarget(target); err != nil {
+		return err
+	}
+	return tmuxSendSubmitKeys(target, keys...)
+}
+
 // TmuxKillPane kills a tmux pane by target and rebalances the window layout.
 func TmuxKillPane(target string) error {
 	sw := ExtractSessionWindow(target)

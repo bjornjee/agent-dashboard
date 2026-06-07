@@ -158,6 +158,13 @@ export function attachSlashAutocomplete(input, harness) {
       activeIndex = (activeIndex - 1 + currentMatches.length) % currentMatches.length;
       render(popup, currentMatches);
     } else if (e.key === 'Enter' || e.key === 'Tab') {
+      const cfg = commandConfig(harness);
+      const ctx = detectCommandFragment(input, cfg.sigil);
+      const complete = ctx && currentMatches.some((m) => m.full === ctx.fragment);
+      if (e.key === 'Enter' && complete) {
+        hidePopup();
+        return;
+      }
       // Only intercept Enter when the popup is open; otherwise the
       // normal Enter-to-send handler in detail.js takes over.
       e.preventDefault();

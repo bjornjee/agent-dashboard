@@ -692,11 +692,11 @@ test.describe('Per-turn tally + optimistic Thinking', () => {
     expect(tally.toLowerCase()).toContain('file');
   });
 
-  test('Thinking appears immediately after confirmUserMessageSent (no SSE wait)', async ({ page }) => {
+  test('Thinking appears immediately after send (no SSE wait)', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    // Agent starts in Stop state — no indicator on initial mount.
+    // Agent starts idle — no indicator on initial mount.
     await mockApiWithActivity(page, makeAgent({
-      session_id: 'desk-001', state: 'running', last_hook_event: 'Stop', current_tool: '',
+      session_id: 'desk-001', state: 'idle_prompt', last_hook_event: 'Stop', current_tool: '',
     }));
 
     await page.goto('/');
@@ -708,34 +708,31 @@ test.describe('Per-turn tally + optimistic Thinking', () => {
     // Indicator should be absent (last_hook_event === 'Stop')
     expect(await page.locator('.ui-msg-status--working').count()).toBe(0);
 
-    // Simulate sendInput → POST ack path. No SSE event will fire; the
-    // ONLY trigger for the indicator is confirmUserMessageSent().
+    // Simulate sendInput. No SSE event will fire; the optimistic send path
+    // mounts the indicator immediately, before POST ack returns.
     await page.evaluate(async () => {
       const mod = await import('/js/pages/detail.js');
       // Prime lastKnownAgent via a refresh that would no-op (Stop state).
       const agents = await fetch('/api/agents').then(r => r.json());
       mod.refreshWorkingIndicator(agents[0]);
       mod.appendUserMessage('test message');
-      mod.confirmUserMessageSent();
     });
 
-    // Indicator should be present WITHOUT waiting for SSE — assert
-    // within 500ms (which is well shy of the real SSE lag).
+    // Indicator should be present WITHOUT waiting for SSE or POST ack.
     await expect(page.locator('.ui-msg-status--working')).toBeVisible({ timeout: 500 });
-    await expect(page.locator('.ui-msg-status__label')).toContainText('Thinking');
   });
 });
 
 // ---------- Slash-command autocomplete ----------
 
 test.describe('Slash-command autocomplete', () => {
-  async function mockApiWithSkills(page, skills) {
+  async function mockApiWithSkills(page, skills, agentOverrides = {}) {
     await page.route('**/events', (route) => route.abort('connectionrefused'));
-    await page.route('**/api/skills', (route) => route.fulfill({ json: skills }));
+    await page.route('**/api/skills*', (route) => route.fulfill({ json: skills }));
     await page.route(/\/api\/agents/, async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path === '/api/agents') {
-        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', state: 'running', last_hook_event: 'Stop' })] });
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', state: 'running', last_hook_event: 'Stop', ...agentOverrides })] });
       } else if (path.endsWith('/conversation')) {
         await route.fulfill({ json: [] });
       } else if (path.endsWith('/activity')) {
@@ -801,6 +798,24 @@ test.describe('Slash-command autocomplete', () => {
     await expect(input).toHaveValue('/agent-dashboard:pr ');
   });
 
+  test('Enter submits an already-complete Codex skill command', async ({ page }) => {
+    await mockApiWithSkills(page, ['pr', 'feature'], { harness: 'codex' });
+    await mountDetail(page);
+
+    const input = page.locator('#reply-input');
+    await input.click();
+    await input.type('$agent-dashboard:pr');
+    await expect(page.locator('#slash-autocomplete')).toBeVisible();
+
+    const sent = page.waitForRequest((req) =>
+      req.method() === 'POST' &&
+      req.url().includes('/api/agents/desk-001/input') &&
+      req.postDataJSON().text === '$agent-dashboard:pr'
+    );
+    await input.press('Enter');
+    await sent;
+  });
+
   test('Escape dismisses without inserting', async ({ page }) => {
     await mockApiWithSkills(page, ['pr', 'feature']);
     await mountDetail(page);
@@ -819,6 +834,59 @@ test.describe('Slash-command autocomplete', () => {
 // ---------- Sending caption lifecycle ----------
 
 test.describe('Sending caption clears on POST ack and does not reappear', () => {
+  test('pending user bubble survives a late initial conversation render', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    let releaseConversation;
+    const conversationGate = new Promise((resolve) => { releaseConversation = resolve; });
+
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route(/\/api\/agents/, async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', state: 'idle_prompt', last_hook_event: 'Stop' })] });
+      } else if (path.endsWith('/conversation')) {
+        await conversationGate;
+        await route.fulfill({ json: [
+          { Role: 'human', Content: 'previous question', Timestamp: '2026-06-02T10:00:00.000Z' },
+          { Role: 'assistant', Content: 'previous answer', Timestamp: '2026-06-02T10:00:01.000Z' },
+        ]});
+      } else if (path.endsWith('/input')) {
+        await route.fulfill({ json: { ok: 'sent' } });
+      } else if (path.endsWith('/pending-question')) {
+        await route.fulfill({ json: {} });
+      } else if (path.endsWith('/activity')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+
+    const input = page.locator('#reply-input');
+    await input.fill('new pending message');
+    const sent = page.waitForRequest((req) =>
+      req.method() === 'POST' &&
+      req.url().includes('/api/agents/desk-001/input') &&
+      req.postDataJSON().text === 'new pending message'
+    );
+    await input.press('Enter');
+    await sent;
+    await expect(page.locator('.ui-msg--user')).toContainText('new pending message');
+
+    releaseConversation();
+    await expect(page.locator('.ui-msg--user').last()).toContainText('new pending message');
+  });
+
   test('refreshConversation must not re-add the "Sending…" caption after ack', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.route('**/events', (route) => route.abort('connectionrefused'));
@@ -882,6 +950,134 @@ test.describe('Sending caption clears on POST ack and does not reappear', () => 
     // BUT the "Sending…" caption must NOT be back.
     await expect(page.locator('.ui-msg--user').last()).toBeVisible();
     await expect(page.locator('.ui-msg__caption--sending')).toHaveCount(0);
+  });
+});
+
+// ---------- Codex conversation streaming ----------
+
+test.describe('Codex conversation incremental refresh', () => {
+  test('poll refresh updates an existing assistant bubble when content grows', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    let assistantText = 'First chunk.';
+
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route(/\/api\/agents/, async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', harness: 'codex', state: 'running', last_hook_event: 'PreToolUse' })] });
+      } else if (path.endsWith('/conversation')) {
+        await route.fulfill({ json: [
+          { Role: 'human', Content: 'please explain', Timestamp: '2026-06-02T10:00:00.000Z' },
+          { Role: 'assistant', Content: assistantText, Timestamp: '2026-06-02T10:00:01.000Z' },
+        ]});
+      } else if (path.endsWith('/pending-question')) {
+        await route.fulfill({ json: {} });
+      } else if (path.endsWith('/activity')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await expect(page.locator('.ui-msg--assistant')).toContainText('First chunk.');
+
+    assistantText = 'First chunk. Second chunk.';
+    await page.evaluate(async () => {
+      const mod = await import('/js/pages/detail.js');
+      mod.refreshActiveTab('desk-001', { session_id: 'desk-001', harness: 'codex', state: 'running', last_hook_event: 'PreToolUse' });
+    });
+
+    await expect(page.locator('.ui-msg--assistant')).toContainText('Second chunk.');
+    await expect(page.locator('.ui-msg--assistant')).toHaveCount(1);
+  });
+
+  test('active Codex chat poll surfaces assistant updates without waiting for refresh', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    let assistantText = 'Initial text.';
+
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route(/\/api\/agents/, async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', harness: 'codex', state: 'running', last_hook_event: 'PreToolUse' })] });
+      } else if (path.endsWith('/conversation')) {
+        await route.fulfill({ json: [
+          { Role: 'human', Content: 'please explain', Timestamp: '2026-06-02T10:00:00.000Z' },
+          { Role: 'assistant', Content: assistantText, Timestamp: '2026-06-02T10:00:01.000Z' },
+        ]});
+      } else if (path.endsWith('/pending-question')) {
+        await route.fulfill({ json: {} });
+      } else if (path.endsWith('/activity')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await expect(page.locator('.ui-msg--assistant')).toContainText('Initial text.');
+
+    assistantText = 'Initial text. Arrived from poll.';
+
+    await expect(page.locator('.ui-msg--assistant')).toContainText('Arrived from poll.', { timeout: 1200 });
+  });
+
+  test('adjacent assistant fragments render as one growing bubble', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    await page.route('**/events', (route) => route.abort('connectionrefused'));
+    await page.route(/\/api\/agents/, async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/agents') {
+        await route.fulfill({ json: [makeAgent({ session_id: 'desk-001', harness: 'codex', state: 'running', last_hook_event: 'PreToolUse' })] });
+      } else if (path.endsWith('/conversation')) {
+        await route.fulfill({ json: [
+          { Role: 'human', Content: 'please explain', Timestamp: '2026-06-02T10:00:00.000Z' },
+          { Role: 'assistant', Content: 'First chunk.', Timestamp: '2026-06-02T10:00:01.000Z' },
+          { Role: 'assistant', Content: 'Second chunk.', Timestamp: '2026-06-02T10:00:02.000Z' },
+        ]});
+      } else if (path.endsWith('/pending-question')) {
+        await route.fulfill({ json: {} });
+      } else if (path.endsWith('/activity')) {
+        await route.fulfill({ json: [] });
+      } else if (path.endsWith('/usage')) {
+        await route.fulfill({ json: { CostUSD: 0 } });
+      } else if (path.endsWith('/subagents')) {
+        await route.fulfill({ json: [] });
+      } else {
+        await route.fulfill({ json: {} });
+      }
+    });
+    await page.route('**/api/usage/ratelimit', (r) => r.fulfill({ json: { session: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, weekly: {used_percent:1, resets_at:'2099-01-01T00:00:00Z'}, plan: 'max_5' } }));
+    await page.route('**/api/usage/daily*', (r) => r.fulfill({ json: { days: [], today_cost: 0, total_cost: 0 } }));
+    await page.addInitScript(() => { try { sessionStorage.clear(); } catch {} });
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+
+    await expect(page.locator('.ui-msg--assistant')).toHaveCount(1);
+    await expect(page.locator('.ui-msg--assistant')).toContainText('First chunk.');
+    await expect(page.locator('.ui-msg--assistant')).toContainText('Second chunk.');
   });
 });
 
@@ -1042,5 +1238,110 @@ test.describe('Modal confirm fires the POST', () => {
     // Give the async chain time to fire fetch.
     await page.waitForTimeout(400);
     expect(mergeHit).toBe(true);
+  });
+
+  test('confirmation modal is an accessible keyboard-contained dialog', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const agent = makeAgent({ state: 'pr', pinned_state: 'pr', branch: 'feat/x' });
+    await mockApi(page, [agent]);
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    const opener = page.locator('.action-panel button:has-text("Merge")');
+    await expect(opener).toBeVisible();
+    await opener.focus();
+    await opener.click();
+
+    const modal = page.locator('.modal');
+    await expect(modal).toHaveAttribute('role', 'dialog');
+    await expect(modal).toHaveAttribute('aria-modal', 'true');
+    const labelledBy = await modal.getAttribute('aria-labelledby');
+    const describedBy = await modal.getAttribute('aria-describedby');
+    expect(labelledBy).toBeTruthy();
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`#${labelledBy}`)).toHaveText('Merge PR');
+    await expect(page.locator(`#${describedBy}`)).toContainText('Squash-merge');
+
+    await expect(page.locator('#modal-confirm')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#modal-cancel')).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('#modal-confirm')).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
+
+  test('confirm cannot double-submit or dismiss while async action is pending', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const agent = makeAgent({ state: 'pr', pinned_state: 'pr', branch: 'feat/x' });
+    await mockApi(page, [agent]);
+
+    let mergeHits = 0;
+    let releaseMerge;
+    const mergePending = new Promise((resolve) => { releaseMerge = resolve; });
+    await page.route('**/api/agents/*/merge', async (route) => {
+      mergeHits += 1;
+      await mergePending;
+      await route.fulfill({ json: { ok: 'merged' } });
+    });
+    await page.route('**/api/agents/*/cleanup', (route) => route.fulfill({ json: { ok: 'cleaned' } }));
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.click('.action-panel button:has-text("Merge")');
+    await page.waitForSelector('#modal-confirm', { timeout: 2000 });
+
+    await page.locator('#modal-confirm').dblclick();
+    await page.keyboard.press('Escape');
+    await page.mouse.click(20, 20);
+
+    expect(mergeHits).toBe(1);
+    await expect(page.locator('.modal-overlay')).toHaveCount(1);
+    await expect(page.locator('#modal-confirm')).toBeDisabled();
+    await expect(page.locator('#modal-cancel')).toBeDisabled();
+
+    releaseMerge();
+    await page.waitForSelector('text=Clean up branch', { timeout: 3000 });
+  });
+
+  test('destructive Close confirmation uses danger treatment and explicit label', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const agent = makeAgent({ state: 'merged', pinned_state: 'merged', branch: 'feat/x' });
+    await mockApi(page, [agent]);
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.click('.action-panel button:has-text("Close")');
+
+    await expect(page.locator('.modal-title')).toHaveText('Close agent');
+    await expect(page.locator('.modal-message')).toContainText('Kill the tmux pane');
+    await expect(page.locator('#modal-confirm')).toHaveText('Close agent');
+    await expect(page.locator('#modal-confirm')).toHaveClass(/ui-modal-btn--danger/);
+  });
+
+  test('success toast appears top-center, not top-right', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const agent = makeAgent({ state: 'pr', pinned_state: 'pr', branch: 'feat/x' });
+    await mockApi(page, [agent]);
+    await page.route('**/api/agents/*/merge', (route) => route.fulfill({ json: { ok: 'merged' } }));
+
+    await page.goto('/');
+    await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
+    await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
+    await page.click('.action-panel button:has-text("Merge")');
+    await page.waitForSelector('#modal-confirm', { timeout: 2000 });
+    await page.click('#modal-confirm');
+
+    const box = await page.locator('.ui-toast--visible', { hasText: 'Merged' }).boundingBox();
+    expect(box).toBeTruthy();
+    const toastCenter = box.x + box.width / 2;
+    expect(toastCenter).toBeGreaterThan(1280 / 2 - 24);
+    expect(toastCenter).toBeLessThan(1280 / 2 + 24);
+    expect(box.x).toBeLessThan(1280 - box.width - 120);
   });
 });

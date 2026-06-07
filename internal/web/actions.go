@@ -14,6 +14,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
@@ -106,18 +107,16 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, map[string]string{"error": "pane no longer exists"})
 		return
 	}
-	// Codex needs a paste-buffer + bracketed-paste delivery and a Tab,Enter
-	// submit while a turn is in flight (Tab queues the reply); Enter alone
-	// only submits when codex is idle. Sending raw text + Enter for codex
-	// lands as multi-line input with a trailing newline and never submits.
-	// Mirrors internal/tui/commands.go sendReply (PR #293).
+	// Codex needs paste-buffer + bracketed-paste delivery. Prefer the
+	// visible pane mode over the sidecar state: hooks can leave state as
+	// "running" after the prompt is already idle, while the Codex footer
+	// explicitly says when Tab is required to queue a reply.
 	var sendErr error
 	if agent.Harness == "codex" {
-		submit := []string{"Enter"}
-		if agent.State == "running" {
-			submit = []string{"Tab", "Enter"}
+		sendErr = tmux.TmuxPasteKeysClearingInput(target, req.Text)
+		if sendErr == nil {
+			sendErr = tmux.TmuxSendRawKeys(target, codexInputSubmitKeysAfterPaste(target, agent)...)
 		}
-		sendErr = tmux.TmuxPasteKeysClearingInput(target, req.Text, submit...)
 	} else {
 		sendErr = tmux.TmuxSendKeys(target, req.Text)
 	}
@@ -126,6 +125,49 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "sent"})
+}
+
+func codexInputSubmitKeysAfterPaste(target string, agent domain.Agent) []string {
+	if codexStateMayQueue(agent.State) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if lines, err := tmux.TmuxCapture(target, 20); err == nil && len(lines) > 0 {
+		if codexPaneShowsQueueHint(lines) {
+			return []string{"Tab", "Enter"}
+		}
+		if agent.State == "permission" || agent.State == "plan" {
+			return []string{"Tab", "Enter"}
+		}
+		return []string{"Enter"}
+	}
+	return fallbackCodexInputSubmitKeys(agent.State)
+}
+
+func codexStateMayQueue(state string) bool {
+	switch state {
+	case "running", "permission", "plan":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexPaneShowsQueueHint(lines []string) bool {
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), "tab to queue") {
+			return true
+		}
+	}
+	return false
+}
+
+func fallbackCodexInputSubmitKeys(state string) []string {
+	switch state {
+	case "running", "permission", "plan":
+		return []string{"Tab", "Enter"}
+	default:
+		return []string{"Enter"}
+	}
 }
 
 // askAnswerEntry is one question's answer in an /answer-question payload.
