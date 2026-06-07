@@ -1554,6 +1554,17 @@ func TestSkillsEndpointEmpty(t *testing.T) {
 	}
 }
 
+func writeSkillFixture(t *testing.T, skillsBase, skill string) {
+	t.Helper()
+	skillDir := filepath.Join(skillsBase, skill)
+	if err := os.MkdirAll(skillDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: "+skill+"\n---\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSkillsEndpointWithSkills(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
@@ -1610,9 +1621,9 @@ func TestSkillsEndpoint_HarnessCodex(t *testing.T) {
 	cfg.Profile.PluginCacheDir = claudeCache
 	cfg.Profile.CodexPluginCacheDir = codexCache
 
-	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "claude-only"), 0700)
+	writeSkillFixture(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "claude-only")
 	for _, name := range []string{"feature", "fix", "implement", "rca", "pr"} {
-		os.MkdirAll(filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", name), 0700)
+		writeSkillFixture(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), name)
 	}
 
 	srv := NewServer(cfg, nil, ServerOptions{})
@@ -1646,9 +1657,9 @@ func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
 	cfg.Profile.PluginCacheDir = claudeCache
 	cfg.Profile.CodexPluginCacheDir = codexCache
 
-	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "feature"), 0700)
-	os.MkdirAll(filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "implement"), 0700)
-	os.MkdirAll(filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills", "codex-only"), 0700)
+	writeSkillFixture(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "feature")
+	writeSkillFixture(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "implement")
+	writeSkillFixture(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "codex-only")
 
 	srv := NewServer(cfg, nil, ServerOptions{})
 	ts := httptest.NewServer(srv.Handler())

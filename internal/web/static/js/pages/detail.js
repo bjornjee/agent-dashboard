@@ -209,7 +209,12 @@ let conversationScrolledThisSession = false;
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   pendingMessageAcked = false;
-  const container = document.querySelector('#tab-conversation .conversation');
+  const tab = document.getElementById('tab-conversation');
+  let container = tab ? tab.querySelector('.conversation') : null;
+  if (!container && tab) {
+    tab.innerHTML = '<div class="conversation"></div>';
+    container = tab.querySelector('.conversation');
+  }
   if (!container) return;
   const wrap = document.createElement('div');
   wrap.innerHTML = UI.message('user', text);
@@ -678,6 +683,7 @@ let currentDetailTab = 'conversation';
 let currentDetailAgentId = null;
 let lastAgentState = null;
 let conversationPollTimer = null;
+const CONVERSATION_POLL_MS = 750;
 
 // Render a chat-stream plan-link as an assistant message bubble.
 // Wrapped in .ui-msg--assistant + .ui-msg__card so it sits in the
@@ -726,6 +732,21 @@ export function visibleEntries(entries) {
     if (role === 'plan-saved') { out.push(entry); continue; }
     const content = entry.Content || entry.content || '';
     if (!content) continue;
+    const prev = out[out.length - 1];
+    const prevRole = prev ? (prev.Role || prev.role) : '';
+    if (role === 'assistant' && prevRole === 'assistant') {
+      const prevContent = prev.Content || prev.content || '';
+      const sep = prevContent.endsWith('\n') || content.startsWith('\n') || content.startsWith(' ')
+        ? ''
+        : '\n\n';
+      out[out.length - 1] = {
+        ...prev,
+        Content: prevContent + sep + content,
+        content: undefined,
+        Timestamp: entry.Timestamp || entry.timestamp || prev.Timestamp || prev.timestamp,
+      };
+      continue;
+    }
     out.push(entry);
   }
   return out;
@@ -742,6 +763,12 @@ function renderEntryHtml(entry, agentId, suppressPlanActions) {
   const content = entry.Content || entry.content || '';
   if (role === 'human') return UI.message('user', content);
   return UI.message('assistant', renderMarkdown(content), { html: true });
+}
+
+function entryRenderSignature(entry, suppressPlanActions) {
+  const role = entry.Role || entry.role || '';
+  const content = entry.Content || entry.content || '';
+  return JSON.stringify([role, content, role === 'plan-saved' && !!suppressPlanActions]);
 }
 
 // True when the action panel above the composer is already rendering
@@ -1079,42 +1106,35 @@ function entryInsertAnchor(conv) {
   );
 }
 
-// Idempotent: append every visible entry past data-rendered-count to
-// `conv`, stamp the new count back. Entries the API has already shown
-// us are never touched, so their DOM (focus, caret, :checked, scroll)
-// survives the poll. If the conversation rewinds (history reset, agent
-// switch), falls back to a full rebuild of just the entry nodes — leaves
-// decoration siblings alone.
+// Idempotent: keep rendered entries aligned with the latest visible
+// transcript. Unchanged entries are left alone so their DOM survives the
+// poll; entries whose content changed in place are replaced, which is
+// how Codex partial assistant text grows without waiting for a full page
+// refresh. Decoration siblings are kept outside the indexed entry set.
 function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
   const visible = visibleEntries(entries);
-  const rendered = parseInt(conv.dataset.renderedCount || '0', 10);
 
-  if (visible.length < rendered) {
-    // Conversation got shorter — strip rendered entries and rebuild,
-    // keeping decoration siblings in place.
-    conv.querySelectorAll(':scope > [data-entry-idx]').forEach(el => el.remove());
-    const anchor = entryInsertAnchor(conv);
-    visible.forEach((entry, i) => {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = renderEntryHtml(entry, agentId, suppressPlanActions);
-      const el = wrap.firstElementChild;
-      if (!el) return;
-      el.dataset.entryIdx = String(i);
-      conv.insertBefore(el, anchor);
-    });
-    conv.dataset.renderedCount = String(visible.length);
-    return;
-  }
+  for (let i = 0; i < visible.length; i++) {
+    const sig = entryRenderSignature(visible[i], suppressPlanActions);
+    const existing = conv.querySelector(`:scope > [data-entry-idx="${i}"]`);
+    if (existing && existing.dataset.entrySig === sig) continue;
 
-  const anchor = entryInsertAnchor(conv);
-  for (let i = rendered; i < visible.length; i++) {
     const wrap = document.createElement('div');
     wrap.innerHTML = renderEntryHtml(visible[i], agentId, suppressPlanActions);
     const el = wrap.firstElementChild;
     if (!el) continue;
     el.dataset.entryIdx = String(i);
-    conv.insertBefore(el, anchor);
+    el.dataset.entrySig = sig;
+    if (existing) {
+      existing.replaceWith(el);
+    } else {
+      conv.insertBefore(el, entryInsertAnchor(conv));
+    }
   }
+  conv.querySelectorAll(':scope > [data-entry-idx]').forEach(el => {
+    const idx = parseInt(el.dataset.entryIdx || '-1', 10);
+    if (idx < 0 || idx >= visible.length) el.remove();
+  });
   conv.dataset.renderedCount = String(visible.length);
 }
 
@@ -1248,7 +1268,7 @@ async function refreshConversation(agentId, agent) {
   if (scrollParent && wasAtBottom && !hasCard) scrollParent.scrollTop = scrollParent.scrollHeight;
 }
 
-// Poll conversation every 2s while the chat tab is active.
+// Poll conversation while the chat tab is active.
 // This provides near-realtime streaming of agent responses since the JSONL
 // is written by Claude Code (not the dashboard), so fsnotify/SSE doesn't
 // trigger on new conversation lines.
@@ -1260,7 +1280,7 @@ function startConversationPoll(agentId) {
     } else {
       stopConversationPoll();
     }
-  }, 2000);
+  }, CONVERSATION_POLL_MS);
 }
 
 function stopConversationPoll() {
@@ -1569,6 +1589,16 @@ async function loadTabContent(tab, agentId) {
       ]);
       if (signal.aborted) return;
       if (!entries || entries.length === 0) {
+        if (pendingUserMessage) {
+          container.innerHTML = '<div class="conversation"></div>';
+          const conv = container.querySelector('.conversation');
+          if (conv) {
+            reconcileQuestionCard(conv, pending, agentId);
+            reconcileOptimisticMessage(conv);
+          }
+          markLoaded();
+          break;
+        }
         container.innerHTML = inlineEmptyState(ICONS.chat, 'No conversation yet', 'Messages will appear here once the agent starts');
         markLoaded();
         return;
@@ -1584,6 +1614,7 @@ async function loadTabContent(tab, agentId) {
         const msgs = conv.querySelectorAll(':scope > .ui-msg');
         for (let i = 0; i < msgs.length && i < visible.length; i++) {
           msgs[i].dataset.entryIdx = String(i);
+          msgs[i].dataset.entrySig = entryRenderSignature(visible[i], actionPanelHasApproveReject(lastKnownAgent));
         }
         conv.dataset.renderedCount = String(visible.length);
         if (hasPendingQuestionPayload(pending)) {
@@ -1595,6 +1626,7 @@ async function loadTabContent(tab, agentId) {
             attachQuestionCardInteractions(cardEl, agentId, questionCardId(pending));
           }
         }
+        reconcileOptimisticMessage(conv);
       }
       markLoaded();
       // Only snap to bottom on the *first* conversation load of this

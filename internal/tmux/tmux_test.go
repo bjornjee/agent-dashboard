@@ -296,6 +296,16 @@ func TestTmuxPasteKeysClearingInputClearsPastesThenSubmits(t *testing.T) {
 	}
 }
 
+func TestTmuxSendRawKeysSendsEachKey(t *testing.T) {
+	r := withMockRunner(t)
+	r.On("Run", mock.Anything, "send-keys", "-t", "main:2.1", "Tab").Return(nil).Once()
+	r.On("Run", mock.Anything, "send-keys", "-t", "main:2.1", "Enter").Return(nil).Once()
+
+	if err := TmuxSendRawKeys("main:2.1", "Tab", "Enter"); err != nil {
+		t.Fatalf("TmuxSendRawKeys() error = %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Mocked tests (using testify mock Runner — no exec at all)
 // ---------------------------------------------------------------------------

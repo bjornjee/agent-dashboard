@@ -9,21 +9,22 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// TestHandleInputSendsByHarness asserts that the input endpoint uses the
-// codex-aware paste-buffer + Tab/Enter submit sequence for codex agents,
-// matching the TUI fix in PR #293. Claude agents keep the literal send-keys
-// path.
+// TestHandleInputSendsByHarness asserts that the input endpoint keeps the
+// harness-specific tmux delivery paths straight: Claude uses literal text
+// and Codex mirrors the TUI paste-buffer submit sequence.
 func TestHandleInputSendsByHarness(t *testing.T) {
 	cases := []struct {
 		name    string
 		harness string
 		state   string
+		text    string
 		assert  func(*testing.T, mockExpector)
 	}{
 		{
 			name:    "claude uses literal send-keys then Enter",
 			harness: "",
 			state:   "idle_prompt",
+			text:    "hello",
 			assert: func(t *testing.T, m mockExpector) {
 				m.On("Run", mock.Anything, "send-keys", "-l", "-t", "main:0.0", "hello").Return(nil).Once()
 				m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
@@ -33,23 +34,45 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 			name:    "codex running uses paste-buffer + Tab,Enter to queue",
 			harness: "codex",
 			state:   "running",
+			text:    "hello",
 			assert: func(t *testing.T, m mockExpector) {
-				m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "C-u").Return(nil).Once()
-				m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", "hello").Return(nil).Once()
-				m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:0.0").Return(nil).Once()
-				m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Tab").Return(nil).Once()
-				m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+				expectCodexPasteCaptureSubmit(m, "main:0.0", "hello", "› hello\n\n tab to queue message", "Tab", "Enter")
+			},
+		},
+		{
+			name:    "codex running dashboard skill command mirrors TUI queue sequence",
+			harness: "codex",
+			state:   "running",
+			text:    "$agent-dashboard:pr",
+			assert: func(t *testing.T, m mockExpector) {
+				expectCodexPasteCaptureSubmit(m, "main:0.0", "$agent-dashboard:pr", "› $agent-dashboard:pr\n\n tab to queue message", "Tab", "Enter")
+			},
+		},
+		{
+			name:    "codex permission dashboard skill command queues before submit",
+			harness: "codex",
+			state:   "permission",
+			text:    "$agent-dashboard:pr",
+			assert: func(t *testing.T, m mockExpector) {
+				expectCodexPasteCaptureSubmit(m, "main:0.0", "$agent-dashboard:pr", "› $agent-dashboard:pr\n\n tab to queue message", "Tab", "Enter")
+			},
+		},
+		{
+			name:    "codex stale running state but idle pane submits with Enter only",
+			harness: "codex",
+			state:   "running",
+			text:    "$agent-dashboard:pr",
+			assert: func(t *testing.T, m mockExpector) {
+				expectCodexPasteCaptureSubmit(m, "main:0.0", "$agent-dashboard:pr", "› $agent-dashboard:pr\n\ngpt-5.5 high fast", "Enter")
 			},
 		},
 		{
 			name:    "codex idle uses paste-buffer + Enter only",
 			harness: "codex",
 			state:   "idle_prompt",
+			text:    "hello",
 			assert: func(t *testing.T, m mockExpector) {
-				m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "C-u").Return(nil).Once()
-				m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", "hello").Return(nil).Once()
-				m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:0.0").Return(nil).Once()
-				m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+				expectCodexPasteCaptureSubmit(m, "main:0.0", "hello", "› hello\n\ngpt-5.5 high fast", "Enter")
 			},
 		},
 	}
@@ -70,7 +93,6 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 				"display-message", "-p", "-t", "%1",
 				"#{session_name}:#{window_index}.#{pane_index}",
 			).Return([]byte("main:0.0\n"), nil)
-
 			tc.assert(t, m)
 
 			agent := domain.Agent{
@@ -82,8 +104,9 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 			}
 			ts, _ := createTestServer(t, agent)
 
+			body := `{"text":"` + tc.text + `"}`
 			req, _ := http.NewRequest("POST", ts.URL+"/api/agents/send-1/input",
-				strings.NewReader(`{"text":"hello"}`))
+				strings.NewReader(body))
 			req.Header.Set("X-Requested-With", "dashboard")
 			req.Header.Set("Content-Type", "application/json")
 			resp, err := http.DefaultClient.Do(req)
@@ -136,6 +159,19 @@ func TestHandleInputRejectsEmptyText(t *testing.T) {
 // expectations — keeps the case table free of the full mock type import.
 type mockExpector interface {
 	On(method string, arguments ...interface{}) *mock.Call
+}
+
+func expectCodexPasteCaptureSubmit(m mockExpector, target, text, pane string, keys ...string) {
+	calls := []*mock.Call{
+		m.On("Run", mock.Anything, "send-keys", "-t", target, "C-u").Return(nil).Once(),
+		m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", text).Return(nil).Once(),
+		m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", target).Return(nil).Once(),
+		m.On("Output", mock.Anything, "capture-pane", "-p", "-t", target, "-S", "-20").Return([]byte(pane), nil).Once(),
+	}
+	for _, key := range keys {
+		calls = append(calls, m.On("Run", mock.Anything, "send-keys", "-t", target, key).Return(nil).Once())
+	}
+	mock.InOrder(calls...)
 }
 
 // TestHandleAnswerQuestionDrivesPicker locks the picker-driving key sequence

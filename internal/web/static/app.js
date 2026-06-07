@@ -329,26 +329,28 @@ window.Dashboard = {
   },
 
   confirmStop(id) {
-    showModal('Stop Agent', 'Send Ctrl+C to this agent?', async (evt) => {
+    showModal('Stop agent', 'Send Ctrl+C to this agent. The session stays listed.', async (evt) => {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/stop');
         if (result && result.ok) toast('Stopped', 'success');
         else toast('Failed: ' + (result?.error || 'unknown'), 'error');
       });
-    });
+    }, { confirmLabel: 'Stop agent', confirmVariant: 'danger' });
   },
 
   confirmMerge(id) {
     // Capture branch before async merge — SSE may update agents mid-flight
     const agentPre = agents.find(a => a.session_id === id);
     const branch = agentPre ? agentPre.branch : '';
-    showModal('Merge PR', 'Merge this PR with --squash?', async (evt) => {
+    showModal('Merge PR', 'Squash-merge this pull request.', async (evt) => {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/merge');
         if (result && result.ok) {
           toast('Merged', 'success');
-          const label = branch ? `Clean up ${branch}?` : 'Clean up worktree and branch?';
-          showModal('Post-Merge Cleanup', label + ' This will remove the worktree, checkout the default branch, pull, and delete the local feature branch.', async (cleanEvt) => {
+          const message = branch
+            ? `Remove the ${branch} worktree and local branch.`
+            : 'Remove the worktree and local feature branch.';
+          showModal('Clean up branch', message, async (cleanEvt) => {
             await withSpinner(cleanEvt, async () => {
               const cleanResult = await post('/api/agents/' + id + '/cleanup');
               if (cleanResult && cleanResult.ok) {
@@ -358,16 +360,16 @@ window.Dashboard = {
                 toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error');
               }
             });
-          });
+          }, { confirmLabel: 'Clean up', confirmVariant: 'danger' });
         } else {
           toast('Failed: ' + (result?.error || 'unknown'), 'error');
         }
       });
-    });
+    }, { confirmLabel: 'Merge PR' });
   },
 
   confirmClose(id) {
-    showModal('Close Agent', 'Kill the tmux pane and remove this agent?', async (evt) => {
+    showModal('Close agent', 'Kill the tmux pane and remove this agent from the dashboard.', async (evt) => {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/close');
         if (result && result.ok) {
@@ -377,7 +379,7 @@ window.Dashboard = {
           toast('Failed: ' + (result?.error || 'unknown'), 'error');
         }
       });
-    });
+    }, { confirmLabel: 'Close agent', confirmVariant: 'danger' });
   },
 
   cycleTheme() { Theme.cycle(); },
