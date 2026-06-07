@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.33.1](https://github.com/bjornjee/agent-dashboard/compare/v0.33.0...v0.33.1) (2026-06-07)
+
+
+### Bug Fixes
+
+* detect harness folder-trust prompts in web dashboard ([#373](https://github.com/bjornjee/agent-dashboard/issues/373)) ([e73638f](https://github.com/bjornjee/agent-dashboard/commit/e73638f8c8eaae37349a4c26f9a592b6f9a1960d))
+* submit codex skill commands from web ([#377](https://github.com/bjornjee/agent-dashboard/issues/377)) ([b6d4745](https://github.com/bjornjee/agent-dashboard/commit/b6d47450e2576de047e0bd1aecddf685b2fc5a2d))
+
 ## [0.33.0](https://github.com/bjornjee/agent-dashboard/compare/v0.32.0...v0.33.0) (2026-06-06)
 
 
