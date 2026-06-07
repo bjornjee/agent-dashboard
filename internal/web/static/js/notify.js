@@ -140,7 +140,13 @@ export function processNotifications(newAgents) {
     prevTrustMap.set(id, newTrust);
     if (newTrust && !oldTrust) {
       const dir = basename(agent.worktree_cwd || agent.cwd || '') || 'this folder';
-      toast(`Trust prompt in ${dir} — accept in tmux to continue`, 'warn');
+      const harnessName = agent.harness === 'codex' ? 'Codex' : 'Claude';
+      const target = agent.target || 'the tmux pane';
+      toast(
+        `Trust required for ${dir}. ${harnessName} won't run until you accept the prompt in tmux pane ${target}.`,
+        'warn',
+        { sticky: true },
+      );
     }
   }
 

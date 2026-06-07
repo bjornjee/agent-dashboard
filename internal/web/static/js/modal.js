@@ -28,16 +28,26 @@ export function showModal(title, message, onConfirm, opts) {
   });
 }
 
-export function toast(msg, type) {
+export function toast(msg, type, opts) {
   const variant = type === 'error' || type === 'warn' ? type : 'success';
+  const sticky = !!(opts && opts.sticky);
   const el = document.createElement('div');
-  el.className = 'ui-toast ui-toast--' + variant;
+  el.className = 'ui-toast ui-toast--' + variant + (sticky ? ' ui-toast--sticky' : '');
   el.setAttribute('role', variant === 'error' ? 'alert' : 'status');
-  el.innerHTML = `<span class="ui-toast__dot" aria-hidden="true"></span><span class="ui-toast__text">${escapeHtml(msg)}</span>`;
+  const closeBtn = sticky
+    ? `<button class="ui-toast__close" type="button" aria-label="Dismiss">&times;</button>`
+    : '';
+  el.innerHTML = `<span class="ui-toast__dot" aria-hidden="true"></span><span class="ui-toast__text">${escapeHtml(msg)}</span>${closeBtn}`;
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('ui-toast--visible'));
-  setTimeout(() => {
+  const dismiss = () => {
     el.classList.remove('ui-toast--visible');
     setTimeout(() => el.remove(), 220);
-  }, 2400);
+  };
+  if (sticky) {
+    el.querySelector('.ui-toast__close')?.addEventListener('click', dismiss);
+  } else {
+    setTimeout(dismiss, 2400);
+  }
+  return dismiss;
 }
