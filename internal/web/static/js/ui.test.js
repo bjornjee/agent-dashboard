@@ -137,6 +137,36 @@ test('UI.message user role strips local-command-stdout wrapper before escaping',
   assert.ok(html.includes('hello'), 'inner text should survive');
 });
 
+// -- UI.row badges slot (PWA state-gap fix) --
+
+test('UI.row baseline: no badges → unchanged title/subtitle/tag layout', () => {
+  const html = UI.row({ title: 'foo', subtitle: 'bar', tag: 'PR' });
+  assert.match(html, /class="ui-row__title">foo</);
+  assert.match(html, /class="ui-row__subtitle">bar</);
+  assert.match(html, /class="ui-row__tag">PR</);
+  assert.doesNotMatch(html, /class="ui-row__badges"/);
+});
+
+test('UI.row badges: renders chip HTML on title line after the tag', () => {
+  // badges is pre-rendered chip HTML — caller owns escape, matches how `tag` works.
+  const badges = '<span class="chip chip--plan">PLAN</span><span class="chip chip--sub">↳ 3</span>';
+  const html = UI.row({ title: 'foo', tag: 'PR open', badges });
+  assert.match(html, /class="ui-row__badges"/);
+  assert.match(html, /chip chip--plan">PLAN</);
+  assert.match(html, /chip chip--sub">↳ 3</);
+  // Badges should appear inside the title line, not the body or trailing.
+  const titleLine = html.match(/class="ui-row__title-line">[\s\S]*?<\/span><\/span>/);
+  // Looser check: tag and badges both come before the closing of title-line span structure.
+  const tagIdx = html.indexOf('ui-row__tag');
+  const badgesIdx = html.indexOf('ui-row__badges');
+  assert.ok(tagIdx !== -1 && badgesIdx > tagIdx, 'badges should follow tag');
+});
+
+test('UI.row badges: empty badges string does not render the wrapper', () => {
+  const html = UI.row({ title: 'foo', badges: '' });
+  assert.doesNotMatch(html, /class="ui-row__badges"/);
+});
+
 test('UI.message user role strips local-command-caveat wrapper', () => {
   const html = UI.message('user', '<local-command-caveat>warning</local-command-caveat>');
   assert.ok(!html.includes('local-command-caveat'));

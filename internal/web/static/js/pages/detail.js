@@ -1,7 +1,7 @@
 // Agent detail view with tabs and stats disclosure.
 import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup, prTag, hasOpenPR } from '../state.js';
+import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
 import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -28,7 +28,7 @@ const STATE_LABELS = {
   plan: 'Plan ready',
   question: 'Needs reply',
   error: 'Errored',
-  pr: 'PR open',
+  pr: 'PR',
   merged: 'Merged',
   done: 'Done',
   idle_prompt: 'Idle',
@@ -106,13 +106,17 @@ function inlineVitalStrip(opts) {
 // byte-identical — so we MUST skip the DOM swap. Re-rendering anyway
 // detaches the focused <textarea>, which on mobile (iOS Safari, Chrome
 // Android) dismisses the virtual keyboard mid-typing.
-function actionBarSignature(agent) {
+export function actionBarSignature(agent) {
   return [
     effectiveState(agent),
     hasOpenPR(agent) ? '1' : '0',
     agent.model || '',
     agent.branch || '',
     agent.effort || '',
+    // Must include the plan signal. SSE re-render is gated on the signature;
+    // without this, flipping permission_mode (EnterPlanMode mid-turn) never
+    // surfaces the PLAN chip in the action bar.
+    planBadge(agent) ? '1' : '0',
   ].join('|');
 }
 
@@ -605,11 +609,22 @@ function kindLabel(kind) {
   return 'Tool';
 }
 
-function renderActionBar(agent) {
+export function renderActionBar(agent) {
   const st = effectiveState(agent);
   const id = agent.session_id;
   let actions = '';
   let panelLabel = '';
+  // Plan signal: surfaced as a small chip above the action panel whenever
+  // either permission_mode='plan' or state='plan'. Covers the mid-planning
+  // case (running inside plan mode but ExitPlanMode hasn't fired) which
+  // would otherwise have no visible badge in detail.
+  const planChip = planBadge(agent)
+    ? `<div class="action-bar__status">`
+      + `<span class="chip chip--plan">`
+      + `<span aria-hidden="true">${escapeHtml(planBadge(agent))}</span>`
+      + `<span class="visually-hidden">agent is in plan mode</span>`
+      + `</span></div>`
+    : '';
 
   // State-specific chips live above the composer (Codex pattern: action chips stacked above input).
   if (st === 'permission' || st === 'plan') {
@@ -674,7 +689,7 @@ function renderActionBar(agent) {
          <div class="action-panel__chips">${actions}</div>
        </div>`
     : '';
-  return `<div class="action-bar">${actionRow}${composer}</div>`;
+  return `<div class="action-bar">${planChip}${actionRow}${composer}</div>`;
 }
 
 let activityFilter = 'all';

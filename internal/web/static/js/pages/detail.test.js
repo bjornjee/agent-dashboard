@@ -12,6 +12,8 @@ let renderQuestionCard;
 let formatLatestToolDisplay;
 let isAgentMidTurn;
 let getMessageCopyText;
+let renderActionBar;
+let actionBarSignature;
 
 test('load module', async () => {
   // Stub a minimal global `document` so any module-level click delegation
@@ -26,11 +28,15 @@ test('load module', async () => {
   formatLatestToolDisplay = mod.formatLatestToolDisplay;
   isAgentMidTurn = mod.isAgentMidTurn;
   getMessageCopyText = mod.getMessageCopyText;
+  renderActionBar = mod.renderActionBar;
+  actionBarSignature = mod.actionBarSignature;
   assert.equal(typeof questionCardId, 'function');
   assert.equal(typeof renderQuestionCard, 'function');
   assert.equal(typeof formatLatestToolDisplay, 'function');
   assert.equal(typeof isAgentMidTurn, 'function');
   assert.equal(typeof getMessageCopyText, 'function');
+  assert.equal(typeof renderActionBar, 'function');
+  assert.equal(typeof actionBarSignature, 'function');
 });
 
 test('questionCardId prefers real tool_use_id', () => {
@@ -205,4 +211,50 @@ test('getMessageCopyText returns empty string when no .ui-msg__prose inside', ()
     closest() { return { querySelector() { return null; } }; },
   };
   assert.equal(getMessageCopyText(mockBtn), '');
+});
+
+// -- action-bar plan badge (PWA state-gap fix, Phase C) --
+
+test('renderActionBar: surfaces PLAN chip when permission_mode=plan', () => {
+  // Mid-planning: agent is running inside CC's plan_mode but ExitPlanMode
+  // hasn't fired yet. State is 'running', so without the chip the user
+  // has no visible signal that the agent is in plan mode at all.
+  const agent = {
+    session_id: 'a1',
+    state: 'running',
+    permission_mode: 'plan',
+    branch: 'feat/x',
+  };
+  const html = renderActionBar(agent);
+  assert.match(html, /class="chip chip--plan"/);
+  assert.match(html, /aria-hidden="true">PLAN</);
+  assert.match(html, /class="visually-hidden">agent is in plan mode</);
+});
+
+test('renderActionBar: surfaces PLAN chip when state=plan', () => {
+  const agent = { session_id: 'a1', state: 'plan', branch: 'feat/x' };
+  const html = renderActionBar(agent);
+  assert.match(html, /class="chip chip--plan"/);
+  assert.match(html, /aria-hidden="true">PLAN</);
+});
+
+test('renderActionBar: no PLAN chip in plain running state', () => {
+  const agent = {
+    session_id: 'a1',
+    state: 'running',
+    permission_mode: 'bypassPermissions',
+  };
+  const html = renderActionBar(agent);
+  assert.doesNotMatch(html, /chip--plan/);
+});
+
+test('actionBarSignature: changes when permission_mode flips into/out of plan', () => {
+  // SSE-driven re-render bails out when the signature is unchanged, so the
+  // signature MUST include any field whose value affects the rendered HTML —
+  // otherwise the plan chip never appears in production despite the source
+  // change.
+  const base = { session_id: 'a1', state: 'running', branch: 'feat/x' };
+  const sigOff = actionBarSignature({ ...base, permission_mode: 'bypassPermissions' });
+  const sigOn = actionBarSignature({ ...base, permission_mode: 'plan' });
+  assert.notEqual(sigOff, sigOn);
 });

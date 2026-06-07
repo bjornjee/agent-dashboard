@@ -1,7 +1,10 @@
 package web
 
 import (
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -278,6 +281,13 @@ func TestHandleAnswerQuestionDrivesPicker(t *testing.T) {
 				Harness:     "",
 				TmuxPaneID:  "%1",
 				Cwd:         "/tmp/repo",
+				// Sidecar payload — the hook layer stamps state + tool +
+				// PendingQuestion together; the test fixture mirrors that
+				// so PausedOnQuestion's free path resolves without I/O.
+				PendingQuestion: &domain.PendingQuestion{
+					ToolUseID: "tool_aq",
+					Questions: []domain.PendingQuestionPrompt{{Question: "Which?"}},
+				},
 			}
 			ts, _ := createTestServer(t, agent)
 
@@ -389,6 +399,10 @@ func TestHandleAnswerQuestion_CodexDrivesPicker(t *testing.T) {
 				Harness:     "codex",
 				TmuxPaneID:  "%1",
 				Cwd:         "/tmp/repo",
+				PendingQuestion: &domain.PendingQuestion{
+					ToolUseID: "tool_codex",
+					Questions: []domain.PendingQuestionPrompt{{Question: "Which?"}},
+				},
 			}
 			ts, _ := createTestServer(t, agent)
 
@@ -441,6 +455,109 @@ func TestHandleAnswerQuestionRejectsNonQuestionState(t *testing.T) {
 	}
 }
 
+// TestHandleAnswerQuestion_AcceptsPinnedStateOverride asserts the endpoint
+// still drives the picker when ApplyPinnedStates has rewritten the agent's
+// State from "question" to "pr". CurrentTool + PendingQuestion are the
+// durable signal — agents with an open PR + a pending question must
+// still be answerable.
+func TestHandleAnswerQuestion_AcceptsPinnedStateOverride(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+	m.On("Output", mock.Anything,
+		"display-message", "-p", "-t", "%1",
+		"#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("main:0.0\n"), nil)
+	m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "1").Return(nil).Once()
+	m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+	agent := domain.Agent{
+		SessionID:   "aq-pinned",
+		State:       "pr", // post-ApplyPinnedStates: question → pr override
+		PinnedState: "pr",
+		CurrentTool: "AskUserQuestion",
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_x",
+			Questions: []domain.PendingQuestionPrompt{{Question: "Confirm?"}},
+		},
+		Harness:    "",
+		TmuxPaneID: "%1",
+		Cwd:        "/tmp/repo",
+	}
+	ts, _ := createTestServer(t, agent)
+
+	req, _ := http.NewRequest("POST",
+		ts.URL+"/api/agents/aq-pinned/answer-question",
+		strings.NewReader(`{"answers":[{"option_indices":[0],"freeform":"","multi":false}],"option_counts":[1]}`))
+	req.Header.Set("X-Requested-With", "dashboard")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d (body: %s)", resp.StatusCode, body)
+	}
+}
+
+// TestHandleAnswerQuestion_AcceptsCodexStopOverride asserts the endpoint
+// drives the picker for a codex agent whose Stop hook fired before the
+// user answered the inline request_user_input picker. CurrentTool gets
+// cleared and State becomes "done" — both sidecar paused-on-tool signals
+// fail — but the codex rollout still carries the unanswered function_call.
+// handleAnswerQuestion falls back to a JSONL scan (same logic as
+// handlePendingQuestion), so the click is accepted and the picker is
+// driven.
+//
+// This locks in the codex parity case where codex's Stop semantics
+// preempt the request_user_input PreToolUse stamp.
+func TestHandleAnswerQuestion_AcceptsCodexStopOverride(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+	m.On("Output", mock.Anything,
+		"display-message", "-p", "-t", "%1",
+		"#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("main:0.0\n"), nil)
+	// Codex picker driving: Down arrow (option index 0 → no Down), Enter to submit.
+	m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	sessionID := "019e9ba2-84c1-77a0-8bb4-ee9e88264f58"
+	rolloutDir := filepath.Join(codexHome, "sessions", "2026", "06", "06")
+	os.MkdirAll(rolloutDir, 0o755)
+	rolloutPath := filepath.Join(rolloutDir, "rollout-2026-06-06T11-00-00-"+sessionID+".jsonl")
+	jsonl := `{"timestamp":"2026-06-06T11:00:00Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"header\":\"Scope\",\"question\":\"Which?\",\"options\":[{\"label\":\"A\"},{\"label\":\"B\"}]}]}","call_id":"call_codex_stop"}}
+`
+	os.WriteFile(rolloutPath, []byte(jsonl), 0o644)
+
+	agent := domain.Agent{
+		SessionID:   sessionID,
+		State:       "done", // Stop hook fired before user answered
+		CurrentTool: "",     // cleared
+		Harness:     "codex",
+		TmuxPaneID:  "%1",
+		Cwd:         "/tmp/repo",
+	}
+	ts, _ := createTestServer(t, agent)
+
+	req, _ := http.NewRequest("POST",
+		ts.URL+"/api/agents/"+sessionID+"/answer-question",
+		strings.NewReader(`{"answers":[{"option_indices":[0],"freeform":"","multi":false}],"option_counts":[2]}`))
+	req.Header.Set("X-Requested-With", "dashboard")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d (body: %s)", resp.StatusCode, body)
+	}
+}
+
 // TestHandleAnswerQuestionMidSequenceFailureAbortsPicker asserts that when a
 // tmux send fails mid-key-sequence, the handler dispatches Escape to abort
 // Claude's picker (returning it to a clean cancelled state instead of
@@ -466,6 +583,10 @@ func TestHandleAnswerQuestionMidSequenceFailureAbortsPicker(t *testing.T) {
 		Harness:     "",
 		TmuxPaneID:  "%1",
 		Cwd:         "/tmp/repo",
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_fail",
+			Questions: []domain.PendingQuestionPrompt{{Question: "Which?"}},
+		},
 	}
 	ts, _ := createTestServer(t, agent)
 

@@ -21,6 +21,19 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// writeSkillDir creates a skill directory containing a minimal
+// SKILL.md so skills.DiscoverSkills will surface it.
+func writeSkillDir(t *testing.T, skillsDir, name string) {
+	t.Helper()
+	dir := filepath.Join(skillsDir, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+name+"\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServerStartsAndServesRoutes(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
@@ -390,6 +403,67 @@ func TestPendingQuestionEndpoint_ReturnsPayload(t *testing.T) {
 	}
 }
 
+func TestPendingQuestionEndpoint_ReturnsPayloadWhenStateOverridden(t *testing.T) {
+	// Regression: when an agent has a PendingQuestion populated by the
+	// fast hook AND its State has been overridden by ApplyPinnedStates
+	// (e.g. pinned_state='pr' → state='pr'), the endpoint MUST still
+	// return the question — the user is being asked something and the
+	// detail view needs to render the card. The previous gate
+	// (`agent.State != "question"`) silently dropped the payload.
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	projectsDir := t.TempDir()
+	cfg.Profile.StateDir = stateDir
+	cfg.Profile.ProjectsDir = projectsDir
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+
+	sessionID := "pq-override-1"
+	agent := domain.Agent{
+		SessionID:   sessionID,
+		State:       "pr", // overridden — pinned_state took precedence
+		PinnedState: "pr",
+		Cwd:         "/tmp/pq-override-repo",
+		PendingQuestion: &domain.PendingQuestion{
+			ToolUseID: "tool_xyz",
+			Questions: []domain.PendingQuestionPrompt{{
+				Question: "Confirm or override?",
+				Header:   "Register",
+				Options: []domain.PendingQuestionOption{
+					{Label: "Confirm refined-minimal", Description: "match PRODUCT.md"},
+					{Label: "Industrial", Description: "data-dense"},
+				},
+			}},
+		},
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET pending-question: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "tool_xyz" {
+		t.Errorf("ToolUseID = %q, want tool_xyz", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 || pq.Questions[0].Question != "Confirm or override?" {
+		t.Errorf("Questions = %+v, want Confirm or override?", pq.Questions)
+	}
+}
+
 func TestPendingQuestionEndpoint_ReadsFromSidecarBeforeJSONL(t *testing.T) {
 	// Claude Code doesn't flush the AskUserQuestion tool_use line to the JSONL
 	// until the user answers; while the agent is paused on the question, the
@@ -514,12 +588,21 @@ func TestPendingQuestionEndpoint_EmptyWhenNone(t *testing.T) {
 	}
 }
 
-func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
-	// Pins the cost-saving gate: even when a pending AskUserQuestion sits
-	// in the JSONL, the endpoint must return null while agent.State is not
-	// "question". The hook layer flips state the moment AskUserQuestion
-	// fires; gating on that avoids a full JSONL scan on every 2s poll for
-	// the 99% case where the agent isn't paused on a question.
+func TestPendingQuestionEndpoint_GateSkipsJSONLForNonQuestionState(t *testing.T) {
+	// Perf gate: when agent.State != "question", PausedOnQuestion's
+	// JSONL fallback is short-circuited and the endpoint returns nil
+	// without I/O. This is the 99% case for the 2s detail-tab poll —
+	// running, done, idle_prompt agents all skip the scan.
+	//
+	// State.ApplyIdleOverrides upstream promotes agents to "question"
+	// when their JSONL/rollout actually has an unanswered question, so
+	// gating on state here is correct: anything that reaches the
+	// handler with state != "question" provably has no pending question
+	// (per the promotion contract).
+	//
+	// To prove the gate, we point ProjDir at a JSONL that DOES contain
+	// an unanswered AskUserQuestion. If the gate ever regresses, the
+	// scan would find it and the assertion below would fail.
 	cfg := config.DefaultConfig()
 	stateDir := t.TempDir()
 	projectsDir := t.TempDir()
@@ -533,15 +616,16 @@ func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
 	os.MkdirAll(agentsDir, 0700)
 
 	sessionID := "pq-gate"
-	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_xyz","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
+	jsonl := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool_skip","name":"AskUserQuestion","input":{"questions":[{"question":"would find this","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-02T10:00:00Z"}
 `
 	os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(jsonl), 0644)
 
 	agent := domain.Agent{
 		SessionID: sessionID,
 		ProjDir:   projDir,
-		State:     "running",
+		State:     "running", // not an idle candidate; no promotion will fire
 		Cwd:       cwd,
+		Harness:   "claude",
 	}
 	data, _ := json.Marshal(agent)
 	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
@@ -560,7 +644,61 @@ func TestPendingQuestionEndpoint_NullWhenStateNotQuestion(t *testing.T) {
 	n, _ := resp.Body.Read(buf)
 	trimmed := strings.TrimSpace(string(buf[:n]))
 	if trimmed != "null" {
-		t.Errorf("expected null (gate should skip scan when state != question), got %q", trimmed)
+		t.Errorf("expected null (gate should skip scan), got %q", trimmed)
+	}
+}
+
+// TestPendingQuestionEndpoint_PromotedCodexDoneServesPayload locks the
+// architectural fix end-to-end: a codex agent with state="done" + an
+// unanswered request_user_input in the rollout is promoted to
+// state="question" by ApplyIdleOverrides, and the handler then serves
+// the payload via the (gated) JSONL fallback. This is the original
+// "codex Stop race" bug fixed at the right layer.
+func TestPendingQuestionEndpoint_PromotedCodexDoneServesPayload(t *testing.T) {
+	cfg := config.DefaultConfig()
+	stateDir := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	cfg.Profile.StateDir = stateDir
+
+	sessionID := "019e9c6f-58cf-7fc1-8440-28ff45163db3"
+	rolloutDir := filepath.Join(codexHome, "sessions", "2026", "06", "06")
+	os.MkdirAll(rolloutDir, 0o755)
+	rolloutPath := filepath.Join(rolloutDir, "rollout-2026-06-06T11-00-00-"+sessionID+".jsonl")
+	rolloutJSON := `{"timestamp":"2026-06-06T11:00:00Z","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"header\":\"Scope\",\"question\":\"How broad?\",\"options\":[{\"label\":\"A\"},{\"label\":\"B\"}]}]}","call_id":"call_codex_done"}}
+`
+	os.WriteFile(rolloutPath, []byte(rolloutJSON), 0o644)
+
+	agentsDir := filepath.Join(stateDir, "agents")
+	os.MkdirAll(agentsDir, 0700)
+	agent := domain.Agent{
+		SessionID: sessionID,
+		State:     "done", // ApplyIdleOverrides promotes this to "question"
+		Harness:   "codex",
+		Cwd:       "/tmp/codex-repo",
+	}
+	data, _ := json.Marshal(agent)
+	os.WriteFile(filepath.Join(agentsDir, sessionID+".json"), data, 0600)
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/agents/" + sessionID + "/pending-question")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var pq domain.PendingQuestion
+	if err := json.NewDecoder(resp.Body).Decode(&pq); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pq.ToolUseID != "call_codex_done" {
+		t.Errorf("ToolUseID = %q, want call_codex_done", pq.ToolUseID)
+	}
+	if len(pq.Questions) != 1 || pq.Questions[0].Question != "How broad?" {
+		t.Errorf("Questions = %+v, want How broad?", pq.Questions)
 	}
 }
 
@@ -1554,17 +1692,6 @@ func TestSkillsEndpointEmpty(t *testing.T) {
 	}
 }
 
-func writeSkillFixture(t *testing.T, skillsBase, skill string) {
-	t.Helper()
-	skillDir := filepath.Join(skillsBase, skill)
-	if err := os.MkdirAll(skillDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: "+skill+"\n---\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestSkillsEndpointWithSkills(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
@@ -1621,9 +1748,10 @@ func TestSkillsEndpoint_HarnessCodex(t *testing.T) {
 	cfg.Profile.PluginCacheDir = claudeCache
 	cfg.Profile.CodexPluginCacheDir = codexCache
 
-	writeSkillFixture(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "claude-only")
+	writeSkillDir(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "claude-only")
+	codexSkills := filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills")
 	for _, name := range []string{"feature", "fix", "implement", "rca", "pr"} {
-		writeSkillFixture(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), name)
+		writeSkillDir(t, codexSkills, name)
 	}
 
 	srv := NewServer(cfg, nil, ServerOptions{})
@@ -1657,9 +1785,10 @@ func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
 	cfg.Profile.PluginCacheDir = claudeCache
 	cfg.Profile.CodexPluginCacheDir = codexCache
 
-	writeSkillFixture(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "feature")
-	writeSkillFixture(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "implement")
-	writeSkillFixture(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "codex-only")
+	claudeSkills := filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills")
+	writeSkillDir(t, claudeSkills, "feature")
+	writeSkillDir(t, claudeSkills, "implement")
+	writeSkillDir(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "codex-only")
 
 	srv := NewServer(cfg, nil, ServerOptions{})
 	ts := httptest.NewServer(srv.Handler())

@@ -92,23 +92,6 @@ func (m model) captureSelected() tea.Cmd {
 	}
 }
 
-// containsTrustPrompt returns true if the pane buffer contains a folder
-// trust dialog from a supported harness. Claude Code uses the select-menu
-// option "Yes, I trust this folder"; codex (codex-rs/tui/src/onboarding/
-// trust_directory.rs) renders the question "Do you trust the contents of
-// this directory?". Either is enough to surface the "press Enter to jump
-// and accept" hint — the user resolves the prompt with the harness's own
-// keybinds once they're inside the pane.
-func containsTrustPrompt(lines []string) bool {
-	for _, line := range lines {
-		if strings.Contains(line, "Yes, I trust this folder") ||
-			strings.Contains(line, "Do you trust the contents of this directory?") {
-			return true
-		}
-	}
-	return false
-}
-
 func (m model) captureSpawning() tea.Cmd {
 	if !m.tmuxAvailable || m.spawningTarget == "" || m.trustDetected {
 		return nil
@@ -546,7 +529,7 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	state.ResolveAgentBranches(&sf, paneCwds, path)
 	state.GCSpawnPins(path, 10*time.Minute)
 	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf)
+	state.ApplyIdleOverrides(&sf, codexSessionsDir)
 	return conversation.TopLevelAgents(
 		state.SortedAgents(sf, selfPaneID),
 		conversation.Roots{CodexSessionsRoot: codexSessionsDir},

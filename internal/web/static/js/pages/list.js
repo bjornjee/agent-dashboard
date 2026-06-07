@@ -1,25 +1,13 @@
 // Agent list — Codex-iOS register. Thin glue over the primitives.
+// Row rendering lives in agent-row.js; this file owns mobile-list
+// chrome (app bar, group iteration, dock).
 import { UI } from '../ui.js';
 import { ICONS } from '../icons.js';
 import { Theme } from '../theme.js';
-import { effectiveState, stateGroup, prTag } from '../state.js';
-import { escapeHtml, repoName, durationShort } from '../format.js';
+import { effectiveState, stateGroup } from '../state.js';
+import { agentRowOpts } from '../agent-row.js';
 
 const GROUP_ORDER = ['BLOCKED', 'WAITING', 'RUNNING', 'REVIEW', 'PR', 'MERGED'];
-
-function statusDot(state) {
-  const group = stateGroup(state);
-  const cls = `status-dot status-dot--${group.toLowerCase()}`;
-  return `<span class="${cls}"></span>`;
-}
-
-function metaLine(agent) {
-  const parts = [];
-  if (agent.branch) parts.push(escapeHtml(agent.branch));
-  if (agent.model) parts.push(escapeHtml(agent.model));
-  if (agent.started_at) parts.push(escapeHtml(durationShort(agent)));
-  return parts.join(' · ');
-}
 
 export function renderList(app, agents) {
   const grouped = {};
@@ -50,13 +38,9 @@ export function renderList(app, agents) {
     body += UI.sectionLabel(group, { count: list.length });
     for (const agent of list) {
       const id = agent.session_id;
-      body += UI.row({
-        leading: statusDot(effectiveState(agent)),
-        title: repoName(agent),
-        subtitle: metaLine(agent),
-        tag: prTag(agent),
+      body += UI.row(agentRowOpts(agent, {
         onclick: `Dashboard.selectAgent('${id}')`,
-      });
+      }));
     }
   }
 

@@ -27,8 +27,13 @@
   --accent-green: #30D158;
   --accent-amber: #FF9F0A;
   --accent-red: #FF453A;
-  --accent-blue: #98989A;
-  --accent-indigo: #98989A;
+  --accent-blue: #0A84FF;
+  /* Was #98989A — that gray collapsed the PR pill (.ui-row__tag) and PR
+   * status dot into near-invisible on the #000 base. #5E5CE6 is the iOS
+   * dark-mode indigo (Apple HIG); pairs ≥4.5:1 against #000 and gives
+   * sighted dark-mode users a real PR signal. Light mode has its own
+   * --accent-indigo (#4F46E5) and is unaffected. */
+  --accent-indigo: #5E5CE6;
 
   /* Status colors (token names preserved for legacy usage/diff CSS) */
   --status-running-bg: rgba(60, 203, 107, 0.10);
@@ -402,7 +407,11 @@ a { color: inherit; }
 button.ui-row { cursor: pointer; border: none; outline: none; }
 button.ui-row:hover { background: var(--bg-surface); }
 button.ui-row:active { background: var(--bg-elevated); }
-button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
+/* Focus ring uses --text-secondary instead of --text-faint so the WCAG 1.4.11
+ * non-text contrast floor (3:1) is met in both themes. text-faint sits at
+ * ~2.3:1 in light mode against #FFF — fails the floor. text-secondary clears
+ * 3:1 in both palettes. */
+button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary); }
 .ui-row__leading {
   display: inline-flex;
   align-items: center;
@@ -416,6 +425,24 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  /* flex-wrap prevents pill pileup from truncating the repo title at
+   * narrow widths (≤390px): chips wrap onto a second line instead. */
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.ui-row__title-line .ui-row__title { min-width: 0; flex: 0 1 auto; }
+/* Visually-hidden utility — used to expose chip/dot meaning to screen
+ * readers without affecting layout. WCAG-safe clip pattern. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .ui-row__title {
   font-size: 16px;
@@ -448,6 +475,46 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Stateful chips appended to the title line (PLAN, ↳ N). Sit next to the
+ * PR tag; the wrapper just adds horizontal spacing so chips don't kiss the
+ * tag or each other. */
+.ui-row__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+.chip {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+/* Plan chip — red palette matches STATE_BORDER.plan so the visual signal
+ * lines up with the BLOCKED group's dot. */
+.chip--plan {
+  color: var(--accent-red);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+}
+/* ASK chip — amber palette matches STATE_BORDER.question so the question
+ * signal reads as the WAITING-group "needs reply" affordance even on rows
+ * whose state group has been overridden (pinned_state=pr, running, etc). */
+.chip--ask {
+  color: var(--accent-amber);
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-amber) 12%, transparent);
+}
+/* Subagent chip — muted; informational, not a blocking signal. */
+.chip--sub {
+  color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
 .ui-row__trailing {
   display: inline-flex;
@@ -1541,6 +1608,11 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-faint); }
  * pad needs to clear the composer card's drop shadow (24 px blur) + the
  * iOS home indicator (env safe area). */
 .action-bar { flex-shrink: 0; background: var(--bg-base); padding: var(--space-2) 0 calc(var(--space-5) + env(safe-area-inset-bottom)); border-top: 1px solid var(--bg-surface); }
+/* Status row above the action panel — currently only the PLAN chip,
+ * surfaced whenever planBadge(agent) fires (state='plan' or
+ * permission_mode='plan'). Lives in its own row so the chip sits visibly
+ * above the composer instead of being lost inside the action-panel label. */
+.action-bar__status { display: flex; align-items: center; padding: 0 var(--space-3) var(--space-2); }
 @media (min-width: 900px) {
   .action-bar { padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom)); }
 }
@@ -1657,10 +1729,40 @@ button.btn-ghost.btn-sm {
 }
 .ui-toast--success .ui-toast__dot { background: var(--accent-green); box-shadow: 0 0 0 3px rgba(60, 203, 107, 0.18); }
 .ui-toast--error   .ui-toast__dot { background: var(--accent-red); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+.ui-toast--warn    .ui-toast__dot { background: var(--accent-amber); box-shadow: 0 0 0 3px rgba(255, 159, 10, 0.18); }
 .ui-toast__text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Warn toasts carry actionable text (folder paths, instructions) that
+ * must not truncate at any viewport — see /skills:uiux-design-loop
+ * iter-2 critique. Success/error stay single-line by precedent. */
+.ui-toast--warn .ui-toast__text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+/* Sticky toast: stays until the user dismisses with the close button.
+ * Used for trust prompts — the action lives in another window (tmux)
+ * so the toast must not auto-dismiss before the user can read + act. */
+.ui-toast__close {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 0 2px 8px;
+  margin-left: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.ui-toast__close:hover,
+.ui-toast__close:focus-visible {
+  color: var(--text-primary);
+  outline: none;
 }
 @media (min-width: 900px) {
   .ui-toast {
@@ -1669,6 +1771,9 @@ button.btn-ghost.btn-sm {
     max-width: 360px;
   }
   .ui-toast--visible { transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast { transition: none; }
 }
 
 /* ============================================

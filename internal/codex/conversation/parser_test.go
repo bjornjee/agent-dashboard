@@ -238,6 +238,44 @@ func TestReadPendingQuestion_NoQuestionReturnsNil(t *testing.T) {
 	}
 }
 
+// LastPendingBlockingToolCodex is the codex symmetric of
+// conversation.LastPendingBlockingTool. It exists so state.ApplyIdleOverrides
+// can promote codex agents to state="question" without itself depending on
+// the rollout-parser internals.
+func TestLastPendingBlockingToolCodex_QuestionWhenUnanswered(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"t1","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"question\":\"x\",\"options\":[{\"label\":\"a\"}]}]}","call_id":"call_unans"}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := conversation.LastPendingBlockingToolCodex(path)
+	if got != "question" {
+		t.Errorf("got %q, want \"question\"", got)
+	}
+}
+
+func TestLastPendingBlockingToolCodex_EmptyWhenAnswered(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	contents := `{"timestamp":"t1","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"question\":\"x\",\"options\":[{\"label\":\"a\"}]}]}","call_id":"call_ans"}}
+{"timestamp":"t2","type":"response_item","payload":{"type":"function_call_output","call_id":"call_ans","output":"{\"answers\":{\"q1\":{\"answers\":[\"a\"]}}}"}}
+`
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := conversation.LastPendingBlockingToolCodex(path); got != "" {
+		t.Errorf("got %q, want empty", got)
+	}
+}
+
+func TestLastPendingBlockingToolCodex_EmptyWhenMissingFile(t *testing.T) {
+	if got := conversation.LastPendingBlockingToolCodex(filepath.Join(t.TempDir(), "nope.jsonl")); got != "" {
+		t.Errorf("got %q, want empty for missing file", got)
+	}
+}
+
 // Malformed JSON lines and unrecognized event types are skipped without
 // affecting valid entries (resilient to partial tail writes from codex).
 func TestRead_SkipsMalformedAndUnknown(t *testing.T) {

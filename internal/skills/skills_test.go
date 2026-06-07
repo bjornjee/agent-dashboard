@@ -132,8 +132,9 @@ func TestDiscoverSkillsForHarness_CodexScansCodexCache(t *testing.T) {
 func TestDiscoverSkillsForHarness_ClaudeUsesClaudeCache(t *testing.T) {
 	claudeCache := t.TempDir()
 	codexCache := t.TempDir()
+	claudeSkills := filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills")
 	for _, name := range []string{"feature", "fix", "implement"} {
-		writeSkill(t, filepath.Join(claudeCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills"), name)
+		writeSkill(t, claudeSkills, name)
 	}
 	writeSkill(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills"), "codex-only-skill")
 
