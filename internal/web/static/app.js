@@ -191,7 +191,7 @@ window.Dashboard = {
   },
 
   installApp() {
-    promptInstall();
+    return promptInstall();
   },
 
   openKebab() {
