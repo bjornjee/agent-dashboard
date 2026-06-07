@@ -79,6 +79,13 @@ type Agent struct {
 	// "codex". Conversation/state parsers route on this so the right
 	// JSONL schema is used per agent. Written by SessionStart hooks.
 	Harness string `json:"harness,omitempty"`
+
+	// TrustPromptDetected is true when the web dashboard's post-spawn
+	// poller has seen a harness folder-trust dialog in the agent's pane
+	// buffer and the user has not yet accepted it. Lives in-memory on
+	// the web Server; never persisted to disk. Frontend surfaces it as
+	// a chip + toast so the user knows the agent is stuck waiting.
+	TrustPromptDetected bool `json:"trust_prompt_detected,omitempty"`
 }
 
 // EffectiveDir returns the best directory for git operations and editor opening.

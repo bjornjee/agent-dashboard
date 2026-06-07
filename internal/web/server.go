@@ -46,6 +46,13 @@ type Server struct {
 	rlMu        sync.Mutex
 	rlCache     *domain.RateLimit
 	rlFetchedAt time.Time
+
+	// Trust-prompt tracker: set of tmux pane_ids whose harness has shown a
+	// folder-trust dialog post-spawn. Populated by watchTrustPrompt after
+	// handleCreate, surfaced via readAgentState so SSE/REST clients see
+	// TrustPromptDetected on the affected agent. Cleared by handleClose.
+	trustMu    sync.Mutex
+	trustPanes map[string]trustPaneRecord
 }
 
 // NewServer creates a new web dashboard server.
@@ -56,6 +63,7 @@ func NewServer(cfg domain.Config, database *db.DB, opts ServerOptions) *Server {
 		opts:                 opts,
 		hub:                  newSSEHub(),
 		codexSessionsRootDir: resolveCodexSessionsRoot(cfg.Profile.HomeDir),
+		trustPanes:           make(map[string]trustPaneRecord),
 	}
 	if opts.GoogleClientID != "" {
 		s.auth = newAuthHandler(opts)

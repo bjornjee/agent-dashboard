@@ -130,10 +130,11 @@ func (s *Server) readAgentState() []domain.Agent {
 		state.GCSpawnPins(s.cfg.Profile.StateDir, 10*time.Minute)
 		state.ApplyPinnedStates(&sf)
 		state.ApplyIdleOverrides(&sf, s.codexSessionsRootDir)
-		return conversation.TopLevelAgents(
+		agents := conversation.TopLevelAgents(
 			state.SortedAgents(sf, ""),
 			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
-		), nil
+		)
+		return s.applyTrustFlags(agents), nil
 	})
 	agents, _ := v.([]domain.Agent)
 	return agents

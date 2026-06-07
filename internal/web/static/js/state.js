@@ -76,6 +76,21 @@ export function stateLabel(state) {
   }
 }
 
+// Returns a "Trust" tag when the dashboard's post-spawn poller has
+// seen a harness folder-trust dialog and the user has not accepted yet.
+// Text-only to match the PR open precedent; the amber toast carries the
+// folder name, the chip carries the verb.
+export function trustTag(agent) {
+  return agent && agent.trust_prompt_detected ? 'Trust' : '';
+}
+
+// rowTag picks the most actionable tag to render on a list row. Trust
+// supersedes PR because it blocks the agent from making any progress
+// until the user accepts in tmux.
+export function rowTag(agent) {
+  return trustTag(agent) || prTag(agent);
+}
+
 // True when the agent has an open PR — used to gate Open PR / Merge
 // action chips. Same single signal as prTag.
 export function hasOpenPR(agent) {

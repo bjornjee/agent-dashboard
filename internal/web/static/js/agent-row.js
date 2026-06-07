@@ -7,7 +7,7 @@
 // Each view still owns its own group iteration, section labels, and
 // surrounding chrome. The shared surface is only what a row is.
 
-import { stateGroup, prTag, planBadge, subagentBadge, questionBadge, stateLabel } from './state.js';
+import { stateGroup, rowTag, planBadge, subagentBadge, questionBadge, stateLabel } from './state.js';
 import { escapeHtml, repoName, durationFromUpdate } from './format.js';
 
 // statusDot renders the leading 6px circle. role="img" + aria-label
@@ -73,7 +73,7 @@ export function agentRowOpts(agent, opts) {
     leading: statusDot(agent.state),
     title: repoName(agent),
     subtitle: metaLine(agent),
-    tag: prTag(agent),
+    tag: rowTag(agent),
     badges: rowBadges(agent),
     onclick: o.onclick,
     chevron: o.chevron !== false,

@@ -1722,10 +1722,40 @@ button.btn-ghost.btn-sm {
 }
 .ui-toast--success .ui-toast__dot { background: var(--accent-green); box-shadow: 0 0 0 3px rgba(60, 203, 107, 0.18); }
 .ui-toast--error   .ui-toast__dot { background: var(--accent-red); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+.ui-toast--warn    .ui-toast__dot { background: var(--accent-amber); box-shadow: 0 0 0 3px rgba(255, 159, 10, 0.18); }
 .ui-toast__text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Warn toasts carry actionable text (folder paths, instructions) that
+ * must not truncate at any viewport — see /skills:uiux-design-loop
+ * iter-2 critique. Success/error stay single-line by precedent. */
+.ui-toast--warn .ui-toast__text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+/* Sticky toast: stays until the user dismisses with the close button.
+ * Used for trust prompts — the action lives in another window (tmux)
+ * so the toast must not auto-dismiss before the user can read + act. */
+.ui-toast__close {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 0 2px 8px;
+  margin-left: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.ui-toast__close:hover,
+.ui-toast__close:focus-visible {
+  color: var(--text-primary);
+  outline: none;
 }
 @media (min-width: 900px) {
   .ui-toast {
@@ -1733,9 +1763,12 @@ button.btn-ghost.btn-sm {
     right: var(--space-4);
     left: auto;
     transform: translateY(-6px);
-    max-width: 360px;
+    max-width: 440px;
   }
   .ui-toast--visible { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast { transition: none; }
 }
 
 /* ============================================
