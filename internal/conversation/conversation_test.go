@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -1994,5 +1995,46 @@ func TestFindProjDirByScan_MissingDir(t *testing.T) {
 	got := FindProjDirByScan("/nonexistent-dir-xyz", "sess-1")
 	if got != "" {
 		t.Errorf("FindProjDirByScan = %q, want empty for missing dir", got)
+	}
+}
+
+// BenchmarkLastPendingBlockingTool exercises the JSONL scan on a
+// fabricated multi-MB fixture so future contributors have an objective
+// cost baseline. The hot-path concern: PausedOnQuestion delegates to
+// this when state.ApplyIdleOverrides has just landed an idle agent at
+// state="question" — the cost is bounded because the parser early-exits
+// on the first human reply after the most recent tool_use, but a
+// pathological multi-megabyte sidechain-padded session is the worst
+// case worth measuring.
+//
+// Run via: go test -bench BenchmarkLastPendingBlockingTool ./internal/conversation/
+//
+// As of 2026-06-06 this completes well under a millisecond per call on
+// an Apple Silicon laptop; the assertion below is a smoke guard, not a
+// perf SLA — bump it if hardware drift makes it flake.
+func BenchmarkLastPendingBlockingTool(b *testing.B) {
+	dir := b.TempDir()
+	sessionID := "bench-sid"
+	path := filepath.Join(dir, sessionID+".jsonl")
+
+	// Build a ~2MB fixture: many Bash tool_use / tool_result pairs, then
+	// an AskUserQuestion at the tail (the actual pending question). Each
+	// padding pair is ~400 bytes; 5000 pairs gives roughly 2MB.
+	var f bytes.Buffer
+	pair := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t_bash","name":"Bash","input":{"command":"echo hi"}}]},"timestamp":"2026-06-06T10:00:00Z"}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t_bash","type":"tool_result","content":"hi"}]},"timestamp":"2026-06-06T10:00:01Z"}` + "\n"
+	for i := 0; i < 5000; i++ {
+		f.WriteString(pair)
+	}
+	f.WriteString(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t_q","name":"AskUserQuestion","input":{"questions":[{"question":"Which?","options":[{"label":"A"}]}]}}]},"timestamp":"2026-06-06T10:00:02Z"}` + "\n")
+	if err := os.WriteFile(path, f.Bytes(), 0o644); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if got := LastPendingBlockingTool(dir, sessionID); got != "question" {
+			b.Fatalf("expected 'question', got %q", got)
+		}
 	}
 }

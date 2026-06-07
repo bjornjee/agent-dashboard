@@ -242,7 +242,7 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
 	state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
 	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf)
+	state.ApplyIdleOverrides(&sf, s.codexSessionsRootDir)
 	agent, ok := sf.Agents[id]
 	return agent, ok
 }

@@ -26,7 +26,7 @@ import (
 // the codex filter alongside the message wiring.
 func stateUpdate(m model, sf domain.StateFile) stateUpdatedMsg {
 	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf)
+	state.ApplyIdleOverrides(&sf, m.codexSessionsDir)
 	agents := conversation.TopLevelAgents(
 		state.SortedAgents(sf, m.selfPaneID),
 		conversation.Roots{CodexSessionsRoot: m.codexSessionsDir},
