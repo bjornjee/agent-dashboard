@@ -230,6 +230,21 @@ function reapStaleMarker(fs, path, stateDir, gitDir) {
   try { fs.unlinkSync(marker); } catch {}
 }
 
+// Reap a marker whose owner still has agent state but is pinned elsewhere —
+// the owner left this worktree without releasing the marker. Refuse only when
+// the owner's state still pins this exact worktree path (a live sibling claim).
+function reapMisalignedMarker(fs, path, agentsDir, gitDir, worktreePath, readAllState) {
+  const marker = path.join(gitDir, MARKER_NAME);
+  let owner;
+  try { owner = fs.readFileSync(marker, 'utf8').trim(); } catch { return; }
+  if (!owner) return;
+  const state = readAllState(agentsDir);
+  const ownerAgent = state && state.agents && state.agents[owner];
+  if (!ownerAgent) return;
+  if (ownerAgent.worktree_cwd === worktreePath) return;
+  try { fs.unlinkSync(marker); } catch {}
+}
+
 function isLinkedWorktreePath(fs, path, p) {
   const info = findGitDir(fs, path, p);
   return !!(info && info.type === 'linked');
@@ -269,6 +284,7 @@ function claimWorktreeForPane({ worktreePath, paneId, stateDir, readAllState, wr
     const gitDir = resolveWorktreeGitDir(spawnSync, wt.path);
     if (!gitDir) throw new Error(`worktree git dir not found for ${wt.path}`);
     reapStaleMarker(fs, path, stateDir, gitDir);
+    reapMisalignedMarker(fs, path, agentsDir, gitDir, wt.path, readAllState);
     const claimed = claimMarker(fs, path, gitDir, agent.session_id);
     if (!claimed.match) throw new Error('worktree marker is owned by another session');
 
