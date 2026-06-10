@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.2](https://github.com/bjornjee/agent-dashboard/compare/v0.33.1...v0.33.2) (2026-06-10)
+
+
+### Bug Fixes
+
+* self-heal stale marker in claim-worktree hook ([#378](https://github.com/bjornjee/agent-dashboard/issues/378)) ([56ec39b](https://github.com/bjornjee/agent-dashboard/commit/56ec39b3c307b734077c6c7bc38185a2bb42e6a1))
+
 ## [0.33.1](https://github.com/bjornjee/agent-dashboard/compare/v0.33.0...v0.33.1) (2026-06-07)
 
 
