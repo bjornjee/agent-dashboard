@@ -24,13 +24,12 @@ function makeLinkedWorktree() {
 }
 
 function recordingSpawn(handlers) {
-  const spawnSync = (cmd, args) => {
+  return (cmd, args) => {
     const key = `${cmd} ${args.join(' ')}`;
     const stdout = handlers[key];
     if (stdout === undefined) return { status: 1, stdout: '' };
     return { status: 0, stdout };
   };
-  return spawnSync;
 }
 
 describe('claim-worktree', () => {
