@@ -46,6 +46,28 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/warn-destructive.js\"",
+            "timeout": 5000
+          }
+        ],
+        "description": "Block destructive shell commands (rm -rf, git reset --hard, DROP TABLE, etc.)"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/block-main-commit.js\"",
+            "timeout": 5000
+          }
+        ],
+        "description": "Block git commit on main/master — require a feature branch"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-fast.js\"",
             "timeout": 5000
           }
