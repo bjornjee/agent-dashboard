@@ -36,7 +36,9 @@ describe('codex global hook bundle', () => {
       [
         '$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh',
         '$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh',
+        '$HOME/.codex/hooks/agent-dashboard/block-main-commit.sh',
         '$HOME/.codex/hooks/agent-dashboard/pr-skill-detect.sh',
+        '$HOME/.codex/hooks/agent-dashboard/warn-destructive.sh',
       ]
     );
   });
@@ -51,11 +53,15 @@ describe('codex global hook bundle', () => {
     for (const file of [
       'agent-state-fast.sh',
       'agent-state-reporter.sh',
+      'block-main-commit.sh',
       'pr-skill-detect.sh',
+      'warn-destructive.sh',
       'agent-state-fast.js',
       'agent-state-reporter.js',
+      'block-main-commit.js',
       'claim-worktree.js',
       'pr-skill-detect.js',
+      'warn-destructive.js',
       'effort-config.js',
       'packages/agent-state/index.js',
       'packages/tmux/index.js',

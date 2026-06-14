@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+/**
+ * PreToolUse hook for Bash — blocks destructive commands.
+ *
+ * Exit code 2 blocks the tool call. On pass-through emit `{}` so Codex's
+ * stdout JSON contract is satisfied.
+ */
+
+'use strict';
+
+const path = require('node:path');
+
+const { writeState } = require(path.join(__dirname, 'packages', 'agent-state'));
+
+function hasRmRF(cmd) {
+  const segments = cmd.split(/[|;&\n]+/);
+  for (const seg of segments) {
+    const trimmed = seg.trim();
+    // Allow rm -rf on worktree directories
+    if (/\brm\s+(-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r)\s+.*worktrees?\b/.test(trimmed)) continue;
+    const tokens = trimmed.split(/\s+/);
+    const rmIdx = tokens.indexOf('rm');
+    if (rmIdx === -1) continue;
+
+    let flags = '';
+    for (let i = rmIdx + 1; i < tokens.length; i++) {
+      if (tokens[i] === '--') break;
+      if (tokens[i].startsWith('--')) continue;
+      if (tokens[i].startsWith('-')) flags += tokens[i];
+    }
+
+    if (/[rR]/.test(flags) && /f/.test(flags)) return true;
+  }
+  return false;
+}
+
+const DESTRUCTIVE_PATTERNS = [
+  { test: hasRmRF,                                   label: 'rm -rf' },
+  { pattern: /\bgit\s+reset\s+--hard\b/,             label: 'git reset --hard' },
+  { pattern: /\bgit\s+push\s+.*--force\b/,           label: 'git push --force' },
+  { pattern: /\bgit\s+push\s+-f\b/,                  label: 'git push -f' },
+  { pattern: /\bgit\s+clean\s+(-[^\s]*f[^\s]*|-f)\b/, label: 'git clean -f' },
+  { pattern: /\bgit\s+checkout\s+\.\s*([;&|]|$)/,    label: 'git checkout .' },
+  { pattern: /\bgit\s+restore\s+\.\s*([;&|]|$)/,     label: 'git restore .' },
+  { pattern: /\bdrop\s+table\b/i,                     label: 'DROP TABLE' },
+  { pattern: /\bdrop\s+database\b/i,                  label: 'DROP DATABASE' },
+  { pattern: /\btruncate\s+table\b/i,                 label: 'TRUNCATE TABLE' },
+  { pattern: /\btmux\s+send-keys\b/,                  label: 'tmux send-keys (cross-pane injection)' },
+];
+
+module.exports = { hasRmRF, DESTRUCTIVE_PATTERNS };
+
+if (require.main === module && !process.stdin.isTTY) {
+  let data = '';
+
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => { data += chunk; });
+  process.stdin.on('end', () => {
+    try {
+      const input = data.trim() ? JSON.parse(data) : {};
+      const command = (input.tool_input && input.tool_input.command) || '';
+
+      const isWorktreeRemove = /\bgit\s+worktree\s+remove\b/.test(command);
+      const isWorktreeClean = /worktrees?\//.test(command) &&
+        /\bgit\s+(clean|checkout|restore)\b/.test(command);
+
+      for (const { pattern, test, label } of DESTRUCTIVE_PATTERNS) {
+        const match = test ? test(command) : pattern.test(command);
+        if (match && !isWorktreeRemove && !isWorktreeClean) {
+          const reason = `Blocked: "${label}" is a destructive command. If intentional, ask the user to run it manually.`;
+          const sessionId = input.session_id;
+          if (sessionId) {
+            try { writeState(sessionId, { hook_blocked: reason }); } catch { /* don't break codex */ }
+          }
+          process.stderr.write(reason + '\n');
+          process.exit(2);
+        }
+      }
+
+      process.stdout.write('{}\n');
+    } catch {
+      process.stdout.write('{}\n');
+    }
+  });
+}

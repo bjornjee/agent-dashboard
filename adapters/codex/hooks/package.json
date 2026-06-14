@@ -4,6 +4,6 @@
   "private": true,
   "description": "Global Codex hook bundle for agent-dashboard",
   "scripts": {
-    "test": "node --test hook-bundle.test.js claim-worktree.test.js packages/*/test.js agent-state-fast.test.js agent-state-reporter.test.js pr-skill-detect.test.js effort-config.test.js ../scripts/*.test.js"
+    "test": "node --test hook-bundle.test.js hook-stdout-contract.test.js claim-worktree.test.js packages/*/test.js agent-state-fast.test.js agent-state-reporter.test.js pr-skill-detect.test.js effort-config.test.js block-main-commit.test.js warn-destructive.test.js ../scripts/*.test.js"
   }
 }

@@ -126,6 +126,25 @@ describe('codex hook stdout contract', () => {
     });
   }
 
+  for (const script of ['block-main-commit.js', 'warn-destructive.js']) {
+    it(`${script} emits valid JSON on stdout for PreToolUse pass-through`, () => {
+      const result = runHook(script, {
+        session_id: SESSION_ID,
+        cwd: '/tmp',
+        model: 'gpt-5.5',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+      });
+      assert.equal(result.status, 0, `exit ${result.status}; stderr=${result.stderr}`);
+      assert.notEqual(result.stdout.trim(), '', `${script}: stdout empty`);
+      assert.doesNotThrow(
+        () => JSON.parse(result.stdout),
+        `${script}: stdout not parseable JSON: ${JSON.stringify(result.stdout)}`,
+      );
+    });
+  }
+
   it('pr-skill-detect.js emits valid JSON on stdout for UserPromptSubmit', () => {
     const result = runHook('pr-skill-detect.js', {
       session_id: SESSION_ID,

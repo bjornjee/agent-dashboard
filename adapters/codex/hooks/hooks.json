@@ -46,6 +46,28 @@
         "hooks": [
           {
             "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/warn-destructive.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Block destructive shell commands (rm -rf, git reset --hard, DROP TABLE, etc.)"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/block-main-commit.sh",
+            "timeout": 5000
+          }
+        ],
+        "description": "Block git commit on main/master — require a feature branch"
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh",
             "timeout": 5000
           }
