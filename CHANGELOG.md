@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.34.0](https://github.com/bjornjee/agent-dashboard/compare/v0.33.2...v0.34.0) (2026-06-16)
+
+
+### Features
+
+* guard main branch and destructive commands in codex hook bundle ([#380](https://github.com/bjornjee/agent-dashboard/issues/380)) ([cc0bfe3](https://github.com/bjornjee/agent-dashboard/commit/cc0bfe35692b6474a4928e0d9ef83c9f369d7cda))
+
+
+### Bug Fixes
+
+* drop $schema from codex hook manifests ([#383](https://github.com/bjornjee/agent-dashboard/issues/383)) ([3146771](https://github.com/bjornjee/agent-dashboard/commit/3146771d6e495d178f54f5e63bd51615f22cbd59))
+* promote codex agents to state=plan when a Plan item is awaiting review ([#382](https://github.com/bjornjee/agent-dashboard/issues/382)) ([69add4f](https://github.com/bjornjee/agent-dashboard/commit/69add4fbbeb756a5af124efd296e281e713b14bb))
+
 ## [0.33.2](https://github.com/bjornjee/agent-dashboard/compare/v0.33.1...v0.33.2) (2026-06-10)
 
 
