@@ -231,22 +231,102 @@ func ReadPlanContent(path string) string {
 	return latest
 }
 
-// LastPendingBlockingToolCodex returns "question" when the codex rollout
-// at path contains an unanswered request_user_input function_call, and
-// "" otherwise. It is the codex symmetric of
-// conversation.LastPendingBlockingTool (which handles claude's
-// AskUserQuestion / ExitPlanMode) and is consumed by
-// state.ApplyIdleOverrides to promote codex agents from state="done" or
-// "idle_prompt" up to state="question" when the rollout shows an
-// outstanding picker.
+// LastPendingBlockingToolCodex returns "plan" or "question" when the codex
+// rollout at path has a corresponding unanswered blocking signal — the codex
+// symmetric of conversation.LastPendingBlockingTool. Consumed by
+// state.ApplyIdleOverrides to promote codex agents from state="done" /
+// "idle_prompt" / "permission" up to the appropriate blocking state.
 //
-// Implementation is a thin wrapper over ReadPendingQuestion: same scan,
-// just discard the payload. Codex has no rollout-side ExitPlanMode
-// equivalent today, so this only returns "question" or "". Missing
-// files return "" without error.
+// Signals:
+//   - "plan": the most recent `event_msg item_completed` with item.type=="Plan"
+//     has no later human user turn (the rollout symmetric of claude's
+//     ExitPlanMode tool_use). Codex emits this when the model commits a
+//     <proposed_plan> and waits for the user to approve/reject in chat.
+//   - "question": the most recent unanswered request_user_input function_call
+//     (matching function_call_output with the same call_id means answered).
+//
+// The most recent unanswered blocking event wins — claude's scanner uses the
+// same last-write-wins rule.
+//
+// User-turn detection uses response_item / payload.type=="message" /
+// payload.role=="user". Bootstrap turns at the start of every codex session
+// (AGENTS.md instructions, environment_context, the initial user prompt)
+// arrive before any blocking event and are ignored — humanAfter only flips
+// once a blocking signal has been recorded, matching the claude scanner.
+//
+// Missing files return "" without error.
 func LastPendingBlockingToolCodex(path string) string {
-	if ReadPendingQuestion(path) != nil {
-		return "question"
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	type item struct {
+		Type string `json:"type"`
+	}
+	type payload struct {
+		Type   string `json:"type"`
+		Name   string `json:"name"`
+		Role   string `json:"role"`
+		CallID string `json:"call_id"`
+		Item   item   `json:"item"`
+	}
+	type line struct {
+		Type    string  `json:"type"`
+		Payload payload `json:"payload"`
+	}
+
+	lastTool := ""        // "plan" or "question"
+	humanAfter := false   // user replied after lastTool
+	lastQuestionCID := "" // request_user_input call_id awaiting output
+	questionAnswered := false
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 4096), 8*1024*1024)
+	for scanner.Scan() {
+		raw := scanner.Bytes()
+		if len(raw) == 0 {
+			continue
+		}
+		var l line
+		if json.Unmarshal(raw, &l) != nil {
+			continue
+		}
+		switch l.Type {
+		case "event_msg":
+			if l.Payload.Type == "item_completed" && l.Payload.Item.Type == "Plan" {
+				lastTool = "plan"
+				humanAfter = false
+				lastQuestionCID = ""
+				questionAnswered = false
+			}
+		case "response_item":
+			switch l.Payload.Type {
+			case "function_call":
+				if l.Payload.Name == "request_user_input" {
+					lastTool = "question"
+					humanAfter = false
+					lastQuestionCID = l.Payload.CallID
+					questionAnswered = false
+				}
+			case "function_call_output":
+				if lastTool == "question" && l.Payload.CallID == lastQuestionCID {
+					questionAnswered = true
+				}
+			case "message":
+				if l.Payload.Role == "user" && lastTool != "" {
+					humanAfter = true
+				}
+			}
+		}
+	}
+
+	if lastTool == "question" && questionAnswered {
+		return ""
+	}
+	if lastTool != "" && !humanAfter {
+		return lastTool
 	}
 	return ""
 }

@@ -491,8 +491,9 @@ func ApplyPinnedStates(sf *domain.StateFile) {
 //   - claude: scans the JSONL via conversation.LastPendingBlockingTool;
 //     returns "plan" or "question".
 //   - codex: scans the rollout via codexconv.LastPendingBlockingToolCodex;
-//     returns "question" only (codex has no ExitPlanMode equivalent in
-//     the rollout schema).
+//     returns "plan" or "question". Codex emits its plan-ready signal as
+//     an event_msg item_completed with item.type="Plan" — the codex
+//     symmetric of claude's ExitPlanMode tool_use.
 //
 // Idle-candidate states:
 //   - "idle_prompt", "permission" for both harnesses (claude pattern).

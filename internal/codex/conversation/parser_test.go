@@ -276,6 +276,75 @@ func TestLastPendingBlockingToolCodex_EmptyWhenMissingFile(t *testing.T) {
 	}
 }
 
+// LastPendingBlockingToolCodex must promote codex agents to state="plan"
+// when an `item_completed` Plan event is the most recent blocking signal in
+// the rollout — the codex symmetric of claude's ExitPlanMode promotion in
+// conversation.LastPendingBlockingTool. Real rollouts open with multiple
+// user-role response_item messages (AGENTS.md instructions, environment_context,
+// the user's prompt) before any blocking event; those must not be treated as
+// "the user already responded to the plan" — the same skip-bootstrap-user-turns
+// pattern claude's scanner uses.
+func TestLastPendingBlockingToolCodex_PlanPriority(t *testing.T) {
+	const planLine = `{"timestamp":"t-plan","type":"event_msg","payload":{"type":"item_completed","item":{"type":"Plan","text":"# proposal"}}}`
+	const questionLine = `{"timestamp":"t-q","type":"response_item","payload":{"type":"function_call","name":"request_user_input","arguments":"{\"questions\":[{\"id\":\"q1\",\"question\":\"x\",\"options\":[{\"label\":\"a\"}]}]}","call_id":"cid"}}`
+	const questionAnswered = `{"timestamp":"t-qa","type":"response_item","payload":{"type":"function_call_output","call_id":"cid","output":"{}"}}`
+	const userMsg = `{"timestamp":"t-u","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"approve"}]}}`
+	const bootstrapUserMsg = `{"timestamp":"t-boot","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions"}]}}`
+
+	cases := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{
+			name:  "plan when plan is last",
+			lines: []string{planLine},
+			want:  "plan",
+		},
+		{
+			name:  "empty when plan followed by user message",
+			lines: []string{planLine, userMsg},
+			want:  "",
+		},
+		{
+			name:  "question when question after plan",
+			lines: []string{planLine, questionLine},
+			want:  "question",
+		},
+		{
+			name:  "plan when plan after answered question",
+			lines: []string{questionLine, questionAnswered, planLine},
+			want:  "plan",
+		},
+		{
+			name:  "plan unaffected by session bootstrap user messages",
+			lines: []string{bootstrapUserMsg, planLine},
+			want:  "plan",
+		},
+		{
+			name:  "empty when question followed by user message reply",
+			lines: []string{questionLine, userMsg},
+			want:  "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "rollout.jsonl")
+			contents := ""
+			for _, l := range tc.lines {
+				contents += l + "\n"
+			}
+			if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := conversation.LastPendingBlockingToolCodex(path); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // Malformed JSON lines and unrecognized event types are skipped without
 // affecting valid entries (resilient to partial tail writes from codex).
 func TestRead_SkipsMalformedAndUnknown(t *testing.T) {
