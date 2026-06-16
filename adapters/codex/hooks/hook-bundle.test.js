@@ -25,6 +25,13 @@ function commands(hooksConfig) {
   );
 }
 
+function assertOnlyKeys(value, allowed, context) {
+  const unknown = Object.keys(value)
+    .filter(key => !allowed.includes(key))
+    .sort();
+  assert.deepEqual(unknown, [], context);
+}
+
 describe('codex global hook bundle', () => {
   it('defines only synchronous hooks', () => {
     assert.equal(hasAsyncHook(readJson(HOOKS_JSON)), false);
@@ -90,6 +97,41 @@ describe('codex hook manifests reject unknown top-level fields', () => {
     it(`${manifest} declares only "hooks" at the top level`, () => {
       const top = readJson(path.join(ROOT, manifest));
       assert.deepEqual(Object.keys(top).sort(), ['hooks']);
+    });
+  }
+});
+
+describe('codex hook manifests reject unknown hook-entry fields', () => {
+  for (const manifest of ['hooks.json', 'plugin-hooks.json']) {
+    it(`${manifest} uses only codex hook config fields`, () => {
+      const top = readJson(path.join(ROOT, manifest));
+      const matcherGroupFields = ['hooks', 'matcher'];
+      const hookHandlerFields = [
+        'async',
+        'command',
+        'commandWindows',
+        'statusMessage',
+        'timeout',
+        'type',
+      ];
+
+      for (const [eventName, entries] of Object.entries(top.hooks)) {
+        for (const [entryIndex, entry] of entries.entries()) {
+          assertOnlyKeys(
+            entry,
+            matcherGroupFields,
+            `${manifest} ${eventName}[${entryIndex}]`
+          );
+
+          for (const [hookIndex, hook] of entry.hooks.entries()) {
+            assertOnlyKeys(
+              hook,
+              hookHandlerFields,
+              `${manifest} ${eventName}[${entryIndex}].hooks[${hookIndex}]`
+            );
+          }
+        }
+      }
     });
   }
 });
