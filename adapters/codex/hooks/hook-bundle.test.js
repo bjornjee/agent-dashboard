@@ -84,3 +84,12 @@ describe('codex global hook bundle', () => {
     assert.equal(fs.existsSync(path.join(ROOT, 'scripts', 'hooks')), false);
   });
 });
+
+describe('codex hook manifests reject unknown top-level fields', () => {
+  for (const manifest of ['hooks.json', 'plugin-hooks.json']) {
+    it(`${manifest} declares only "hooks" at the top level`, () => {
+      const top = readJson(path.join(ROOT, manifest));
+      assert.deepEqual(Object.keys(top).sort(), ['hooks']);
+    });
+  }
+});
