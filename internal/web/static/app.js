@@ -268,23 +268,11 @@ window.Dashboard = {
     });
   },
 
-  // Open a native macOS Choose File dialog via the local server
-  // (POST /api/file-picker → osascript), then insert the chosen
-  // absolute path at the textarea cursor. The dashboard binds to
-  // localhost so the dialog can only be triggered from the user's
-  // own browser.
-  async attachFile() {
+  // Insert an absolute host path at the composer cursor. Shared by both
+  // attach-file branches (desktop osascript and mobile upload).
+  insertAttachPath(path) {
     const input = document.getElementById('reply-input');
-    if (!input) return;
-    let path = '';
-    try {
-      const result = await post('/api/file-picker');
-      path = (result && result.path) || '';
-    } catch (err) {
-      toast('File picker failed: ' + err.message, 'error');
-      return;
-    }
-    if (!path) return; // user cancelled
+    if (!input || !path) return;
     const start = input.selectionStart ?? input.value.length;
     const end = input.selectionEnd ?? input.value.length;
     const sep = (start > 0 && input.value[start - 1] && !/\s/.test(input.value[start - 1])) ? ' ' : '';
@@ -294,6 +282,64 @@ window.Dashboard = {
     const cursor = start + insertion.length;
     try { input.setSelectionRange(cursor, cursor); } catch {}
     input.dispatchEvent(new Event('input', { bubbles: true }));
+  },
+
+  // Attach a file at the composer cursor. Desktop pops the native macOS
+  // "Choose File" dialog via the local server (POST /api/file-picker →
+  // osascript). Mobile uses the phone's native image picker via a hidden
+  // <input type="file"> and uploads the bytes to the agent's working dir
+  // (POST /api/agents/{id}/upload). Both branches end by inserting the
+  // resulting host-side absolute path at the cursor.
+  async attachFile(agentId) {
+    const desktop = window.matchMedia('(min-width: 900px)').matches;
+    if (desktop) {
+      let path = '';
+      try {
+        const result = await post('/api/file-picker');
+        path = (result && result.path) || '';
+      } catch (err) {
+        toast('File picker failed: ' + err.message, 'error');
+        return;
+      }
+      if (path) Dashboard.insertAttachPath(path);
+      return;
+    }
+    if (!agentId) return;
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/*';
+    picker.style.display = 'none';
+    document.body.appendChild(picker);
+    const file = await new Promise(resolve => {
+      picker.addEventListener('change', () => resolve(picker.files && picker.files[0] || null), { once: true });
+      // 'cancel' fires on modern browsers when the user dismisses the
+      // picker without choosing; fall back to no-op if unsupported.
+      picker.addEventListener('cancel', () => resolve(null), { once: true });
+      picker.click();
+    });
+    picker.remove();
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    let path = '';
+    try {
+      const resp = await fetch('/api/agents/' + encodeURIComponent(agentId) + '/upload', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'dashboard' },
+        body: fd,
+      });
+      if (resp.status === 401) { window.location.href = '/auth/login'; return; }
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        toast('Upload failed: ' + (out.error || resp.statusText), 'error');
+        return;
+      }
+      path = out.path || '';
+    } catch (err) {
+      toast('Upload failed: ' + err.message, 'error');
+      return;
+    }
+    if (path) Dashboard.insertAttachPath(path);
   },
 
   // Called inline from the card markup on any input change.
