@@ -9,8 +9,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-reporter.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Register Codex agent in dashboard on session start"
+        ]
       }
     ],
     "SubagentStart": [
@@ -22,8 +21,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-reporter.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Track Codex subagent start in dashboard"
+        ]
       }
     ],
     "SubagentStop": [
@@ -35,8 +33,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-reporter.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Track Codex subagent stop in dashboard"
+        ]
       }
     ],
     "PreToolUse": [
@@ -48,8 +45,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/warn-destructive.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Block destructive shell commands (rm -rf, git reset --hard, DROP TABLE, etc.)"
+        ]
       },
       {
         "matcher": "*",
@@ -59,8 +55,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/block-main-commit.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Block git commit on main/master — require a feature branch"
+        ]
       },
       {
         "matcher": "*",
@@ -70,8 +65,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-fast.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Fast Codex state sync for dashboard before tool use"
+        ]
       }
     ],
     "PostToolUse": [
@@ -83,8 +77,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-fast.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Fast Codex state sync for dashboard after tool use"
+        ]
       }
     ],
     "PermissionRequest": [
@@ -96,8 +89,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-fast.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Instant Codex needs-attention detection for dashboard"
+        ]
       }
     ],
     "Stop": [
@@ -109,8 +101,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-reporter.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Final Codex state sync for dashboard"
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -122,8 +113,7 @@
             "command": "node \"${PLUGIN_ROOT}/hooks/pr-skill-detect.js\"",
             "timeout": 5000
           }
-        ],
-        "description": "Detect $agent-dashboard:pr skill invocation and pin agent state to pr"
+        ]
       }
     ]
   }
