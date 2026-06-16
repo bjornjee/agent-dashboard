@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.1](https://github.com/bjornjee/agent-dashboard/compare/v0.34.0...v0.34.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* remove unsupported codex hook descriptions ([#384](https://github.com/bjornjee/agent-dashboard/issues/384)) ([32c35b7](https://github.com/bjornjee/agent-dashboard/commit/32c35b7797551a75c81e32c4bc13b2d6ebf31ea0))
+
 ## [0.34.0](https://github.com/bjornjee/agent-dashboard/compare/v0.33.2...v0.34.0) (2026-06-16)
 
 
