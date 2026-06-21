@@ -19,6 +19,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
+	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
 	"github.com/bjornjee/agent-dashboard/internal/repo"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
@@ -580,10 +581,14 @@ func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
 			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", agent.TmuxPaneID)}
 		}
 		if agent.Harness == "codex" {
-			if agent.State == "running" {
-				return sendResultMsg{err: tmux.TmuxPasteKeysClearingInput(target, text, "Tab", "Enter")}
+			// Submit keys are chosen from the live pane footer, not the
+			// (often stale) sidecar state: a bare Enter against an
+			// in-flight turn lands the paste as un-submitted multi-line
+			// input. Paste first, then send the footer-derived keys.
+			if err := tmux.TmuxPasteKeysClearingInput(target, text); err != nil {
+				return sendResultMsg{err: err}
 			}
-			return sendResultMsg{err: tmux.TmuxPasteKeysClearingInput(target, text, "Enter")}
+			return sendResultMsg{err: tmux.TmuxSendRawKeys(target, codex.SubmitKeysAfterPaste(target, agent.State)...)}
 		}
 		return sendResultMsg{err: tmux.TmuxSendKeys(target, text)}
 	}

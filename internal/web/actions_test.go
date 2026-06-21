@@ -658,14 +658,10 @@ func TestHandleApprove_HarnessRouting(t *testing.T) {
 			"#{session_name}:#{window_index}.#{pane_index}",
 		).Return([]byte("main:0.0\n"), nil)
 		// Codex needs paste-buffer + bracketed-paste so the text lands in
-		// the input box. State="running" → Tab+Enter (queues the reply
-		// behind the in-flight turn); idle → Enter alone. Mirrors
-		// handleInput's codex path.
-		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "C-u").Return(nil).Once()
-		m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", "Approve").Return(nil).Once()
-		m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:0.0").Return(nil).Once()
-		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Tab").Return(nil).Once()
-		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+		// the input box. Submit keys are chosen from the live pane footer:
+		// a "tab to queue" hint means a turn is in flight, so the reply
+		// queues with Tab,Enter. Mirrors handleInput's codex path.
+		expectCodexPasteCaptureSubmit(m, "main:0.0", "Approve", "› Approve\n\n tab to queue message", "Tab", "Enter")
 
 		agent := domain.Agent{
 			SessionID:  "ap-codex",
@@ -726,11 +722,8 @@ func TestHandleReject_HarnessRouting(t *testing.T) {
 			"display-message", "-p", "-t", "%1",
 			"#{session_name}:#{window_index}.#{pane_index}",
 		).Return([]byte("main:0.0\n"), nil)
-		// Idle state → Enter alone (no Tab queue).
-		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "C-u").Return(nil).Once()
-		m.On("Run", mock.Anything, "set-buffer", "-b", "agent-dashboard-reply", "--", "Reject — please revise the plan").Return(nil).Once()
-		m.On("Run", mock.Anything, "paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:0.0").Return(nil).Once()
-		m.On("Run", mock.Anything, "send-keys", "-t", "main:0.0", "Enter").Return(nil).Once()
+		// Clean footer (no "tab to queue") → Enter alone.
+		expectCodexPasteCaptureSubmit(m, "main:0.0", "Reject — please revise the plan", "› Reject — please revise the plan\n\ngpt-5.5 high fast", "Enter")
 
 		agent := domain.Agent{
 			SessionID:  "rj-codex",

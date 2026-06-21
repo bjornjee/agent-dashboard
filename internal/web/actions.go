@@ -14,9 +14,9 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
-	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
+	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
 	"github.com/bjornjee/agent-dashboard/internal/repowin"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/state"
@@ -56,11 +56,10 @@ func (s *Server) sendApprovalKeystroke(w http.ResponseWriter, r *http.Request, c
 	}
 	var err error
 	if agent.Harness == "codex" {
-		submit := []string{"Enter"}
-		if agent.State == "running" {
-			submit = []string{"Tab", "Enter"}
+		err = tmux.TmuxPasteKeysClearingInput(target, codexText)
+		if err == nil {
+			err = tmux.TmuxSendRawKeys(target, codex.SubmitKeysAfterPaste(target, agent.State)...)
 		}
-		err = tmux.TmuxPasteKeysClearingInput(target, codexText, submit...)
 	} else {
 		err = tmux.TmuxSendKeys(target, claudeKey)
 	}
@@ -115,7 +114,7 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 	if agent.Harness == "codex" {
 		sendErr = tmux.TmuxPasteKeysClearingInput(target, req.Text)
 		if sendErr == nil {
-			sendErr = tmux.TmuxSendRawKeys(target, codexInputSubmitKeysAfterPaste(target, agent)...)
+			sendErr = tmux.TmuxSendRawKeys(target, codex.SubmitKeysAfterPaste(target, agent.State)...)
 		}
 	} else {
 		sendErr = tmux.TmuxSendKeys(target, req.Text)
@@ -125,49 +124,6 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "sent"})
-}
-
-func codexInputSubmitKeysAfterPaste(target string, agent domain.Agent) []string {
-	if codexStateMayQueue(agent.State) {
-		time.Sleep(100 * time.Millisecond)
-	}
-	if lines, err := tmux.TmuxCapture(target, 20); err == nil && len(lines) > 0 {
-		if codexPaneShowsQueueHint(lines) {
-			return []string{"Tab", "Enter"}
-		}
-		if agent.State == "permission" || agent.State == "plan" {
-			return []string{"Tab", "Enter"}
-		}
-		return []string{"Enter"}
-	}
-	return fallbackCodexInputSubmitKeys(agent.State)
-}
-
-func codexStateMayQueue(state string) bool {
-	switch state {
-	case "running", "permission", "plan":
-		return true
-	default:
-		return false
-	}
-}
-
-func codexPaneShowsQueueHint(lines []string) bool {
-	for _, line := range lines {
-		if strings.Contains(strings.ToLower(line), "tab to queue") {
-			return true
-		}
-	}
-	return false
-}
-
-func fallbackCodexInputSubmitKeys(state string) []string {
-	switch state {
-	case "running", "permission", "plan":
-		return []string{"Tab", "Enter"}
-	default:
-		return []string{"Enter"}
-	}
 }
 
 // askAnswerEntry is one question's answer in an /answer-question payload.
