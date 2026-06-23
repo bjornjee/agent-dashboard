@@ -71,7 +71,7 @@ status` shows no unexpected tracked-file deletions.
 
 **Then prune implementation-only tests.** The cleaner above never touches tests — this step does.
 
-4. From the Phase 1 changed-file list, take only test files this branch ADDED or MODIFIED (`*_test.go`, `*.test.{js,ts}`, `*.spec.*`, `test_*.py`, `*_test.py`). Never consider pre-existing tests.
+4. From the Phase 1 changed-file list, take only the test files this branch ADDED or MODIFIED — identify tests by their role, not a fixed extension list. Never consider pre-existing tests.
 5. Remove cases that exist only to scaffold the implementation and add no regression value: trivial assertions (constructor returns non-nil, plain getters/setters, framework behavior), placeholder / `assert true` stubs, and cases fully subsumed or duplicated by another retained test. **NEVER** remove a test that is the sole coverage of a behavior, branch, edge case, error path, or regression — if unsure the coverage is unique, keep it.
 6. Report each removed test, one line with its rationale (trivial / subsumed-by-X / duplicate).
 7. Run `make test` — must stay green. Commit the removals on their own: `git add -A && git commit -m "test: remove implementation-only tests"`.
