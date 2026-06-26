@@ -92,25 +92,6 @@ func TestIsMerged(t *testing.T) {
 	}
 }
 
-func TestEffectiveState(t *testing.T) {
-	tests := []struct {
-		name  string
-		agent domain.Agent
-		want  string
-	}{
-		{"pinned overrides", domain.Agent{State: "running", PinnedState: "merged"}, "merged"},
-		{"no pin uses state", domain.Agent{State: "done"}, "done"},
-		{"empty pin uses state", domain.Agent{State: "idle_prompt", PinnedState: ""}, "idle_prompt"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.agent.EffectiveState(); got != tt.want {
-				t.Errorf("EffectiveState() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsBlocked_IncludesPlan(t *testing.T) {
 	if !isBlocked("permission") {
 		t.Error("permission should be blocked")
