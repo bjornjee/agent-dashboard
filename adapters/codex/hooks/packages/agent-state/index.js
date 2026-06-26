@@ -92,9 +92,25 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
   withFileLock(filePath, () => {
     const existing = readAgentState(sessionId, agentsDir) || {};
 
-    // Guard: skip write if current on-disk state is protected. Runs INSIDE
-    // the lock so the check sees the same fresh read the merge will use —
-    // no TOCTOU window between guard and write.
+    // Primary ordering authority: reject a strictly-older report_seq so a stale
+    // write that lands late (e.g. a delayed PostToolUse->running arriving after
+    // Stop->idle_prompt) can never clobber a newer one. report_seq is a wall-clock
+    // timestamp captured just before each write; the Stop reporter does its
+    // transcript/git I/O first, so it always carries a higher seq than a racing
+    // fast-hook write. Equal seqs (same millisecond) and un-seq'd writes skip this
+    // and fall through to the guardStates backstop below.
+    if (
+      typeof update.report_seq === 'number' &&
+      typeof existing.report_seq === 'number' &&
+      update.report_seq < existing.report_seq
+    ) {
+      return;
+    }
+
+    // Backstop: skip write if current on-disk state is protected. Catches
+    // equal-seq ties and un-seq'd writes. Runs INSIDE the lock so the check sees
+    // the same fresh read the merge will use — no TOCTOU window between guard
+    // and write.
     if (opts.guardStates && opts.guardStates.has(existing.state)) {
       return;
     }

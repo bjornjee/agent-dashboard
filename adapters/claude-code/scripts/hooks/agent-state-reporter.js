@@ -269,6 +269,9 @@ function report(input) {
   });
 
   if (changed) {
+    // Wall-clock report sequence so writeState can reject an out-of-order write
+    // (see agent-state-fast.js for the cross-process rationale and caveats).
+    entry.report_seq = Date.now() * 1000;
     const writeOpts = shouldGuardWrite(hookEvent, hasPendingTool)
       ? { guardStates: STOP_STATES }
       : {};

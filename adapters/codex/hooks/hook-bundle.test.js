@@ -79,6 +79,22 @@ describe('codex global hook bundle', () => {
     }
   });
 
+  it('keeps the agent-state package in lock-step with the claude-code copy', () => {
+    // The codex packages/agent-state/* files are byte-identical copies of the
+    // claude-code originals, kept in sync by hand (no sync script). This guard
+    // is what stops the two writeState implementations from drifting apart —
+    // a real hazard now that report_seq ordering lives in both.
+    for (const rel of ['index.js', 'test.js']) {
+      const codexFile = path.join(ROOT, 'packages', 'agent-state', rel);
+      const claudeFile = path.join(ROOT, '..', '..', 'claude-code', 'packages', 'agent-state', rel);
+      assert.equal(
+        fs.readFileSync(codexFile, 'utf8'),
+        fs.readFileSync(claudeFile, 'utf8'),
+        `codex packages/agent-state/${rel} must match the claude-code copy`
+      );
+    }
+  });
+
   it('registers PR skill detection on user prompt submit', () => {
     const hooks = readJson(HOOKS_JSON);
     const entries = hooks.hooks.UserPromptSubmit || [];

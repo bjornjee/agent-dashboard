@@ -36,6 +36,7 @@ if (require.main === module) {
         writeState(input.session_id, {
           ...buildPRSkillUpdate(),
           last_hook_event: input.hook_event_name || 'UserPromptSubmit',
+          report_seq: Date.now() * 1000,
         });
       }
     } catch {

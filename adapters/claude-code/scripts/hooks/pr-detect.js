@@ -114,6 +114,7 @@ if (require.main === module) {
       writeState(sessionId, {
         ...update,
         last_hook_event: input.hook_event_name || existing.last_hook_event || '',
+        report_seq: Date.now() * 1000,
       });
     } catch {
       // Silent — don't break Claude Code
