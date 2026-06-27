@@ -416,9 +416,15 @@ func TestReplyMode_CodexPlanDoesNotSendEscape(t *testing.T) {
 
 type recordingTmuxRunner struct {
 	runs [][]string
+	// paneOutput is returned for capture-pane calls so tests can drive the
+	// codex live-footer submit-key decision. Empty means a clean footer.
+	paneOutput string
 }
 
-func (r *recordingTmuxRunner) Output(_ context.Context, _ ...string) ([]byte, error) {
+func (r *recordingTmuxRunner) Output(_ context.Context, args ...string) ([]byte, error) {
+	if len(args) > 0 && args[0] == "capture-pane" {
+		return []byte(r.paneOutput), nil
+	}
 	return []byte("main:2.1\n"), nil
 }
 
@@ -428,7 +434,9 @@ func (r *recordingTmuxRunner) Run(_ context.Context, args ...string) error {
 }
 
 func TestReplyMode_CodexRunningReplyQueuesMessage(t *testing.T) {
-	runner := &recordingTmuxRunner{}
+	// Live footer says "tab to queue" → the reply must queue behind the
+	// in-flight turn with Tab,Enter.
+	runner := &recordingTmuxRunner{paneOutput: "› continue the PR\n\n tab to queue message"}
 	restore := tmux.SetTestRunner(runner)
 	t.Cleanup(restore)
 
@@ -490,6 +498,43 @@ func TestReplyMode_CodexWaitingReplySubmitsMessage(t *testing.T) {
 	want := [][]string{
 		{"send-keys", "-t", "main:2.1", "C-u"},
 		{"set-buffer", "-b", "agent-dashboard-reply", "--", "continue the PR"},
+		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.1"},
+		{"send-keys", "-t", "main:2.1", "Enter"},
+	}
+	if fmt.Sprint(runner.runs) != fmt.Sprint(want) {
+		t.Fatalf("tmux calls = %#v, want %#v", runner.runs, want)
+	}
+}
+
+// TestReplyMode_CodexStaleRunningCleanFooterSubmits is the regression guard for
+// the reported bug: typing "$pr" into a codex reply box just added a newline and
+// never submitted. The cause was sendReply trusting the stale sidecar state
+// (State=="running" → Tab,Enter) instead of the live pane footer. When the
+// footer is clean (idle), a queued Tab,Enter leaves the paste as un-submitted
+// multi-line input. The fix submits with Enter alone here.
+func TestReplyMode_CodexStaleRunningCleanFooterSubmits(t *testing.T) {
+	runner := &recordingTmuxRunner{paneOutput: "› $pr\n\ngpt-5.5 high fast"}
+	restore := tmux.SetTestRunner(runner)
+	t.Cleanup(restore)
+
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:2.0", TmuxPaneID: "%5", Window: 2, Pane: 0, State: "running", Harness: "codex", Cwd: "/tmp"},
+	}
+	m.mode = modeReply
+	m.textInput.SetValue("$pr")
+	m.buildTree()
+	m.selected = 1
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected reply command")
+	}
+	cmd()
+
+	want := [][]string{
+		{"send-keys", "-t", "main:2.1", "C-u"},
+		{"set-buffer", "-b", "agent-dashboard-reply", "--", "$pr"},
 		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.1"},
 		{"send-keys", "-t", "main:2.1", "Enter"},
 	}
