@@ -529,8 +529,7 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	state.ResolveAgentWorktree(&sf, path)
 	state.ResolveAgentBranches(&sf, paneCwds, path)
 	state.GCSpawnPins(path, 10*time.Minute)
-	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf, codexSessionsDir)
+	state.ApplyStateArbitration(&sf, codexSessionsDir)
 	return conversation.TopLevelAgents(
 		state.SortedAgents(sf, selfPaneID),
 		conversation.Roots{CodexSessionsRoot: codexSessionsDir},

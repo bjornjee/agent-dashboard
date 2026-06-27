@@ -304,6 +304,13 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
 }
 
 function fastUpdate(input) {
+  // Stamp the report sequence at hook ENTRY (≈ when PostToolUse fired), before any
+  // I/O, so writeState's ordering reflects event order — not how long this hook
+  // ran. Date.now()*1000 is comparable across the separate hook processes (*1000
+  // scales into shared units; no sub-ms resolution is implied).
+  // ponytail: wall-clock, not truly monotonic — an NTP step-back could mis-order a
+  // write; the freeze guard in writeState bounds the downside.
+  const reportSeq = Date.now() * 1000;
   const tmuxPane = getPaneId();
   if (!tmuxPane) return;
 
@@ -323,6 +330,7 @@ function fastUpdate(input) {
 
   const { changed, update, dispatchEffort } = buildUpdate({ input, existing, target, tmuxPane });
   if (changed && update) {
+    update.report_seq = reportSeq;
     // Pass guardStates on PostToolUse to eliminate the TOCTOU race with the
     // async Stop hook: buildUpdate's guard reads stale state, but writeState
     // re-reads from disk — the guard must run against that fresh read. Skip

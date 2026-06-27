@@ -205,6 +205,9 @@ if (require.main === module) {
 }
 
 function report(input) {
+  // Stamp at hook ENTRY (≈ when Stop fired), before the transcript/git/tmux I/O
+  // below, so the seq reflects event order not I/O duration. See agent-state-fast.js.
+  const reportSeq = Date.now() * 1000;
   const tmuxPane = getPaneId();
   if (!tmuxPane) return;
 
@@ -269,6 +272,7 @@ function report(input) {
   });
 
   if (changed) {
+    entry.report_seq = reportSeq;
     const writeOpts = shouldGuardWrite(hookEvent, hasPendingTool)
       ? { guardStates: STOP_STATES }
       : {};

@@ -128,8 +128,7 @@ func (s *Server) readAgentState() []domain.Agent {
 		state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
 		state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
 		state.GCSpawnPins(s.cfg.Profile.StateDir, 10*time.Minute)
-		state.ApplyPinnedStates(&sf)
-		state.ApplyIdleOverrides(&sf, s.codexSessionsRootDir)
+		state.ApplyStateArbitration(&sf, s.codexSessionsRootDir)
 		agents := conversation.TopLevelAgents(
 			state.SortedAgents(sf, ""),
 			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},

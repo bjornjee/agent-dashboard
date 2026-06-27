@@ -468,83 +468,83 @@ var idleStates = map[string]bool{
 	"idle_prompt": true, "done": true, "question": true,
 }
 
-// ApplyPinnedStates restores each agent's State to its PinnedState, but only
-// when the agent is idle. Active states (running, permission, error, plan)
-// pass through so the dashboard reflects live work.
-func ApplyPinnedStates(sf *domain.StateFile) {
-	for key, agent := range sf.Agents {
-		if agent.PinnedState != "" && idleStates[agent.State] {
-			agent.State = agent.PinnedState
-			sf.Agents[key] = agent
+// arbitrateState resolves one agent's displayed state through a single declared
+// precedence:
+//
+//  1. A pinned pr/merged wins over an idle resting state (idleStates).
+//  2. Otherwise a transcript structural blocker (pending plan/question)
+//     overrides an idle-candidate state.
+//  3. Otherwise the raw hook-reported State stands.
+//
+// Pinned is checked first, mirroring ApplyPinnedStates running before
+// ApplyIdleOverrides in the former pipeline, so a pinned idle agent resolves
+// without consulting the transcript. Pure and table-testable; transcriptOverride
+// is "" when nothing is pending or the agent is not an idle candidate.
+func arbitrateState(agent domain.Agent, transcriptOverride string) string {
+	if agent.PinnedState != "" && idleStates[agent.State] {
+		return agent.PinnedState
+	}
+	if transcriptOverride != "" {
+		return transcriptOverride
+	}
+	return agent.State
+}
+
+// transcriptOverrideFor recovers a pending plan review (claude's ExitPlanMode /
+// codex's item.type="Plan") or pending question (claude's AskUserQuestion /
+// codex's request_user_input) from the agent's transcript. The most recent
+// unanswered blocking tool wins — if AskUserQuestion appears after ExitPlanMode,
+// "question" takes precedence. Returns "" when nothing is pending or the
+// transcript can't be located.
+//
+// Per-harness dispatch:
+//   - claude: scans the JSONL via conversation.LastPendingBlockingTool.
+//   - codex: scans the rollout via codexconv.LastPendingBlockingToolCodex.
+//     Pass codexSessionsRoot="" when codex isn't installed; the branch then
+//     short-circuits to "" and behavior matches the claude-only path.
+func transcriptOverrideFor(agent domain.Agent, codexSessionsRoot string) string {
+	switch agent.Harness {
+	case "codex":
+		// LocateRollout returns "" on any lookup/IO error; treat that the same as
+		// "no rollout found" → no override (mirrors the claude ProjDir guard below).
+		path, _ := codexconv.LocateRollout(codexSessionsRoot, agent.SessionID)
+		if path == "" {
+			return ""
 		}
+		return codexconv.LastPendingBlockingToolCodex(path)
+	default:
+		if agent.ProjDir == "" {
+			return ""
+		}
+		return conversation.LastPendingBlockingTool(agent.ProjDir, agent.SessionID)
 	}
 }
 
-// ApplyIdleOverrides checks each idle-candidate agent for a pending plan
-// review (claude's ExitPlanMode) or pending question (claude's
-// AskUserQuestion / codex's request_user_input) and overrides the state
-// accordingly. The most recently seen blocking tool wins — if
-// AskUserQuestion appears after ExitPlanMode in claude, "question" takes
-// precedence.
-//
-// Per-harness dispatch:
-//   - claude: scans the JSONL via conversation.LastPendingBlockingTool;
-//     returns "plan" or "question".
-//   - codex: scans the rollout via codexconv.LastPendingBlockingToolCodex;
-//     returns "plan" or "question". Codex emits its plan-ready signal as
-//     an event_msg item_completed with item.type="Plan" — the codex
-//     symmetric of claude's ExitPlanMode tool_use.
-//
-// Idle-candidate states:
-//   - "idle_prompt", "permission" for both harnesses (claude pattern).
-//   - "done" additionally for codex: codex's Stop hook fires while the
-//     model is still blocked at the inline request_user_input picker, so
-//     the agent file lands with state="done" even though the CLI is
-//     waiting. We recover the state here at read time. Claude in
-//     state="done" stays unchanged because LastPendingBlockingTool will
-//     correctly find the human reply in the JSONL and return "".
-//
-// Running agents are skipped — claude's hook-side stop-state guard
-// prevents the PostToolUse race that used to leave agents stuck at
-// "running" when actually idle.
-//
-// codexSessionsRoot is the path the codex CLI writes rollouts under
-// (typically $CODEX_HOME/sessions). Pass "" if codex isn't installed;
-// the codex branch then short-circuits to "" and behavior matches the
-// claude-only loop.
-func ApplyIdleOverrides(sf *domain.StateFile, codexSessionsRoot string) {
+// ApplyStateArbitration resolves every agent's displayed State through the single
+// arbitrateState precedence, replacing the former ApplyPinnedStates →
+// ApplyIdleOverrides in-place pipeline whose precedence lived only in call order.
+// Behavior is identical: a pinned idle agent resolves without a transcript read,
+// and only idle candidates (isIdleCandidate) consult the transcript.
+func ApplyStateArbitration(sf *domain.StateFile, codexSessionsRoot string) {
 	for key, agent := range sf.Agents {
-		if !isIdleCandidate(agent) {
-			continue
+		override := ""
+		// Skip the transcript read when a pin already decides the state (matches
+		// ApplyPinnedStates running before the candidate-gated override).
+		pinWins := agent.PinnedState != "" && idleStates[agent.State]
+		if !pinWins && isIdleCandidate(agent) && agent.SessionID != "" {
+			override = transcriptOverrideFor(agent, codexSessionsRoot)
 		}
-		if agent.SessionID == "" {
-			continue
-		}
-		var override string
-		switch agent.Harness {
-		case "codex":
-			path, _ := codexconv.LocateRollout(codexSessionsRoot, agent.SessionID)
-			if path == "" {
-				continue
-			}
-			override = codexconv.LastPendingBlockingToolCodex(path)
-		default:
-			if agent.ProjDir == "" {
-				continue
-			}
-			override = conversation.LastPendingBlockingTool(agent.ProjDir, agent.SessionID)
-		}
-		if override != "" {
-			agent.State = override
+		if next := arbitrateState(agent, override); next != agent.State {
+			agent.State = next
 			sf.Agents[key] = agent
 		}
 	}
 }
 
 // isIdleCandidate is the per-harness candidate-state predicate for
-// ApplyIdleOverrides. The "done" case is codex-only because claude's
-// PostToolUse stop-state guard already prevents the equivalent stuck
-// state for claude agents.
+// ApplyStateArbitration's transcript override. The "done" case is codex-only
+// because claude's PostToolUse stop-state guard already prevents the equivalent
+// stuck state for claude agents.
 func isIdleCandidate(agent domain.Agent) bool {
 	if agent.State == "idle_prompt" || agent.State == "permission" {
 		return true

@@ -20,13 +20,12 @@ import (
 )
 
 // stateUpdate builds a stateUpdatedMsg the way production does: the same
-// ApplyPinnedStates → ApplyIdleOverrides → SortedAgents → TopLevelAgents
-// chain that resolveAgents runs off the main goroutine. Tests should use
-// this helper instead of constructing the message directly so they cover
-// the codex filter alongside the message wiring.
+// ApplyStateArbitration → SortedAgents → TopLevelAgents chain that
+// resolveAgents runs off the main goroutine. Tests should use this helper
+// instead of constructing the message directly so they cover the codex
+// filter alongside the message wiring.
 func stateUpdate(m model, sf domain.StateFile) stateUpdatedMsg {
-	state.ApplyPinnedStates(&sf)
-	state.ApplyIdleOverrides(&sf, m.codexSessionsDir)
+	state.ApplyStateArbitration(&sf, m.codexSessionsDir)
 	agents := conversation.TopLevelAgents(
 		state.SortedAgents(sf, m.selfPaneID),
 		conversation.Roots{CodexSessionsRoot: m.codexSessionsDir},

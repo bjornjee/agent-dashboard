@@ -417,6 +417,93 @@ describe('writeState guardStates', () => {
   });
 });
 
+describe('writeState report_seq ordering', () => {
+  it('drops a write with a strictly-older report_seq', () => {
+    const sessionId = 'sess-seq-older';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt', report_seq: 200 }, agentsDir);
+
+    // A stale write (older event) that lands later must lose.
+    writeState(sessionId, { state: 'running', report_seq: 100 }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'idle_prompt', 'older report_seq must not overwrite a newer state');
+    assert.equal(state.report_seq, 200, 'report_seq must remain the newest');
+  });
+
+  it('applies a write with a newer report_seq', () => {
+    const sessionId = 'sess-seq-newer';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'running', report_seq: 100 }, agentsDir);
+
+    writeState(sessionId, { state: 'idle_prompt', report_seq: 200 }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'idle_prompt', 'newer report_seq must apply');
+    assert.equal(state.report_seq, 200);
+  });
+
+  it('rejects a stale running after a newer idle_prompt with no guardStates', () => {
+    // The exact race seq is meant to kill: a late PostToolUse->running landing
+    // after a Stop->idle_prompt, with NO content guard supplied.
+    const sessionId = 'sess-seq-race';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt', report_seq: 5000 }, agentsDir);
+
+    writeState(sessionId, { state: 'running', report_seq: 4999 }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'idle_prompt', 'seq alone (no guard) must reject the stale running');
+  });
+
+  it('allows a write with an equal report_seq (not strictly older)', () => {
+    const sessionId = 'sess-seq-equal';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'running', report_seq: 100 }, agentsDir);
+
+    writeState(sessionId, { state: 'permission', report_seq: 100 }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'permission', 'equal report_seq is not strictly older; the compare is skipped so the write proceeds');
+  });
+
+  it('allows a write when report_seq is absent (degrades to current behavior)', () => {
+    const sessionId = 'sess-seq-missing';
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt', report_seq: 100 }, agentsDir);
+
+    // No report_seq on the second write → compare skipped → normal merge.
+    writeState(sessionId, { state: 'running' }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'running', 'without report_seq the write proceeds (unchanged behavior)');
+  });
+});
+
+describe('writeState report_seq freeze guard', () => {
+  it('self-heals when the on-disk report_seq is implausibly far in the future', () => {
+    const sessionId = 'sess-seq-future';
+    const farFuture = Date.now() * 1000 + 3_600_000_000; // ~1h ahead, well past the slack
+    writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt', report_seq: farFuture }, agentsDir);
+
+    // A normal, current write must NOT be frozen out by the bogus future seq.
+    writeState(sessionId, { state: 'running', report_seq: Date.now() * 1000 }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'running', 'an implausibly-future on-disk seq must not freeze writes');
+  });
+
+  it('ignores a non-finite (Infinity) on-disk report_seq', () => {
+    const sessionId = 'sess-seq-inf';
+    // JSON.parse turns an out-of-range literal into Infinity; hooks can't write
+    // this (JSON.stringify(Infinity)==='null'), but a hand-edited / restored
+    // file can. Write the raw literal so the file genuinely parses to Infinity.
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, sessionId + '.json'),
+      '{"target":"a:0.1","session_id":"' + sessionId + '","state":"idle_prompt","report_seq":1e309}');
+
+    writeState(sessionId, { state: 'running', report_seq: Date.now() * 1000 }, agentsDir);
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'running', 'a non-finite on-disk seq must not freeze writes');
+  });
+});
+
 describe('cleanStale', () => {
   it('removes agent files older than threshold', () => {
     const old = new Date(Date.now() - 600000).toISOString(); // 10 min ago

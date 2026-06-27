@@ -97,16 +97,6 @@ func (a Agent) EffectiveDir() string {
 	return a.Cwd
 }
 
-// EffectiveState returns the agent's display state. If a pinned state is set
-// (e.g. "pr" or "merged"), it overrides the hook-reported state so that
-// user-driven promotions survive while the agent continues working.
-func (a Agent) EffectiveState() string {
-	if a.PinnedState != "" {
-		return a.PinnedState
-	}
-	return a.State
-}
-
 // StateFile is the in-memory aggregate of all per-agent JSON files.
 type StateFile struct {
 	Agents map[string]Agent `json:"agents"`

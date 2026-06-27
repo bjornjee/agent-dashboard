@@ -777,9 +777,44 @@ func TestApplyPinnedStates(t *testing.T) {
 					"agent": {State: tt.state, PinnedState: tt.pinned},
 				},
 			}
-			ApplyPinnedStates(&sf)
+			ApplyStateArbitration(&sf, "")
 			if got := sf.Agents["agent"].State; got != tt.wantState {
 				t.Errorf("got %q, want %q", got, tt.wantState)
+			}
+		})
+	}
+}
+
+func TestArbitrateState(t *testing.T) {
+	tests := []struct {
+		name     string
+		state    string
+		pinned   string
+		override string
+		want     string
+	}{
+		// Precedence 1: pinned pr/merged wins over an idle resting state.
+		{"pinned pr over idle_prompt", "idle_prompt", "pr", "", "pr"},
+		{"pinned merged over done", "done", "merged", "", "merged"},
+		{"pinned pr over question", "question", "pr", "", "pr"},
+		{"pin beats a pending override", "idle_prompt", "pr", "plan", "pr"},
+		// Pin only applies to idle states; active states pass through.
+		{"running ignores pin", "running", "pr", "", "running"},
+		{"permission ignores pin", "permission", "pr", "", "permission"},
+		// Precedence 2: transcript override on an idle candidate.
+		{"override promotes idle_prompt to plan", "idle_prompt", "", "plan", "plan"},
+		{"override promotes permission to question", "permission", "", "question", "question"},
+		// Precedence 3: raw state when nothing else applies.
+		{"no pin no override passes through", "idle_prompt", "", "", "idle_prompt"},
+		{"running passes through", "running", "", "", "running"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := domain.Agent{State: tt.state, PinnedState: tt.pinned}
+			if got := arbitrateState(agent, tt.override); got != tt.want {
+				t.Errorf("arbitrateState(%q, pin=%q, override=%q) = %q, want %q",
+					tt.state, tt.pinned, tt.override, got, tt.want)
 			}
 		})
 	}
@@ -947,7 +982,7 @@ func TestApplyIdleOverrides_OverridesIdlePrompt(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan', got %q", sf.Agents[sessionID].State)
@@ -970,7 +1005,7 @@ func TestApplyIdleOverrides_SkipsRunningAgents(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "running" {
 		t.Errorf("expected state 'running' unchanged (running agents should be skipped), got %q", sf.Agents[sessionID].State)
@@ -989,7 +1024,7 @@ func TestApplyIdleOverrides_NoOverrideWithoutPlan(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "idle_prompt" {
 		t.Errorf("expected state 'idle_prompt' unchanged, got %q", sf.Agents[sessionID].State)
@@ -1009,7 +1044,7 @@ func TestApplyIdleOverrides_QuestionOverride(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "question" {
 		t.Errorf("expected state 'question', got %q", sf.Agents[sessionID].State)
@@ -1032,7 +1067,7 @@ func TestApplyIdleOverrides_PlanTakesPriorityOverQuestion(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected 'plan' to take priority over 'question', got %q", sf.Agents[sessionID].State)
@@ -1054,7 +1089,7 @@ func TestApplyIdleOverrides_OverridesPermissionWithPendingPlan(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected state 'plan' (permission agent with pending ExitPlanMode), got %q", sf.Agents[sessionID].State)
@@ -1074,7 +1109,7 @@ func TestApplyIdleOverrides_LeavesPermissionAloneWhenNoPlan(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "permission" {
 		t.Errorf("expected state 'permission' unchanged (real permission, no plan), got %q", sf.Agents[sessionID].State)
@@ -1099,7 +1134,7 @@ func TestApplyIdleOverrides_QuestionAfterPlanWins(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "question" {
 		t.Errorf("expected 'question' (AskUserQuestion after ExitPlanMode), got %q", sf.Agents[sessionID].State)
@@ -1123,7 +1158,7 @@ func TestApplyIdleOverrides_PlanAfterUnansweredQuestionWins(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if sf.Agents[sessionID].State != "plan" {
 		t.Errorf("expected 'plan' (ExitPlanMode after AskUserQuestion), got %q", sf.Agents[sessionID].State)
@@ -1164,7 +1199,7 @@ func TestApplyIdleOverrides_CodexPromotesDoneToQuestion(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, root)
+	ApplyStateArbitration(&sf, root)
 
 	if got := sf.Agents[sessionID].State; got != "question" {
 		t.Errorf("expected 'question' (codex Stop race recovered), got %q", got)
@@ -1186,7 +1221,7 @@ func TestApplyIdleOverrides_CodexLeavesAnsweredAlone(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, root)
+	ApplyStateArbitration(&sf, root)
 
 	if got := sf.Agents[sessionID].State; got != "done" {
 		t.Errorf("expected 'done' (answered question is not pending), got %q", got)
@@ -1210,7 +1245,7 @@ func TestApplyIdleOverrides_ClaudeDoneIsNotCandidate(t *testing.T) {
 		},
 	}
 
-	ApplyIdleOverrides(&sf, "")
+	ApplyStateArbitration(&sf, "")
 
 	if got := sf.Agents[sessionID].State; got != "done" {
 		t.Errorf("expected 'done' (claude in done is not an idle candidate), got %q", got)

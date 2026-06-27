@@ -12,6 +12,12 @@ const DEFAULT_AGENTS_DIR = path.join(
   'agents',
 );
 
+// report_seq is a scaled wall-clock stamp (Date.now() * 1000). Treat an on-disk
+// value more than this far in the future as implausible (corrupt/restored file
+// or a clock jump) and ignore it for ordering, so it can't freeze writes forever
+// — the next write overwrites it and self-heals.
+const REPORT_SEQ_FUTURE_SLACK = 60_000 * 1000; // ~60s in the same scaled units
+
 /**
  * Get the file path for a specific agent by session_id.
  * UUIDs are filesystem-safe, so no encoding is needed.
@@ -92,9 +98,27 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
   withFileLock(filePath, () => {
     const existing = readAgentState(sessionId, agentsDir) || {};
 
-    // Guard: skip write if current on-disk state is protected. Runs INSIDE
-    // the lock so the check sees the same fresh read the merge will use —
-    // no TOCTOU window between guard and write.
+    // Primary ordering authority: reject a strictly-older report_seq so a stale
+    // write that lands late (e.g. a delayed PostToolUse->running arriving after
+    // Stop->idle_prompt) can never clobber a newer one. report_seq is a scaled
+    // wall-clock stamp taken at hook entry (≈ event time), so the earlier event
+    // keeps the lower seq even if it writes last. A non-finite or implausibly-
+    // future on-disk seq is ignored (self-healing) so a corrupt file or clock
+    // jump can't freeze writes. Equal seqs and un-seq'd writes fall through to
+    // the guardStates backstop below.
+    if (
+      Number.isFinite(update.report_seq) &&
+      Number.isFinite(existing.report_seq) &&
+      existing.report_seq <= Date.now() * 1000 + REPORT_SEQ_FUTURE_SLACK &&
+      update.report_seq < existing.report_seq
+    ) {
+      return;
+    }
+
+    // Backstop: skip write if current on-disk state is protected. Catches
+    // equal-seq ties and un-seq'd writes. Runs INSIDE the lock so the check sees
+    // the same fresh read the merge will use — no TOCTOU window between guard
+    // and write.
     if (opts.guardStates && opts.guardStates.has(existing.state)) {
       return;
     }
