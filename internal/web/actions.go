@@ -583,54 +583,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings)
 	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOpts)
 
-	// Look for an existing window with agents in the same repo.
-	agents := s.readAgentState()
-	sw, found := repowin.FindWindowForRepo(agents, folder, "")
-	if !found {
-		// Fallback: match by tmux window name in the first session.
-		// Mirrors TUI behavior which also searches a single session.
-		session, sErr := firstTmuxSession()
-		if sErr == nil {
-			windows, wErr := tmux.TmuxListWindows(session)
-			if wErr == nil {
-				sw, found = repowin.FindWindowByName(windows, repoName, session, "")
-			}
-		}
-	}
-
-	var target, paneID string
-	if found {
-		// Split into the existing window if under the pane limit.
-		count, cErr := tmux.TmuxCountPanes(sw)
-		if cErr != nil {
-			found = false // window may have been destroyed; fall through
-		} else if count >= repowin.MaxPanesPerWindow {
-			writeJSON(w, http.StatusConflict, map[string]string{
-				"error": fmt.Sprintf("%d-pane limit reached for %s", repowin.MaxPanesPerWindow, repoName),
-			})
-			return
-		} else {
-			var sErr error
-			target, paneID, sErr = tmux.TmuxSplitWindow(sw, folder, cmd)
-			if sErr != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("split window: %v", sErr)})
-				return
-			}
-		}
-	}
-	if !found {
-		// No existing window — create a new one.
-		session, sErr := firstTmuxSession()
-		if sErr != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no tmux sessions available"})
-			return
-		}
-		var nErr error
-		target, paneID, nErr = tmux.TmuxNewWindow(session, repoName, folder, cmd)
-		if nErr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", nErr)})
-			return
-		}
+	target, paneID, ok := s.spawnInRepoWindow(w, folder, repoName, cmd)
+	if !ok {
+		return // spawnInRepoWindow already wrote the error response
 	}
 	// Stage the worktree/branch pin keyed by the new pane_id so the dashboard
 	// renders correctly *before* the agent's first hook event fires.
@@ -646,6 +601,137 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
+}
+
+// spawnInRepoWindow launches cmd in a new pane for folder's repo: it splits an
+// existing window for that repo when one exists and is under the pane limit,
+// otherwise it opens a fresh window. On any failure it writes the HTTP error
+// response and returns ok=false. Shared by handleCreate and handleResume so
+// both spawn paths place panes identically.
+func (s *Server) spawnInRepoWindow(w http.ResponseWriter, folder, repoName, cmd string) (target, paneID string, ok bool) {
+	// Look for an existing window with agents in the same repo.
+	agents := s.readAgentState()
+	sw, found := repowin.FindWindowForRepo(agents, folder, "")
+	if !found {
+		// Fallback: match by tmux window name in the first session.
+		session, sErr := firstTmuxSession()
+		if sErr == nil {
+			windows, wErr := tmux.TmuxListWindows(session)
+			if wErr == nil {
+				sw, found = repowin.FindWindowByName(windows, repoName, session, "")
+			}
+		}
+	}
+
+	if found {
+		// Split into the existing window if under the pane limit.
+		count, cErr := tmux.TmuxCountPanes(sw)
+		if cErr != nil {
+			found = false // window may have been destroyed; fall through
+		} else if count >= repowin.MaxPanesPerWindow {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": fmt.Sprintf("%d-pane limit reached for %s", repowin.MaxPanesPerWindow, repoName),
+			})
+			return "", "", false
+		} else {
+			var sErr error
+			target, paneID, sErr = tmux.TmuxSplitWindow(sw, folder, cmd)
+			if sErr != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("split window: %v", sErr)})
+				return "", "", false
+			}
+		}
+	}
+	if !found {
+		// No existing window — create a new one.
+		session, sErr := firstTmuxSession()
+		if sErr != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no tmux sessions available"})
+			return "", "", false
+		}
+		var nErr error
+		target, paneID, nErr = tmux.TmuxNewWindow(session, repoName, folder, cmd)
+		if nErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("create window: %v", nErr)})
+			return "", "", false
+		}
+	}
+	return target, paneID, true
+}
+
+// handleResume re-spawns a restart-survivor (orphaned) agent on its existing
+// session — `claude --resume <sid>` / `codex resume <sid>` — in a fresh pane in
+// its stored working directory. It reads the agent via state.ReadAgent (the
+// single-file fast path: no worktree/branch/projdir resolve chain, since the
+// persisted record already holds session_id, harness, and cwd/worktree_cwd).
+// On success the stale orphan state file is removed: claude reuses the same sid
+// so its SessionStart hook re-creates a live file; codex resume gets a new sid,
+// so removing the old file prevents a duplicate dead row.
+func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
+	if !tmux.TmuxIsAvailable() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "tmux not available"})
+		return
+	}
+	id := r.PathValue("id")
+	agent, found := state.ReadAgent(s.cfg.Profile.StateDir, id)
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+	if agent.SessionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent has no session to resume"})
+		return
+	}
+
+	folder := agent.EffectiveDir()
+	if folder == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent has no working directory"})
+		return
+	}
+	if fi, err := os.Stat(folder); err != nil || !fi.IsDir() {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent working directory no longer exists"})
+		return
+	}
+
+	// Only resume a genuine orphan (its pane is dead). Resuming a live agent
+	// would spawn a duplicate session and delete the live agent's state file.
+	// An empty live set (tmux transient failure / all panes dead) correctly
+	// allows the resume — the restart case must still work.
+	if !state.IsResumableOrphan(agent, tmux.TmuxListLivePaneIDs()) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "agent is not a resumable orphan (its pane may still be alive)"})
+		return
+	}
+
+	// Empty agent.Harness routes to claude (legacy pre-codex state files).
+	h, hErr := harness.Resolve(agent.Harness, s.cfg.Profile)
+	if hErr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": hErr.Error()})
+		return
+	}
+	opts := harness.SpawnOptsFor(h.Name(), s.cfg.Settings)
+	opts.ResumeSessionID = agent.SessionID
+	cmd := h.SpawnCommand("", "", opts)
+
+	rawRepo := repowin.RepoFromCwd(folder)
+	if rawRepo == "" {
+		rawRepo = s.cfg.Profile.Command
+	}
+	repoName := repowin.SanitizeWindowName(rawRepo)
+
+	target, paneID, ok := s.spawnInRepoWindow(w, folder, repoName, cmd)
+	if !ok {
+		return // spawnInRepoWindow already wrote the error response
+	}
+
+	_ = state.StageSpawnPin(s.cfg.Profile.StateDir, folder, paneID, target)
+	// Drop the stale orphan entry; the resumed agent re-registers live.
+	_ = state.RemoveAgent(s.cfg.Profile.StateDir, agent.SessionID)
+
+	if paneID != "" {
+		go s.watchTrustPrompt(context.Background(), paneID, target, folder, trustWatchBudget, trustWatchTick)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "resumed", "target": target})
 }
 
 // firstTmuxSession returns the name of the first available tmux session.

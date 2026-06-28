@@ -499,13 +499,21 @@ func loadCodexDBUsage(database *db.DB) tea.Cmd {
 	}
 }
 
+// resolvedState bundles resolveAgents' two return values for the singleflight
+// cache (which carries a single any value).
+type resolvedState struct {
+	agents    []domain.Agent
+	livePanes map[string]bool
+}
+
 func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) tea.Cmd {
 	return func() tea.Msg {
 		v, _, _ := loadStateGroup.Do(path, func() (any, error) {
-			return resolveAgents(path, projectsDir, sessionsDir, tmuxAvailable, selfPaneID, codexSessionsDir), nil
+			agents, livePanes := resolveAgents(path, projectsDir, sessionsDir, tmuxAvailable, selfPaneID, codexSessionsDir)
+			return resolvedState{agents: agents, livePanes: livePanes}, nil
 		})
-		agents, _ := v.([]domain.Agent)
-		return stateUpdatedMsg{agents: agents}
+		rs, _ := v.(resolvedState)
+		return stateUpdatedMsg{agents: rs.agents, livePanes: rs.livePanes}
 	}
 }
 
@@ -513,13 +521,20 @@ func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPa
 // goroutine — including the codex ParentThreadID lookups that previously
 // blocked keystrokes inside the stateUpdatedMsg handler whenever the
 // codex sessions cache expired.
-func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) []domain.Agent {
+func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) ([]domain.Agent, map[string]bool) {
 	sf := state.ReadState(path)
 	var paneCwds map[string]string
+	var livePanes map[string]bool
 	if tmuxAvailable {
 		targets, cwds := tmux.TmuxListPanes()
 		state.ResolveAgentTargets(&sf, targets)
 		paneCwds = cwds
+		// targets is keyed by pane ID (%N) — the live-pane set used by the
+		// palette's orphan filter/marker.
+		livePanes = make(map[string]bool, len(targets))
+		for paneID := range targets {
+			livePanes[paneID] = true
+		}
 	}
 	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
 	// Apply spawn-pins BEFORE marker-scan / scan-on-init so freshly-spawned
@@ -530,10 +545,11 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	state.ResolveAgentBranches(&sf, paneCwds, path)
 	state.GCSpawnPins(path, 10*time.Minute)
 	state.ApplyStateArbitration(&sf, codexSessionsDir)
-	return conversation.TopLevelAgents(
+	agents := conversation.TopLevelAgents(
 		state.SortedAgents(sf, selfPaneID),
 		conversation.Roots{CodexSessionsRoot: codexSessionsDir},
 	)
+	return agents, livePanes
 }
 
 // loadStateGroup deduplicates concurrent loadState calls. The TUI tick
@@ -643,26 +659,6 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 			return createSessionMsg{err: hErr}
 		}
 
-		selfTarget := tmux.ResolveTarget(selfPaneID)
-		session := tmux.ExtractSession(selfTarget)
-		dashboardSW := tmux.ExtractSessionWindow(selfTarget)
-		repoName := repowin.SanitizeWindowName(repowin.RepoFromCwd(absFolder))
-		if repoName == "" {
-			repoName = profile.Command
-		}
-
-		var newTarget, newPaneID string
-
-		// Check for existing window
-		sw, found := repowin.FindWindowForRepo(agents, absFolder, selfPaneID)
-		if !found {
-			// Fallback: check window names
-			windows, wErr := tmux.TmuxListWindows(session)
-			if wErr == nil {
-				sw, found = repowin.FindWindowByName(windows, repoName, session, dashboardSW)
-			}
-		}
-
 		if !skills.SupportsHarness(skill, h.Name()) {
 			return createSessionMsg{err: fmt.Errorf("skill %q is not supported by %s", skill, h.Name())}
 		}
@@ -673,22 +669,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		opts := harness.SpawnOptsFor(h.Name(), settings)
 		cmd := h.SpawnCommand(skill, message, opts)
 
-		if found {
-			// Check pane limit; if the window no longer exists (stale agent
-			// state), fall through and create a fresh window instead.
-			count, cErr := tmux.TmuxCountPanes(sw)
-			if cErr != nil {
-				found = false
-			} else if count >= maxPanesPerWindow {
-				return createSessionMsg{err: fmt.Errorf("8-pane limit reached for %s", repoName)}
-			} else {
-				newTarget, newPaneID, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
-			}
-		}
-		if !found {
-			newTarget, newPaneID, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
-		}
-
+		newTarget, newPaneID, err := spawnCmdInWindow(agents, absFolder, selfPaneID, profile, cmd)
 		if err != nil {
 			return createSessionMsg{err: err}
 		}
@@ -699,6 +680,81 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// WorktreeCwd/Branch which is itself useful (tells consumers
 		// "no pin expected").
 		_ = state.StageSpawnPin(profile.StateDir, absFolder, newPaneID, newTarget)
+
+		return createSessionMsg{target: newTarget}
+	}
+}
+
+// spawnCmdInWindow launches cmd in a new tmux pane for absFolder's repo: it
+// splits an existing window for that repo when one exists and is under the pane
+// limit, otherwise it opens a fresh window. Shared by the fresh-spawn and the
+// resume paths so panes are placed identically.
+func spawnCmdInWindow(agents []domain.Agent, absFolder, selfPaneID string, profile domain.AgentProfile, cmd string) (newTarget, newPaneID string, err error) {
+	selfTarget := tmux.ResolveTarget(selfPaneID)
+	session := tmux.ExtractSession(selfTarget)
+	dashboardSW := tmux.ExtractSessionWindow(selfTarget)
+	repoName := repowin.SanitizeWindowName(repowin.RepoFromCwd(absFolder))
+	if repoName == "" {
+		repoName = profile.Command
+	}
+
+	sw, found := repowin.FindWindowForRepo(agents, absFolder, selfPaneID)
+	if !found {
+		// Fallback: check window names
+		windows, wErr := tmux.TmuxListWindows(session)
+		if wErr == nil {
+			sw, found = repowin.FindWindowByName(windows, repoName, session, dashboardSW)
+		}
+	}
+
+	if found {
+		// Check pane limit; if the window no longer exists (stale agent
+		// state), fall through and create a fresh window instead.
+		count, cErr := tmux.TmuxCountPanes(sw)
+		if cErr != nil {
+			found = false
+		} else if count >= maxPanesPerWindow {
+			return "", "", fmt.Errorf("8-pane limit reached for %s", repoName)
+		} else {
+			newTarget, newPaneID, err = tmux.TmuxSplitWindow(sw, absFolder, cmd)
+		}
+	}
+	if !found {
+		newTarget, newPaneID, err = tmux.TmuxNewWindow(session, repoName, absFolder, cmd)
+	}
+	return newTarget, newPaneID, err
+}
+
+// resumeSession re-spawns a restart-survivor (orphaned) agent on its existing
+// session — `claude --resume <sid>` / `codex resume <sid>` — in a fresh pane in
+// its stored working directory (agent.EffectiveDir()). On success the stale
+// orphan state file is removed: claude reuses the same sid so its SessionStart
+// hook re-creates a live file; codex resume gets a new sid, so removing the old
+// file prevents a duplicate dead row. The persisted agent record already holds
+// the session id, harness, and dir — no resolve chain is needed.
+func resumeSession(agent domain.Agent, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings) tea.Cmd {
+	return func() tea.Msg {
+		absFolder, err := validateFolder(agent.EffectiveDir())
+		if err != nil {
+			return createSessionMsg{err: err}
+		}
+		// Empty agent.Harness routes to claude (legacy pre-codex state files).
+		h, hErr := harness.Resolve(agent.Harness, profile)
+		if hErr != nil {
+			return createSessionMsg{err: hErr}
+		}
+		opts := harness.SpawnOptsFor(h.Name(), settings)
+		opts.ResumeSessionID = agent.SessionID
+		cmd := h.SpawnCommand("", "", opts)
+
+		newTarget, newPaneID, err := spawnCmdInWindow(agents, absFolder, selfPaneID, profile, cmd)
+		if err != nil {
+			return createSessionMsg{err: err}
+		}
+
+		_ = state.StageSpawnPin(profile.StateDir, absFolder, newPaneID, newTarget)
+		// Drop the stale orphan entry; the resumed agent re-registers live.
+		_ = state.RemoveAgent(profile.StateDir, agent.SessionID)
 
 		return createSessionMsg{target: newTarget}
 	}
@@ -1121,8 +1177,8 @@ func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxRea
 						if ptr := selfPaneID.Load(); ptr != nil {
 							pane = *ptr
 						}
-						agents := resolveAgents(dir, projectsDir, sessionsDir, tmuxReady.Load(), pane, codexSessionsDir)
-						p.Send(stateUpdatedMsg{agents: agents})
+						agents, livePanes := resolveAgents(dir, projectsDir, sessionsDir, tmuxReady.Load(), pane, codexSessionsDir)
+						p.Send(stateUpdatedMsg{agents: agents, livePanes: livePanes})
 					})
 				}
 			case _, ok := <-watcher.Errors:

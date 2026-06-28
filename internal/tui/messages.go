@@ -18,7 +18,12 @@ import (
 // goroutines, so the Update handler does not block on any filesystem
 // walk — including the codex sessions tree walk that previously froze
 // keystrokes whenever the per-session cache expired.
-type stateUpdatedMsg struct{ agents []domain.Agent }
+type stateUpdatedMsg struct {
+	agents []domain.Agent
+	// livePanes is the set of currently live tmux pane IDs (%N), used to flag
+	// restart-survivor (resumable) orphans. nil when tmux is unavailable.
+	livePanes map[string]bool
+}
 type tickMsg time.Time
 type jumpResultMsg struct{ err error }
 type sendResultMsg struct{ err error }
@@ -129,6 +134,7 @@ const (
 	modeCreateMessage // message input step of create wizard
 	modeDinoGame      // full-screen dino runner game
 	modeDepsStatus    // full-screen deps status (gh / tmux / git / codex)
+	modeSearch        // Cmd+K-style fuzzy palette over the agent list
 )
 
 // -- Viewport focus --

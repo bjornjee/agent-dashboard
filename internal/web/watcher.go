@@ -116,10 +116,17 @@ func (s *Server) readAgentState() []domain.Agent {
 	v, _, _ := readAgentStateGroup.Do("readAgentState", func() (any, error) {
 		sf := state.ReadState(s.cfg.Profile.StateDir)
 		var paneCwds map[string]string
+		var livePanes map[string]bool
 		if tmux.TmuxIsAvailable() {
 			targets, cwds := tmux.TmuxListPanes()
 			state.ResolveAgentTargets(&sf, targets)
 			paneCwds = cwds
+			// targets is keyed by pane ID (%N) — the live-pane set used to flag
+			// restart-survivor (resumable) orphans below.
+			livePanes = make(map[string]bool, len(targets))
+			for paneID := range targets {
+				livePanes[paneID] = true
+			}
 		}
 		state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
 		// Apply spawn-pins BEFORE marker-scan so freshly-spawned agents
@@ -133,6 +140,14 @@ func (s *Server) readAgentState() []domain.Agent {
 			state.SortedAgents(sf, ""),
 			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
 		)
+		// Flag restart-survivor orphans (dead pane, active session) so the
+		// frontend Cmd+K palette can mark and resume them. Only meaningful when
+		// tmux is available to tell live panes from dead ones.
+		if livePanes != nil {
+			for i := range agents {
+				agents[i].Resumable = state.IsResumableOrphan(agents[i], livePanes)
+			}
+		}
 		return s.applyTrustFlags(agents), nil
 	})
 	agents, _ := v.([]domain.Agent)

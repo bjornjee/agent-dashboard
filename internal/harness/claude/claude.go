@@ -37,6 +37,12 @@ func (c *Claude) ConfigDir() string { return c.profile.ConfigDir }
 // SpawnCommand implements domain.Harness.
 func (c *Claude) SpawnCommand(skill, message string, opts domain.SpawnOpts) string {
 	cmd := c.profile.Command
+	// Resume short-circuits everything else: `claude --resume <sid>` restores the
+	// session along with its own prior skill/effort, so spawn-time skill, message,
+	// and effort flags don't apply (mirrors codex's `codex resume <sid>`).
+	if opts.ResumeSessionID != "" {
+		return cmd + " --resume " + shellQuote(opts.ResumeSessionID)
+	}
 	if _, opted := effortOptedSkills[skill]; opted && opts.DefaultEffort != "" {
 		cmd = "CLAUDE_CODE_EFFORT_LEVEL=" + opts.DefaultEffort + " " + cmd + " --effort " + opts.DefaultEffort
 	}

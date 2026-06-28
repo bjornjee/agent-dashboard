@@ -65,6 +65,31 @@ func TestClaude_ConfigDir(t *testing.T) {
 	}
 }
 
+// When ResumeSessionID is set, SpawnCommand must produce `claude --resume <sid>`
+// and drop skill, message, and effort flags — a resumed session restores its own
+// prior skill/effort, so spawn-time knobs don't apply.
+func TestClaude_SpawnCommand_Resume(t *testing.T) {
+	h := claude.New(domain.AgentProfile{Command: "claude"})
+	tests := []struct {
+		name    string
+		skill   string
+		message string
+		opts    domain.SpawnOpts
+		want    string
+	}{
+		{"bare resume", "", "", domain.SpawnOpts{ResumeSessionID: "abc"}, "claude --resume 'abc'"},
+		{"resume ignores skill/message/effort", "feature", "do the thing", domain.SpawnOpts{DefaultEffort: "high", ResumeSessionID: "sess-123"}, "claude --resume 'sess-123'"},
+		{"resume quotes special chars", "", "", domain.SpawnOpts{ResumeSessionID: "a'b"}, "claude --resume 'a'\\''b'"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := h.SpawnCommand(tc.skill, tc.message, tc.opts); got != tc.want {
+				t.Errorf("SpawnCommand(%q, %q, %+v) = %q, want %q", tc.skill, tc.message, tc.opts, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestClaude_SpawnCommand_IgnoresCodexModel(t *testing.T) {
 	h := claude.New(domain.AgentProfile{Command: "claude"})
 	got := h.SpawnCommand("feature", "", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5"})

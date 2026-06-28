@@ -19,6 +19,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
+	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
@@ -155,6 +156,12 @@ type model struct {
 	diffFilterActive  bool
 	diffFilterText    string
 
+	// Cmd+K agent-search palette (modeSearch)
+	searchInput      textinput.Model
+	searchText       string
+	searchOrphanOnly bool            // show only resumable orphans
+	livePanes        map[string]bool // live tmux pane IDs (%N); drives isOrphan
+
 	// Help overlay
 	helpVisible bool
 
@@ -269,6 +276,13 @@ func (m *model) buildTree() {
 	m.treeNodes = nil
 	lastGroup := -1
 	for i, agent := range m.agents {
+		// While the Cmd+K palette is open, hide agents that don't match the
+		// query / orphan filter. Skipping before the group-header insert means
+		// empty group headers never appear (a header is only added immediately
+		// before a matching agent).
+		if m.mode == modeSearch && !m.agentMatchesSearch(agent) {
+			continue
+		}
 		group := agentGroup(agent)
 		if group != lastGroup {
 			m.treeNodes = append(m.treeNodes, treeNode{AgentIdx: -1, GroupHeader: group})
@@ -284,6 +298,69 @@ func (m *model) buildTree() {
 				s := sub // copy
 				m.treeNodes = append(m.treeNodes, treeNode{AgentIdx: i, Sub: &s})
 			}
+		}
+	}
+}
+
+// isOrphan reports whether an agent is a resumable restart-survivor: a real
+// session whose tmux pane is dead. Requires tmux so live panes can be told from
+// dead ones. Shares state.IsResumableOrphan with the web/prune paths.
+func (m model) isOrphan(a domain.Agent) bool {
+	return m.tmuxAvailable && state.IsResumableOrphan(a, m.livePanes)
+}
+
+// agentMatchesSearch reports whether an agent passes the active palette filters:
+// the orphan-only toggle and a case-insensitive substring query over repo,
+// branch, dir, last message, session id, and harness.
+func (m model) agentMatchesSearch(a domain.Agent) bool {
+	if m.searchOrphanOnly && !m.isOrphan(a) {
+		return false
+	}
+	q := strings.ToLower(strings.TrimSpace(m.searchText))
+	if q == "" {
+		return true
+	}
+	hay := strings.ToLower(strings.Join([]string{
+		agentRepo(a), a.Branch, a.EffectiveDir(), a.LastMessagePreview, a.SessionID, a.Harness,
+	}, " "))
+	return strings.Contains(hay, q)
+}
+
+// closeSearch exits the palette, clears its filters, and restores the full tree.
+func (m *model) closeSearch() {
+	m.mode = modeNormal
+	m.searchText = ""
+	m.searchOrphanOnly = false
+	m.searchInput.Reset()
+	m.searchInput.Blur()
+	m.buildTree()
+	if m.selected >= len(m.treeNodes) {
+		m.selected = len(m.treeNodes) - 1
+	}
+	if m.selected < 0 {
+		m.selected = 0
+	}
+}
+
+// selectFirstResult moves the cursor to the first agent row (skipping group
+// headers), used after each palette filter change.
+func (m *model) selectFirstResult() {
+	for i, n := range m.treeNodes {
+		if n.AgentIdx >= 0 && n.Sub == nil {
+			m.selected = i
+			return
+		}
+	}
+	m.selected = 0
+}
+
+// moveSearchSelection moves the cursor by delta across agent rows only,
+// skipping group-header nodes.
+func (m *model) moveSearchSelection(delta int) {
+	for i := m.selected + delta; i >= 0 && i < len(m.treeNodes); i += delta {
+		if n := m.treeNodes[i]; n.AgentIdx >= 0 && n.Sub == nil {
+			m.selected = i
+			return
 		}
 	}
 }
@@ -516,6 +593,10 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	dfi.Placeholder = "Filter files..."
 	dfi.CharLimit = 256
 
+	si := textinput.New()
+	si.Placeholder = "Search agents..."
+	si.CharLimit = 256
+
 	s := spinner.New()
 	s.Spinner = spinner.Jump
 	s.Style = lipgloss.NewStyle().Foreground(textInputColor)
@@ -571,6 +652,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		diffContentVP:         viewport.New(),
 		diffCollapsedDirs:     make(map[string]bool),
 		diffFilterInput:       dfi,
+		searchInput:           si,
 		agentCaches:           make(map[string]*agentCache),
 		lastSeenDiagramCount:  make(map[string]int),
 		agentSubagents:        make(map[string][]domain.SubagentInfo),
@@ -656,6 +738,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pays no filesystem cost — no walk of ~/.codex/sessions on the main
 		// bubbletea goroutine.
 		m.agents = msg.agents
+		m.livePanes = msg.livePanes
+		// Flag restart-survivor orphans so the row badge + palette can mark them.
+		for i := range m.agents {
+			m.agents[i].Resumable = m.isOrphan(m.agents[i])
+		}
 		// Flash status when any agent gains a new diagram while panel is closed.
 		for _, a := range m.agents {
 			if a.SessionID == "" || a.DiagramCount == 0 {

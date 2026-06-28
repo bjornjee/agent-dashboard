@@ -618,6 +618,27 @@ func SortedAgents(sf domain.StateFile, selfPaneID string) []domain.Agent {
 	return agents
 }
 
+// finishedStates are terminal/shipped states that are not worth resuming: a
+// done task, an opened PR, or a merged branch. Orphans in these states are
+// still GC'd by PruneDead; only active sessions are retained for resume.
+var finishedStates = map[string]bool{"done": true, "pr": true, "merged": true}
+
+// IsResumableOrphan reports whether an agent is a restart-survivor worth
+// continuing: it has a real session, was in an active (non-finished) state, and
+// its recorded tmux pane is no longer live. livePanes is the set of currently
+// live pane IDs (%N format). Used by PruneDead (retention), the web JSON
+// (`resumable` flag), and both Cmd+K palettes (orphan marker + resume action),
+// so "orphan" means the same thing everywhere.
+func IsResumableOrphan(a domain.Agent, livePanes map[string]bool) bool {
+	if a.SessionID == "" || a.State == "" || a.TmuxPaneID == "" {
+		return false
+	}
+	if livePanes[a.TmuxPaneID] {
+		return false // pane is alive — not an orphan
+	}
+	return !finishedStates[a.State]
+}
+
 // PruneDead removes agent files whose tmux panes no longer exist and
 // deduplicates agents sharing the same live pane (keeps only the newest).
 // livePaneIDs is the set of currently live tmux pane IDs (%N format).
@@ -671,8 +692,14 @@ func PruneDead(dir string, livePaneIDs map[string]bool) int {
 			dedupPaths = append(dedupPaths, f.path)
 			continue
 		}
-		// Dead: pane no longer exists
+		// Dead: pane no longer exists. Resumable orphans (an active session
+		// whose pane died — e.g. a tmux/server restart) are kept on disk so the
+		// user can find and continue them, and so resuming one doesn't
+		// cascade-delete its restart-survivor siblings once it gets a live pane.
 		if f.agent.TmuxPaneID == "" || !livePaneIDs[f.agent.TmuxPaneID] {
+			if IsResumableOrphan(f.agent, livePaneIDs) {
+				continue
+			}
 			deadPaths = append(deadPaths, f.path)
 		}
 	}
@@ -699,6 +726,27 @@ func PruneDead(dir string, livePaneIDs map[string]bool) int {
 		}
 	}
 	return removed
+}
+
+// ReadAgent reads a single agent's persisted state by session ID without
+// running the resolve chain (worktree/branch/projdir/usage). This is the fast
+// path for resume: the stored record already holds session_id, harness, cwd,
+// worktree_cwd, and branch — everything needed to re-spawn. Returns false when
+// no file matches the session ID.
+func ReadAgent(dir, sessionID string) (domain.Agent, bool) {
+	path, ok := agentFileMap(dir)[sessionID]
+	if !ok {
+		return domain.Agent{}, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return domain.Agent{}, false
+	}
+	var agent domain.Agent
+	if err := json.Unmarshal(data, &agent); err != nil {
+		return domain.Agent{}, false
+	}
+	return agent, true
 }
 
 // RemoveAgent removes an agent's file by session_id.

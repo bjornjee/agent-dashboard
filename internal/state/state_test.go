@@ -188,6 +188,34 @@ func TestRemoveAgent_NonExistent(t *testing.T) {
 	}
 }
 
+func TestReadAgent(t *testing.T) {
+	tmp := t.TempDir()
+	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{
+		SessionID:   "sess-a",
+		Harness:     "codex",
+		State:       "running",
+		Cwd:         "/repo",
+		WorktreeCwd: "/repo/.worktrees/feat",
+		Branch:      "feat/x",
+		TmuxPaneID:  "%7",
+	})
+
+	got, ok := ReadAgent(tmp, "sess-a")
+	if !ok {
+		t.Fatal("ReadAgent should find sess-a")
+	}
+	if got.Harness != "codex" || got.WorktreeCwd != "/repo/.worktrees/feat" || got.Cwd != "/repo" {
+		t.Errorf("ReadAgent returned wrong fields: %+v", got)
+	}
+	if got.EffectiveDir() != "/repo/.worktrees/feat" {
+		t.Errorf("EffectiveDir() = %q, want worktree cwd", got.EffectiveDir())
+	}
+
+	if _, ok := ReadAgent(tmp, "nonexistent"); ok {
+		t.Error("ReadAgent should return false for unknown session id")
+	}
+}
+
 func TestPruneDead_ByPaneID(t *testing.T) {
 	tmp := t.TempDir()
 	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{SessionID: "sess-a", Target: "main:1.0", State: "running", TmuxPaneID: "%1"})
@@ -366,6 +394,61 @@ func TestPruneDead_DedupOnDeadPane(t *testing.T) {
 	// Newest agent is kept by the safety net (sole remaining dead agent)
 	if _, err := os.Stat(filepath.Join(agentsPath, "new-session.json")); err != nil {
 		t.Error("newest agent was incorrectly removed")
+	}
+}
+
+func TestIsResumableOrphan(t *testing.T) {
+	live := map[string]bool{"%1": true}
+	tests := []struct {
+		name  string
+		agent domain.Agent
+		want  bool
+	}{
+		{"running with dead pane", domain.Agent{SessionID: "s", State: "running", TmuxPaneID: "%2"}, true},
+		{"idle_prompt with dead pane", domain.Agent{SessionID: "s", State: "idle_prompt", TmuxPaneID: "%2"}, true},
+		{"question with dead pane", domain.Agent{SessionID: "s", State: "question", TmuxPaneID: "%2"}, true},
+		{"live pane is not an orphan", domain.Agent{SessionID: "s", State: "running", TmuxPaneID: "%1"}, false},
+		{"no session id", domain.Agent{SessionID: "", State: "running", TmuxPaneID: "%2"}, false},
+		{"no state", domain.Agent{SessionID: "s", State: "", TmuxPaneID: "%2"}, false},
+		{"no pane id (never had one)", domain.Agent{SessionID: "s", State: "running", TmuxPaneID: ""}, false},
+		{"done is finished, not resumable", domain.Agent{SessionID: "s", State: "done", TmuxPaneID: "%2"}, false},
+		{"pr is finished, not resumable", domain.Agent{SessionID: "s", State: "pr", TmuxPaneID: "%2"}, false},
+		{"merged is finished, not resumable", domain.Agent{SessionID: "s", State: "merged", TmuxPaneID: "%2"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsResumableOrphan(tc.agent, live); got != tc.want {
+				t.Errorf("IsResumableOrphan(%+v) = %v, want %v", tc.agent, got, tc.want)
+			}
+		})
+	}
+}
+
+// After a restart, resuming one orphan gives it a live pane. PruneDead must not
+// then cascade-delete the remaining active orphans. Finished agents (done/pr/
+// merged) on dead panes are still GC'd.
+func TestPruneDead_RetainsActiveOrphans(t *testing.T) {
+	tmp := t.TempDir()
+	writeAgentFile(t, tmp, "live.json", domain.Agent{SessionID: "live", State: "running", TmuxPaneID: "%1"})
+	writeAgentFile(t, tmp, "orphan.json", domain.Agent{SessionID: "orphan", State: "running", TmuxPaneID: "%2"})
+	writeAgentFile(t, tmp, "finished.json", domain.Agent{SessionID: "finished", State: "done", TmuxPaneID: "%3"})
+
+	livePaneIDs := map[string]bool{"%0": true, "%1": true} // %2 and %3 dead
+
+	removed := PruneDead(tmp, livePaneIDs)
+	if removed != 1 {
+		t.Errorf("expected 1 removed (only the finished done agent), got %d", removed)
+	}
+
+	sf := ReadState(tmp)
+	if _, ok := sf.Agents["orphan"]; !ok {
+		t.Error("active orphan should be retained for resume (no cascade prune)")
+	}
+	if _, ok := sf.Agents["live"]; !ok {
+		t.Error("live agent should be retained")
+	}
+	if _, ok := sf.Agents["finished"]; ok {
+		t.Error("finished done agent on a dead pane should be pruned")
 	}
 }
 
