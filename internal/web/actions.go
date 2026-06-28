@@ -552,13 +552,6 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Derive repo name for the tmux window.
-	rawRepo := repowin.RepoFromCwd(folder)
-	if rawRepo == "" {
-		rawRepo = s.cfg.Profile.Command
-	}
-	repoName := repowin.SanitizeWindowName(rawRepo)
-
 	// Resolve the harness for this spawn — request override takes precedence
 	// over the configured default. Per-harness settings
 	// (Codex.Model/Approval/Sandbox/effort) flow into SpawnOpts based on the
@@ -583,7 +576,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings)
 	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOpts)
 
-	target, paneID, ok := s.spawnInRepoWindow(w, folder, repoName, cmd)
+	target, paneID, ok := s.spawnInRepoWindow(w, folder, cmd)
 	if !ok {
 		return // spawnInRepoWindow already wrote the error response
 	}
@@ -608,7 +601,12 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 // otherwise it opens a fresh window. On any failure it writes the HTTP error
 // response and returns ok=false. Shared by handleCreate and handleResume so
 // both spawn paths place panes identically.
-func (s *Server) spawnInRepoWindow(w http.ResponseWriter, folder, repoName, cmd string) (target, paneID string, ok bool) {
+func (s *Server) spawnInRepoWindow(w http.ResponseWriter, folder, cmd string) (target, paneID string, ok bool) {
+	rawRepo := repowin.RepoFromCwd(folder)
+	if rawRepo == "" {
+		rawRepo = s.cfg.Profile.Command
+	}
+	repoName := repowin.SanitizeWindowName(rawRepo)
 	// Look for an existing window with agents in the same repo.
 	agents := s.readAgentState()
 	sw, found := repowin.FindWindowForRepo(agents, folder, "")
@@ -712,13 +710,7 @@ func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
 	opts.ResumeSessionID = agent.SessionID
 	cmd := h.SpawnCommand("", "", opts)
 
-	rawRepo := repowin.RepoFromCwd(folder)
-	if rawRepo == "" {
-		rawRepo = s.cfg.Profile.Command
-	}
-	repoName := repowin.SanitizeWindowName(rawRepo)
-
-	target, paneID, ok := s.spawnInRepoWindow(w, folder, repoName, cmd)
+	target, paneID, ok := s.spawnInRepoWindow(w, folder, cmd)
 	if !ok {
 		return // spawnInRepoWindow already wrote the error response
 	}
