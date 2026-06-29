@@ -78,3 +78,42 @@ func TestResumeSession(t *testing.T) {
 		t.Error("stale orphan state file should be removed after resume")
 	}
 }
+
+// resumeSession is harness-agnostic: a codex orphan re-spawns via
+// `codex resume <sid>` (no --resume flag).
+func TestResumeSessionCodex(t *testing.T) {
+	stateDir := t.TempDir()
+	agentsDir := filepath.Join(stateDir, "agents")
+	if err := os.MkdirAll(agentsDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	folder := t.TempDir()
+	orphan := domain.Agent{SessionID: "orphan-cx", Harness: "codex", State: "running", Cwd: folder, TmuxPaneID: "%9"}
+	data, _ := json.Marshal(orphan)
+	if err := os.WriteFile(filepath.Join(agentsDir, "orphan-cx.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &resumeSpawnRunner{}
+	t.Cleanup(tmux.SetTestRunner(runner))
+
+	cfg := testConfig(stateDir)
+	cmd := resumeSession(orphan, nil, "", cfg.Profile, cfg.Settings)
+	if cmd == nil {
+		t.Fatal("expected a resume command")
+	}
+	res, ok := cmd().(createSessionMsg)
+	if !ok || res.err != nil {
+		t.Fatalf("resume failed: %+v", res)
+	}
+
+	var sawResume bool
+	for _, out := range runner.outputs {
+		if out[0] == "new-window" && strings.Contains(out[len(out)-1], "codex resume 'orphan-cx'") {
+			sawResume = true
+		}
+	}
+	if !sawResume {
+		t.Errorf("new-window command should carry `codex resume 'orphan-cx'`; got %v", runner.outputs)
+	}
+}

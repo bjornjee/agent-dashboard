@@ -82,6 +82,54 @@ func TestResumeOrphanSplitsIntoWindow(t *testing.T) {
 	}
 }
 
+// A codex orphan resumes via `codex resume <sid>` (no --resume flag), proving
+// the resume path is harness-agnostic: handleResume resolves the harness from
+// agent.Harness.
+func TestResumeCodexOrphanSplitsIntoWindow(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+
+	folder := t.TempDir()
+	orphan := domain.Agent{
+		SessionID:  "orph-cx",
+		Harness:    "codex",
+		State:      "running",
+		Cwd:        folder,
+		Session:    "main",
+		Window:     1,
+		TmuxPaneID: "%9", // dead pane
+	}
+	ts, stateDir := createTestServer(t, orphan)
+
+	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}").
+		Return([]byte("%0\n%1\n"), nil) // %9 not live → orphan
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:1", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	codexResume := mock.MatchedBy(func(s string) bool {
+		return strings.Contains(s, "codex resume 'orph-cx'")
+	})
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:1", "-c", folder,
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
+		codexResume,
+	).Return([]byte("main:1.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:1", "tiled").Return(nil)
+
+	resp := postResume(t, ts, "orph-cx")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var body map[string]string
+		json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("expected 200, got %d: %v", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "agents", "orph-cx.json")); !os.IsNotExist(err) {
+		t.Error("stale codex orphan state file should be removed after resume")
+	}
+}
+
 func TestResumeUnknownAgent(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	m.On("Run", mock.Anything, "list-sessions").Return(nil) // TmuxIsAvailable
