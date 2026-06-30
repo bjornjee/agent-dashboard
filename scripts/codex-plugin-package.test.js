@@ -193,12 +193,18 @@ describe('codex plugin package', () => {
       const implement = readSkill('implement');
 
       assert.match(feature, /Verification profile/, `${adapter} feature must require a verification profile`);
-      assert.match(feature, /\bSurgical\b[\s\S]*\bTargeted\b[\s\S]*\bFull\b/, `${adapter} feature must define all profiles`);
+      assert.match(feature, /profile taxonomy is owned by core rules/, `${adapter} feature must defer profile definitions to core rules`);
+      assert.match(feature, /Surgical\|Targeted\|Full/, `${adapter} feature must carry the profile name`);
+      assert.doesNotMatch(feature, /- \*\*Surgical:\*\*/, `${adapter} feature must not redefine Surgical`);
+      assert.doesNotMatch(feature, /- \*\*Targeted:\*\*/, `${adapter} feature must not redefine Targeted`);
+      assert.doesNotMatch(feature, /- \*\*Full:\*\*/, `${adapter} feature must not redefine Full`);
       assert.match(feature, /Do not add implementation-only tests/, `${adapter} feature must discourage useless tests`);
       assert.doesNotMatch(feature, /Build the feature following strict RED/, `${adapter} feature must not force strict TDD for every task`);
 
       assert.match(implement, /phase's Verification profile proof command/, `${adapter} implement must verify phase-scoped proof`);
-      assert.match(implement, /Use full `make test` only for Full phases/, `${adapter} implement must bound full-suite runs`);
+      assert.match(implement, /active AGENTS\.md\/core instructions/, `${adapter} implement must defer profile definitions to core rules`);
+      assert.doesNotMatch(implement, /Surgical: do not add implementation-only tests/, `${adapter} implement must not redefine profiles`);
+      assert.match(implement, /use full `make test` only for Full phases/i, `${adapter} implement must bound full-suite runs`);
       assert.doesNotMatch(implement, /Run `make test` between each step/, `${adapter} implement must not force full tests between every step`);
     }
   });

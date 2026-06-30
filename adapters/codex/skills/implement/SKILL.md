@@ -103,7 +103,7 @@ Phase scope (the only section you should implement):
 <<<end-phase-body>>>
 
 Rules:
-1. Follow the phase's Verification profile. Surgical: do not add implementation-only tests; run the named proof or explain why no executable proof applies. Targeted/Full: use RED → GREEN → REFACTOR and run the named proof command between steps. Use full `make test` only for Full phases or when the phase risk cannot be bounded.
+1. Follow the phase's Verification profile as defined by the active AGENTS.md/core instructions. Do not redefine the profile taxonomy here; execute the named proof command, avoid implementation-only tests, and use full `make test` only for Full phases or when the phase risk cannot be bounded.
 2. Implement ONLY this phase. Do not touch files outside this phase's declared scope.
 3. After the profile proof passes, commit with:
      git commit -m "feat({phase-id-kebab}): <one-line description>"

@@ -208,18 +208,15 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
-Build the feature with a proportional verification profile. State the profile before editing, and escalate it if the diff grows.
-
-- **Surgical:** docs, rules, config, generated packaging metadata, or a trivial isolated helper where a new test would only assert the implementation. Do not add implementation-only tests. Run the smallest relevant existing check, or state why no executable check applies.
-- **Targeted:** isolated behavior with nearby tests or a clear regression risk. Use RED → GREEN → REFACTOR for that behavior. Run the specific test/package command that proves it (`node --test file.test.js`, `pytest path::test_name`, `go test ./pkg`, `terraform validate` for the touched module, etc.).
-- **Full:** cross-module behavior, public APIs, persistence/state reconciliation, auth/security, migrations, concurrency, test infrastructure, broad refactors, or any change whose risk cannot be bounded to one package. Use RED → GREEN → REFACTOR and run the full project gate (`make test`, or `make test-fast` when the repo provides it as the pre-commit gate).
+Build the feature using the active AGENTS.md/core proportional verification doctrine. The profile taxonomy is owned by core rules, not this skill. This skill only selects the profile, records the proof command, and runs that command.
 
 Loop:
 
-1. **RED where it adds value.** For Targeted/Full behavior changes, write the smallest failing test first and show the failing output from the targeted command. For Surgical work, skip new tests and name the existing proof instead.
-2. **GREEN.** Write the minimum implementation and rerun the same targeted command until it passes. No "while I'm here" additions or premature abstractions.
-3. **REFACTOR.** Clean up only structure. Rerun the targeted command after meaningful edits; escalate to Full if the refactor crosses package boundaries or changes shared behavior.
-4. **Final implementation proof.** Before committing from this skill, run the profile's proof command. The PR skill owns the final branch-wide cleanup, formatting, and full test gate.
+1. **Profile first.** State `Verification profile: <Surgical|Targeted|Full>` and `Proof command: <command or none>` before editing. Escalate the profile if the diff grows.
+2. **RED where it adds value.** When the selected profile calls for behavior or regression coverage, write the smallest failing test first and show the failing output. Do not add implementation-only tests; when no new test is warranted, name the existing proof or why no executable proof applies.
+3. **GREEN.** Write the minimum implementation and rerun the proof command until it passes. No "while I'm here" additions or premature abstractions.
+4. **REFACTOR.** Clean up only structure. Rerun the proof command after meaningful edits; escalate if the refactor crosses package boundaries or changes shared behavior.
+5. **Final implementation proof.** Before committing from this skill, run the profile's proof command. The PR skill owns the final branch-wide cleanup, formatting, and full test gate.
 
 For UI verification, prefer headless Playwright with worktree-local resources. Use interactive Browser/Chrome inspection only when the shared policy says it is warranted.
 
