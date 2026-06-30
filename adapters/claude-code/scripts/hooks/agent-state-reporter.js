@@ -184,8 +184,11 @@ function resolveStopState({ hookEvent, existing, hasPendingTool, lastMessage, pa
   return detectState(lastMessage, paneBuffer);
 }
 
-function resolveChangedFiles({ hookEvent, existing, effectiveCwd, getChangedFilesFn = getChangedFiles }) {
+function resolveChangedFiles({
+  hookEvent, existing, effectiveCwd, refreshSubagent = false, getChangedFilesFn = getChangedFiles,
+}) {
   if ((hookEvent === 'SubagentStart' || hookEvent === 'SubagentStop')
+    && !refreshSubagent
     && Array.isArray(existing.files_changed)) {
     return existing.files_changed;
   }
@@ -245,6 +248,7 @@ function report(input) {
   // hasPendingTool is hoisted out of the else branch so the writeState call
   // below can decide whether to pass guardStates.
   let hasPendingTool = false;
+  let finalSubagentStop = false;
   let state;
   if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart') {
     state = 'running';
@@ -253,6 +257,12 @@ function report(input) {
     // JSONL check. A pending parent tool_use means the agent is still working.
     hasPendingTool = hasPendingParentToolUse(input.transcript_path);
     const lastMessage = input.last_assistant_message || null;
+    const postDecrementCount = hookEvent === 'SubagentStop'
+      ? Math.max(0, (existing.subagent_count || 0) - 1)
+      : (existing.subagent_count || 0);
+    finalSubagentStop = hookEvent === 'SubagentStop'
+      && !hasPendingTool
+      && postDecrementCount === 0;
     // detectState() runs only on Stop (SubagentStop returns existing.state),
     // and only when no parent tool is in flight. Skip the tmux capture
     // otherwise — it's the most expensive call in this hook.
@@ -266,7 +276,9 @@ function report(input) {
   const parsed = parseTarget(target);
   // Use worktree_cwd if available (agent may be working in a worktree)
   const effectiveCwd = existing.worktree_cwd || cwd;
-  const filesChanged = resolveChangedFiles({ hookEvent, existing, effectiveCwd });
+  const filesChanged = resolveChangedFiles({
+    hookEvent, existing, effectiveCwd, refreshSubagent: finalSubagentStop,
+  });
 
   // Read settings.json only when SessionStart needs the fallback — every other
   // event preserves existing.effort, so disk reads on every PostToolUse would

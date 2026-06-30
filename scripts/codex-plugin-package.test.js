@@ -45,6 +45,10 @@ function readClaudeSkill(name) {
   return fs.readFileSync(path.join(REPO, `adapters/claude-code/skills/${name}/SKILL.md`), 'utf8');
 }
 
+function readShared(adapter, name) {
+  return fs.readFileSync(path.join(REPO, `adapters/${adapter}/skills/_shared/${name}.md`), 'utf8');
+}
+
 describe('codex plugin package', () => {
   it('keeps adapters named by supported harness', () => {
     const adapters = fs.readdirSync(path.join(REPO, 'adapters'), { withFileTypes: true })
@@ -191,21 +195,26 @@ describe('codex plugin package', () => {
     for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
       const feature = readSkill('feature');
       const implement = readSkill('implement');
+      const glossary = readShared(adapter, 'verification-profiles');
 
       assert.match(feature, /Verification profile/, `${adapter} feature must require a verification profile`);
-      assert.match(feature, /profile taxonomy is owned by core rules/, `${adapter} feature must defer profile definitions to core rules`);
+      assert.match(feature, /\.\.\/_shared\/verification-profiles\.md/, `${adapter} feature must reference standalone profile glossary`);
       assert.match(feature, /Surgical\|Targeted\|Full/, `${adapter} feature must carry the profile name`);
       assert.doesNotMatch(feature, /- \*\*Surgical:\*\*/, `${adapter} feature must not redefine Surgical`);
       assert.doesNotMatch(feature, /- \*\*Targeted:\*\*/, `${adapter} feature must not redefine Targeted`);
       assert.doesNotMatch(feature, /- \*\*Full:\*\*/, `${adapter} feature must not redefine Full`);
       assert.match(feature, /Do not add implementation-only tests/, `${adapter} feature must discourage useless tests`);
       assert.doesNotMatch(feature, /Build the feature following strict RED/, `${adapter} feature must not force strict TDD for every task`);
+      assert.doesNotMatch(feature, /run RED → GREEN → REFACTOR per phase/, `${adapter} feature must not use stale strict-TDD dispatch wording`);
 
       assert.match(implement, /phase's Verification profile proof command/, `${adapter} implement must verify phase-scoped proof`);
-      assert.match(implement, /active AGENTS\.md\/core instructions/, `${adapter} implement must defer profile definitions to core rules`);
+      assert.match(implement, /\.\.\/_shared\/verification-profiles\.md/, `${adapter} implement must include standalone profile glossary`);
       assert.doesNotMatch(implement, /Surgical: do not add implementation-only tests/, `${adapter} implement must not redefine profiles`);
       assert.match(implement, /use full `make test` only for Full phases/i, `${adapter} implement must bound full-suite runs`);
       assert.doesNotMatch(implement, /Run `make test` between each step/, `${adapter} implement must not force full tests between every step`);
+
+      assert.match(glossary, /minimal standalone contract/, `${adapter} glossary must be standalone fallback, not full doctrine`);
+      assert.match(glossary, /\*\*Surgical:\*\*[\s\S]*\*\*Targeted:\*\*[\s\S]*\*\*Full:\*\*/, `${adapter} glossary must define all profile names`);
     }
   });
 
@@ -356,12 +365,14 @@ describe('codex plugin package', () => {
   });
 
   it('requires confirmation and untracked-only safeguards before destructive PR cleanup', () => {
-    const pr = readCodexSkill('pr');
+    for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
+      const pr = readSkill('pr');
 
-    assert.match(pr, /\buntracked only\b/i);
-    assert.match(pr, /\brequest_user_input\b|\bconfirm/i);
-    assert.match(pr, /\bgit status --porcelain\b/);
-    assert.match(pr, /\brm -rf\b/);
+      assert.match(pr, /\buntracked only\b/i, `${adapter} PR cleanup must be untracked-only`);
+      assert.match(pr, /explicit user\s+confirmation|\brequest_user_input\b|\bconfirm/i, `${adapter} PR cleanup must require confirmation`);
+      assert.match(pr, /\bgit status --porcelain\b/, `${adapter} PR cleanup must verify status after deletion`);
+      assert.match(pr, /\brm -rf\b/, `${adapter} PR cleanup must document directory deletion command`);
+    }
   });
 
   it('keeps Codex hard-rules blocks concise and executable', () => {

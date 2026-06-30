@@ -48,10 +48,13 @@ inspects the diff. **Untracked only.** Never touch tracked or staged files.
 2. Show the user the list of files about to be deleted (one line each). If the
    list is empty, skip the rest of this phase.
 
-3. Delete them. For files: `rm -f <path>`. For directories: `rm -rf <path>`.
+3. Deletion is destructive and irreversible. Ask for explicit user confirmation
+   before any `rm` runs.
+
+4. Delete them. For files: `rm -f <path>`. For directories: `rm -rf <path>`.
    Run from the repo root.
 
-4. Verify with `git status --porcelain` — none of the deletions should appear,
+5. Verify with `git status --porcelain` — none of the deletions should appear,
    because every removed path was untracked. If any tracked file shows as
    deleted, **stop** and surface it to the user (something matched a tracked
    path; the patterns above are wrong for this repo).

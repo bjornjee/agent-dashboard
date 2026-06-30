@@ -17,6 +17,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 If the feature touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` at planning, environment setup, verification, delegation, and cleanup points.
 
+For Verification profiles, apply `../_shared/verification-profiles.md`. Active AGENTS.md/core rules may add doctrine, but this shared glossary is the standalone agent-dashboard fallback.
+
 ---
 
 ### Phase 1: Setup
@@ -176,7 +178,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to /agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
-        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run RED → GREEN → REFACTOR per phase in order.
+        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run each phase with its selected Verification profile and proof command.
         - `"Hand off to /agent-dashboard:implement"` — Exit /agent-dashboard:feature. The user invokes `/agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
 
       **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
@@ -208,7 +210,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
-Build the feature using the active AGENTS.md/core proportional verification doctrine. The profile taxonomy is owned by core rules, not this skill. This skill only selects the profile, records the proof command, and runs that command.
+Build the feature using the active AGENTS.md/core proportional verification doctrine when present, and `../_shared/verification-profiles.md` as the standalone fallback. This skill selects the profile, records the proof command, and runs that command.
 
 Loop:
 

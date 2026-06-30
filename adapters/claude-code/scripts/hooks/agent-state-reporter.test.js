@@ -367,7 +367,7 @@ describe('SubagentStop state handling', () => {
 });
 
 describe('resolveChangedFiles', () => {
-  it('reuses cached file changes on subagent lifecycle events', () => {
+  it('reuses cached file changes on subagent start and non-final stop events', () => {
     const cached = ['M adapters/claude-code/skills/feature/SKILL.md'];
     const getter = () => {
       throw new Error('git diff should not run for subagent lifecycle snapshots');
@@ -383,6 +383,7 @@ describe('resolveChangedFiles', () => {
       hookEvent: 'SubagentStop',
       existing: { files_changed: cached },
       effectiveCwd: '/repo',
+      refreshSubagent: false,
       getChangedFilesFn: getter,
     }), cached);
   });
@@ -411,6 +412,16 @@ describe('resolveChangedFiles', () => {
       effectiveCwd: '/repo',
       getChangedFilesFn: () => ['fresh'],
     }), ['fresh']);
+  });
+
+  it('refreshes final subagent stop file changes', () => {
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'SubagentStop',
+      existing: { files_changed: ['old'] },
+      effectiveCwd: '/repo',
+      refreshSubagent: true,
+      getChangedFilesFn: cwd => [`fresh:${cwd}`],
+    }), ['fresh:/repo']);
   });
 });
 

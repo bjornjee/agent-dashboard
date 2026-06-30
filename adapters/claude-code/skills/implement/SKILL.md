@@ -16,6 +16,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 
 If a dispatched phase touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, include `../_shared/ui-automation.md` in the subagent context and pass the resolved worktree-local UI resources explicitly.
 
+Include `../_shared/verification-profiles.md` in every subagent prompt so Verification profile names remain defined even when agent-dashboard is installed without external core rules.
+
 ---
 
 ### Phase 1: Locate worktree + plan
@@ -53,6 +55,8 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 4. **Slice the phase body.** Find the matching `### Phase X: name` heading; capture through the next `### ` heading or end-of-file. This is the dispatch unit.
 
    If the phase body mentions UI automation, browser testing, Playwright, screenshots, or interactive inspection, also read `../_shared/ui-automation.md` and include its relevant rules in the subagent prompt.
+
+   Always read `../_shared/verification-profiles.md` and include its relevant rules in the subagent prompt.
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
@@ -94,7 +98,7 @@ Phase scope (the only section you should implement):
 <<<end-phase-body>>>
 
 Rules:
-1. Follow the phase's Verification profile as defined by the active AGENTS.md/core instructions. Do not redefine the profile taxonomy here; execute the named proof command, avoid implementation-only tests, and use full `make test` only for Full phases or when the phase risk cannot be bounded.
+1. Follow the phase's Verification profile using active AGENTS.md/core instructions when present and the included verification-profile glossary as the standalone fallback. Execute the named proof command, avoid implementation-only tests, and use full `make test` only for Full phases or when the phase risk cannot be bounded.
 2. Implement ONLY this phase. Do not touch files outside this phase's declared scope.
 3. After the profile proof passes, commit with:
      git commit -m "feat({phase-id-kebab}): <one-line description>"
