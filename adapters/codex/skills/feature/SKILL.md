@@ -1,7 +1,7 @@
 ---
 name: feature
-description: Start a new feature in an isolated git worktree with TDD workflow
-when_to_use: when the user says "start a feature", "new feature", invokes "$agent-dashboard:feature", or describes work that needs an isolated branch + worktree + TDD loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use $agent-dashboard:chore, $agent-dashboard:fix, $agent-dashboard:investigate instead).
+description: Start a new feature in an isolated git worktree with proportional verification
+when_to_use: when the user says "start a feature", "new feature", invokes "$agent-dashboard:feature", or describes work that needs an isolated branch + worktree + planned implementation loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use $agent-dashboard:chore, $agent-dashboard:fix, $agent-dashboard:investigate instead).
 version: 1.0.0
 disable-model-invocation: true
 effort: max
@@ -119,7 +119,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    ### Phase A: <short name>
 
-   <10–50 lines: what files, what tests, what invariants, what to leave alone.>
+   <10–50 lines: what files, Verification profile (Surgical/Targeted/Full) + proof command, what invariants, what to leave alone.>
 
    ### Phase B: <short name>
 
@@ -128,6 +128,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    Rules:
    - The `## Phases` block is the dispatch index. Phase names MUST match between checklist and `### Phase X:` headings (case-sensitive).
+   - Each phase body MUST name a Verification profile and proof command so `$agent-dashboard:implement` does not default to whole-repo tests for isolated work.
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
    - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
    - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
@@ -203,20 +204,22 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
 **Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than implementing directly. If delegating, use `$agent-dashboard:implement` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
-Build the feature following strict RED → GREEN → REFACTOR:
+Build the feature with a proportional verification profile. State the profile before editing, and escalate it if the diff grows.
 
-1. **RED.** Write the failing test. Run `make test`. Paste the failing output into the conversation. **Wrote implementation before test? Delete it. Start over.** No exceptions:
-   - Don't keep it as "reference"
-   - Don't write tests *for* the implementation you already wrote
-   - Don't claim "the test would obviously fail" — show it failing
+- **Surgical:** docs, rules, config, generated packaging metadata, or a trivial isolated helper where a new test would only assert the implementation. Do not add implementation-only tests. Run the smallest relevant existing check, or state why no executable check applies.
+- **Targeted:** isolated behavior with nearby tests or a clear regression risk. Use RED → GREEN → REFACTOR for that behavior. Run the specific test/package command that proves it (`node --test file.test.js`, `pytest path::test_name`, `go test ./pkg`, `terraform validate` for the touched module, etc.).
+- **Full:** cross-module behavior, public APIs, persistence/state reconciliation, auth/security, migrations, concurrency, test infrastructure, broad refactors, or any change whose risk cannot be bounded to one package. Use RED → GREEN → REFACTOR and run the full project gate (`make test`, or `make test-fast` when the repo provides it as the pre-commit gate).
 
-2. **GREEN.** Write the minimum implementation to make the failing test pass. Run `make test`. Paste the passing output. **Wrote more than the test demanded? Revert and re-do.** No "while I'm here" additions, no premature abstractions.
+Loop:
 
-3. **REFACTOR.** Clean up. Run `make test` after each meaningful edit. **Tests broke during refactor? Revert that edit and try a smaller step.** Refactor is structure-only — if behavior changed, you're back in RED.
+1. **RED where it adds value.** For Targeted/Full behavior changes, write the smallest failing test first and show the failing output from the targeted command. For Surgical work, skip new tests and name the existing proof instead.
+2. **GREEN.** Write the minimum implementation and rerun the same targeted command until it passes. No "while I'm here" additions or premature abstractions.
+3. **REFACTOR.** Clean up only structure. Rerun the targeted command after meaningful edits; escalate to Full if the refactor crosses package boundaries or changes shared behavior.
+4. **Final implementation proof.** Before committing from this skill, run the profile's proof command. The PR skill owns the final branch-wide cleanup, formatting, and full test gate.
 
 For UI verification, prefer headless Playwright with worktree-local resources. Use interactive Browser/Chrome inspection only when the shared policy says it is warranted.
 
-**Gate:** Environment ready. All tests pass via `make test`. Implementation matches the approved plan.
+**Gate:** Environment ready. The selected verification profile passes. Implementation matches the approved plan, and unnecessary new tests were not added.
 
 ---
 
@@ -231,7 +234,7 @@ Review all changes for correctness, security, and convention adherence. Apply al
 ### Phase 5: Deliver
 
 1. Commit the feature changes with a `feat:` conventional commit message.
-2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (Codex `worker` with an inline cleanup brief), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns conditional cleanup/formatting, final test gating when available, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit history with conventional commit messages. PR opened via `$agent-dashboard:pr`.
 
@@ -252,9 +255,9 @@ Triggered when the user indicates the feature has been merged upstream.
 
 Failure modes the MUST block doesn't already cover. If you catch yourself saying any of these, pause:
 
-- "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
+- "I'll just sketch the implementation first" → Phase 3 verification violation. Pick a profile, then follow it.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for `<proposed_plan>` approval.
-- "Tests pass on my reading of the code" → didn't run `make test`. Run it.
+- "Tests pass on my reading of the code" → no executable proof. Run the profile's command, or state why none applies.
 - "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it; use `$agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it into a separate PR.
 - "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason; don't second-guess.

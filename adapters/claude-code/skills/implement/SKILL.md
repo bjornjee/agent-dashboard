@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Dispatch each phase of an approved plan to a fresh subagent with TDD; re-invoke to resume
+description: Dispatch each phase of an approved plan to a fresh subagent with proportional verification; re-invoke to resume
 when_to_use: when `/agent-dashboard:feature` (or `/agent-dashboard:fix`, `/agent-dashboard:refactor`, `/agent-dashboard:chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `/agent-dashboard:feature`), inline TDD on small features (also `/agent-dashboard:feature`), or non-code work.
 disable-model-invocation: true
 effort: max
@@ -42,7 +42,7 @@ If a dispatched phase touches browser UI, Playwright, dev-server ports, screensh
 
 ### Phase 2: Dispatch loop
 
-Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent, verify tests, flip the checkbox. Resume is implicit — phases marked `[x]` are skipped.
+Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent, verify the phase's declared proof command, flip the checkbox. Resume is implicit — phases marked `[x]` are skipped.
 
 1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier and deps.
 
@@ -66,7 +66,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
    ```
 
 7. **Verify** when the subagent returns:
-   - `make test` in the worktree → must pass. On failure, surface output verbatim.
+   - Run the phase's Verification profile proof command from the plan. If the phase omitted one, default to Targeted and choose the smallest relevant package/test command from the changed files; use full `make test`/`make test-fast` only when the phase is Full or the risk cannot be bounded. On failure, surface output verbatim.
    - `git log --oneline <prev-sha>..HEAD` → must show exactly one new commit. Zero: subagent didn't commit; halt. Multiple: surface and ask the user to inspect.
    - On any failure, call `AskUserQuestion` with options `["Retry the phase", "Skip and mark done anyway", "Abort the loop"]`.
 
@@ -77,7 +77,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 9. **Loop** to step 3.
 
-**Gate:** All phases in the `## Phases` checklist are marked `- [x]` and `make test` is green.
+**Gate:** All phases in the `## Phases` checklist are marked `- [x]` and each phase's declared proof command is green.
 
 #### Subagent prompt template (verbatim, with `{placeholders}` filled in)
 
@@ -94,9 +94,9 @@ Phase scope (the only section you should implement):
 <<<end-phase-body>>>
 
 Rules:
-1. Strict TDD: RED → GREEN → REFACTOR. Run `make test` between each step.
+1. Follow the phase's Verification profile. Surgical: do not add implementation-only tests; run the named proof or explain why no executable proof applies. Targeted/Full: use RED → GREEN → REFACTOR and run the named proof command between steps. Use full `make test` only for Full phases or when the phase risk cannot be bounded.
 2. Implement ONLY this phase. Do not touch files outside this phase's declared scope.
-3. After GREEN + REFACTOR pass, commit with:
+3. After the profile proof passes, commit with:
      git commit -m "feat({phase-id-kebab}): <one-line description>"
 4. Do NOT modify the plan file. Do NOT update checkboxes — the orchestrator owns that.
 5. If the phase is ambiguous or blocked, STOP and report a question instead of guessing.
@@ -104,7 +104,7 @@ Rules:
 
 Report back with:
 - Commit SHA
-- Test status (pass/fail + key output line)
+- Verification profile and proof status (pass/fail + key output line)
 - Files changed (paths)
 - Anything unexpected
 ```
@@ -152,7 +152,7 @@ The plan file's checkbox state is the source of truth — the orchestrator's in-
 If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
 
 - "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially — a later phase may depend on an earlier one's commit.
-- "The subagent's tests failed but the diff looks fine, I'll move on" → Phase 2 step 7 violation. Halt and surface to the user.
+- "The subagent's proof command failed but the diff looks fine, I'll move on" → Phase 2 step 7 violation. Halt and surface to the user.
 - "Subagent didn't commit, but the changes are there — I'll mark it done" → Phase 2 step 7 violation. No commit means no phase. Retry or abort.
 - "I'll fix a typo in the plan body while I'm flipping the checkbox" → Phase 2 step 8 violation. Checkbox only. Plan-content changes need a separate decision.
 - "No `## Phases` block, but I can infer the phases from the prose" → Phase 2 step 2 violation. Halt and point the user back to `/agent-dashboard:feature` for inline TDD.

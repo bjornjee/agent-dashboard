@@ -41,6 +41,10 @@ function readCodexSkill(name) {
   return fs.readFileSync(path.join(REPO, `adapters/codex/skills/${name}/SKILL.md`), 'utf8');
 }
 
+function readClaudeSkill(name) {
+  return fs.readFileSync(path.join(REPO, `adapters/claude-code/skills/${name}/SKILL.md`), 'utf8');
+}
+
 describe('codex plugin package', () => {
   it('keeps adapters named by supported harness', () => {
     const adapters = fs.readdirSync(path.join(REPO, 'adapters'), { withFileTypes: true })
@@ -181,6 +185,41 @@ describe('codex plugin package', () => {
     assert.match(feature, /\.feature-plan-path/);
     assert.match(implement, /\bspawn_agent\b/);
     assert.match(implement, /\bworker\b/);
+  });
+
+  it('documents proportional feature and implement verification for both adapters', () => {
+    for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
+      const feature = readSkill('feature');
+      const implement = readSkill('implement');
+
+      assert.match(feature, /Verification profile/, `${adapter} feature must require a verification profile`);
+      assert.match(feature, /\bSurgical\b[\s\S]*\bTargeted\b[\s\S]*\bFull\b/, `${adapter} feature must define all profiles`);
+      assert.match(feature, /Do not add implementation-only tests/, `${adapter} feature must discourage useless tests`);
+      assert.doesNotMatch(feature, /Build the feature following strict RED/, `${adapter} feature must not force strict TDD for every task`);
+
+      assert.match(implement, /phase's Verification profile proof command/, `${adapter} implement must verify phase-scoped proof`);
+      assert.match(implement, /Use full `make test` only for Full phases/, `${adapter} implement must bound full-suite runs`);
+      assert.doesNotMatch(implement, /Run `make test` between each step/, `${adapter} implement must not force full tests between every step`);
+    }
+  });
+
+  it('keeps PR cleanup conditional and avoids adding missing Make targets by default', () => {
+    for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
+      const pr = readSkill('pr');
+
+      assert.match(pr, /Do not launch .* by default/, `${adapter} PR skill must gate cleanup workers`);
+      assert.match(pr, /tiny docs\/config diff/, `${adapter} PR skill must skip cleanup workers for tiny docs/config diffs`);
+      assert.match(pr, /do not add one during PR\s+cleanup unless the user explicitly asked/, `${adapter} PR skill must not add Make targets by default`);
+      assert.doesNotMatch(pr, /Skip the cleaner, the diff looks clean/, `${adapter} PR skill must not force cleaner on every diff`);
+    }
+  });
+
+  it('uses scoped verification for chore, fix, and refactor workflows', () => {
+    for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
+      assert.match(readSkill('chore'), /smallest relevant verification/, `${adapter} chore must avoid blanket tests`);
+      assert.match(readSkill('fix'), /reproducing test command/, `${adapter} fix must use targeted reproducer proof`);
+      assert.match(readSkill('refactor'), /scoped baseline/, `${adapter} refactor must use scoped baseline proof`);
+    }
   });
 
   it('documents a complete Codex request_user_input schema in feature', () => {
