@@ -48,19 +48,25 @@ inspects the diff. **Untracked only.** Never touch tracked or staged files.
 2. Show the user the list of files about to be deleted (one line each). If the
    list is empty, skip the rest of this phase.
 
-3. Deletion is destructive and irreversible. Ask for explicit user confirmation
-   before any `rm` runs.
+3. **Confirmation gate** — deletion is destructive and irreversible. Show the
+   user the exact list of paths about to be deleted (one line each) and ask
+   explicit permission before deleting. If the user declines, **skip deletion**
+   and proceed to Phase 3.
 
-4. Delete them. For files: `rm -f <path>`. For directories: `rm -rf <path>`.
-   Run from the repo root.
+   Any path outside the worktree root (absolute paths, `..` traversal) must be
+   rejected — fail this gate rather than delete.
+
+4. Delete the confirmed paths. For files: `rm -f <path>`. For directories:
+   `rm -rf <path>`. Run from the repo root.
 
 5. Verify with `git status --porcelain` — none of the deletions should appear,
    because every removed path was untracked. If any tracked file shows as
    deleted, **stop** and surface it to the user (something matched a tracked
    path; the patterns above are wrong for this repo).
 
-**Gate:** No matching untracked artifacts remain in the worktree, and `git
-status` shows no unexpected tracked-file deletions.
+**Gate:** Either the user confirmed and matching untracked artifacts were
+removed, or the user declined and the phase was skipped. `git status` shows no
+unexpected tracked-file deletions.
 
 ---
 

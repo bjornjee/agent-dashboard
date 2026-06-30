@@ -415,6 +415,29 @@ describe('writeState guardStates', () => {
     const state = readAgentState(sessionId, agentsDir);
     assert.equal(state.state, 'running', 'without guardStates, write should proceed normally');
   });
+
+  it('preserves guarded state while merging non-state fields when requested', () => {
+    const sessionId = 'sess-guard-preserve';
+    writeState(sessionId, {
+      target: 'a:0.1',
+      session_id: sessionId,
+      state: 'idle_prompt',
+      subagent_count: 1,
+      files_changed: ['old'],
+    }, agentsDir);
+
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
+    writeState(sessionId, {
+      state: 'running',
+      subagent_count: 0,
+      files_changed: ['fresh'],
+    }, agentsDir, { guardStates, preserveGuardedState: true });
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'idle_prompt', 'guarded stop state must remain authoritative');
+    assert.equal(state.subagent_count, 0, 'subagent metadata should still merge');
+    assert.deepEqual(state.files_changed, ['fresh'], 'fresh file changes should still merge');
+  });
 });
 
 describe('writeState report_seq ordering', () => {

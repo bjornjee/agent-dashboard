@@ -294,7 +294,7 @@ function report(input) {
   if (changed) {
     entry.report_seq = reportSeq;
     const writeOpts = shouldGuardWrite(hookEvent, hasPendingTool)
-      ? { guardStates: STOP_STATES }
+      ? { guardStates: STOP_STATES, preserveGuardedState: finalSubagentStop }
       : {};
     writeState(sessionId, entry, undefined, writeOpts);
   }

@@ -1,7 +1,7 @@
 ---
 name: implement
 description: Dispatch each phase of an approved plan to a fresh subagent with proportional verification; re-invoke to resume
-when_to_use: when `$agent-dashboard:feature` (or `$agent-dashboard:fix`, `$agent-dashboard:refactor`, `$agent-dashboard:chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `$agent-dashboard:feature`), inline TDD on small features (also `$agent-dashboard:feature`), or non-code work.
+when_to_use: when `$agent-dashboard:feature` (or `$agent-dashboard:fix`, `$agent-dashboard:refactor`, `$agent-dashboard:chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `$agent-dashboard:feature`), inline implementation on small features (also `$agent-dashboard:feature`), or non-code work.
 disable-model-invocation: true
 effort: max
 ---
@@ -57,7 +57,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier and deps.
 
-2. **Halt if no `## Phases` block.** The user opted into `$agent-dashboard:implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `$agent-dashboard:feature`, or return to `$agent-dashboard:feature` for inline TDD." Halt.
+2. **Halt if no `## Phases` block.** The user opted into `$agent-dashboard:implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `$agent-dashboard:feature`, or return to `$agent-dashboard:feature` for inline implementation." Halt.
 
 3. **Pick the next pending phase** (`- [ ]`) in checklist order. If all phases are `[x]`, skip to Phase 3.
 
@@ -167,4 +167,4 @@ Failure modes the MUST block doesn't already cover:
 - "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially; a later phase may depend on an earlier one's commit.
 - "The subagent's proof command failed but the diff looks fine, I'll move on" → halt and surface to the user.
 - "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `$agent-dashboard:pr`.
-- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `$agent-dashboard:feature` for inline TDD.
+- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `$agent-dashboard:feature` for inline implementation.

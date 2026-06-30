@@ -172,7 +172,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
-   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 (inline TDD).
+   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 inline.
 
    3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `AskUserQuestion` exactly once:
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to /agent-dashboard:implement for context isolation?"`
@@ -181,7 +181,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
         - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run each phase with its selected Verification profile and proof command.
         - `"Hand off to /agent-dashboard:implement"` — Exit /agent-dashboard:feature. The user invokes `/agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
 
-      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
+      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline implementation ignores the index.
 
       **If `Hand off to /agent-dashboard:implement`:** print the message below and exit cleanly. Do not start Phase 3.
 
@@ -269,5 +269,5 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
 - "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `/agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
-- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason (context). Don't second-guess.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline implementation for a reason (context). Don't second-guess.
 - "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `/agent-dashboard:implement` and resume can't find the plan without it.

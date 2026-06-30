@@ -206,12 +206,14 @@ describe('codex plugin package', () => {
       assert.match(feature, /Do not add implementation-only tests/, `${adapter} feature must discourage useless tests`);
       assert.doesNotMatch(feature, /Build the feature following strict RED/, `${adapter} feature must not force strict TDD for every task`);
       assert.doesNotMatch(feature, /run RED → GREEN → REFACTOR per phase/, `${adapter} feature must not use stale strict-TDD dispatch wording`);
+      assert.doesNotMatch(feature, /inline TDD/, `${adapter} feature must not call inline proportional work TDD`);
 
       assert.match(implement, /phase's Verification profile proof command/, `${adapter} implement must verify phase-scoped proof`);
       assert.match(implement, /\.\.\/_shared\/verification-profiles\.md/, `${adapter} implement must include standalone profile glossary`);
       assert.doesNotMatch(implement, /Surgical: do not add implementation-only tests/, `${adapter} implement must not redefine profiles`);
       assert.match(implement, /use full `make test` only for Full phases/i, `${adapter} implement must bound full-suite runs`);
       assert.doesNotMatch(implement, /Run `make test` between each step/, `${adapter} implement must not force full tests between every step`);
+      assert.doesNotMatch(implement, /inline TDD/, `${adapter} implement must not call inline proportional work TDD`);
 
       assert.match(glossary, /minimal standalone contract/, `${adapter} glossary must be standalone fallback, not full doctrine`);
       assert.match(glossary, /\*\*Surgical:\*\*[\s\S]*\*\*Targeted:\*\*[\s\S]*\*\*Full:\*\*/, `${adapter} glossary must define all profile names`);
@@ -370,6 +372,7 @@ describe('codex plugin package', () => {
 
       assert.match(pr, /\buntracked only\b/i, `${adapter} PR cleanup must be untracked-only`);
       assert.match(pr, /explicit user\s+confirmation|\brequest_user_input\b|\bconfirm/i, `${adapter} PR cleanup must require confirmation`);
+      assert.match(pr, /declined and the phase was skipped|declines?, \*\*skip deletion\*\*/i, `${adapter} PR cleanup must allow declined deletion to proceed`);
       assert.match(pr, /\bgit status --porcelain\b/, `${adapter} PR cleanup must verify status after deletion`);
       assert.match(pr, /\brm -rf\b/, `${adapter} PR cleanup must document directory deletion command`);
     }

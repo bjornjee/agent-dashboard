@@ -115,17 +115,20 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
       return;
     }
 
+    const guardHit = opts.guardStates && opts.guardStates.has(existing.state);
+
     // Backstop: skip write if current on-disk state is protected. Catches
     // equal-seq ties and un-seq'd writes. Runs INSIDE the lock so the check sees
     // the same fresh read the merge will use — no TOCTOU window between guard
     // and write.
-    if (opts.guardStates && opts.guardStates.has(existing.state)) {
+    if (guardHit && !opts.preserveGuardedState) {
       return;
     }
 
     const merged = {
       ...existing,
       ...update,
+      ...(guardHit ? { state: existing.state } : {}),
       updated_at: new Date().toISOString(),
     };
 

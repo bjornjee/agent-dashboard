@@ -168,7 +168,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
       4. On success, write a sentinel file: `touch .env-setup-done`
          On failure, write the error: `echo "<error message>" > .env-setup-failed`
 
-   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 (inline TDD).
+   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 inline.
 
    4. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question and wait for the user's answer. Never choose the recommended option yourself.
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
@@ -177,7 +177,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
         - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run each phase with its selected Verification profile and proof command.
         - `"Hand off to $agent-dashboard:implement"` — Exit $agent-dashboard:feature. The user invokes `$agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
 
-      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
+      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline implementation ignores the index.
 
       **If `Hand off to $agent-dashboard:implement`:** print the message below and exit cleanly. Do not start Phase 3.
 
@@ -259,4 +259,4 @@ Failure modes the MUST block doesn't already cover. If you catch yourself saying
 - "Tests pass on my reading of the code" → no executable proof. Run the profile's command, or state why none applies.
 - "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it; use `$agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it into a separate PR.
-- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason; don't second-guess.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline implementation for a reason; don't second-guess.
