@@ -633,6 +633,13 @@ func IsResumableOrphan(a domain.Agent, livePanes map[string]bool) bool {
 	if a.SessionID == "" || a.State == "" || a.TmuxPaneID == "" {
 		return false
 	}
+	// A nil set means tmux pane enumeration failed — we can't distinguish a live
+	// pane from a dead one, so refuse to classify anything as an orphan rather
+	// than risk treating a live agent as resumable. A non-nil empty set (tmux
+	// succeeded, zero panes) correctly falls through: the agent is dead.
+	if livePanes == nil {
+		return false
+	}
 	if livePanes[a.TmuxPaneID] {
 		return false // pane is alive — not an orphan
 	}

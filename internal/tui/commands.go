@@ -530,10 +530,15 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 		state.ResolveAgentTargets(&sf, targets)
 		paneCwds = cwds
 		// targets is keyed by pane ID (%N) — the live-pane set used by the
-		// palette's orphan filter/marker.
-		livePanes = make(map[string]bool, len(targets))
-		for paneID := range targets {
-			livePanes[paneID] = true
+		// palette's orphan filter/marker. Leave livePanes nil when targets is
+		// nil (tmux enumeration failed) so IsResumableOrphan can't misclassify
+		// live agents as orphans; a non-nil empty targets (zero panes) yields a
+		// non-nil empty set (genuinely all dead).
+		if targets != nil {
+			livePanes = make(map[string]bool, len(targets))
+			for paneID := range targets {
+				livePanes[paneID] = true
+			}
 		}
 	}
 	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
@@ -734,6 +739,12 @@ func spawnCmdInWindow(agents []domain.Agent, absFolder, selfPaneID string, profi
 // the session id, harness, and dir — no resolve chain is needed.
 func resumeSession(agent domain.Agent, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings) tea.Cmd {
 	return func() tea.Msg {
+		// Re-check orphan status against live panes now, not against the
+		// (possibly stale) m.livePanes captured at keypress — resuming an agent
+		// whose pane revived would spawn a duplicate and delete its state file.
+		if !state.IsResumableOrphan(agent, tmux.TmuxListLivePaneIDs()) {
+			return createSessionMsg{err: fmt.Errorf("agent is no longer a resumable orphan (its pane may be alive)")}
+		}
 		absFolder, err := validateFolder(agent.EffectiveDir())
 		if err != nil {
 			return createSessionMsg{err: err}

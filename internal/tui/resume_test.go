@@ -79,6 +79,43 @@ func TestResumeSession(t *testing.T) {
 	}
 }
 
+// liveAgentRunner reports the agent's own pane (%9) as alive and would
+// otherwise let the spawn succeed — so a missing re-check would resume a live
+// agent.
+type liveAgentRunner struct{}
+
+func (liveAgentRunner) Output(_ context.Context, args ...string) ([]byte, error) {
+	switch {
+	case len(args) > 0 && args[0] == "list-panes":
+		return []byte("%9\n"), nil // the agent's pane is alive
+	case len(args) > 0 && args[0] == "new-window":
+		return []byte("%99\tmain:3.0\n"), nil
+	case len(args) > 0 && args[0] == "display-message":
+		return nil, fmt.Errorf("no self pane")
+	}
+	return []byte(""), nil
+}
+func (liveAgentRunner) Run(_ context.Context, _ ...string) error { return nil }
+
+// resumeSession must re-check orphan status at execution time and refuse to
+// resume an agent whose pane is now alive (would spawn a duplicate + delete the
+// live session's state file).
+func TestResumeSessionRejectsLiveAgent(t *testing.T) {
+	stateDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(stateDir, "agents"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	folder := t.TempDir()
+	agent := domain.Agent{SessionID: "s", Harness: "claude", State: "running", Cwd: folder, TmuxPaneID: "%9"}
+
+	t.Cleanup(tmux.SetTestRunner(liveAgentRunner{}))
+	cfg := testConfig(stateDir)
+	res := resumeSession(agent, nil, "", cfg.Profile, cfg.Settings)().(createSessionMsg)
+	if res.err == nil {
+		t.Error("resumeSession should refuse to resume a live agent")
+	}
+}
+
 // resumeSession is harness-agnostic: a codex orphan re-spawns via
 // `codex resume <sid>` (no --resume flag).
 func TestResumeSessionCodex(t *testing.T) {

@@ -424,6 +424,21 @@ func TestIsResumableOrphan(t *testing.T) {
 	}
 }
 
+// A nil live-pane set means tmux enumeration FAILED — we cannot tell a live
+// pane from a dead one, so no agent may be classified an orphan (else a
+// transient failure would mark live agents resumable and let a resume delete a
+// live session's state file). A non-nil empty set means tmux succeeded with
+// zero panes — genuinely all dead, so the agent IS an orphan.
+func TestIsResumableOrphan_NilVsEmptyLiveSet(t *testing.T) {
+	agent := domain.Agent{SessionID: "s", State: "running", TmuxPaneID: "%2"}
+	if IsResumableOrphan(agent, nil) {
+		t.Error("nil live set (tmux failed) must NOT classify an agent as an orphan")
+	}
+	if !IsResumableOrphan(agent, map[string]bool{}) {
+		t.Error("empty non-nil live set (genuinely zero panes) should classify a dead agent as an orphan")
+	}
+}
+
 // After a restart, resuming one orphan gives it a live pane. PruneDead must not
 // then cascade-delete the remaining active orphans. Finished agents (done/pr/
 // merged) on dead panes are still GC'd.
@@ -431,9 +446,10 @@ func TestPruneDead_RetainsActiveOrphans(t *testing.T) {
 	tmp := t.TempDir()
 	writeAgentFile(t, tmp, "live.json", domain.Agent{SessionID: "live", State: "running", TmuxPaneID: "%1"})
 	writeAgentFile(t, tmp, "orphan.json", domain.Agent{SessionID: "orphan", State: "running", TmuxPaneID: "%2"})
+	writeAgentFile(t, tmp, "idle.json", domain.Agent{SessionID: "idle", State: "idle_prompt", TmuxPaneID: "%4"})
 	writeAgentFile(t, tmp, "finished.json", domain.Agent{SessionID: "finished", State: "done", TmuxPaneID: "%3"})
 
-	livePaneIDs := map[string]bool{"%0": true, "%1": true} // %2 and %3 dead
+	livePaneIDs := map[string]bool{"%0": true, "%1": true} // %2, %3, %4 dead
 
 	removed := PruneDead(tmp, livePaneIDs)
 	if removed != 1 {
@@ -442,7 +458,10 @@ func TestPruneDead_RetainsActiveOrphans(t *testing.T) {
 
 	sf := ReadState(tmp)
 	if _, ok := sf.Agents["orphan"]; !ok {
-		t.Error("active orphan should be retained for resume (no cascade prune)")
+		t.Error("active (running) orphan should be retained for resume (no cascade prune)")
+	}
+	if _, ok := sf.Agents["idle"]; !ok {
+		t.Error("active (idle_prompt) orphan should be retained for resume")
 	}
 	if _, ok := sf.Agents["live"]; !ok {
 		t.Error("live agent should be retained")

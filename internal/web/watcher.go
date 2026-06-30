@@ -122,10 +122,14 @@ func (s *Server) readAgentState() []domain.Agent {
 			state.ResolveAgentTargets(&sf, targets)
 			paneCwds = cwds
 			// targets is keyed by pane ID (%N) — the live-pane set used to flag
-			// restart-survivor (resumable) orphans below.
-			livePanes = make(map[string]bool, len(targets))
-			for paneID := range targets {
-				livePanes[paneID] = true
+			// restart-survivor (resumable) orphans below. Leave livePanes nil
+			// when targets is nil (tmux enumeration failed) so a transient
+			// failure doesn't flag every live agent resumable.
+			if targets != nil {
+				livePanes = make(map[string]bool, len(targets))
+				for paneID := range targets {
+					livePanes[paneID] = true
+				}
 			}
 		}
 		state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)

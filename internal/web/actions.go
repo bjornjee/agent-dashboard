@@ -693,9 +693,14 @@ func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
 
 	// Only resume a genuine orphan (its pane is dead). Resuming a live agent
 	// would spawn a duplicate session and delete the live agent's state file.
-	// An empty live set (tmux transient failure / all panes dead) correctly
-	// allows the resume — the restart case must still work.
-	if !state.IsResumableOrphan(agent, tmux.TmuxListLivePaneIDs()) {
+	livePaneIDs := tmux.TmuxListLivePaneIDs()
+	if livePaneIDs == nil {
+		// tmux enumeration failed — we can't tell live from dead. Refuse rather
+		// than risk resuming a live agent; the caller can retry.
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "could not enumerate tmux panes; try again"})
+		return
+	}
+	if !state.IsResumableOrphan(agent, livePaneIDs) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "agent is not a resumable orphan (its pane may still be alive)"})
 		return
 	}
