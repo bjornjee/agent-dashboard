@@ -40,9 +40,12 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 ### Phase 3: Implement
 
 1. Make the changes.
-2. Run `make test` to verify nothing breaks. Skip only if no Makefile exists.
+2. Run the smallest relevant verification:
+   - Docs/rules/config text only: run no test, or a docs/config validation command if the repo has one.
+   - Dependency, CI, Makefile, formatter, or test-runner changes: run the affected native command and full `make test`/`make test-fast` when available.
+   - Agent workflow/rule changes that alter behavior: run the package test covering that workflow, or switch to `$agent-dashboard:feature` if implementation-level validation is needed.
 
-**Gate:** Changes are applied. `make test` passes.
+**Gate:** Changes are applied. The relevant verification is complete and named.
 
 ---
 
@@ -65,6 +68,6 @@ Review all changes for correctness and convention adherence. Apply all project r
    | `ci` | CI/CD pipeline changes |
    | `build` | Build system, Makefile changes |
 
-2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns cleanup, `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns conditional cleanup/formatting, final test gating when available, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit with conventional message. PR opened via `$agent-dashboard:pr`.

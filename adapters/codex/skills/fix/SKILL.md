@@ -50,7 +50,7 @@ If the bug involves browser UI, Playwright, dev-server ports, screenshots, or in
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
    - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
-7. cd into the worktree, run `node "$HOME/.codex/hooks/agent-dashboard/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
+7. cd into the worktree, run `node "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(ls -dt "${CODEX_HOME:-$HOME/.codex}/plugins/cache/agent-dashboard/agent-dashboard"/* 2>/dev/null | head -1)}}/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
 8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
@@ -110,7 +110,7 @@ Before touching code, collect **grounded evidence** from observable sources. Do 
    - Target the specific behavior that is broken
    - Fail for the right reason (matching the observed error, not a typo or import error)
    - Be minimal — test only the broken behavior
-2. Run `make test` and confirm the new test **fails**.
+2. Run the smallest command that executes the reproducing test and confirm it **fails**.
 3. Compare the test failure output against the evidence from Phase 2 — the failure should match the observed bug (same error type, same behavior). If it doesn't, the test is wrong, not the code.
 4. Show the failing test output to the user.
 
@@ -141,23 +141,23 @@ Root cause analysis must be grounded in the evidence and the failing test, not s
 **Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the fix touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than implementing directly. If delegating, pass the diagnosis (Phase 4), failing test output (Phase 3), exact file paths, and a bounded write scope to a `worker`; then call `wait_agent`, review the result, and verify locally. Otherwise, proceed below.
 
 1. Implement the **minimal fix** — change only what is necessary to fix the bug.
-2. Run `make test` — the previously failing test must now **pass**.
-3. Run the full test suite via `make test` — no regressions.
-4. Show the passing test output.
+2. Run the reproducing test command — the previously failing test must now **pass**.
+3. Run full `make test`/`make test-fast` only when the fix crosses packages, touches shared state/test/build infrastructure, or the risk cannot be bounded. Otherwise rely on the targeted reproducing command here; `$agent-dashboard:pr` owns the final branch-wide gate.
+4. Show the passing test output and name whether full-suite verification was required.
 
 For UI fixes, prefer headless Playwright with worktree-local resources. Use interactive Browser/Chrome inspection only when the shared policy says it is warranted.
 
-**Gate:** The reproducing test passes. The full test suite passes. No unrelated changes.
+**Gate:** The reproducing test passes. Full-suite verification ran only when required by risk. No unrelated changes.
 
 ---
 
 ### Phase 6: Refactor
 
 1. Review the fix — is there a cleaner way to express it? Unnecessary duplication?
-2. If changes are needed, make them and run `make test` to confirm tests still pass.
+2. If changes are needed, make them and rerun the reproducing proof command; escalate to full `make test`/`make test-fast` if the refactor widens scope.
 3. If no refactoring is needed, skip this phase.
 
-**Gate:** Tests pass via `make test`. Code is clean.
+**Gate:** The relevant proof passes. Code is clean.
 
 ---
 
@@ -165,7 +165,7 @@ For UI fixes, prefer headless Playwright with worktree-local resources. Use inte
 
 1. Review all changes for correctness, security, and convention adherence.
 2. Commit with a `fix:` conventional commit message that describes what was fixed and why.
-3. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns cleanup, `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+3. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns conditional cleanup/formatting, final test gating when available, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit with conventional message. No critical or high-severity review issues. PR opened via `$agent-dashboard:pr`.
 

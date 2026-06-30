@@ -1,7 +1,7 @@
 ---
 name: feature
-description: Start a new feature in an isolated git worktree with TDD workflow
-when_to_use: when the user says "start a feature", "new feature", invokes "$agent-dashboard:feature", or describes work that needs an isolated branch + worktree + TDD loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use $agent-dashboard:chore, $agent-dashboard:fix, $agent-dashboard:investigate instead).
+description: Start a new feature in an isolated git worktree with proportional verification
+when_to_use: when the user says "start a feature", "new feature", invokes "$agent-dashboard:feature", or describes work that needs an isolated branch + worktree + planned implementation loop. NOT for hotfixes, single-file edits, pure exploration, or non-code changes (use $agent-dashboard:chore, $agent-dashboard:fix, $agent-dashboard:investigate instead).
 version: 1.0.0
 disable-model-invocation: true
 effort: max
@@ -27,6 +27,8 @@ Follow these phases in order. Each phase has a gate — do not proceed until the
 Before every action, identify the current phase and check its gate. If a gate is not satisfied, stop instead of falling back. If you violate phase order, halt and report the violated gate.
 
 If the feature touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, apply `../_shared/ui-automation.md` at planning, environment setup, verification, delegation, and cleanup points.
+
+For Verification profiles, apply `../_shared/verification-profiles.md`. Active AGENTS.md/core rules may add doctrine, but this shared glossary is the standalone agent-dashboard fallback.
 
 ---
 
@@ -56,7 +58,7 @@ If the feature touches browser UI, Playwright, dev-server ports, screenshots, or
    - Use: `for f in $(find . -name '.env*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
    - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
-7. cd into the worktree, run `node "$HOME/.codex/hooks/agent-dashboard/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
+7. cd into the worktree, run `node "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(ls -dt "${CODEX_HOME:-$HOME/.codex}/plugins/cache/agent-dashboard/agent-dashboard"/* 2>/dev/null | head -1)}}/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
 8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
@@ -119,7 +121,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    ### Phase A: <short name>
 
-   <10–50 lines: what files, what tests, what invariants, what to leave alone.>
+   <10–50 lines: what files, Verification profile (Surgical/Targeted/Full) + proof command, what invariants, what to leave alone.>
 
    ### Phase B: <short name>
 
@@ -128,6 +130,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
    Rules:
    - The `## Phases` block is the dispatch index. Phase names MUST match between checklist and `### Phase X:` headings (case-sensitive).
+   - Each phase body MUST name a Verification profile and proof command so `$agent-dashboard:implement` does not default to whole-repo tests for isolated work.
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
    - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
    - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
@@ -165,16 +168,16 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
       4. On success, write a sentinel file: `touch .env-setup-done`
          On failure, write the error: `echo "<error message>" > .env-setup-failed`
 
-   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 (inline TDD).
+   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 inline.
 
    4. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question and wait for the user's answer. Never choose the recommended option yourself.
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
-        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run RED → GREEN → REFACTOR per phase in order.
+        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run each phase with its selected Verification profile and proof command.
         - `"Hand off to $agent-dashboard:implement"` — Exit $agent-dashboard:feature. The user invokes `$agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
 
-      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline TDD ignores the index.
+      **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline implementation ignores the index.
 
       **If `Hand off to $agent-dashboard:implement`:** print the message below and exit cleanly. Do not start Phase 3.
 
@@ -203,20 +206,19 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
 
 **Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the plan touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead (skill loading, prompt construction, subagent context, result parsing, review) costs more tokens than implementing directly. If delegating, use `$agent-dashboard:implement` with the approved plan (Phase 2) as implementation context, then skip to the phase gate. Otherwise, proceed below.
 
-Build the feature following strict RED → GREEN → REFACTOR:
+Build the feature using the active AGENTS.md/core proportional verification doctrine when present, and `../_shared/verification-profiles.md` as the standalone fallback. This skill selects the profile, records the proof command, and runs that command.
 
-1. **RED.** Write the failing test. Run `make test`. Paste the failing output into the conversation. **Wrote implementation before test? Delete it. Start over.** No exceptions:
-   - Don't keep it as "reference"
-   - Don't write tests *for* the implementation you already wrote
-   - Don't claim "the test would obviously fail" — show it failing
+Loop:
 
-2. **GREEN.** Write the minimum implementation to make the failing test pass. Run `make test`. Paste the passing output. **Wrote more than the test demanded? Revert and re-do.** No "while I'm here" additions, no premature abstractions.
-
-3. **REFACTOR.** Clean up. Run `make test` after each meaningful edit. **Tests broke during refactor? Revert that edit and try a smaller step.** Refactor is structure-only — if behavior changed, you're back in RED.
+1. **Profile first.** State `Verification profile: <Surgical|Targeted|Full>` and `Proof command: <command or none>` before editing. Escalate the profile if the diff grows.
+2. **RED where it adds value.** When the selected profile calls for behavior or regression coverage, write the smallest failing test first and show the failing output. Do not add implementation-only tests; when no new test is warranted, name the existing proof or why no executable proof applies.
+3. **GREEN.** Write the minimum implementation and rerun the proof command until it passes. No "while I'm here" additions or premature abstractions.
+4. **REFACTOR.** Clean up only structure. Rerun the proof command after meaningful edits; escalate if the refactor crosses package boundaries or changes shared behavior.
+5. **Final implementation proof.** Before committing from this skill, run the profile's proof command. The PR skill owns the final branch-wide cleanup, formatting, and full test gate.
 
 For UI verification, prefer headless Playwright with worktree-local resources. Use interactive Browser/Chrome inspection only when the shared policy says it is warranted.
 
-**Gate:** Environment ready. All tests pass via `make test`. Implementation matches the approved plan.
+**Gate:** Environment ready. The selected verification profile passes. Implementation matches the approved plan, and unnecessary new tests were not added.
 
 ---
 
@@ -231,7 +233,7 @@ Review all changes for correctness, security, and convention adherence. Apply al
 ### Phase 5: Deliver
 
 1. Commit the feature changes with a `feat:` conventional commit message.
-2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns the cleanup pass (Codex `worker` with an inline cleanup brief), `make fmt`, `make test`, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
+2. Open the PR by invoking **`$agent-dashboard:pr`**. That skill owns conditional cleanup/formatting, final test gating when available, push, and `gh pr create`. Do not call `gh pr create` directly — a `pr-skill-gate` hook will block it.
 
 **Gate:** Clean commit history with conventional commit messages. PR opened via `$agent-dashboard:pr`.
 
@@ -252,9 +254,9 @@ Triggered when the user indicates the feature has been merged upstream.
 
 Failure modes the MUST block doesn't already cover. If you catch yourself saying any of these, pause:
 
-- "I'll just sketch the implementation first" → Phase 3 RED violation. Delete and restart.
+- "I'll just sketch the implementation first" → Phase 3 verification violation. Pick a profile, then follow it.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for `<proposed_plan>` approval.
-- "Tests pass on my reading of the code" → didn't run `make test`. Run it.
+- "Tests pass on my reading of the code" → no executable proof. Run the profile's command, or state why none applies.
 - "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it; use `$agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it into a separate PR.
-- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline TDD for a reason; don't second-guess.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline implementation for a reason; don't second-guess.

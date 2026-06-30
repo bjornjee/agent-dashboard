@@ -182,6 +182,17 @@ function resolveStopState({ hookEvent, existing, hasPendingTool, subagentCount =
   return detectState(lastMessage, paneBuffer);
 }
 
+function resolveChangedFiles({
+  hookEvent, existing, effectiveCwd, refreshSubagent = false, getChangedFilesFn = getChangedFiles,
+}) {
+  if ((hookEvent === 'SubagentStart' || hookEvent === 'SubagentStop')
+    && !refreshSubagent
+    && Array.isArray(existing.files_changed)) {
+    return existing.files_changed;
+  }
+  return getChangedFilesFn(effectiveCwd);
+}
+
 // Only run stdin reader when executed directly (not when require()'d by tests)
 if (require.main === module) {
   const MAX_STDIN = 1024 * 1024;
@@ -237,6 +248,7 @@ function report(input) {
   // hasPendingTool is hoisted out of the else branch so the writeState call
   // below can decide whether to pass guardStates.
   let hasPendingTool = false;
+  let finalSubagentStop = false;
   let state;
   if (hookEvent === 'SessionStart' || hookEvent === 'SubagentStart') {
     state = 'running';
@@ -250,6 +262,9 @@ function report(input) {
     const postDecrementCount = hookEvent === 'SubagentStop'
       ? Math.max(0, (existing.subagent_count || 0) - 1)
       : (existing.subagent_count || 0);
+    finalSubagentStop = hookEvent === 'SubagentStop'
+      && !hasPendingTool
+      && postDecrementCount === 0;
     // Skip the tmux capture (most expensive call in this hook) unless
     // detectState will actually run.
     const willDetect = !hasPendingTool
@@ -263,7 +278,9 @@ function report(input) {
   const parsed = parseTarget(target);
   // Use worktree_cwd if available (agent may be working in a worktree)
   const effectiveCwd = existing.worktree_cwd || cwd;
-  const filesChanged = getChangedFiles(effectiveCwd);
+  const filesChanged = resolveChangedFiles({
+    hookEvent, existing, effectiveCwd, refreshSubagent: finalSubagentStop,
+  });
 
   // Read settings.json only when SessionStart needs the fallback — every other
   // event preserves existing.effort, so disk reads on every PostToolUse would
@@ -279,7 +296,7 @@ function report(input) {
   if (changed) {
     entry.report_seq = reportSeq;
     const writeOpts = shouldGuardWrite(hookEvent, hasPendingTool)
-      ? { guardStates: STOP_STATES }
+      ? { guardStates: STOP_STATES, preserveGuardedState: finalSubagentStop }
       : {};
     writeState(sessionId, entry, undefined, writeOpts);
   }
@@ -307,4 +324,4 @@ function shouldGuardWrite(hookEvent, hasPendingTool) {
 }
 
 // Export for testing
-module.exports = { buildReportEntry, resolveStopState, shouldGuardWrite };
+module.exports = { buildReportEntry, resolveStopState, resolveChangedFiles, shouldGuardWrite };

@@ -48,24 +48,44 @@ inspects the diff. **Untracked only.** Never touch tracked or staged files.
 2. Show the user the list of files about to be deleted (one line each). If the
    list is empty, skip the rest of this phase.
 
-3. Delete them. For files: `rm -f <path>`. For directories: `rm -rf <path>`.
-   Run from the repo root.
+3. **Confirmation gate** — deletion is destructive and irreversible. Show the
+   user the exact list of paths about to be deleted (one line each) and ask
+   explicit permission before deleting. If the user declines, **skip deletion**
+   and proceed to Phase 3.
 
-4. Verify with `git status --porcelain` — none of the deletions should appear,
+   Any path outside the worktree root (absolute paths, `..` traversal) must be
+   rejected — fail this gate rather than delete.
+
+4. Delete the confirmed paths. For files: `rm -f <path>`. For directories:
+   `rm -rf <path>`. Run from the repo root.
+
+5. Verify with `git status --porcelain` — none of the deletions should appear,
    because every removed path was untracked. If any tracked file shows as
    deleted, **stop** and surface it to the user (something matched a tracked
    path; the patterns above are wrong for this repo).
 
-**Gate:** No matching untracked artifacts remain in the worktree, and `git
-status` shows no unexpected tracked-file deletions.
+**Gate:** Either the user confirmed and matching untracked artifacts were
+removed, or the user declined and the phase was skipped. `git status` shows no
+unexpected tracked-file deletions.
 
 ---
 
-### Phase 3: Refactor-cleaner pass on the branch diff
+### Phase 3: Conditional refactor-cleaner pass on the branch diff
 
-1. Spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo.
+Do not launch `refactor-cleaner` by default. First classify the diff from
+Phase 1:
+
+- **Skip cleaner:** docs/config-only changes, ≤3 simple files, or a diff that
+  has no debug output, unused imports, local duplication, or mechanical churn.
+  Do one inline scan of the changed-file list and continue.
+- **Use cleaner:** broad diffs, mixed-language changes, generated/manual churn,
+  obvious debug leftovers, or user-requested cleanup.
+
+1. If the cleaner is warranted, spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo. If the cleaner is not warranted, skip to step 4.
 2. If the cleaner edited files:
-   - Run `make test`. If it fails, fix the regression before continuing.
+   - Run the smallest relevant proof command for the edited files. Use full
+     `make test`/`make test-fast` only when the cleanup crossed package
+     boundaries or touched shared test/build infrastructure.
    - Commit: `git add -u && git commit -m "chore: ai-fmt"`.
 3. If the cleaner made no changes, skip the commit.
 
@@ -74,25 +94,26 @@ status` shows no unexpected tracked-file deletions.
 4. From the Phase 1 changed-file list, take only the test files this branch ADDED or MODIFIED — identify tests by their role, not a fixed extension list. Never consider pre-existing tests.
 5. Remove cases that exist only to scaffold the implementation and add no regression value: trivial assertions (constructor returns non-nil, plain getters/setters, framework behavior), placeholder / `assert true` stubs, and cases fully subsumed or duplicated by another retained test. **NEVER** remove a test that is the sole coverage of a behavior, branch, edge case, error path, or regression — if unsure the coverage is unique, keep it.
 6. Report each removed test, one line with its rationale (trivial / subsumed-by-X / duplicate).
-7. Run `make test` — must stay green. Commit the removals on their own: `git add -A && git commit -m "test: remove implementation-only tests"`.
+7. If tests were removed, run the smallest relevant proof command for those test files; use full `make test` only when coverage spans multiple packages or the proof cannot be bounded. Commit the removals on their own: `git add -A && git commit -m "test: remove implementation-only tests"`.
 8. If nothing qualifies, skip silently.
 
-**Gate:** Cleaner changes (if any) are committed and green; implementation-only tests are pruned in their own commit (or none qualified); no sole-coverage test was removed; `make test` passes.
+**Gate:** Cleaner ran only when warranted; cleaner changes (if any) are committed and green; implementation-only tests are pruned in their own commit (or none qualified); no sole-coverage test was removed.
 
 ---
 
-### Phase 4: `make fmt`
+### Phase 4: Format only when relevant
 
 Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 
-- **If the target exists:** run `make fmt`. Then check `git status --porcelain`. If anything changed, run `make test`, then commit with `git add -u && git commit -m "chore: fmt"`. If nothing changed, skip the commit.
-- **If no Makefile exists, or no `fmt` target:** surface this hint to the user, then proceed:
+- **If the target exists and the changed-file list includes formatter-owned source files:** run `make fmt`. Then check `git status --porcelain`. If anything changed, run the smallest relevant proof command, then commit with `git add -u && git commit -m "chore: fmt"`. If nothing changed, skip the commit.
+- **If `fmt` exists but the branch is docs/config-only or otherwise outside
+  formatter scope:** skip and note why.
+- **If no Makefile exists, or no `fmt` target:** do not add one during PR
+  cleanup unless the user explicitly asked. Use a language-native formatter
+  only when it is obvious and scoped to changed files; otherwise proceed and
+  note that no formatter gate exists.
 
-  > No `make fmt` target found in this repo. Recommend adding one — even a thin wrapper around the language-native formatter (`gofmt -w .`, `ruff format`, `prettier --write`, `cargo fmt`, etc.) is enough to make this gate work and keeps formatting deterministic across contributors. Want me to add it now? (Y/n)
-
-  If the user says yes, add the target *before* opening the PR (a separate `chore: add make fmt target` commit). If no, proceed without formatting.
-
-**Gate:** Either `make fmt` ran clean, or the user has been notified the target is missing.
+**Gate:** Formatting ran when relevant, or was explicitly skipped as out of scope/missing.
 
 ---
 
@@ -101,11 +122,10 @@ Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `test-fast` per the `test-gate` hook's preference order).
 
 - **If the target exists:** run it — must pass. If it fails, **stop**. Do not push a broken branch. Fix the failure (likely a separate `fix:` commit) and re-run.
-- **If no Makefile exists, or no `test`/`test-fast` target:** surface this hint to the user, then proceed:
-
-  > No `make test` target found in this repo. Recommend adding one (e.g. `test: ; <runner>`) so the PR gate can verify changes pass before opening the PR. Want me to add it now? (Y/n)
-
-  If yes, add it (separate `chore: add make test target` commit) and run it. If no, proceed but note in the PR body that tests were not gated.
+- **If no Makefile exists, or no `test`/`test-fast` target:** do not add one
+  during PR cleanup unless the user explicitly asked. Run an obvious native
+  project test command only if it is already documented/configured; otherwise
+  proceed and note in the PR body that tests were not gated.
 
 **Gate:** Either tests are green, or the user has been notified the target is missing and accepted that trade-off.
 
@@ -142,6 +162,6 @@ Compose the PR using **all** commits on the branch (not just the latest):
 ## Red Flags — STOP
 
 - "I'll just call `gh pr create` directly" → the hook will block you. Use the prefix.
-- "Skip the cleaner, the diff looks clean" → don't. The cleaner is the whole point of this skill.
+- "I'll spawn the cleaner for a tiny docs/config diff" → don't. The cleaner is for broad or messy diffs.
 - "Tests fail but my changes are unrelated" → fix or revert. Never push red.
 - "I'll bundle the fmt diff into the feature commit" → keep `chore: fmt` and `chore: ai-fmt` as their own commits; squash happens at merge.

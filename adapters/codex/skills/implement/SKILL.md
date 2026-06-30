@@ -1,7 +1,7 @@
 ---
 name: implement
-description: Dispatch each phase of an approved plan to a fresh subagent with TDD; re-invoke to resume
-when_to_use: when `$agent-dashboard:feature` (or `$agent-dashboard:fix`, `$agent-dashboard:refactor`, `$agent-dashboard:chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `$agent-dashboard:feature`), inline TDD on small features (also `$agent-dashboard:feature`), or non-code work.
+description: Dispatch each phase of an approved plan to a fresh subagent with proportional verification; re-invoke to resume
+when_to_use: when `$agent-dashboard:feature` (or `$agent-dashboard:fix`, `$agent-dashboard:refactor`, `$agent-dashboard:chore`) has produced a plan with a `## Phases` block and the user opted into dispatch at the probe. Also the resume primitive — re-invoke on a partially-done worktree to pick up at the first pending phase. NOT for fresh features (use `$agent-dashboard:feature`), inline implementation on small features (also `$agent-dashboard:feature`), or non-code work.
 disable-model-invocation: true
 effort: max
 ---
@@ -10,7 +10,7 @@ effort: max
 1. Cwd must match `.../worktrees/<app>/<name>`. Halt with a clear error otherwise — this skill runs only inside a feature worktree.
 2. Read `.feature-plan-path` first; fall back to a plan-file search only if the sentinel file is missing.
 3. Dispatch each pending `- [ ]` phase to a fresh `spawn_agent` with role `worker`. Strictly sequential — never overlap phases.
-4. After each phase: `make test` must pass AND `git log --oneline <prev-sha>..HEAD` must show exactly one new commit. Halt on either failure.
+4. After each phase: the phase's Verification profile proof must pass AND `git log --oneline <prev-sha>..HEAD` must show exactly one new commit. Halt on either failure.
 5. When marking a phase done, flip only the `- [ ]` → `- [x]` checklist line. Never edit the `### Phase X:` body.
 6. Every `spawn_agent` call must be followed by `wait_agent`.
 </codex_skill_must>
@@ -24,6 +24,8 @@ Opt-in. Invoked after `$agent-dashboard:feature` (or a sibling task skill) probe
 Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
 
 If a dispatched phase touches browser UI, Playwright, dev-server ports, screenshots, or interactive Browser/Chrome inspection, include `../_shared/ui-automation.md` in the subagent context and pass the resolved worktree-local UI resources explicitly.
+
+Include `../_shared/verification-profiles.md` in every subagent prompt so Verification profile names remain defined even when agent-dashboard is installed without external core rules.
 
 ---
 
@@ -51,17 +53,19 @@ If a dispatched phase touches browser UI, Playwright, dev-server ports, screensh
 
 ### Phase 2: Dispatch loop
 
-Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent, verify tests, flip the checkbox. Resume is implicit — phases marked `[x]` are skipped.
+Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent, verify the phase's declared proof command, flip the checkbox. Resume is implicit — phases marked `[x]` are skipped.
 
 1. **Parse the checklist.** Read the plan file (from Phase 1). Extract each `- [ ]` / `- [x]` line under `## Phases`, with its `**Phase X: name**` identifier and deps.
 
-2. **Halt if no `## Phases` block.** The user opted into `$agent-dashboard:implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `$agent-dashboard:feature`, or return to `$agent-dashboard:feature` for inline TDD." Halt.
+2. **Halt if no `## Phases` block.** The user opted into `$agent-dashboard:implement` on a plan without phase structure. Surface: "Plan has no `## Phases` block. Either restructure it using the phase format described in `$agent-dashboard:feature`, or return to `$agent-dashboard:feature` for inline implementation." Halt.
 
 3. **Pick the next pending phase** (`- [ ]`) in checklist order. If all phases are `[x]`, skip to Phase 3.
 
 4. **Slice the phase body.** Find the matching `### Phase X: name` heading; capture through the next `### ` heading or end-of-file. This is the dispatch unit.
 
    If the phase body mentions UI automation, browser testing, Playwright, screenshots, or interactive inspection, also read `../_shared/ui-automation.md` and include its relevant rules in the subagent prompt.
+
+   Always read `../_shared/verification-profiles.md` and include its relevant rules in the subagent prompt.
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
@@ -75,7 +79,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
    ```
 
 7. **Verify** when the subagent returns:
-   - `make test` in the worktree → must pass. On failure, surface output verbatim.
+   - Run the phase's Verification profile proof command from the plan. If the phase omitted one, default to Targeted and choose the smallest relevant package/test command from the changed files; use full `make test`/`make test-fast` only when the phase is Full or the risk cannot be bounded. On failure, surface output verbatim.
    - `git log --oneline <prev-sha>..HEAD` → must show exactly one new commit. Zero: subagent didn't commit; halt. Multiple: surface and ask the user to inspect.
    - On any failure, call `request_user_input` when available with options `["Retry the phase", "Skip and mark done anyway", "Abort the loop"]`. If unavailable, ask one concise direct question with those choices.
 
@@ -86,7 +90,7 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 9. **Loop** to step 3.
 
-**Gate:** All phases in the `## Phases` checklist are marked `- [x]` and `make test` is green.
+**Gate:** All phases in the `## Phases` checklist are marked `- [x]` and each phase's declared proof command is green.
 
 #### Subagent prompt template (verbatim, with `{placeholders}` filled in)
 
@@ -103,9 +107,9 @@ Phase scope (the only section you should implement):
 <<<end-phase-body>>>
 
 Rules:
-1. Strict TDD: RED → GREEN → REFACTOR. Run `make test` between each step.
+1. Follow the phase's Verification profile using active AGENTS.md/core instructions when present and the included verification-profile glossary as the standalone fallback. Execute the named proof command, avoid implementation-only tests, and use full `make test` only for Full phases or when the phase risk cannot be bounded.
 2. Implement ONLY this phase. Do not touch files outside this phase's declared scope.
-3. After GREEN + REFACTOR pass, commit with:
+3. After the profile proof passes, commit with:
      git commit -m "feat({phase-id-kebab}): <one-line description>"
 4. Do NOT modify the plan file. Do NOT update checkboxes — the orchestrator owns that.
 5. If the phase is ambiguous or blocked, STOP and report a question instead of guessing.
@@ -113,7 +117,7 @@ Rules:
 
 Report back with:
 - Commit SHA
-- Test status (pass/fail + key output line)
+- Verification profile and proof status (pass/fail + key output line)
 - Files changed (paths)
 - Anything unexpected
 ```
@@ -161,6 +165,6 @@ The plan file's checkbox state is the source of truth — the orchestrator's in-
 Failure modes the MUST block doesn't already cover:
 
 - "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially; a later phase may depend on an earlier one's commit.
-- "The subagent's tests failed but the diff looks fine, I'll move on" → halt and surface to the user.
+- "The subagent's proof command failed but the diff looks fine, I'll move on" → halt and surface to the user.
 - "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `$agent-dashboard:pr`.
-- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `$agent-dashboard:feature` for inline TDD.
+- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `$agent-dashboard:feature` for inline implementation.

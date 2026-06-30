@@ -4,7 +4,12 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildReportEntry, resolveStopState, shouldGuardWrite } = require('./agent-state-reporter');
+const {
+  buildReportEntry,
+  resolveStopState,
+  resolveChangedFiles,
+  shouldGuardWrite,
+} = require('./agent-state-reporter');
 const { detectState } = require('./packages/agent-state/detect');
 
 const BASE_INPUT = {
@@ -358,6 +363,65 @@ describe('SubagentStop state handling', () => {
 
     assert.equal(entry.state, 'running', 'should stay running with active subagents');
     assert.equal(entry.subagent_count, 2);
+  });
+});
+
+describe('resolveChangedFiles', () => {
+  it('reuses cached file changes on subagent start and non-final stop events', () => {
+    const cached = ['M adapters/codex/skills/feature/SKILL.md'];
+    const getter = () => {
+      throw new Error('git diff should not run for subagent lifecycle snapshots');
+    };
+
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'SubagentStart',
+      existing: { files_changed: cached },
+      effectiveCwd: '/repo',
+      getChangedFilesFn: getter,
+    }), cached);
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'SubagentStop',
+      existing: { files_changed: cached },
+      effectiveCwd: '/repo',
+      refreshSubagent: false,
+      getChangedFilesFn: getter,
+    }), cached);
+  });
+
+  it('refreshes file changes on settled lifecycle events', () => {
+    const getter = cwd => [`refreshed:${cwd}`];
+
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'SessionStart',
+      existing: { files_changed: ['old'] },
+      effectiveCwd: '/repo',
+      getChangedFilesFn: getter,
+    }), ['refreshed:/repo']);
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'Stop',
+      existing: { files_changed: ['old'] },
+      effectiveCwd: '/repo',
+      getChangedFilesFn: getter,
+    }), ['refreshed:/repo']);
+  });
+
+  it('refreshes subagent file changes when no cache exists', () => {
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'SubagentStart',
+      existing: {},
+      effectiveCwd: '/repo',
+      getChangedFilesFn: () => ['fresh'],
+    }), ['fresh']);
+  });
+
+  it('refreshes final subagent stop file changes', () => {
+    assert.deepEqual(resolveChangedFiles({
+      hookEvent: 'SubagentStop',
+      existing: { files_changed: ['old'] },
+      effectiveCwd: '/repo',
+      refreshSubagent: true,
+      getChangedFilesFn: cwd => [`fresh:${cwd}`],
+    }), ['fresh:/repo']);
   });
 });
 
