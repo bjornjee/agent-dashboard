@@ -309,6 +309,21 @@ describe('codex plugin package', () => {
         /claim-worktree\.js/,
         `${skillName} must explicitly run the JS claim script after entering the worktree`,
       );
+      assert.doesNotMatch(
+        text,
+        /\$HOME\/\.codex\/hooks/,
+        `${skillName} must not depend on a global ~/.codex/hooks install`,
+      );
+      assert.match(
+        text,
+        /\$\{PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT:-/,
+        `${skillName} must prefer plugin root env vars before cache fallback`,
+      );
+      assert.match(
+        text,
+        /plugins\/cache\/agent-dashboard\/agent-dashboard/,
+        `${skillName} must fall back to the standalone Codex plugin cache`,
+      );
       assert.match(
         text,
         new RegExp(`git worktree add -b ${branchPrefix}/<name> \\.\\./worktrees/<app>/<name> main`),

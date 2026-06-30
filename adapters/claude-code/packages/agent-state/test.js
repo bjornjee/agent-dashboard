@@ -476,6 +476,32 @@ describe('writeState report_seq ordering', () => {
     assert.equal(state.state, 'idle_prompt', 'seq alone (no guard) must reject the stale running');
   });
 
+  it('merges older preserved guarded-state metadata without moving report_seq backward', () => {
+    const sessionId = 'sess-seq-older-preserve';
+    writeState(sessionId, {
+      target: 'a:0.1',
+      session_id: sessionId,
+      state: 'idle_prompt',
+      report_seq: 5000,
+      subagent_count: 1,
+      files_changed: ['old'],
+    }, agentsDir);
+
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
+    writeState(sessionId, {
+      state: 'running',
+      report_seq: 4999,
+      subagent_count: 0,
+      files_changed: ['fresh'],
+    }, agentsDir, { guardStates, preserveGuardedState: true });
+
+    const state = readAgentState(sessionId, agentsDir);
+    assert.equal(state.state, 'idle_prompt', 'guarded stop state must remain authoritative');
+    assert.equal(state.report_seq, 5000, 'older metadata refresh must not move report_seq backward');
+    assert.equal(state.subagent_count, 0, 'final subagent metadata should still merge');
+    assert.deepEqual(state.files_changed, ['fresh'], 'fresh final file changes should still merge');
+  });
+
   it('allows a write with an equal report_seq (not strictly older)', () => {
     const sessionId = 'sess-seq-equal';
     writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'running', report_seq: 100 }, agentsDir);

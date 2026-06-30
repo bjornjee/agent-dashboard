@@ -98,6 +98,9 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
   withFileLock(filePath, () => {
     const existing = readAgentState(sessionId, agentsDir) || {};
 
+    const guardHit = opts.guardStates && opts.guardStates.has(existing.state);
+    const preserveGuardedState = guardHit && opts.preserveGuardedState;
+
     // Primary ordering authority: reject a strictly-older report_seq so a stale
     // write that lands late (e.g. a delayed PostToolUse->running arriving after
     // Stop->idle_prompt) can never clobber a newer one. report_seq is a scaled
@@ -106,16 +109,15 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
     // future on-disk seq is ignored (self-healing) so a corrupt file or clock
     // jump can't freeze writes. Equal seqs and un-seq'd writes fall through to
     // the guardStates backstop below.
-    if (
+    const staleReportSeq = (
       Number.isFinite(update.report_seq) &&
       Number.isFinite(existing.report_seq) &&
       existing.report_seq <= Date.now() * 1000 + REPORT_SEQ_FUTURE_SLACK &&
       update.report_seq < existing.report_seq
-    ) {
+    );
+    if (staleReportSeq && !preserveGuardedState) {
       return;
     }
-
-    const guardHit = opts.guardStates && opts.guardStates.has(existing.state);
 
     // Backstop: skip write if current on-disk state is protected. Catches
     // equal-seq ties and un-seq'd writes. Runs INSIDE the lock so the check sees
@@ -128,7 +130,8 @@ function writeState(sessionId, update, agentsDir = DEFAULT_AGENTS_DIR, opts = {}
     const merged = {
       ...existing,
       ...update,
-      ...(guardHit ? { state: existing.state } : {}),
+      ...(preserveGuardedState ? { state: existing.state } : {}),
+      ...(staleReportSeq ? { report_seq: existing.report_seq } : {}),
       updated_at: new Date().toISOString(),
     };
 
