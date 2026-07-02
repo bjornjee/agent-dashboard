@@ -734,6 +734,76 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Cmd+K agent-search palette
+	if m.mode == modeSearch {
+		switch key {
+		case "esc":
+			m.closeSearch()
+			m.updateLeftContent()
+			m.updateRightContent()
+			return m, m.loadSelectionData()
+		case "ctrl+c":
+			return m, tea.Quit
+		case "ctrl+o":
+			m.searchOrphanOnly = !m.searchOrphanOnly
+			m.buildTree()
+			m.selectFirstResult()
+			m.updateLeftContent()
+			m.updateRightContent()
+			return m, m.loadSelectionData()
+		case "up", "ctrl+p":
+			m.moveSearchSelection(-1)
+			m.updateLeftContent()
+			m.updateRightContent()
+			return m, m.loadSelectionData()
+		case "down", "ctrl+n":
+			m.moveSearchSelection(1)
+			m.updateLeftContent()
+			m.updateRightContent()
+			return m, m.loadSelectionData()
+		case "enter":
+			agent := m.selectedAgent()
+			var selected domain.Agent
+			resume := false
+			if agent != nil {
+				selected = *agent
+				resume = m.isOrphan(selected)
+			}
+			m.closeSearch()
+			if agent == nil {
+				m.updateLeftContent()
+				m.updateRightContent()
+				return m, nil
+			}
+			if !m.tmuxAvailable {
+				m.setStatus("Cannot resume/jump: tmux not detected", true)
+				return m, nil
+			}
+			if resume {
+				// The orphan's pane is dead — re-spawn its session instead of
+				// jumping to a pane that no longer exists.
+				m.setStatus("Resuming session…", false)
+				return m, resumeSession(selected, m.agents, m.selfPaneID, m.cfg.Profile, m.cfg.Settings)
+			}
+			// Live agent — confirm jump, mirroring normal-mode Enter.
+			m.mode = modeConfirmJump
+			m.confirmEnteredAt = time.Now()
+			m.confirmJumpPaneID = selected.TmuxPaneID
+			m.statusMsg = "Jump to agent? (y/Enter to confirm, Esc to cancel)"
+			m.statusMsgTick = -1
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.searchText = m.searchInput.Value()
+			m.buildTree()
+			m.selectFirstResult()
+			m.updateLeftContent()
+			m.updateRightContent()
+			return m, tea.Batch(cmd, m.loadSelectionData())
+		}
+	}
+
 	// Diff viewer mode
 	if m.diffVisible {
 		// Filter input active — forward keys to text input
@@ -868,6 +938,17 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q", "ctrl+c":
 		return m, tea.Quit
+	case "/":
+		// Open the Cmd+K-style agent-search palette.
+		m.mode = modeSearch
+		m.searchText = ""
+		m.searchOrphanOnly = false
+		m.searchInput.Reset()
+		m.buildTree()
+		m.selectFirstResult()
+		m.updateLeftContent()
+		m.updateRightContent()
+		return m, m.searchInput.Focus()
 	case "up", "k":
 		if m.selected > 0 {
 			m.saveCurrentCache()

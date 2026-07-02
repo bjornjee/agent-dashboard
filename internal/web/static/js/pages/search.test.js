@@ -10,6 +10,7 @@ const path = require('node:path');
 let highlightMatched;
 let searchAgents;
 let searchTagClass;
+let resumableBadge;
 
 test('load module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'search.js')).href;
@@ -17,9 +18,11 @@ test('load module', async () => {
   highlightMatched = mod.highlightMatched;
   searchAgents = mod.searchAgents;
   searchTagClass = mod.searchTagClass;
+  resumableBadge = mod.resumableBadge;
   assert.equal(typeof highlightMatched, 'function');
   assert.equal(typeof searchAgents, 'function');
   assert.equal(typeof searchTagClass, 'function');
+  assert.equal(typeof resumableBadge, 'function');
 });
 
 test('highlightMatched wraps matched chars in <strong>', () => {
@@ -82,6 +85,39 @@ test('searchAgents matches against repo name and branch', () => {
   const byRepo = searchAgents(agents, 'wrk', 50);
   assert.equal(byRepo.length, 1);
   assert.equal(byRepo[0].item.session_id, '3');
+});
+
+test('searchAgents matches cwd and last message preview', () => {
+  const agents = [
+    { session_id: '1', cwd: '/home/u/alpha', branch: 'main', last_message_preview: 'fix the auth flow' },
+    { session_id: '2', cwd: '/home/u/beta', branch: 'main', last_message_preview: 'add search' },
+  ];
+  // "auth" appears only in agent 1's last_message_preview.
+  const byPreview = searchAgents(agents, 'auth', 50);
+  assert.equal(byPreview.length, 1);
+  assert.equal(byPreview[0].item.session_id, '1');
+  // "beta" appears in agent 2's cwd path.
+  const byCwd = searchAgents(agents, 'beta', 50);
+  assert.equal(byCwd[0].item.session_id, '2');
+});
+
+test('searchAgents orphanOnly filters to resumable agents', () => {
+  const agents = [
+    { session_id: '1', cwd: '/home/u/alpha', resumable: true },
+    { session_id: '2', cwd: '/home/u/beta' },
+    { session_id: '3', cwd: '/home/u/gamma', resumable: true },
+  ];
+  const res = searchAgents(agents, '', 50, true);
+  const ids = res.map((r) => r.item.session_id).sort();
+  assert.deepEqual(ids, ['1', '3'], 'only resumable agents survive orphanOnly');
+  // Without the flag, all agents are searchable.
+  assert.equal(searchAgents(agents, '', 50, false).length, 3);
+});
+
+test('resumableBadge renders a pill only for resumable agents', () => {
+  assert.ok(resumableBadge({ resumable: true }).toLowerCase().includes('resumable'));
+  assert.equal(resumableBadge({ resumable: false }), '');
+  assert.equal(resumableBadge({}), '');
 });
 
 test('searchAgents respects max cap', () => {

@@ -263,7 +263,23 @@ func (m model) agentListContentWithLine() (string, int) {
 	var lines []string
 	selectedLine := -1
 
+	// Palette search bar pinned to the top while modeSearch is active. Since it
+	// prepends to `lines`, the later `selectedLine = len(lines)` stays correct.
+	if m.mode == modeSearch {
+		label := "search"
+		if m.searchOrphanOnly {
+			label = "resumable"
+		}
+		lines = append(lines, "  "+renderWrappedInput(m.searchInput.Value(), m.searchInput.Position(), m.rightWidth-4, true, '/', nil, "  "))
+		lines = append(lines, "  "+lipgloss.NewStyle().Foreground(themeOverlay1).Render(label+" · ctrl+o orphaned · enter resume/jump · esc close"))
+		lines = append(lines, "")
+	}
+
 	if len(m.treeNodes) == 0 {
+		if m.mode == modeSearch {
+			lines = append(lines, "  "+lipgloss.NewStyle().Foreground(themeOverlay1).Render("No matching agents"))
+			return strings.Join(lines, "\n"), -1
+		}
 		if !m.startupDone {
 			lines = append(lines, "  "+m.startupSpinner.View()+" Reticulating splines...")
 		} else {
@@ -1732,6 +1748,7 @@ func buildHelpSections(ghAvailable bool) []helpSection {
 			{"e", "Open editor"},
 			{"o", "Open dir in tmux window"},
 			{"a", "Create new session"},
+			{"/", "Search / resume agents"},
 			{"x", "Close/dismiss agent"},
 			{"m", mergeDesc},
 			{"c", "Collapse/expand subagents"},

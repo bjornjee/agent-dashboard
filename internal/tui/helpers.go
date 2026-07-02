@@ -202,6 +202,9 @@ func harnessBadgeToken(harness string, selected bool) string {
 // rendered in the full harness color (selected) or dimmed (unselected).
 func agentBadges(agent domain.Agent, selected bool) string {
 	parts := []string{harnessBadgeToken(agent.Harness, selected)}
+	if agent.Resumable {
+		parts = append(parts, lipgloss.NewStyle().Foreground(themePeach).Render("⏏ resumable"))
+	}
 	if agent.PermissionMode != "" && agent.PermissionMode != "default" {
 		parts = append(parts, permissionModeStyle(agent.PermissionMode))
 	}

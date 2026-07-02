@@ -244,6 +244,16 @@ window.Dashboard = {
     navigateTo('detail', id, true);
   },
 
+  // resumeAgent re-spawns a restart-survivor (orphaned) agent on its existing
+  // session in a fresh tmux pane. Invoked from the Cmd+K palette when the
+  // selected result is a dead-pane resumable orphan (jumping would target a
+  // pane that no longer exists).
+  async resumeAgent(id) {
+    const result = await post('/api/agents/' + encodeURIComponent(id) + '/resume');
+    if (result && result.ok) toast('Resumed session', 'success');
+    else toast('Resume failed: ' + (result?.error || 'unknown'), 'error');
+  },
+
   // Programmatic tab switch — used by the chat plan-link card so it
   // can jump to the Plan tab without simulating a click event handler.
   // Mirrors the inline behaviour of the .detail-tabs__tab click listener.

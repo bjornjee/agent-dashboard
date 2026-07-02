@@ -3900,6 +3900,30 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   color: var(--accent-indigo);
   background: color-mix(in srgb, var(--accent-indigo) 14%, transparent);
 }
+/* Orphaned-only filter chip in the palette header. */
+.search-overlay__filter {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-default);
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.search-overlay__filter:hover { color: var(--text-primary); }
+.search-overlay__filter--on {
+  color: var(--accent-amber);
+  background: color-mix(in srgb, var(--accent-amber) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-amber) 40%, transparent);
+}
+/* "resumable" pill on restart-survivor orphan rows. */
+.search-overlay__tag--resumable {
+  color: var(--accent-amber);
+  background: color-mix(in srgb, var(--accent-amber) 14%, transparent);
+}
 .search-overlay__empty {
   padding: 24px;
   text-align: center;

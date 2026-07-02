@@ -80,6 +80,13 @@ type Agent struct {
 	// JSONL schema is used per agent. Written by SessionStart hooks.
 	Harness string `json:"harness,omitempty"`
 
+	// Resumable is true when this agent is a restart-survivor whose tmux pane
+	// is dead but whose session can be continued (see state.IsResumableOrphan).
+	// Computed transiently at read time from the live-pane set; never written by
+	// hooks (omitempty keeps it out of persisted files). Surfaced to the web
+	// frontend so the Cmd+K palette can mark and resume orphaned agents.
+	Resumable bool `json:"resumable,omitempty"`
+
 	// TrustPromptDetected is true when the web dashboard's post-spawn
 	// poller has seen a harness folder-trust dialog in the agent's pane
 	// buffer and the user has not yet accepted it. Lives in-memory on
