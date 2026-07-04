@@ -18,6 +18,13 @@ type Harness interface {
 	// tmux new-window / split-window as the pane's initial process.
 	SpawnCommand(skill, message string, opts SpawnOpts) string
 
+	// Models returns this harness's fixed model list, newest/most-capable
+	// first. The empty string is represented by SpawnOpts.Model, not this list.
+	Models() []string
+
+	// EffortLevels returns the valid effort levels for this harness.
+	EffortLevels() []string
+
 	// SessionsDir returns the directory where this harness writes session
 	// logs (used for usage/billing parsing).
 	SessionsDir() string
@@ -31,9 +38,12 @@ type Harness interface {
 // Fields that don't apply to a given harness are ignored.
 type SpawnOpts struct {
 	DefaultEffort string // claude + codex
-	Model         string // codex: e.g. "gpt-5.5"
-	Approval      string // codex only: "never" | "untrusted" | "on-request"
-	Sandbox       string // codex only: "danger-full-access" | "workspace-write" | ...
+	// Effort is an explicit per-spawn override. When non-empty it applies to
+	// every spawn without the skill gate; DefaultEffort keeps its gated semantics.
+	Effort   string // claude + codex
+	Model    string // claude + codex
+	Approval string // codex only: "never" | "untrusted" | "on-request"
+	Sandbox  string // codex only: "danger-full-access" | "workspace-write" | ...
 
 	// ResumeSessionID, when non-empty, switches codex's spawn to
 	// `codex resume <sid>` and drops other per-session flags (codex

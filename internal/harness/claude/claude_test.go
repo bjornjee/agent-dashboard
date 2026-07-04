@@ -1,6 +1,7 @@
 package claude_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
@@ -36,6 +37,10 @@ func TestClaude_SpawnCommand(t *testing.T) {
 		{"feature with message", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high"}, "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/feature add login'"},
 		{"custom default effort", "feature", "", domain.SpawnOpts{DefaultEffort: "medium"}, "CLAUDE_CODE_EFFORT_LEVEL=medium claude --effort medium '/feature'"},
 		{"empty default effort omits flag", "feature", "", domain.SpawnOpts{}, "claude '/feature'"},
+		{"explicit effort applies to non-opted skill", "chore", "", domain.SpawnOpts{Effort: "low"}, "CLAUDE_CODE_EFFORT_LEVEL=low claude --effort low '/chore'"},
+		{"explicit effort wins over default effort", "feature", "", domain.SpawnOpts{DefaultEffort: "high", Effort: "minimal"}, "CLAUDE_CODE_EFFORT_LEVEL=minimal claude --effort minimal '/feature'"},
+		{"model flag", "", "", domain.SpawnOpts{Model: "sonnet"}, "claude --model 'sonnet'"},
+		{"model and effort compose", "chore", "ship it", domain.SpawnOpts{Model: "opus", Effort: "high"}, "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high --model 'opus' '/chore ship it'"},
 	}
 
 	h := claude.New(domain.AgentProfile{Command: "claude"})
@@ -78,7 +83,7 @@ func TestClaude_SpawnCommand_Resume(t *testing.T) {
 		want    string
 	}{
 		{"bare resume", "", "", domain.SpawnOpts{ResumeSessionID: "abc"}, "claude --resume 'abc'"},
-		{"resume ignores skill/message/effort", "feature", "do the thing", domain.SpawnOpts{DefaultEffort: "high", ResumeSessionID: "sess-123"}, "claude --resume 'sess-123'"},
+		{"resume ignores skill/message/effort/model", "feature", "do the thing", domain.SpawnOpts{DefaultEffort: "high", Effort: "low", Model: "opus", ResumeSessionID: "sess-123"}, "claude --resume 'sess-123'"},
 		{"resume quotes special chars", "", "", domain.SpawnOpts{ResumeSessionID: "a'b"}, "claude --resume 'a'\\''b'"},
 	}
 	for _, tc := range tests {
@@ -90,11 +95,25 @@ func TestClaude_SpawnCommand_Resume(t *testing.T) {
 	}
 }
 
-func TestClaude_SpawnCommand_IgnoresCodexModel(t *testing.T) {
+func TestClaude_SpawnCommand_EmitsModel(t *testing.T) {
 	h := claude.New(domain.AgentProfile{Command: "claude"})
-	got := h.SpawnCommand("feature", "", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5"})
-	want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high '/feature'"
+	got := h.SpawnCommand("feature", "", domain.SpawnOpts{DefaultEffort: "high", Model: "sonnet"})
+	want := "CLAUDE_CODE_EFFORT_LEVEL=high claude --effort high --model 'sonnet' '/feature'"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestClaude_Capabilities(t *testing.T) {
+	h := claude.New(domain.AgentProfile{Command: "claude"})
+
+	wantModels := []string{"fable", "opus", "sonnet", "haiku"}
+	if got := h.Models(); !slices.Equal(got, wantModels) {
+		t.Errorf("Models() = %v, want %v", got, wantModels)
+	}
+
+	wantEfforts := []string{"minimal", "low", "medium", "high", "max"}
+	if got := h.EffortLevels(); !slices.Equal(got, wantEfforts) {
+		t.Errorf("EffortLevels() = %v, want %v", got, wantEfforts)
 	}
 }

@@ -38,6 +38,28 @@ export function formatFolderLabel(p) {
   return b || 'Work in a project';
 }
 
+// Replace a <select>'s options with a leading default entry (value "")
+// followed by `values`, preserving the prior selection when still present.
+// Pure DOM manipulation with no closure state — exported for unit tests.
+export function replaceSelectOptions(sel, values, defaultLabel) {
+  if (!sel || !Array.isArray(values)) return;
+  const prev = sel.value;
+  while (sel.options.length > 0) sel.remove(0);
+  const def = document.createElement('option');
+  def.value = '';
+  def.textContent = defaultLabel;
+  sel.appendChild(def);
+  let restored = prev === '';
+  for (const v of values) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+    if (v === prev) restored = true;
+  }
+  sel.value = restored ? prev : '';
+}
+
 const SEND_ARROW = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
 const CHEVRON_DOWN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 
@@ -108,6 +130,18 @@ export function renderCreate(app, agents) {
               </select>
               ${CHEVRON_DOWN}
             </label>
+            <label class="create-composer__pill" title="Model — override this agent's model for one spawn.">
+              <select id="create-model" aria-label="Model — override this agent's model for one spawn">
+                <option value="">Default</option>
+              </select>
+              ${CHEVRON_DOWN}
+            </label>
+            <label class="create-composer__pill" title="Effort — override this agent's thinking effort for one spawn.">
+              <select id="create-effort" aria-label="Effort — override this agent's thinking effort for one spawn">
+                <option value="">Default</option>
+              </select>
+              ${CHEVRON_DOWN}
+            </label>
           </div>
           <div class="create-composer__trail">
             <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn (Cmd/Ctrl+Enter)" title="Spawn (Cmd/Ctrl+Enter)" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
@@ -122,6 +156,8 @@ export function renderCreate(app, agents) {
 
   const skillSel = document.getElementById('create-skill');
   const harnessSel = document.getElementById('create-harness');
+  const modelSel = document.getElementById('create-model');
+  const effortSel = document.getElementById('create-effort');
 
   // Different harnesses have different plugin caches and block-lists.
   // Refetch when the harness changes so the dropdown matches what the
@@ -146,9 +182,21 @@ export function renderCreate(app, agents) {
     });
   }
 
+  function reloadHarnessOptions(harness) {
+    const url = harness ? `/api/harness-options?harness=${encodeURIComponent(harness)}` : '/api/harness-options';
+    return get(url).then(options => {
+      replaceSelectOptions(modelSel, options && options.models, 'Default');
+      replaceSelectOptions(effortSel, options && options.efforts, 'Default');
+    }).catch(() => {}); // failed fetch keeps the current options usable
+  }
+
   reloadSkillsForHarness(harnessSel ? harnessSel.value : '');
+  reloadHarnessOptions(harnessSel ? harnessSel.value : '');
   if (harnessSel) {
-    harnessSel.addEventListener('change', () => reloadSkillsForHarness(harnessSel.value));
+    harnessSel.addEventListener('change', () => {
+      reloadSkillsForHarness(harnessSel.value);
+      reloadHarnessOptions(harnessSel.value);
+    });
   }
 
   get('/api/suggestions').then(suggestions => {

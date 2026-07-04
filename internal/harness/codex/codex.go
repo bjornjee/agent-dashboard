@@ -48,6 +48,16 @@ func New(cfg Config) *Codex {
 // Name implements domain.Harness.
 func (c *Codex) Name() string { return "codex" }
 
+// Models implements domain.Harness.
+func (c *Codex) Models() []string {
+	return []string{"gpt-5.5", "gpt-5.4", "gpt-5.3-codex-spark"}
+}
+
+// EffortLevels implements domain.Harness.
+func (c *Codex) EffortLevels() []string {
+	return []string{"minimal", "low", "medium", "high"}
+}
+
 // SessionsDir implements domain.Harness.
 func (c *Codex) SessionsDir() string { return c.cfg.SessionsDir }
 
@@ -61,8 +71,14 @@ func (c *Codex) SpawnCommand(skill, message string, opts domain.SpawnOpts) strin
 	}
 
 	cmd := c.cfg.Command
-	if _, opted := effortOptedSkills[skill]; opted && opts.DefaultEffort != "" {
-		cmd += " -c model_reasoning_effort=" + mapEffort(opts.DefaultEffort)
+	effort := opts.Effort
+	if effort == "" {
+		if _, opted := effortOptedSkills[skill]; opted {
+			effort = opts.DefaultEffort
+		}
+	}
+	if effort != "" {
+		cmd += " -c model_reasoning_effort=" + mapEffort(effort)
 	}
 	if opts.Model != "" {
 		cmd += " --model " + shellQuote(opts.Model)

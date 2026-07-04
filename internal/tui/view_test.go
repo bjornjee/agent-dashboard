@@ -915,6 +915,8 @@ func TestView_MouseModeNone_InTextInputModes(t *testing.T) {
 		{"createFolder", modeCreateFolder},
 		{"createHarness", modeCreateHarness},
 		{"createSkill", modeCreateSkill},
+		{"createModel", modeCreateModel},
+		{"createEffort", modeCreateEffort},
 		{"createMessage", modeCreateMessage},
 	}
 	for _, tt := range textInputModes {

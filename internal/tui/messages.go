@@ -131,6 +131,8 @@ const (
 	modeCreateFolder
 	modeCreateHarness // harness selection step of create wizard
 	modeCreateSkill   // skill selection step of create wizard
+	modeCreateModel   // model selection step of create wizard
+	modeCreateEffort  // effort selection step of create wizard
 	modeCreateMessage // message input step of create wizard
 	modeDinoGame      // full-screen dino runner game
 	modeDepsStatus    // full-screen deps status (gh / tmux / git / codex)

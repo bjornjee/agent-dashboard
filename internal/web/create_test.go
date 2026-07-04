@@ -48,6 +48,14 @@ func createTestServer(t *testing.T, agents ...domain.Agent) (*httptest.Server, s
 // before the server is built.
 func createTestServerWithCfg(t *testing.T, mutate func(*domain.Config), agents ...domain.Agent) (*httptest.Server, string) {
 	t.Helper()
+	srv, stateDir := createTestHandlerWithCfg(t, mutate, agents...)
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+	return ts, stateDir
+}
+
+func createTestHandlerWithCfg(t *testing.T, mutate func(*domain.Config), agents ...domain.Agent) (*Server, string) {
+	t.Helper()
 	cfg := config.DefaultConfig()
 	cfg.Profile.Command = "claude"
 	stateDir := t.TempDir()
@@ -65,9 +73,7 @@ func createTestServerWithCfg(t *testing.T, mutate func(*domain.Config), agents .
 	}
 
 	srv := NewServer(cfg, nil, ServerOptions{})
-	ts := httptest.NewServer(srv.Handler())
-	t.Cleanup(ts.Close)
-	return ts, stateDir
+	return srv, stateDir
 }
 
 func postCreate(t *testing.T, ts *httptest.Server, body string) *http.Response {
@@ -81,6 +87,16 @@ func postCreate(t *testing.T, ts *httptest.Server, body string) *http.Response {
 		t.Fatalf("POST /api/agents/create: %v", err)
 	}
 	return resp
+}
+
+func postCreateDirect(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req, _ := http.NewRequest("POST", "/api/agents/create", strings.NewReader(body))
+	req.Header.Set("X-Requested-With", "dashboard")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
 }
 
 func TestCreateNewWindow(t *testing.T) {
@@ -477,5 +493,76 @@ func TestCreate_HarnessUnknownIs400(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 	if !strings.Contains(body["error"], "unknown harness") {
 		t.Errorf("expected unknown-harness error, got %q", body["error"])
+	}
+}
+
+func TestCreate_RejectsUnknownModel(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+
+	folder := t.TempDir()
+	srv, _ := createTestHandlerWithCfg(t, nil)
+
+	resp := postCreateDirect(t, srv, `{"folder":"`+folder+`","model":"not-a-model","message":"hi"}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !strings.Contains(body["error"], "unknown model") {
+		t.Errorf("expected unknown-model error, got %q", body["error"])
+	}
+}
+
+func TestCreate_RejectsUnknownEffort(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+
+	folder := t.TempDir()
+	srv, _ := createTestHandlerWithCfg(t, nil)
+
+	resp := postCreateDirect(t, srv, `{"folder":"`+folder+`","effort":"extreme","message":"hi"}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !strings.Contains(body["error"], "unknown effort") {
+		t.Errorf("expected unknown-effort error, got %q", body["error"])
+	}
+}
+
+func TestCreate_ModelAndEffortOverrideSpawnCommand(t *testing.T) {
+	m := withMockTmuxRunner(t)
+	mockReadAgentState(m)
+
+	folder := t.TempDir()
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+	srv, _ := createTestHandlerWithCfg(t, nil, existingAgent)
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
+	resp := postCreateDirect(t, srv, `{"folder":"`+folder+`","model":"sonnet","effort":"low","message":"hi"}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	want := "CLAUDE_CODE_EFFORT_LEVEL=low claude --effort low --model 'sonnet' 'hi'"
+	if capturedCmd != want {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
 }

@@ -53,7 +53,7 @@ func (m *model) updateRightContent() {
 	// Override modes use the full panel height since they replace all three viewports.
 	// Normal mode restores the standard message viewport height.
 	panelHeight := m.height - 5 - m.bannerHeight() // matches resizeViewports
-	if m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") || (m.diagramsVisible && len(m.diagrams) > 0) {
+	if m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateModel || m.mode == modeCreateEffort || m.mode == modeCreateMessage || (m.planVisible && m.renderedPlan != "") || (m.diagramsVisible && len(m.diagrams) > 0) {
 		fullHeight := panelHeight - defaultHeaderLines - 1 // -1 for section label
 		if fullHeight < minMessageHeight {
 			fullHeight = minMessageHeight
@@ -156,6 +156,69 @@ func (m *model) updateRightContent() {
 		return
 	}
 
+	// Create model selection mode
+	if m.mode == modeCreateModel {
+		var lines []string
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Folder:  "+m.createFolder))
+		lines = append(lines, "  "+helpStyle.Render("Harness: "+m.createHarness))
+		sigil := harnessSigil(m.createHarness)
+		if m.createSkillName != "" {
+			lines = append(lines, "  "+helpStyle.Render("Skill:   "+string(sigil)+m.createSkillName))
+		}
+		lines = append(lines, "")
+		lines = append(lines, "  "+boldStyle.Render("Select model:"))
+		lines = append(lines, "")
+		for i, model := range m.availableModels {
+			prefix := "  "
+			if i == m.selectedCreateModel {
+				lines = append(lines, prefix+selectedStyle.Render(" "+model+" "))
+			} else {
+				lines = append(lines, prefix+helpStyle.Render(" "+model))
+			}
+		}
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc back │ ^C cancel"))
+		m.filesVP.SetContent("")
+		m.historyVP.SetContent("")
+		m.messageVP.SetContent(strings.Join(lines, "\n"))
+		return
+	}
+
+	// Create effort selection mode
+	if m.mode == modeCreateEffort {
+		var lines []string
+		lines = append(lines, "")
+		lines = append(lines, "  "+titleStyle.Render(" CREATE NEW SESSION "))
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Folder:  "+m.createFolder))
+		lines = append(lines, "  "+helpStyle.Render("Harness: "+m.createHarness))
+		sigil := harnessSigil(m.createHarness)
+		if m.createSkillName != "" {
+			lines = append(lines, "  "+helpStyle.Render("Skill:   "+string(sigil)+m.createSkillName))
+		}
+		lines = append(lines, "  "+helpStyle.Render("Model:   "+createOptionLabel(m.createModel)))
+		lines = append(lines, "")
+		lines = append(lines, "  "+boldStyle.Render("Select effort:"))
+		lines = append(lines, "")
+		for i, effort := range m.availableEfforts {
+			prefix := "  "
+			if i == m.selectedCreateEffort {
+				lines = append(lines, prefix+selectedStyle.Render(" "+effort+" "))
+			} else {
+				lines = append(lines, prefix+helpStyle.Render(" "+effort))
+			}
+		}
+		lines = append(lines, "")
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc back │ ^C cancel"))
+		m.filesVP.SetContent("")
+		m.historyVP.SetContent("")
+		m.messageVP.SetContent(strings.Join(lines, "\n"))
+		return
+	}
+
 	// Create message input mode
 	if m.mode == modeCreateMessage {
 		var lines []string
@@ -168,6 +231,8 @@ func (m *model) updateRightContent() {
 		if m.createSkillName != "" {
 			lines = append(lines, "  "+helpStyle.Render("Skill:   "+string(sigil)+m.createSkillName))
 		}
+		lines = append(lines, "  "+helpStyle.Render("Model:   "+createOptionLabel(m.createModel)))
+		lines = append(lines, "  "+helpStyle.Render("Effort:  "+createOptionLabel(m.createEffort)))
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Message:"))
 		lines = append(lines, "  "+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-4, true, sigil, m.availableSkills, "  "))
@@ -1059,7 +1124,7 @@ func (m model) View() tea.View {
 		v := tea.NewView(content)
 		v.AltScreen = true
 		switch m.mode {
-		case modeReply, modeCreateFolder, modeCreateHarness, modeCreateSkill, modeCreateMessage:
+		case modeReply, modeCreateFolder, modeCreateHarness, modeCreateSkill, modeCreateModel, modeCreateEffort, modeCreateMessage:
 			v.MouseMode = tea.MouseModeNone
 		default:
 			v.MouseMode = tea.MouseModeCellMotion
@@ -1189,7 +1254,7 @@ func (m model) renderRightPanel() string {
 	panelHeight := m.height - 5 - m.bannerHeight()
 
 	// Create wizard modes: simple form
-	if m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateMessage {
+	if m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateModel || m.mode == modeCreateEffort || m.mode == modeCreateMessage {
 		return borderStyle.
 			Width(m.rightWidth + 2).
 			Height(panelHeight + 2).
@@ -1453,7 +1518,7 @@ func (m model) modeBadge() string {
 		return badgeStyle.Foreground(questionColor).Render("-- JUMP? --")
 	case m.mode == modeConfirmDeleteDiagram:
 		return badgeStyle.Foreground(errorColor).Render("-- DELETE? --")
-	case m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateMessage:
+	case m.mode == modeCreateFolder || m.mode == modeCreateHarness || m.mode == modeCreateSkill || m.mode == modeCreateModel || m.mode == modeCreateEffort || m.mode == modeCreateMessage:
 		return badgeStyle.Foreground(themeSapphire).Render("-- CREATE --")
 	case m.mode == modeDinoGame:
 		return badgeStyle.Foreground(themeGreen).Render("-- DINO --")
@@ -1602,6 +1667,22 @@ func (m model) renderHelpBar() string {
 	}
 
 	if m.mode == modeCreateSkill {
+		parts = append(parts, boldStyle.Render("enter")+" select")
+		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
+		parts = append(parts, boldStyle.Render("esc")+" back")
+		parts = append(parts, boldStyle.Render("^c")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeCreateModel {
+		parts = append(parts, boldStyle.Render("enter")+" select")
+		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
+		parts = append(parts, boldStyle.Render("esc")+" back")
+		parts = append(parts, boldStyle.Render("^c")+" cancel")
+		return m.truncateHelpBar(parts)
+	}
+
+	if m.mode == modeCreateEffort {
 		parts = append(parts, boldStyle.Render("enter")+" select")
 		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
 		parts = append(parts, boldStyle.Render("esc")+" back")

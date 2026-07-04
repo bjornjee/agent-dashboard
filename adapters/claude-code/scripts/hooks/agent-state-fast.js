@@ -141,7 +141,7 @@ function effortTransition(existingMode, newMode) {
   if (off === '0' || off === 'off' || off === 'false') return null;
   if (!newMode) return null;
   if (existingMode !== 'plan' && newMode === 'plan') return readEffortConfig().plan;
-  if (existingMode === 'plan' && newMode !== 'plan') return readEffortConfig().default;
+  if (existingMode === 'plan' && newMode !== 'plan') return process.env.CLAUDE_CODE_EFFORT_LEVEL || readEffortConfig().default;
   return null;
 }
 

@@ -435,6 +435,8 @@ window.Dashboard = {
     const skill = document.getElementById('create-skill')?.value?.trim();
     const message = document.getElementById('create-message')?.value?.trim();
     const harness = document.getElementById('create-harness')?.value?.trim();
+    const model = document.getElementById('create-model')?.value?.trim();
+    const effort = document.getElementById('create-effort')?.value?.trim();
 
     if (!folder) {
       toast('Folder is required', 'error');
@@ -442,7 +444,7 @@ window.Dashboard = {
     }
 
     await withSpinner(evt, async () => {
-      const result = await post('/api/agents/create', { folder, skill, message, harness });
+      const result = await post('/api/agents/create', { folder, skill, message, harness, model, effort });
       if (result && result.ok) {
         toast('Agent created', 'success');
         navigateTo('list', null, true);

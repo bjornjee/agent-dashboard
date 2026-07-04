@@ -648,7 +648,7 @@ func validateFolder(path string) (string, error) {
 // message, and harness override. The wizard picks the harness; per-harness
 // settings (Codex.Model/Approval/Sandbox/effort) flow
 // through harness.SpawnOptsFor exactly like the web spawn path does.
-func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings, harnessName, skill, message string) tea.Cmd {
+func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings, harnessName, skill, message, model, effort string) tea.Cmd {
 	return func() tea.Msg {
 		absFolder, err := validateFolder(folder)
 		if err != nil {
@@ -671,7 +671,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// Build the spawn command via the harness so per-harness flags
 		// (claude --effort, codex --model/-a/-s) are added consistently
 		// across UIs.
-		opts := harness.SpawnOptsFor(h.Name(), settings)
+		opts := harness.SpawnOptsFor(h.Name(), settings, model, effort)
 		cmd := h.SpawnCommand(skill, message, opts)
 
 		newTarget, newPaneID, err := spawnCmdInWindow(agents, absFolder, selfPaneID, profile, cmd)
@@ -754,7 +754,7 @@ func resumeSession(agent domain.Agent, agents []domain.Agent, selfPaneID string,
 		if hErr != nil {
 			return createSessionMsg{err: hErr}
 		}
-		opts := harness.SpawnOptsFor(h.Name(), settings)
+		opts := harness.SpawnOptsFor(h.Name(), settings, "", "")
 		opts.ResumeSessionID = agent.SessionID
 		cmd := h.SpawnCommand("", "", opts)
 

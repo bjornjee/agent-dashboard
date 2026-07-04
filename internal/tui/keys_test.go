@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -537,37 +538,43 @@ func TestCreateWizard_SkillNavigation(t *testing.T) {
 	}
 }
 
-func TestCreateWizard_SkillToMessage(t *testing.T) {
+func TestCreateWizard_SkillToModel(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateSkill
 	m.availableSkills = []string{"(none)", "feature", "fix"}
 	m.selectedCreateSkill = 1 // "feature"
 	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeCreateMessage {
-		t.Errorf("expected modeCreateMessage, got %d", rm.mode)
+	if rm.mode != modeCreateModel {
+		t.Errorf("expected modeCreateModel, got %d", rm.mode)
 	}
 	if rm.createSkillName != "feature" {
 		t.Errorf("expected createSkillName=feature, got %q", rm.createSkillName)
 	}
+	wantModels := []string{"(default)", "fable", "opus", "sonnet", "haiku"}
+	if !slices.Equal(rm.availableModels, wantModels) {
+		t.Errorf("availableModels = %v, want %v", rm.availableModels, wantModels)
+	}
 }
 
-func TestCreateWizard_SkillNoneToMessage(t *testing.T) {
+func TestCreateWizard_SkillNoneToModel(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.mode = modeCreateSkill
 	m.availableSkills = []string{"(none)", "feature", "fix"}
 	m.selectedCreateSkill = 0 // "(none)"
+	m.createHarness = "claude"
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeCreateMessage {
-		t.Errorf("expected modeCreateMessage, got %d", rm.mode)
+	if rm.mode != modeCreateModel {
+		t.Errorf("expected modeCreateModel, got %d", rm.mode)
 	}
 	if rm.createSkillName != "" {
 		t.Errorf("expected empty createSkillName for (none), got %q", rm.createSkillName)
@@ -598,6 +605,8 @@ func TestCreateWizard_CtrlCFromSkillCancels(t *testing.T) {
 	m.mode = modeCreateSkill
 	m.createFolder = "/Users/test/repo"
 	m.selectedCreateSkill = 2
+	m.createModel = "sonnet"
+	m.createEffort = "high"
 
 	msg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	result, _ := m.handleKey(msg)
@@ -609,6 +618,171 @@ func TestCreateWizard_CtrlCFromSkillCancels(t *testing.T) {
 	if rm.createFolder != "" {
 		t.Errorf("expected createFolder reset, got %q", rm.createFolder)
 	}
+	if rm.createModel != "" || rm.createEffort != "" {
+		t.Errorf("expected model/effort reset, got %q/%q", rm.createModel, rm.createEffort)
+	}
+}
+
+func TestCreateWizard_ModelNavigationAndDefaultToEffort(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateModel
+	m.createHarness = "claude"
+	m.availableModels = []string{"(default)", "fable", "opus"}
+	m.selectedCreateModel = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	rm := result.(model)
+	if rm.selectedCreateModel != 1 {
+		t.Errorf("expected selectedCreateModel=1 after down, got %d", rm.selectedCreateModel)
+	}
+
+	rm.mode = modeCreateModel
+	result, _ = rm.handleKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	rm = result.(model)
+	if rm.selectedCreateModel != 0 {
+		t.Errorf("expected selectedCreateModel=0 after up, got %d", rm.selectedCreateModel)
+	}
+
+	rm.mode = modeCreateModel
+	result, _ = rm.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm = result.(model)
+	if rm.mode != modeCreateEffort {
+		t.Errorf("expected modeCreateEffort, got %d", rm.mode)
+	}
+	if rm.createModel != "" {
+		t.Errorf("expected default model to map to empty string, got %q", rm.createModel)
+	}
+}
+
+func TestCreateWizard_ModelSelectionToEffort(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateModel
+	m.availableModels = []string{"(default)", "fable", "opus"}
+	m.selectedCreateModel = 2
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeCreateEffort {
+		t.Errorf("expected modeCreateEffort, got %d", rm.mode)
+	}
+	if rm.createModel != "opus" {
+		t.Errorf("expected createModel=opus, got %q", rm.createModel)
+	}
+}
+
+func TestCreateWizard_EffortSelectionToMessage(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateEffort
+	m.availableEfforts = []string{"(default)", "minimal", "low"}
+	m.selectedCreateEffort = 2
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeCreateMessage {
+		t.Errorf("expected modeCreateMessage, got %d", rm.mode)
+	}
+	if rm.createEffort != "low" {
+		t.Errorf("expected createEffort=low, got %q", rm.createEffort)
+	}
+}
+
+func TestCreateWizard_EffortDefaultToMessage(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateEffort
+	m.availableEfforts = []string{"(default)", "minimal", "low"}
+	m.selectedCreateEffort = 0
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	rm := result.(model)
+	if rm.mode != modeCreateMessage {
+		t.Errorf("expected modeCreateMessage, got %d", rm.mode)
+	}
+	if rm.createEffort != "" {
+		t.Errorf("expected default effort to map to empty string, got %q", rm.createEffort)
+	}
+}
+
+func TestCreateWizard_EscFromModelGoesBackToSkill(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateModel
+	m.createHarness = "claude"
+	m.skillsAvailable = true
+	m.createSkillName = "feature"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	rm := result.(model)
+	if rm.mode != modeCreateSkill {
+		t.Errorf("expected modeCreateSkill after esc from model, got %d", rm.mode)
+	}
+	if rm.createSkillName != "" {
+		t.Errorf("expected createSkillName reset, got %q", rm.createSkillName)
+	}
+}
+
+func TestCreateWizard_EscFromModelGoesBackToHarnessWithoutSkills(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateModel
+	m.createHarness = "claude"
+	m.skillsAvailable = false
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	rm := result.(model)
+	if rm.mode != modeCreateHarness {
+		t.Errorf("expected modeCreateHarness after esc from model without skills, got %d", rm.mode)
+	}
+}
+
+func TestCreateWizard_EscFromEffortGoesBackToModel(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateEffort
+	m.createModel = "sonnet"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	rm := result.(model)
+	if rm.mode != modeCreateModel {
+		t.Errorf("expected modeCreateModel after esc from effort, got %d", rm.mode)
+	}
+	if rm.createModel != "" {
+		t.Errorf("expected createModel reset, got %q", rm.createModel)
+	}
+}
+
+func TestCreateWizard_CtrlCFromModelCancels(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateModel
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
+	m.createSkillName = "feature"
+	m.createModel = "sonnet"
+	m.createEffort = "high"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Errorf("expected modeNormal after ctrl+c, got %d", rm.mode)
+	}
+	if rm.createFolder != "" || rm.createHarness != "" || rm.createSkillName != "" || rm.createModel != "" || rm.createEffort != "" {
+		t.Errorf("expected create state reset, got folder=%q harness=%q skill=%q model=%q effort=%q", rm.createFolder, rm.createHarness, rm.createSkillName, rm.createModel, rm.createEffort)
+	}
+}
+
+func TestCreateWizard_CtrlCFromEffortCancels(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.mode = modeCreateEffort
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
+	m.createSkillName = "feature"
+	m.createModel = "sonnet"
+	m.createEffort = "high"
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	rm := result.(model)
+	if rm.mode != modeNormal {
+		t.Errorf("expected modeNormal after ctrl+c, got %d", rm.mode)
+	}
+	if rm.createFolder != "" || rm.createHarness != "" || rm.createSkillName != "" || rm.createModel != "" || rm.createEffort != "" {
+		t.Errorf("expected create state reset, got folder=%q harness=%q skill=%q model=%q effort=%q", rm.createFolder, rm.createHarness, rm.createSkillName, rm.createModel, rm.createEffort)
+	}
 }
 
 func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
@@ -617,6 +791,8 @@ func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	m.createFolder = "/Users/test/repo"
 	m.createHarness = "claude"
 	m.createSkillName = "feature"
+	m.createModel = "sonnet"
+	m.createEffort = "high"
 	m.skillsAvailable = true
 	m.availableSkills = []string{"(none)", "feature", "fix"}
 	m.textInput.SetValue("some message")
@@ -625,12 +801,11 @@ func TestCreateWizard_EscFromMessageGoesBack(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// Claude + skills available — esc lands on skill selection.
-	if rm.mode != modeCreateSkill {
-		t.Errorf("expected modeCreateSkill after esc from message, got %d", rm.mode)
+	if rm.mode != modeCreateEffort {
+		t.Errorf("expected modeCreateEffort after esc from message, got %d", rm.mode)
 	}
-	if rm.createSkillName != "" {
-		t.Errorf("expected createSkillName reset for re-selection, got %q", rm.createSkillName)
+	if rm.createEffort != "" {
+		t.Errorf("expected createEffort reset for re-selection, got %q", rm.createEffort)
 	}
 }
 
@@ -646,9 +821,8 @@ func TestCreateWizard_EscFromMessageGoesToHarnessWhenNoSkills(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	// No skills — esc unwinds one step to harness, not all the way to folder.
-	if rm.mode != modeCreateHarness {
-		t.Errorf("expected modeCreateHarness after esc (no skills), got %d", rm.mode)
+	if rm.mode != modeCreateEffort {
+		t.Errorf("expected modeCreateEffort after esc (no skills), got %d", rm.mode)
 	}
 }
 
@@ -665,8 +839,8 @@ func TestCreateWizard_EscFromMessageGoesToSkillForCodex(t *testing.T) {
 	result, _ := m.handleKey(msg)
 	rm := result.(model)
 
-	if rm.mode != modeCreateSkill {
-		t.Errorf("expected modeCreateSkill after esc (codex), got %d", rm.mode)
+	if rm.mode != modeCreateEffort {
+		t.Errorf("expected modeCreateEffort after esc (codex), got %d", rm.mode)
 	}
 }
 
@@ -675,6 +849,8 @@ func TestCreateWizard_CtrlCFromMessageCancels(t *testing.T) {
 	m.mode = modeCreateMessage
 	m.createFolder = "/Users/test/repo"
 	m.createSkillName = "feature"
+	m.createModel = "sonnet"
+	m.createEffort = "high"
 	m.textInput.SetValue("some message")
 
 	msg := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
@@ -690,6 +866,9 @@ func TestCreateWizard_CtrlCFromMessageCancels(t *testing.T) {
 	if rm.createSkillName != "" {
 		t.Errorf("expected createSkillName reset, got %q", rm.createSkillName)
 	}
+	if rm.createModel != "" || rm.createEffort != "" {
+		t.Errorf("expected createModel/createEffort reset, got %q/%q", rm.createModel, rm.createEffort)
+	}
 }
 
 func TestCreateWizard_MessageLaunch(t *testing.T) {
@@ -697,6 +876,8 @@ func TestCreateWizard_MessageLaunch(t *testing.T) {
 	m.mode = modeCreateMessage
 	m.createFolder = "/Users/test/repo"
 	m.createSkillName = "feature"
+	m.createModel = "sonnet"
+	m.createEffort = "high"
 	m.textInput.SetValue("add login page")
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
@@ -713,7 +894,7 @@ func TestCreateWizard_MessageLaunch(t *testing.T) {
 		t.Error("expected command batch for createSessionWithPrompt")
 	}
 	// Wizard state should be reset
-	if rm.createFolder != "" || rm.createSkillName != "" || rm.selectedCreateSkill != 0 {
+	if rm.createFolder != "" || rm.createSkillName != "" || rm.createModel != "" || rm.createEffort != "" || rm.selectedCreateSkill != 0 || rm.selectedCreateModel != 0 || rm.selectedCreateEffort != 0 {
 		t.Error("expected wizard state to be reset after launch")
 	}
 }

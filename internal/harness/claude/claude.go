@@ -28,6 +28,16 @@ func New(profile domain.AgentProfile) *Claude {
 // Name implements domain.Harness.
 func (c *Claude) Name() string { return "claude" }
 
+// Models implements domain.Harness.
+func (c *Claude) Models() []string {
+	return []string{"fable", "opus", "sonnet", "haiku"}
+}
+
+// EffortLevels implements domain.Harness.
+func (c *Claude) EffortLevels() []string {
+	return []string{"minimal", "low", "medium", "high", "max"}
+}
+
 // SessionsDir implements domain.Harness.
 func (c *Claude) SessionsDir() string { return c.profile.SessionsDir }
 
@@ -43,8 +53,17 @@ func (c *Claude) SpawnCommand(skill, message string, opts domain.SpawnOpts) stri
 	if opts.ResumeSessionID != "" {
 		return cmd + " --resume " + shellQuote(opts.ResumeSessionID)
 	}
-	if _, opted := effortOptedSkills[skill]; opted && opts.DefaultEffort != "" {
-		cmd = "CLAUDE_CODE_EFFORT_LEVEL=" + opts.DefaultEffort + " " + cmd + " --effort " + opts.DefaultEffort
+	effort := opts.Effort
+	if effort == "" {
+		if _, opted := effortOptedSkills[skill]; opted {
+			effort = opts.DefaultEffort
+		}
+	}
+	if effort != "" {
+		cmd = "CLAUDE_CODE_EFFORT_LEVEL=" + effort + " " + cmd + " --effort " + effort
+	}
+	if opts.Model != "" {
+		cmd += " --model " + shellQuote(opts.Model)
 	}
 	prompt := buildPrompt(skill, message)
 	if prompt != "" {

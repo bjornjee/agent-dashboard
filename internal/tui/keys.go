@@ -310,12 +310,11 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.createSkillName = ""
-			m.mode = modeCreateMessage
+			m.populateCreateModelEffortOptions()
+			m.mode = modeCreateModel
 			m.textInput.Reset()
-			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
-			focusCmd := m.textInput.Focus()
 			m.updateRightContent()
-			return m, focusCmd
+			return m, nil
 		case "esc":
 			// Back to folder selection — restore the prior folder so the
 			// user can edit it without retyping.
@@ -333,6 +332,12 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.textInput.Placeholder = "Type reply..."
 			m.createFolder = ""
 			m.createHarness = ""
+			m.createModel = ""
+			m.createEffort = ""
+			m.availableModels = nil
+			m.availableEfforts = nil
+			m.selectedCreateModel = 0
+			m.selectedCreateEffort = 0
 			m.updateRightContent()
 			return m, nil
 		case "down":
@@ -360,11 +365,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.createSkillName = m.availableSkills[m.selectedCreateSkill]
 			}
-			m.mode = modeCreateMessage
-			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
-			focusCmd := m.textInput.Focus()
+			m.populateCreateModelEffortOptions()
+			m.mode = modeCreateModel
 			m.updateRightContent()
-			return m, focusCmd
+			return m, nil
 		case "esc":
 			// Back to harness selection — the wizard inserts harness
 			// between folder and skill, so esc unwinds one step.
@@ -378,7 +382,13 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.textInput.Placeholder = "Type reply..."
 			m.createFolder = ""
 			m.createHarness = ""
+			m.createModel = ""
+			m.createEffort = ""
+			m.availableModels = nil
+			m.availableEfforts = nil
 			m.selectedCreateSkill = 0
+			m.selectedCreateModel = 0
+			m.selectedCreateEffort = 0
 			m.updateRightContent()
 			return m, nil
 		case "down":
@@ -397,38 +407,15 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Create message input mode
-	if m.mode == modeCreateMessage {
+	// Create model selection mode
+	if m.mode == modeCreateModel {
 		switch key {
 		case "enter":
-			message := m.textInput.Value()
-			folder := m.createFolder
-			skill := m.createSkillName
-
-			// Reset wizard state
-			m.mode = modeNormal
-			m.textInput.Reset()
-			m.textInput.Placeholder = "Type reply..."
-			m.createFolder = ""
-			m.createSkillName = ""
-			m.selectedCreateSkill = 0
-
-			m.statusMsg = "spawning"
-			m.statusMsgTick = -1 // don't auto-clear
-			m.spawningFolder = folder
-			m.spawningTick = m.tickCount
-			harnessName := m.createHarness
-			settings := m.cfg.Settings
-			// Reset harness state too — message is the final step.
-			m.createHarness = ""
-			return m, tea.Batch(
-				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, settings, harnessName, skill, message),
-				m.spawningSpinner.Tick,
-			)
+			m.createModel = createSelectedOption(m.availableModels, m.selectedCreateModel)
+			m.mode = modeCreateEffort
+			m.updateRightContent()
+			return m, nil
 		case "esc":
-			// Back one step: skill if the chosen harness supports skills and
-			// skills exist; otherwise back to the harness picker.
-			m.textInput.Reset()
 			if m.skillsAvailable && isSkillCapableHarness(m.createHarness) {
 				m.mode = modeCreateSkill
 				m.createSkillName = ""
@@ -445,7 +432,135 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.createFolder = ""
 			m.createHarness = ""
 			m.createSkillName = ""
+			m.createModel = ""
+			m.createEffort = ""
 			m.selectedCreateSkill = 0
+			m.selectedCreateModel = 0
+			m.selectedCreateEffort = 0
+			m.availableModels = nil
+			m.availableEfforts = nil
+			m.updateRightContent()
+			return m, nil
+		case "down":
+			if m.selectedCreateModel < len(m.availableModels)-1 {
+				m.selectedCreateModel++
+				m.updateRightContent()
+			}
+			return m, nil
+		case "up":
+			if m.selectedCreateModel > 0 {
+				m.selectedCreateModel--
+				m.updateRightContent()
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Create effort selection mode
+	if m.mode == modeCreateEffort {
+		switch key {
+		case "enter":
+			m.createEffort = createSelectedOption(m.availableEfforts, m.selectedCreateEffort)
+			m.mode = modeCreateMessage
+			m.textInput.Placeholder = "Message for agent (optional, Enter to skip)..."
+			focusCmd := m.textInput.Focus()
+			m.updateRightContent()
+			return m, focusCmd
+		case "esc":
+			m.mode = modeCreateModel
+			m.createModel = ""
+			m.updateRightContent()
+			return m, nil
+		case "ctrl+c":
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.createHarness = ""
+			m.createSkillName = ""
+			m.createModel = ""
+			m.createEffort = ""
+			m.selectedCreateSkill = 0
+			m.selectedCreateModel = 0
+			m.selectedCreateEffort = 0
+			m.availableModels = nil
+			m.availableEfforts = nil
+			m.updateRightContent()
+			return m, nil
+		case "down":
+			if m.selectedCreateEffort < len(m.availableEfforts)-1 {
+				m.selectedCreateEffort++
+				m.updateRightContent()
+			}
+			return m, nil
+		case "up":
+			if m.selectedCreateEffort > 0 {
+				m.selectedCreateEffort--
+				m.updateRightContent()
+			}
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Create message input mode
+	if m.mode == modeCreateMessage {
+		switch key {
+		case "enter":
+			message := m.textInput.Value()
+			folder := m.createFolder
+			skill := m.createSkillName
+			model := m.createModel
+			effort := m.createEffort
+
+			// Reset wizard state
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.createSkillName = ""
+			m.createModel = ""
+			m.createEffort = ""
+			m.selectedCreateSkill = 0
+			m.selectedCreateModel = 0
+			m.selectedCreateEffort = 0
+			m.availableModels = nil
+			m.availableEfforts = nil
+
+			m.statusMsg = "spawning"
+			m.statusMsgTick = -1 // don't auto-clear
+			m.spawningFolder = folder
+			m.spawningTick = m.tickCount
+			harnessName := m.createHarness
+			settings := m.cfg.Settings
+			// Reset harness state too — message is the final step.
+			m.createHarness = ""
+			return m, tea.Batch(
+				createSessionWithPrompt(folder, m.agents, m.selfPaneID, m.cfg.Profile, settings, harnessName, skill, message, model, effort),
+				m.spawningSpinner.Tick,
+			)
+		case "esc":
+			// Back one step to effort selection.
+			m.textInput.Reset()
+			m.mode = modeCreateEffort
+			m.createEffort = ""
+			m.updateRightContent()
+			return m, nil
+		case "ctrl+c":
+			m.mode = modeNormal
+			m.textInput.Reset()
+			m.textInput.Placeholder = "Type reply..."
+			m.createFolder = ""
+			m.createHarness = ""
+			m.createSkillName = ""
+			m.createModel = ""
+			m.createEffort = ""
+			m.selectedCreateSkill = 0
+			m.selectedCreateModel = 0
+			m.selectedCreateEffort = 0
+			m.availableModels = nil
+			m.availableEfforts = nil
 			m.updateRightContent()
 			return m, nil
 		default:
