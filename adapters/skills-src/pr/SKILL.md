@@ -34,14 +34,9 @@ Run in parallel:
 ### Phase 2: Clean up scratch artifacts
 
 Delete transient files left over from implementation, testing, and discovery —
-screenshots, Playwright MCP output, and tmp scratch — before the cleaner pass
+screenshots, Playwright MCP output, and tmp scratch — before the cleanup pass
 inspects the diff. **Untracked only.** Never touch tracked or staged files.
 
-<!-- codex-only -->
-Deletion is destructive and irreversible. This phase **requires explicit user
-confirmation** before any `rm` runs.
-
-<!-- /codex-only -->
 1. Identify untracked artifacts. Use `git ls-files --others --exclude-standard`
    for unignored untracked files, and `git ls-files --others --ignored
    --exclude-standard` for ignored untracked files. Filter for these patterns:
@@ -50,13 +45,7 @@ confirmation** before any `rm` runs.
    - `*.tmp` (anywhere)
    - `tmp/` (directory, when at repo root or inside a subproject root)
 
-<!-- claude-only -->
-2. Show the user the list of files about to be deleted (one line each). If the
-   list is empty, skip the rest of this phase.
-<!-- /claude-only -->
-<!-- codex-only -->
 2. If the list is empty, skip the rest of this phase.
-<!-- /codex-only -->
 
 <!-- claude-only -->
 3. **Confirmation gate** — deletion is destructive and irreversible. Show the
@@ -83,14 +72,8 @@ confirmation** before any `rm` runs.
    rejected — fail this gate rather than delete.
 
 4. Delete the confirmed paths. For files: `rm -f <path>`. For directories:
-<!-- claude-only -->
-   `rm -rf <path>`. Run from the repo root.
-<!-- /claude-only -->
-<!-- codex-only -->
-   `rm -rf <path>`. Run from the repo root. **Never** pass `/`, `~`, `.`,
-   `..`, or a glob like `*` to `rm` — only the explicit confirmed paths from
-   step 3.
-<!-- /codex-only -->
+   `rm -rf <path>`. Run from the repo root. Never pass `/`, `~`, `.`, `..`,
+   or a glob like `*` to `rm` — only the explicit confirmed paths from step 3.
 
 5. Verify with `git status --porcelain` — none of the deletions should appear,
    because every removed path was untracked. If any tracked file shows as
@@ -103,47 +86,26 @@ unexpected tracked-file deletions.
 
 ---
 
-<!-- claude-only -->
-### Phase 3: Conditional refactor-cleaner pass on the branch diff
-<!-- /claude-only -->
-<!-- codex-only -->
-### Phase 3: Conditional cleaner pass on the branch diff
-<!-- /codex-only -->
+### Phase 3: Conditional cleanup pass on the branch diff
 
-<!-- claude-only -->
-Do not launch `refactor-cleaner` by default. First classify the diff from
+Do not launch the cleanup pass by default. First classify the diff from
 Phase 1:
-<!-- /claude-only -->
-<!-- codex-only -->
-Do not launch a cleanup worker by default. First classify the diff from Phase
-1:
-<!-- /codex-only -->
 
-<!-- claude-only -->
-- **Skip cleaner:** docs/config-only changes, ≤3 simple files, or a diff that
-<!-- /claude-only -->
-<!-- codex-only -->
-- **Skip worker:** docs/config-only changes, ≤3 simple files, or a diff that
-<!-- /codex-only -->
+- **Skip cleanup:** docs/config-only changes, ≤3 simple files, or a diff that
   has no debug output, unused imports, local duplication, or mechanical churn.
   Do one inline scan of the changed-file list and continue.
-<!-- claude-only -->
-- **Use cleaner:** broad diffs, mixed-language changes, generated/manual churn,
-<!-- /claude-only -->
-<!-- codex-only -->
-- **Use worker:** broad diffs, mixed-language changes, generated/manual churn,
-<!-- /codex-only -->
+- **Run cleanup:** broad diffs, mixed-language changes, generated/manual churn,
   obvious debug leftovers, or user-requested cleanup.
 
 <!-- claude-only -->
-1. If the cleaner is warranted, spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo. If the cleaner is not warranted, skip to step 4.
+1. If cleanup is warranted, spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo. If cleanup is not warranted, skip to step 4.
 2. If the cleaner edited files:
 <!-- /claude-only -->
 <!-- codex-only -->
-1. If the worker is warranted, spawn a Codex `worker` subagent scoped to the
+1. If cleanup is warranted, spawn a Codex `worker` subagent scoped to the
    changed-file list from Phase 1. Pass file paths explicitly — do not let it
    roam the whole repo. Then call `wait_agent` to block on its completion
-   before continuing. If the worker is not warranted, skip to step 4.
+   before continuing. If cleanup is not warranted, skip to step 4.
 
    Inline brief for the worker (pass as the worker's prompt):
 
@@ -174,18 +136,11 @@ Do not launch a cleanup worker by default. First classify the diff from Phase
      `make test`/`make test-fast` only when the cleanup crossed package
      boundaries or touched shared test/build infrastructure.
    - Commit: `git add -u && git commit -m "chore: ai-fmt"`.
-<!-- claude-only -->
-3. If the cleaner made no changes, skip the commit.
-<!-- /claude-only -->
-<!-- codex-only -->
-3. If the worker made no changes, skip the commit.
-<!-- /codex-only -->
+3. If the cleanup pass made no changes, skip the commit.
 
-<!-- claude-only -->
-**Then prune implementation-only tests.** The cleaner above never touches tests — this step does.
-<!-- /claude-only -->
+**Then prune implementation-only tests.** The cleanup pass above never touches tests — this step does.
 <!-- codex-only -->
-**Then prune implementation-only tests.** The cleaner above never touches tests — this step does. Do it inline yourself; do not spawn a subagent.
+Do it inline yourself; do not spawn a subagent.
 <!-- /codex-only -->
 
 4. From the Phase 1 changed-file list, take only the test files this branch ADDED or MODIFIED — identify tests by their role, not a fixed extension list. Never consider pre-existing tests.
@@ -194,7 +149,7 @@ Do not launch a cleanup worker by default. First classify the diff from Phase
 7. If tests were removed, run the smallest relevant proof command for those test files; use full `make test` only when coverage spans multiple packages or the proof cannot be bounded. Commit the removals on their own: `git add -A && git commit -m "test: remove implementation-only tests"`.
 8. If nothing qualifies, skip silently.
 
-**Gate:** Cleaner ran only when warranted; cleaner changes (if any) are committed and green; implementation-only tests are pruned in their own commit (or none qualified); no sole-coverage test was removed.
+**Gate:** Cleanup ran only when warranted; cleanup changes (if any) are committed and green; implementation-only tests are pruned in their own commit (or none qualified); no sole-coverage test was removed.
 
 ---
 
@@ -258,7 +213,5 @@ Compose the PR using **all** commits on the branch (not just the latest):
 
 ## Red Flags — STOP
 
-- "I'll just call `gh pr create` directly" → the hook will block you. Use the prefix.
-- "I'll spawn the cleaner for a tiny docs/config diff" → don't. The cleaner is for broad or messy diffs.
+- "I'll run the cleanup pass for a tiny docs/config diff" → don't. It is for broad or messy diffs.
 - "Tests fail but my changes are unrelated" → fix or revert. Never push red.
-- "I'll bundle the fmt diff into the feature commit" → keep `chore: fmt` and `chore: ai-fmt` as their own commits; squash happens at merge.
