@@ -75,7 +75,7 @@ func emitTarget(tgt target, targetRoot string) error {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
-		if filepath.Base(path) == "SKILL.md" {
+		if filepath.Ext(path) == ".md" {
 			content, err = transform(content, tgt)
 			if err != nil {
 				return fmt.Errorf("transform %s for %s: %w", path, tgt, err)
