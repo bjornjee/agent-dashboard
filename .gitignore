@@ -48,3 +48,4 @@ test-results/
 .feature-plan-path
 .uiux-loop/
 .uiux-loop-*/
+.codegraph/
