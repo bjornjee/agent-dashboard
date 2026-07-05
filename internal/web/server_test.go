@@ -1736,9 +1736,9 @@ func TestSkillsEndpointWithSkills(t *testing.T) {
 	}
 }
 
-// /api/skills?harness=codex must scan the codex plugin cache and filter
-// out skills the dashboard blocks for codex (implement, rca). Without
-// the harness param, behavior is unchanged: scan the claude cache.
+// /api/skills?harness=codex must scan the codex plugin cache and apply
+// the dashboard's codex blocklist. Without the harness param, behavior is
+// unchanged: scan the claude cache.
 func TestSkillsEndpoint_HarnessCodex(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
@@ -1765,7 +1765,7 @@ func TestSkillsEndpoint_HarnessCodex(t *testing.T) {
 	defer resp.Body.Close()
 	var skills []string
 	json.NewDecoder(resp.Body).Decode(&skills)
-	want := []string{"feature", "fix", "pr"}
+	want := []string{"feature", "fix", "implement", "pr", "rca"}
 	if len(skills) != len(want) {
 		t.Fatalf("got %v, want %v", skills, want)
 	}
@@ -1801,7 +1801,6 @@ func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
 	defer resp.Body.Close()
 	var skills []string
 	json.NewDecoder(resp.Body).Decode(&skills)
-	// implement stays — only codex blocks it.
 	want := []string{"feature", "implement"}
 	if len(skills) != len(want) {
 		t.Fatalf("got %v, want %v", skills, want)
