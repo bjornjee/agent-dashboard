@@ -101,25 +101,27 @@ Check for any crash/diagnostic files the application writes (e.g., `crash.log`, 
 
 For each Codex session active during the incident window:
 
-1. **Extract all shell tool calls** — these are the commands Codex actually executed:
+1. **Extract all shell tool calls** — these are the commands Codex actually executed. Codex rollout lines are `{"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"<json string>",...}}`:
    ```python
    python3 << 'PYEOF'
-   import json, os
+   import json
 
-   fpath = "<session-jsonl-path>"
+   fpath = "<rollout-jsonl-path>"
    with open(fpath) as f:
        for line in f:
            try:
                obj = json.loads(line)
-               if obj.get('type') == 'assistant':
-                   content = obj.get('message', {}).get('content', [])
-                   if isinstance(content, list):
-                       for block in content:
-                           if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'shell':
-                               cmd = block.get('input', {}).get('command', '')
-                               print(f'CMD: {cmd[:400]}')
-                               print()
-           except:
+               if obj.get('type') != 'response_item':
+                   continue
+               p = obj.get('payload', {})
+               if p.get('type') == 'function_call' and p.get('name') in ('exec_command', 'shell'):
+                   args = json.loads(p.get('arguments') or '{}')
+                   cmd = args.get('command') or args.get('cmd') or ''
+                   if isinstance(cmd, list):
+                       cmd = ' '.join(str(c) for c in cmd)
+                   print(f"CMD [{obj.get('timestamp', '')}]: {str(cmd)[:400]}")
+                   print()
+           except Exception:
                pass
    PYEOF
    ```

@@ -95,7 +95,7 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/test-gate.js\"",
-            "timeout": 5000
+            "timeout": 120000
           }
         ]
       },

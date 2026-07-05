@@ -144,7 +144,7 @@ Rules:
 1. Follow the phase's Verification profile using active AGENTS.md/core instructions when present and the included verification-profile glossary as the standalone fallback. Execute the named proof command, avoid implementation-only tests, and use full `make test` only for Full phases or when the phase risk cannot be bounded.
 2. Implement ONLY this phase. Do not touch files outside this phase's declared scope.
 3. After the profile proof passes, commit with:
-     git commit -m "feat({phase-id-kebab}): <one-line description>"
+     git commit -m "feat: {phase-id-kebab} <one-line description>"
 4. Do NOT modify the plan file. Do NOT update checkboxes — the orchestrator owns that.
 5. If the phase is ambiguous or blocked, STOP and report a question instead of guessing.
 6. If this phase touches UI automation, apply the provided UI automation policy and use only the worktree-local port/base URL/profile/output paths.

@@ -95,7 +95,7 @@
           {
             "type": "command",
             "command": "$HOME/.codex/hooks/agent-dashboard/test-gate.sh",
-            "timeout": 5000
+            "timeout": 120000
           }
         ]
       },
