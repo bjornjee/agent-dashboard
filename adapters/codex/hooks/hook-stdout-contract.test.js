@@ -126,13 +126,20 @@ describe('codex hook stdout contract', () => {
     });
   }
 
-  for (const script of ['block-main-commit.js', 'warn-destructive.js']) {
-    it(`${script} emits valid JSON on stdout for PreToolUse pass-through`, () => {
+  for (const script of [
+    'block-main-commit.js',
+    'commit-lint.js',
+    'pr-detect.js',
+    'pr-skill-gate.js',
+    'test-gate.js',
+    'warn-destructive.js',
+  ]) {
+    it(`${script} emits valid JSON on stdout for a no-op tool call`, () => {
       const result = runHook(script, {
         session_id: SESSION_ID,
         cwd: '/tmp',
         model: 'gpt-5.5',
-        hook_event_name: 'PreToolUse',
+        hook_event_name: script === 'pr-detect.js' ? 'PostToolUse' : 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'ls' },
       });

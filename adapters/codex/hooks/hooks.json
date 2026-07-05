@@ -62,6 +62,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/pr-skill-gate.sh",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.codex/hooks/agent-dashboard/agent-state-fast.sh",
             "timeout": 5000
           }
@@ -69,6 +79,36 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/commit-lint.sh",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/test-gate.sh",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/pr-detect.sh",
+            "timeout": 5000
+          }
+        ]
+      },
       {
         "matcher": "*",
         "hooks": [
