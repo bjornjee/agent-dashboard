@@ -231,6 +231,31 @@ describe('codex plugin package', () => {
     }
   });
 
+  it('keeps the workflow latency cuts in both adapters', () => {
+    for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
+      const pr = readSkill('pr');
+      assert.match(pr, /Phase 5 is the single test gate/, `${adapter} PR skill must gate cleaner/prune/fmt on the single Phase 5 test run`);
+
+      const feature = readSkill('feature');
+      assert.match(feature, /spawn every applicable reviewer in one message/, `${adapter} feature must spawn language reviewers in parallel`);
+      assert.match(feature, /phase count ≥ 6/, `${adapter} feature dispatch probe must fire only at 6+ phases`);
+      assert.match(feature, /Recommended for 6\+ phases/, `${adapter} feature must recommend hand-off at 6+ phases`);
+      assert.doesNotMatch(feature, /phase count ≥ 3/, `${adapter} feature must not keep the old ≥3 probe threshold`);
+
+      for (const name of ['feature', 'fix', 'refactor']) {
+        const text = readSkill(name);
+        assert.match(text, /-not -name '\.env-setup-\*'/, `${adapter} ${name} env copy must exclude setup sentinels`);
+        assert.match(text, /older than the sentinel/, `${adapter} ${name} must skip env setup when a current sentinel exists`);
+      }
+    }
+
+    const claudePr = readClaudeSkill('pr');
+    assert.match(claudePr, /run_in_background: true/, 'claude-code PR cleaner must run in the background');
+
+    const codexPr = readCodexSkill('pr');
+    assert.match(codexPr, /Do not block on it yet/, 'codex PR worker must not block before the overlap work');
+  });
+
   it('uses scoped verification for chore, fix, and refactor workflows', () => {
     for (const [adapter, readSkill] of [['codex', readCodexSkill], ['claude-code', readClaudeSkill]]) {
       assert.match(readSkill('chore'), /smallest relevant verification/, `${adapter} chore must avoid blanket tests`);
