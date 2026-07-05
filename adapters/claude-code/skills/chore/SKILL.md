@@ -10,7 +10,7 @@ Change description: $ARGUMENTS
 
 ## Instructions
 
-Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied. Apply all project rules and conventions that are in your context.
+Follow these phases in order. Each phase has a gate — do not proceed until the gate is satisfied.
 
 ---
 

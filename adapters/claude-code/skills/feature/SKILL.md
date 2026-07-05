@@ -23,24 +23,7 @@ For Verification profiles, apply `../_shared/verification-profiles.md`. Active A
 
 ### Phase 1: Setup
 
-1. Derive a short kebab-case name from the description
-2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
-3. Switch to main: `git checkout main`
-4. Pull latest: `git pull origin main`
-5. Create branch `feat/<name>` and worktree `../worktrees/<app>/<name>` from main:
-   `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b feat/<name> main`
-   - If the branch already exists, ask the user whether to resume it or choose a new name.
-6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
-   - Find all env files recursively: `find . -name '.env*' -not -name '.env-setup-done' -not -name '.env-setup-failed' -not -path './.git/*' -not -path './node_modules/*'`
-   - For each file found, recreate its directory structure in the worktree and copy it. For example:
-     - `./.env` → `../worktrees/<app>/<name>/.env`
-     - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
-     - `./infra/.env.production` → `../worktrees/<app>/<name>/infra/.env.production`
-   - Use: `for f in $(find . -name '.env*' -not -name '.env-setup-done' -not -name '.env-setup-failed' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
-   - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-   - **Important:** All Bash tool calls in this step must set `dangerouslyDisableSandbox: true` because they write outside the project root.
-7. cd into the worktree, run `node "${CLAUDE_PLUGIN_ROOT:-$(ls -dt "$HOME/.claude/plugins/cache/agent-dashboard/agent-dashboard"/* 2>/dev/null | head -1)}/scripts/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
-8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+Follow `../_shared/worktree-setup.md` with branch prefix `feat`.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -50,36 +33,13 @@ For Verification profiles, apply `../_shared/verification-profiles.md`. Active A
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
-
-1. Auto-detect project type from project files (highest match wins):
-
-   | Priority | Signal | Type |
-   |----------|--------|------|
-   | 1 | `react-native` in package.json dependencies | Mobile |
-   | 2 | `next`, `vite`, or `webpack` in package.json | Web |
-   | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
-   | 4 | `go.mod` | Go |
-   | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
-
-   Ask the user only if no signal matches.
-
-2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed. For browser UI work, allocate worktree-local Playwright/server/profile/output resources per `../_shared/ui-automation.md`.
-3. Symlink large source-content directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying. NEVER symlink build outputs or per-project caches (`.next/`, `dist/`, `build/`, `out/`, `target/`, `.turbo/`, `.cache/`, `.parcel-cache/`, `.vite/`, `__pycache__/`, `.pytest_cache/`, `.gradle/`, `.venv/`, `node_modules/`) — they bake absolute paths and corrupt across worktrees, and must be regenerated per-worktree.
-4. On success, write a sentinel file: `touch .env-setup-done`
-   On failure, write the error: `echo "<error message>" > .env-setup-failed`
+**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment per `../_shared/env-setup.md`.
 
 **Foreground — Planning:**
 
 Phase order: research first, interview second, plan mode third, submit fourth. Plan mode is the *last* gate before approval, not a pre-research speed-bump. Each step has a HARD-GATE you cannot rationalize past.
 
 1. **Research with `Explore`.** Use the built-in `Explore` subagent for any non-trivial codebase question or library lookup. Do not call `Agent` with `subagent_type=Plan` — composing the plan is your job, not a delegated subagent's. Synthesize what you found inline as your own assistant text.
-
-   **Why:** a delegated Plan subagent returns the plan inside a `tool_result` block that lives in the JSONL but never reaches the dashboard's plan panel, conversation view, or activity log. Synthesizing inline puts the plan in your assistant text, which the dashboard renders everywhere.
-
-   Symptoms you're about to violate:
-   - You're about to call `Agent` with `subagent_type: "Plan"`.
-   - You're rationalizing *"the planner does this better."*
 
    <HARD-GATE>
    Research subagent (`Explore`): allowed and encouraged.
@@ -111,10 +71,6 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
 
    The plan you submit in step 4 must be implementable as written. No "Decisions needed", "Phase 0", "TBD", "?", or "to be confirmed" sections in the body. If a user answer changes scope, return to this step and re-interview.
 
-   Symptoms you're about to violate:
-   - You're typing "1." "2." "3." numbered questions in assistant text.
-   - You're writing "Decisions needed before implementation" inside the plan.
-   - You're rationalizing "the user can answer these after approval."
 
    <HARD-GATE>
    Freeform numbered questions in assistant text are a violation. If you find yourself typing "1." "2." "3." to ask the user something — STOP, call `AskUserQuestion` instead.
@@ -122,8 +78,6 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    </HARD-GATE>
 
 3. **Enter plan mode via `EnterPlanMode`, then draft the plan inline.** Now that research is done and decisions are resolved, call `EnterPlanMode` (load via `ToolSearch` if not in scope). This flips the parent's `permission_mode='plan'` and restricts you to read-only tools while you write the plan as your own assistant text.
-
-   **Why this order:** drafting inside plan mode pairs the visible mode-flip with the actual planning work, and `EnterPlanMode` is a load-bearing prerequisite for `ExitPlanMode` (step 4) — which is the only path to user approval.
 
    Caveat: on approval (step 4), CC drops to its default `permission_mode`, not back to `bypassPermissions`. Subsequent edits in Phase 3 will re-prompt unless the user re-enables bypass. Accepted trade-off — visible planning is worth the one-time mode reset.
 
@@ -256,18 +210,15 @@ Triggered when the user indicates the feature has been merged upstream.
 
 ## Red Flags — STOP
 
-If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase. (Hooks block the common paths for commits on main and direct `gh pr create`, so those get no self-check bullets here.)
 
 - "I'll just sketch the implementation first" → Phase 3 verification violation. Pick a profile, then follow it.
 - "I'll delegate the plan to a Plan subagent" → Phase 2 step 1 violation. Research with `Explore`; plan inline. The dashboard can't surface delegated plans.
-- "I'll just type the questions as numbered text" → Phase 2 step 2 violation. `AskUserQuestion` exists for exactly this. Load via `ToolSearch` and call it.
-- "I'll skip `EnterPlanMode`, plan mode resets `bypassPermissions`" → Phase 2 step 3 violation. After research and the `AskUserQuestion` interview, you call `EnterPlanMode` to draft the plan inside plan mode, then `ExitPlanMode` to submit. The reset to default `permission_mode` is the accepted cost.
-- "I'll just paste the plan as text instead of calling `ExitPlanMode`" → Phase 2 step 4 violation. `ExitPlanMode` is the only acceptable submission. Pasting in assistant text is not a fallback.
+- "I'll skip `EnterPlanMode`, plan mode resets `bypassPermissions`" → Phase 2 step 3 violation. The reset to default `permission_mode` is the accepted cost.
+- "I'll just paste the plan as text instead of calling `ExitPlanMode`" → Phase 2 step 4 violation. `ExitPlanMode` is the only acceptable submission.
 - "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
 - "Tests pass on my reading of the code" → no executable proof. Run the profile's command, or state why none applies.
 - "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
-- "Let me commit on main since the change is trivial" → blocked by hook anyway. Create a branch.
-- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it. Use `/agent-dashboard:pr`.
 - "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
 - "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline implementation for a reason (context). Don't second-guess.
 - "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `/agent-dashboard:implement` and resume can't find the plan without it.

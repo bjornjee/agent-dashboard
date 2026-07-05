@@ -13,27 +13,29 @@ const (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(sourceRoot, claudeRoot, codexRoot); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	if _, err := os.Stat(sourceRoot); err != nil {
-		return fmt.Errorf("source root %s: %w", sourceRoot, err)
+func run(srcRoot, claudeOut, codexOut string) error {
+	if _, err := os.Stat(srcRoot); err != nil {
+		return fmt.Errorf("source root %s: %w", srcRoot, err)
 	}
-	if err := cleanTarget(claudeRoot); err != nil {
-		return err
-	}
-	if err := cleanTarget(codexRoot); err != nil {
-		return err
-	}
-	if err := emitTarget(targetClaude, claudeRoot); err != nil {
-		return err
-	}
-	if err := emitTarget(targetCodex, codexRoot); err != nil {
-		return err
+	for _, out := range []struct {
+		tgt  target
+		root string
+	}{
+		{targetClaude, claudeOut},
+		{targetCodex, codexOut},
+	} {
+		if err := cleanTarget(out.root); err != nil {
+			return err
+		}
+		if err := emitTarget(out.tgt, srcRoot, out.root); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -48,13 +50,13 @@ func cleanTarget(root string) error {
 	return nil
 }
 
-func emitTarget(tgt target, targetRoot string) error {
-	return filepath.WalkDir(sourceRoot, func(path string, entry os.DirEntry, walkErr error) error {
+func emitTarget(tgt target, srcRoot, targetRoot string) error {
+	return filepath.WalkDir(srcRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 
-		rel, err := filepath.Rel(sourceRoot, path)
+		rel, err := filepath.Rel(srcRoot, path)
 		if err != nil {
 			return fmt.Errorf("resolve relative path for %s: %w", path, err)
 		}
@@ -75,7 +77,7 @@ func emitTarget(tgt target, targetRoot string) error {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
-		if filepath.Base(path) == "SKILL.md" {
+		if filepath.Ext(path) == ".md" {
 			content, err = transform(content, tgt)
 			if err != nil {
 				return fmt.Errorf("transform %s for %s: %w", path, tgt, err)

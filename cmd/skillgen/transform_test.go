@@ -88,6 +88,23 @@ func TestTransformConditionals(t *testing.T) {
 			wantErr: "nested",
 		},
 		{
+			name:    "closing marker without opener errors",
+			target:  targetClaude,
+			input:   "before\n<!-- /claude-only -->\nafter\n",
+			wantErr: "without opener",
+		},
+		{
+			name:   "mismatched closing marker errors",
+			target: targetClaude,
+			input: strings.Join([]string{
+				"<!-- claude-only -->",
+				"content",
+				"<!-- /codex-only -->",
+				"",
+			}, "\n"),
+			wantErr: "does not match",
+		},
+		{
 			name:   "rewrites agent-dashboard slash prefix only for codex",
 			target: targetCodex,
 			input:  "run /agent-dashboard:feature then /agent-dashboard:pr\n",

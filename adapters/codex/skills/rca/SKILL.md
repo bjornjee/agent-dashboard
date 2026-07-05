@@ -10,7 +10,7 @@ Incident description: $ARGUMENTS
 
 ## Instructions
 
-Follow these phases strictly in order. Do NOT speculate or reason about root cause until Phase 5. Every phase has a gate.
+Follow these phases strictly in order. Every phase has a gate. Do not speculate about cause until Phase 5.
 
 ---
 
@@ -133,11 +133,7 @@ For each Codex session active during the incident window:
    - `signal`, `SIGKILL`, `SIGTERM` (signal sending)
    - Any command referencing the crashed process
 
-3. **Extract subagent launches** — check for Codex `spawn_agent` and `wait_agent` tool calls in logs. Do not call either tool from this read-only RCA skill:
-   ```python
-   # Same pattern but filter for spawn_agent tool calls
-   # Check agent_type, prompt content, and whether the parent waited for results
-   ```
+3. **Extract subagent launches** — check for Codex `spawn_agent` and `wait_agent` tool calls in logs (do not call either tool from this read-only RCA skill). Use the same pattern as step 1, filtering for `spawn_agent` calls; check `agent_type`, prompt content, and whether the parent waited for results.
 
 4. **Identify the LAST command before the crash** — cross-reference the session's final tool call timestamp with the system log timestamps from Phase 2.
 

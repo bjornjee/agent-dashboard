@@ -4,6 +4,8 @@ Baseline audit of the 8 workflow skills in `adapters/skills-src/`, scored for ef
 
 Line refs cite `adapters/skills-src/<skill>/SKILL.md` at the state committed alongside this doc (after the marker-pair collapse described below).
 
+> **Status update:** the recommended trims (recs 1–6) landed in PR #396, so the per-skill line refs below describe the pre-trim source. Actual post-trim size is ~1,611 `.md` lines under `adapters/skills-src/` — slightly above the ~1,590 projection because the rca baseline below was miscounted and defence-in-depth lines were deliberately restored after review. Rec 7 (effort notes) remains open.
+
 ## Rubric (each dimension scored 1–5, 5 = excellent)
 
 - **Token cost** — is file size proportionate to unique decision content? The full file loads into the agent's context on every invocation.
