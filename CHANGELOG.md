@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.35.0](https://github.com/bjornjee/agent-dashboard/compare/v0.34.1...v0.35.0) (2026-07-05)
+
+
+### Features
+
+* harden agent state reliability (report_seq + state arbiter) ([#389](https://github.com/bjornjee/agent-dashboard/issues/389)) ([3403273](https://github.com/bjornjee/agent-dashboard/commit/34032732aced3980738657a8bd9e6224d10ddf71))
+* improve skills workflows for claude and codex plugins ([#393](https://github.com/bjornjee/agent-dashboard/issues/393)) ([0881d00](https://github.com/bjornjee/agent-dashboard/commit/0881d0019bc09f79744b5dbb1fe6f7359fcea113))
+* model and thinking-effort selection in agent creation flow ([#392](https://github.com/bjornjee/agent-dashboard/issues/392)) ([42c27fa](https://github.com/bjornjee/agent-dashboard/commit/42c27fae955a2c953aaf53e44bc16dcfa9924a9b))
+* prune implementation-only tests in PR skill cleanup ([#387](https://github.com/bjornjee/agent-dashboard/issues/387)) ([7a6b820](https://github.com/bjornjee/agent-dashboard/commit/7a6b82083efc38b4d1f08087a2447bc354e721dd))
+* search and resume orphaned agent sessions after tmux restart ([#390](https://github.com/bjornjee/agent-dashboard/issues/390)) ([6a09677](https://github.com/bjornjee/agent-dashboard/commit/6a09677e9ae6018cbfa6b2e80010f289c4efc804))
+
+
+### Bug Fixes
+
+* submit codex skill replies from the TUI ([#386](https://github.com/bjornjee/agent-dashboard/issues/386)) ([89ed53a](https://github.com/bjornjee/agent-dashboard/commit/89ed53ae18cf5bd26aea3a2e1b1e564179f80a26))
+
+
+### Performance Improvements
+
+* reduce agent workflow overhead ([#391](https://github.com/bjornjee/agent-dashboard/issues/391)) ([fe31919](https://github.com/bjornjee/agent-dashboard/commit/fe3191996a27a1ea3e3bca4fed380d3487aa0b2a))
+
 ## [0.34.1](https://github.com/bjornjee/agent-dashboard/compare/v0.34.0...v0.34.1) (2026-06-16)
 
 
