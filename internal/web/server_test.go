@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1805,6 +1806,84 @@ func TestSkillsEndpoint_NoHarnessParamScansClaudeCache(t *testing.T) {
 	want := []string{"feature", "implement"}
 	if len(skills) != len(want) {
 		t.Fatalf("got %v, want %v", skills, want)
+	}
+}
+
+func TestHarnessOptionsEndpoint_DefaultHarness(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	req := httptest.NewRequest("GET", "/api/harness-options", nil)
+	resp := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var got struct {
+		Models  []string `json:"models"`
+		Efforts []string `json:"efforts"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	wantModels := []string{"fable", "opus", "sonnet", "haiku"}
+	if !slices.Equal(got.Models, wantModels) {
+		t.Errorf("models = %v, want %v", got.Models, wantModels)
+	}
+	wantEfforts := []string{"minimal", "low", "medium", "high", "max"}
+	if !slices.Equal(got.Efforts, wantEfforts) {
+		t.Errorf("efforts = %v, want %v", got.Efforts, wantEfforts)
+	}
+}
+
+func TestHarnessOptionsEndpoint_Codex(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	req := httptest.NewRequest("GET", "/api/harness-options?harness=codex", nil)
+	resp := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var got struct {
+		Models  []string `json:"models"`
+		Efforts []string `json:"efforts"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	wantModels := []string{"gpt-5.5", "gpt-5.4", "gpt-5.3-codex-spark"}
+	if !slices.Equal(got.Models, wantModels) {
+		t.Errorf("models = %v, want %v", got.Models, wantModels)
+	}
+	wantEfforts := []string{"minimal", "low", "medium", "high"}
+	if !slices.Equal(got.Efforts, wantEfforts) {
+		t.Errorf("efforts = %v, want %v", got.Efforts, wantEfforts)
+	}
+}
+
+func TestHarnessOptionsEndpoint_UnknownHarness(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Profile.StateDir = t.TempDir()
+
+	srv := NewServer(cfg, nil, ServerOptions{})
+	req := httptest.NewRequest("GET", "/api/harness-options?harness=pi", nil)
+	resp := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !strings.Contains(body["error"], "unknown harness") {
+		t.Errorf("expected unknown-harness error, got %q", body["error"])
 	}
 }
 

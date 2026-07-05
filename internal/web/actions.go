@@ -511,6 +511,8 @@ type createRequest struct {
 	Folder  string `json:"folder"`
 	Skill   string `json:"skill"`
 	Message string `json:"message"`
+	Model   string `json:"model"`
+	Effort  string `json:"effort"`
 	// Harness overrides the [harness] default in settings.toml for this
 	// spawn only. Empty string falls back to the configured default.
 	// Valid: "claude" | "codex".
@@ -573,7 +575,15 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings)
+	if req.Model != "" && !containsString(activeHarness.Models(), req.Model) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown model '" + req.Model + "' for " + activeHarness.Name()})
+		return
+	}
+	if req.Effort != "" && !containsString(activeHarness.EffortLevels(), req.Effort) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown effort '" + req.Effort + "' for " + activeHarness.Name()})
+		return
+	}
+	spawnOpts := harness.SpawnOptsFor(activeHarness.Name(), s.cfg.Settings, req.Model, req.Effort)
 	cmd := activeHarness.SpawnCommand(req.Skill, req.Message, spawnOpts)
 
 	target, paneID, ok := s.spawnInRepoWindow(w, folder, cmd)
@@ -594,6 +604,15 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})
+}
+
+func containsString(values []string, value string) bool {
+	for _, v := range values {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
 
 // spawnInRepoWindow launches cmd in a new pane for folder's repo: it splits an
@@ -711,7 +730,7 @@ func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": hErr.Error()})
 		return
 	}
-	opts := harness.SpawnOptsFor(h.Name(), s.cfg.Settings)
+	opts := harness.SpawnOptsFor(h.Name(), s.cfg.Settings, "", "")
 	opts.ResumeSessionID = agent.SessionID
 	cmd := h.SpawnCommand("", "", opts)
 

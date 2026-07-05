@@ -18,6 +18,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -224,6 +225,12 @@ type model struct {
 	createHarness         string   // selected harness ("claude" | "codex")
 	selectedCreateSkill   int      // index into availableSkills
 	createSkillName       string   // selected skill name ("" if none)
+	availableModels       []string // display list: ["(default)", "sonnet", ...]
+	selectedCreateModel   int      // index into availableModels
+	createModel           string   // selected model ("" if default)
+	availableEfforts      []string // display list: ["(default)", "low", ...]
+	selectedCreateEffort  int      // index into availableEfforts
+	createEffort          string   // selected effort ("" if default)
 
 	// Spawning status — keeps the bottom "Spawning agent..." spinner alive
 	// until the agent's state file appears on disk or 30s safety expiry.
@@ -247,6 +254,44 @@ type model struct {
 	// Dino game (experimental)
 	dino        dinoGameModel
 	dinoEnabled bool
+}
+
+const defaultCreateOption = "(default)"
+
+func createOptionList(values []string) []string {
+	out := make([]string, 0, len(values)+1)
+	out = append(out, defaultCreateOption)
+	out = append(out, values...)
+	return out
+}
+
+func createSelectedOption(options []string, selected int) string {
+	if selected <= 0 || selected >= len(options) {
+		return ""
+	}
+	return options[selected]
+}
+
+func createOptionLabel(value string) string {
+	if value == "" {
+		return defaultCreateOption
+	}
+	return value
+}
+
+func (m *model) populateCreateModelEffortOptions() {
+	h, err := harness.Resolve(m.createHarness, m.cfg.Profile)
+	if err != nil {
+		m.availableModels = createOptionList(nil)
+		m.availableEfforts = createOptionList(nil)
+	} else {
+		m.availableModels = createOptionList(h.Models())
+		m.availableEfforts = createOptionList(h.EffortLevels())
+	}
+	m.selectedCreateModel = 0
+	m.selectedCreateEffort = 0
+	m.createModel = ""
+	m.createEffort = ""
 }
 
 // CodexSessionsDir returns the resolved $CODEX_HOME/sessions root for this

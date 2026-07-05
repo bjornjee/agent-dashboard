@@ -12,6 +12,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
 	"github.com/bjornjee/agent-dashboard/internal/usage"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
@@ -33,6 +34,25 @@ func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request) {
 		discovered = []string{}
 	}
 	writeJSON(w, http.StatusOK, discovered)
+}
+
+// handleHarnessOptions returns the fixed model and effort choices for the
+// selected harness. Empty harness uses the active configured default.
+func (s *Server) handleHarnessOptions(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("harness")
+	activeHarness := s.cfg.Harness
+	if name != "" && name != activeHarness.Name() {
+		h, err := harness.Resolve(name, s.cfg.Profile)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		activeHarness = h
+	}
+	writeJSON(w, http.StatusOK, map[string][]string{
+		"models":  activeHarness.Models(),
+		"efforts": activeHarness.EffortLevels(),
+	})
 }
 
 // sensitiveDirs lists directory base names that should never be sent to the

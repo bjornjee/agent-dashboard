@@ -1,6 +1,7 @@
 package codex_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
@@ -42,11 +43,15 @@ func TestCodex_SpawnCommand(t *testing.T) {
 		// (codex-rs/protocol/src/config_types.rs ReasoningEffort). Map max → high.
 		{"max effort maps to high on feature", "feature", "", domain.SpawnOpts{DefaultEffort: "max"}, "codex -c model_reasoning_effort=high '$agent-dashboard:feature'"},
 		{"chore not opted-in", "chore", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex '$agent-dashboard:chore'"},
+		{"explicit effort applies to non-opted skill", "chore", "", domain.SpawnOpts{Effort: "low"}, "codex -c model_reasoning_effort=low '$agent-dashboard:chore'"},
+		{"explicit effort wins over default effort", "feature", "", domain.SpawnOpts{DefaultEffort: "high", Effort: "minimal"}, "codex -c model_reasoning_effort=minimal '$agent-dashboard:feature'"},
+		{"explicit max effort maps to high", "chore", "", domain.SpawnOpts{Effort: "max"}, "codex -c model_reasoning_effort=high '$agent-dashboard:chore'"},
 		{"model flag", "", "", domain.SpawnOpts{Model: "gpt-5.5"}, "codex --model 'gpt-5.5'"},
 		{"approval flag", "", "", domain.SpawnOpts{Approval: "on-request"}, "codex -a 'on-request'"},
 		{"sandbox flag", "", "", domain.SpawnOpts{Sandbox: "workspace-write"}, "codex -s 'workspace-write'"},
 		{"feature passes message + flags", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' '$agent-dashboard:feature add login'"},
 		{"non-plan skill keeps prompt + flags", "fix", "fix the thing", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' '$agent-dashboard:fix fix the thing'"},
+		{"model and explicit effort compose", "chore", "fix lint", domain.SpawnOpts{Effort: "medium", Model: "gpt-5.4"}, "codex -c model_reasoning_effort=medium --model 'gpt-5.4' '$agent-dashboard:chore fix lint'"},
 	}
 
 	h := codex.New(codex.Config{Command: "codex"})
@@ -69,6 +74,7 @@ func TestCodex_SpawnCommand_Resume(t *testing.T) {
 		ResumeSessionID: "019e39d0-581e-7f81-beb0-ea3c04ffa2e4",
 		// Flags below must be ignored on resume — codex remembers them.
 		DefaultEffort: "high",
+		Effort:        "low",
 		Model:         "gpt-5.5",
 		Approval:      "on-request",
 	}
@@ -92,5 +98,19 @@ func TestCodex_ConfigDir(t *testing.T) {
 	h := codex.New(codex.Config{ConfigDir: "/tmp/.codex"})
 	if got := h.ConfigDir(); got != "/tmp/.codex" {
 		t.Errorf("ConfigDir() = %q, want %q", got, "/tmp/.codex")
+	}
+}
+
+func TestCodex_Capabilities(t *testing.T) {
+	h := codex.New(codex.Config{Command: "codex"})
+
+	wantModels := []string{"gpt-5.5", "gpt-5.4", "gpt-5.3-codex-spark"}
+	if got := h.Models(); !slices.Equal(got, wantModels) {
+		t.Errorf("Models() = %v, want %v", got, wantModels)
+	}
+
+	wantEfforts := []string{"minimal", "low", "medium", "high"}
+	if got := h.EffortLevels(); !slices.Equal(got, wantEfforts) {
+		t.Errorf("EffortLevels() = %v, want %v", got, wantEfforts)
 	}
 }

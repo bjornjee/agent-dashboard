@@ -9,14 +9,17 @@ const path = require('node:path');
 
 let buildRecentFolders;
 let formatFolderLabel;
+let replaceSelectOptions;
 
 test('load module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'create.js')).href;
   const mod = await import(url);
   buildRecentFolders = mod.buildRecentFolders;
   formatFolderLabel = mod.formatFolderLabel;
+  replaceSelectOptions = mod.replaceSelectOptions;
   assert.equal(typeof buildRecentFolders, 'function');
   assert.equal(typeof formatFolderLabel, 'function');
+  assert.equal(typeof replaceSelectOptions, 'function');
 });
 
 test('buildRecentFolders — empty input returns []', () => {
@@ -75,4 +78,70 @@ test('formatFolderLabel — empty / null falls back to default', () => {
 
 test('formatFolderLabel — single segment is returned as-is', () => {
   assert.equal(formatFolderLabel('repo'), 'repo');
+});
+
+// Minimal <select> + document stand-ins for replaceSelectOptions — same
+// stub-the-DOM approach as sidebar.test.js.
+function fakeSelect(optionValues = [], value = '') {
+  return {
+    value,
+    options: optionValues.map(v => ({ value: v })),
+    remove(i) { this.options.splice(i, 1); },
+    appendChild(opt) { this.options.push(opt); },
+  };
+}
+
+function withFakeDocument(fn) {
+  const orig = globalThis.document;
+  globalThis.document = { createElement: () => ({ value: '', textContent: '' }) };
+  try { fn(); } finally {
+    if (orig === undefined) delete globalThis.document;
+    else globalThis.document = orig;
+  }
+}
+
+test('replaceSelectOptions — null select or non-array values is a no-op', () => {
+  withFakeDocument(() => {
+    assert.doesNotThrow(() => replaceSelectOptions(null, ['a'], 'Default'));
+    const sel = fakeSelect(['old'], 'old');
+    replaceSelectOptions(sel, null, 'Default');
+    replaceSelectOptions(sel, undefined, 'Default');
+    assert.equal(sel.options.length, 1);
+    assert.equal(sel.value, 'old');
+  });
+});
+
+test('replaceSelectOptions — repopulates with default option first', () => {
+  withFakeDocument(() => {
+    const sel = fakeSelect(['stale1', 'stale2']);
+    replaceSelectOptions(sel, ['opus', 'sonnet'], 'Default');
+    assert.deepEqual(sel.options.map(o => o.value), ['', 'opus', 'sonnet']);
+    assert.equal(sel.options[0].textContent, 'Default');
+    assert.equal(sel.value, '');
+  });
+});
+
+test('replaceSelectOptions — preserves prior selection when still present', () => {
+  withFakeDocument(() => {
+    const sel = fakeSelect(['', 'opus', 'sonnet'], 'sonnet');
+    replaceSelectOptions(sel, ['sonnet', 'haiku'], 'Default');
+    assert.equal(sel.value, 'sonnet');
+  });
+});
+
+test('replaceSelectOptions — resets to default when prior selection is gone', () => {
+  withFakeDocument(() => {
+    const sel = fakeSelect(['', 'gpt-5.5'], 'gpt-5.5');
+    replaceSelectOptions(sel, ['opus', 'sonnet'], 'Default');
+    assert.equal(sel.value, '');
+  });
+});
+
+test('replaceSelectOptions — empty values array leaves only the default option', () => {
+  withFakeDocument(() => {
+    const sel = fakeSelect(['', 'opus'], '');
+    replaceSelectOptions(sel, [], 'Default');
+    assert.deepEqual(sel.options.map(o => o.value), ['']);
+    assert.equal(sel.value, '');
+  });
 });

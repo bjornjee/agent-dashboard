@@ -995,14 +995,19 @@ describe('dynamic effort on permission_mode transitions', () => {
   // custom [effort] values don't make these default-asserting tests flaky.
   let tmpEffortDir;
   let origEffortDir;
+  let origSpawnEffort;
   beforeEach(() => {
     tmpEffortDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fast-hook-effort-default-'));
     origEffortDir = process.env.AGENT_DASHBOARD_DIR;
+    origSpawnEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL;
     process.env.AGENT_DASHBOARD_DIR = tmpEffortDir;
+    delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
   });
   afterEach(() => {
     if (origEffortDir === undefined) delete process.env.AGENT_DASHBOARD_DIR;
     else process.env.AGENT_DASHBOARD_DIR = origEffortDir;
+    if (origSpawnEffort === undefined) delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    else process.env.CLAUDE_CODE_EFFORT_LEVEL = origSpawnEffort;
     fs.rmSync(tmpEffortDir, { recursive: true, force: true });
   });
 
@@ -1028,6 +1033,31 @@ describe('dynamic effort on permission_mode transitions', () => {
     });
 
     assert.equal(changed, true);
+    assert.equal(update.effort, 'max');
+  });
+
+  it('entering plan mode ignores spawn-time effort env var', () => {
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = 'low';
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: '',
+      permission_mode: 'default',
+      effort: 'low',
+    };
+
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Read',
+        permission_mode: 'plan',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
     assert.equal(update.effort, 'max');
   });
 
@@ -1058,6 +1088,32 @@ describe('dynamic effort on permission_mode transitions', () => {
     // surfaced even from a guarded PostToolUse.
     assert.equal(changed, true);
     assert.equal(update.effort, 'high');
+  });
+
+  it('leaving plan mode restores spawn-time effort env var when set', () => {
+    process.env.CLAUDE_CODE_EFFORT_LEVEL = 'low';
+    const existing = {
+      target: 'main:1.0',
+      state: 'plan',
+      current_tool: '',
+      permission_mode: 'plan',
+      effort: 'max',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Read',
+        permission_mode: 'default',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.effort, 'low');
   });
 
   it('staying in plan mode does not rewrite effort', () => {
@@ -1153,16 +1209,21 @@ describe('dynamic effort on permission_mode transitions', () => {
 describe('dynamic effort reads levels from settings.toml', () => {
   let tmpDashboardDir;
   let originalDashboardDir;
+  let originalSpawnEffort;
 
   beforeEach(() => {
     tmpDashboardDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fast-hook-effort-cfg-'));
     originalDashboardDir = process.env.AGENT_DASHBOARD_DIR;
+    originalSpawnEffort = process.env.CLAUDE_CODE_EFFORT_LEVEL;
     process.env.AGENT_DASHBOARD_DIR = tmpDashboardDir;
+    delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
   });
 
   afterEach(() => {
     if (originalDashboardDir === undefined) delete process.env.AGENT_DASHBOARD_DIR;
     else process.env.AGENT_DASHBOARD_DIR = originalDashboardDir;
+    if (originalSpawnEffort === undefined) delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    else process.env.CLAUDE_CODE_EFFORT_LEVEL = originalSpawnEffort;
     fs.rmSync(tmpDashboardDir, { recursive: true, force: true });
   });
 
