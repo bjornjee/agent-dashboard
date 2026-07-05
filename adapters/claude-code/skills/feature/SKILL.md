@@ -210,7 +210,7 @@ Triggered when the user indicates the feature has been merged upstream.
 
 ## Red Flags — STOP
 
-If you catch yourself saying or thinking any of these, pause and re-read the relevant phase. (Hooks already block commits on main and direct `gh pr create` — those need no self-check.)
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase. (Hooks block the common paths for commits on main and direct `gh pr create`, so those get no self-check bullets here.)
 
 - "I'll just sketch the implementation first" → Phase 3 verification violation. Pick a profile, then follow it.
 - "I'll delegate the plan to a Plan subagent" → Phase 2 step 1 violation. Research with `Explore`; plan inline. The dashboard can't surface delegated plans.
