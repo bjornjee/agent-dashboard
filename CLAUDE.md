@@ -57,3 +57,7 @@ The dashboard supports two coding-agent harnesses today: `claude` and `codex`. P
 For codex specifically: codex CLI 0.130.0's hook payload schema is **1:1 with Claude's** (`codex-rs/hooks/schema/generated/*.json`), and codex sets `CLAUDE_PLUGIN_ROOT` for OOTB plugin compatibility (`codex-rs/hooks/src/engine/discovery.rs`). Most JS hooks work unchanged; the discriminator is `process.env.PLUGIN_ROOT` (codex-only) or `input.model` starting with `gpt-`.
 
 When adding a new dashboard skill that requires Claude-only orchestration primitives, append its name to `internal/skills/guard.go`'s `codexBlockedSkills` map so both TUI and web creation reject that skill against a codex session. The guard is a Codex blocklist: supported built-in skills and custom maintained skills are allowed by default.
+
+### Generated harness skills
+
+Workflow skills are generated from `adapters/skills-src/`. Edit the source skill files there, run `make gen-skills`, and never hand-edit `adapters/claude-code/skills/` or `adapters/codex/skills/`.
