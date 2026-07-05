@@ -62,6 +62,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/pr-skill-gate.js\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/agent-state-fast.js\"",
             "timeout": 5000
           }
@@ -69,6 +79,36 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/commit-lint.js\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/test-gate.js\"",
+            "timeout": 120000
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/pr-detect.js\"",
+            "timeout": 5000
+          }
+        ]
+      },
       {
         "matcher": "*",
         "hooks": [

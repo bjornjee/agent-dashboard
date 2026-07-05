@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+/**
+ * PostToolUse hook for Bash — detects PR creation and merge via `gh` CLI.
+ *
+ * On `gh pr create`: extracts the PR URL from tool output, sets state to "pr"
+ *   and pins it so idle states don't overwrite it. Active states (running,
+ *   permission) still show through — the Go-side ApplyPinnedStates only
+ *   restores pinned state from idle states.
+ * On `gh pr merge`: sets state to "merged" and pins it (terminal state).
+ *
+ * Writes pr_url and state into the agent's state file.
+ *
+ * Stdin: JSON from Codex hook system (PostToolUse)
+ * Env: TMUX_PANE, PLUGIN_ROOT, CLAUDE_PLUGIN_ROOT, AGENT_DASHBOARD_DIR
+ */
+
+'use strict';
+
+const path = require('path');
+
+const { readAgentState, writeState } = require(path.join(__dirname, 'packages', 'agent-state'));
+
+// GitHub PR URL pattern: https://github.com/<owner>/<repo>/pull/<number>
+const PR_URL_RE = /https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
+
+// gh pr {create,merge} must be at the start of a command segment, allowing
+// env-var prefixes (e.g. AGENT_DASHBOARD_PR_SKILL=1 gh pr create ...). PostToolUse
+// only fires on Bash exit 0, so the remaining gap is the phrase appearing as
+// an argument to grep/rg/echo etc. — segment-anchoring kills those.
+const ENV_PREFIX = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*`;
+const CREATE_CMD = new RegExp(`(?:^|;|&&|\\n)\\s*${ENV_PREFIX}gh\\s+pr\\s+create\\b`);
+const MERGE_CMD = new RegExp(`(?:^|;|&&|\\n)\\s*${ENV_PREFIX}gh\\s+pr\\s+merge\\b`);
+
+/**
+ * Detect PR action from a Bash command and its output.
+ * Returns { action, prUrl } or null if no PR activity detected.
+ *
+ * @param {string} command - the Bash command that was executed
+ * @param {string} output - the tool result / stdout
+ * @returns {{ action: 'created'|'merged', prUrl: string|null } | null}
+ */
+function detectPR(command, output) {
+  if (!command || typeof command !== 'string') return null;
+
+  if (CREATE_CMD.test(command)) {
+    const match = (output || '').match(PR_URL_RE);
+    return { action: 'created', prUrl: match ? match[0] : null };
+  }
+
+  if (MERGE_CMD.test(command)) {
+    // --help exits 0 but doesn't merge; --auto queues the merge but the PR is
+    // still OPEN, so treat it as 'created' (pin "pr"), not 'merged'.
+    if (/\s(?:-h|--help)\b/.test(command)) return null;
+    const match = (command + ' ' + (output || '')).match(PR_URL_RE);
+    const action = /\s--auto\b/.test(command) ? 'created' : 'merged';
+    return { action, prUrl: match ? match[0] : null };
+  }
+
+  return null;
+}
+
+/**
+ * Build the state update from a detected PR action.
+ *
+ * Both PR creation and merge pin the state. Active states (running,
+ * permission) still show through on the dashboard — the Go-side
+ * ApplyPinnedStates only restores pinned state from idle states.
+ *
+ * @param {{ action: string, prUrl: string|null }} detection
+ * @returns {object} fields to merge into agent state
+ */
+function buildPRUpdate(detection) {
+  const update = {};
+  if (detection.action === 'created') {
+    update.state = 'pr';
+    update.pinned_state = 'pr';
+  } else if (detection.action === 'merged') {
+    update.state = 'merged';
+    update.pinned_state = 'merged';
+  }
+  if (detection.prUrl) {
+    update.pr_url = detection.prUrl;
+  }
+  return update;
+}
+
+// Only run stdin reader when executed directly (not when require()'d by tests)
+if (require.main === module) {
+  const MAX_STDIN = 1024 * 64;
+  let data = '';
+
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    if (data.length < MAX_STDIN) data += chunk.substring(0, MAX_STDIN - data.length);
+  });
+
+  process.stdin.on('end', () => {
+    try {
+      const input = data.trim() ? JSON.parse(data) : {};
+      const command = (input.tool_input && input.tool_input.command) || '';
+      const output = input.tool_result || '';
+
+      const detection = detectPR(command, output);
+      if (!detection) {
+        process.stdout.write('{}\n');
+        return;
+      }
+
+      const sessionId = input.session_id;
+      if (!sessionId) {
+        process.stdout.write('{}\n');
+        return;
+      }
+
+      const existing = readAgentState(sessionId) || {};
+      const update = buildPRUpdate(detection);
+
+      // Preserve existing fields, only merge PR-related updates
+      writeState(sessionId, {
+        ...update,
+        last_hook_event: input.hook_event_name || existing.last_hook_event || '',
+        report_seq: Date.now() * 1000,
+      });
+    } catch {
+      // Silent — don't break Codex
+    }
+    process.stdout.write('{}\n');
+  });
+}
+
+// Export for testing
+module.exports = { detectPR, buildPRUpdate, PR_URL_RE };

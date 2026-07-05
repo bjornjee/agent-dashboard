@@ -4,6 +4,16 @@ description: Safely restructure code in an isolated git worktree with test-prese
 disable-model-invocation: true
 effort: max
 ---
+<!-- codex-only -->
+
+<codex_skill_must>
+1. Run `mkdir -p` and `git worktree add -b refactor/<name> ... main` as separate `exec_command` calls.
+2. Run the scoped baseline proof before editing; halt if it fails.
+3. Make one behavior-preserving change, then rerun that proof; repeat.
+4. Allowed tools: `exec_command`, `apply_patch`, `spawn_agent`, `wait_agent`.
+5. Every `spawn_agent` call must be followed by `wait_agent`.
+</codex_skill_must>
+<!-- /codex-only -->
 
 Safely refactor code while preserving all existing behavior.
 
@@ -23,8 +33,22 @@ If the refactor touches browser UI, Playwright, dev-server ports, screenshots, o
 2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
 3. Switch to main: `git checkout main`
 4. Pull latest: `git pull origin main`
+<!-- claude-only -->
 5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main:
    `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b refactor/<name> main`
+<!-- /claude-only -->
+<!-- codex-only -->
+5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main. Run **two separate `exec_command` tool calls** — do not chain them with `&&`. The dashboard's PostToolUse hook only stamps `worktree_cwd` + `branch` when the command starts with `git worktree add`; a compound `mkdir … && git worktree add …` slips past the regex and leaves the dashboard unable to detect dir or branch.
+
+   First, ensure the parent directory exists:
+   ```
+   mkdir -p ../worktrees/<app>
+   ```
+   Then run `git worktree add -b refactor/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call:
+   ```
+   git worktree add -b refactor/<name> ../worktrees/<app>/<name> main
+   ```
+<!-- /codex-only -->
    - If the branch already exists, ask the user whether to resume it or choose a new name.
 6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
    - Find all env files recursively: `find . -name '.env*' -not -name '.env-setup-done' -not -name '.env-setup-failed' -not -path './.git/*' -not -path './node_modules/*'`
@@ -33,8 +57,14 @@ If the refactor touches browser UI, Playwright, dev-server ports, screenshots, o
      - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
    - Use: `for f in $(find . -name '.env*' -not -name '.env-setup-done' -not -name '.env-setup-failed' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
    - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
+<!-- claude-only -->
    - **Important:** All Bash tool calls in this step must set `dangerouslyDisableSandbox: true` because they write outside the project root.
 7. cd into the worktree, run `node "${CLAUDE_PLUGIN_ROOT:-$(ls -dt "$HOME/.claude/plugins/cache/agent-dashboard/agent-dashboard"/* 2>/dev/null | head -1)}/scripts/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
+<!-- /claude-only -->
+<!-- codex-only -->
+   - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
+7. cd into the worktree, run `node "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(ls -dt "${CODEX_HOME:-$HOME/.codex}/plugins/cache/agent-dashboard/agent-dashboard"/* 2>/dev/null | head -1)}}/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
+<!-- /codex-only -->
 8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
@@ -45,7 +75,12 @@ If the refactor touches browser UI, Playwright, dev-server ports, screenshots, o
 
 Start two tracks in parallel:
 
+<!-- claude-only -->
 **Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
+<!-- /claude-only -->
+<!-- codex-only -->
+**Background — Environment setup:** Launch a background `exec_command` to set up the dev environment. It must:
+<!-- /codex-only -->
 
 1. Auto-detect project type from project files (highest match wins):
 
@@ -95,9 +130,19 @@ For UI baselines, prefer headless Playwright with worktree-local resources. Use 
 
 ### Phase 4: Transform
 
+<!-- claude-only -->
 **Effort note:** When launched via the agent-dashboard's New Agent flow, this skill spawns with `--effort high` on the CLI, which Claude Code pins at the session level. The dynamic dispatcher in agent-state-fast.js bumps effort to `max` automatically while `permission_mode='plan'` (EnterPlanMode active) and drops back to `high` on exit — so planning runs at max effort without paying that cost during implementation. When invoked as a slash command inside an existing claude session, you can run `/effort max` before entering plan mode and `/effort high` (or lower) before implementation.
+<!-- /claude-only -->
+<!-- codex-only -->
+**Effort note:** When launched via the agent-dashboard's New Agent flow, this skill starts at implementation effort. Use Codex Plan Mode for high-reasoning scoping when the refactor needs it, then return to proportional implementation effort for the mechanical transformation.
+<!-- /codex-only -->
 
+<!-- claude-only -->
 **Delegation gate:** Invoke `/codex:setup` to check Codex CLI availability. If the output contains `"ready": true`, delegate **only if** the user explicitly requested Codex delegation OR the refactor touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than Claude implementing directly. If delegating, invoke `/codex-delegate` with the scope (Phase 2) and baseline (Phase 3) as implementation context, then skip to the phase gate. Otherwise, proceed below.
+<!-- /claude-only -->
+<!-- codex-only -->
+**Delegation gate:** Use Codex `spawn_agent` **only if** the user explicitly requested subagents OR the refactor touches 10+ files / ~3,000+ lines of implementation. Below that threshold, the orchestration overhead costs more tokens than implementing directly. If delegating, pass the scope (Phase 2), baseline (Phase 3), exact file paths, and a bounded write scope to a `worker`; then call `wait_agent`, review the result, and verify locally. Otherwise, proceed below.
+<!-- /codex-only -->
 
 Apply the refactoring in small, atomic steps. For each step:
 

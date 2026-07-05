@@ -148,7 +148,7 @@ Then restart Claude Code sessions for hooks and skills to take effect.
 /plugin install skills@bjornjee-skills
 ```
 
-Without it, skill-gated session types (feature, fix, refactor, pr, rca) will not function as intended.
+Without it, skill-gated session types (feature, fix, chore, refactor, investigate, implement, pr, rca) will not function as intended.
 
 ### Codex CLI support
 
@@ -169,11 +169,11 @@ Restart Codex sessions and approve the `agent-dashboard` hooks prompt. Once appr
 
 From a repo checkout you can also run `make install-codex-adapter`, which performs the marketplace registration and prints the config snippet.
 
-Caveats specific to codex:
+Notes specific to codex:
 
-- **Some skills remain Claude-only.** `/implement` and `/rca` still rely on Claude-only orchestration primitives. The dashboard returns a 400 for unsupported codex skill combinations.
+- **Workflow skills are available for Codex sessions.** The dashboard skills use Codex-native commands where the harness differs, including `$agent-dashboard:implement` and `$agent-dashboard:rca`.
 - **Plan mode is signaled, not gated.** Codex's `/plan` slash command flips the hook payload's `permission_mode` to `"plan"`. The dashboard captures this as a field but doesn't flip state to `plan` — codex has no `ExitPlanMode` equivalent, so there's no discrete "plan ready" review moment.
-- **No subagent tree for codex.** Codex doesn't have a `Task`/`Agent` tool, so the subagent tree panel stays empty for codex sessions.
+- **Subagent state comes from Codex lifecycle hooks.** Codex sessions use `spawn_agent`/`wait_agent`; the dashboard tracks those sessions through the Codex hook events emitted by the plugin.
 
 ## Uninstall
 

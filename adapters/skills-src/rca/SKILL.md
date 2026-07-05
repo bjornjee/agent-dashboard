@@ -33,9 +33,19 @@ Follow these phases strictly in order. Do NOT speculate or reason about root cau
      ```
    - Filter to the time window around the incident.
 
+<!-- claude-only -->
+4. Identify **all active agents/processes** — check Claude Code session logs:
+<!-- /claude-only -->
+<!-- codex-only -->
 4. Identify **all active agents/processes** — check Codex session logs:
+<!-- /codex-only -->
    ```
+<!-- claude-only -->
+   ls -lt ~/.claude/projects/<project-dir>/*.jsonl | head -15
+<!-- /claude-only -->
+<!-- codex-only -->
    ls -lt "${CODEX_HOME:-$HOME/.codex}"/sessions/*/*/*/rollout-*.jsonl 2>/dev/null | head -15
+<!-- /codex-only -->
    ```
    Cross-reference modification times with the incident window.
 
@@ -99,8 +109,38 @@ Check for any crash/diagnostic files the application writes (e.g., `crash.log`, 
 
 ### Phase 3: Session Forensics
 
+<!-- claude-only -->
+For each Claude Code session active during the incident window:
+<!-- /claude-only -->
+<!-- codex-only -->
 For each Codex session active during the incident window:
+<!-- /codex-only -->
 
+<!-- claude-only -->
+1. **Extract all Bash tool calls** — these are the commands Claude actually executed:
+   ```python
+   python3 << 'PYEOF'
+   import json, os
+
+   fpath = "<session-jsonl-path>"
+   with open(fpath) as f:
+       for line in f:
+           try:
+               obj = json.loads(line)
+               if obj.get('type') == 'assistant':
+                   content = obj.get('message', {}).get('content', [])
+                   if isinstance(content, list):
+                       for block in content:
+                           if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'Bash':
+                               cmd = block.get('input', {}).get('command', '')
+                               print(f'CMD: {cmd[:400]}')
+                               print()
+           except:
+               pass
+   PYEOF
+   ```
+<!-- /claude-only -->
+<!-- codex-only -->
 1. **Extract all shell tool calls** — these are the commands Codex actually executed. Codex rollout lines are `{"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"<json string>",...}}`:
    ```python
    python3 << 'PYEOF'
@@ -125,6 +165,7 @@ For each Codex session active during the incident window:
                pass
    PYEOF
    ```
+<!-- /codex-only -->
 
 2. **Flag dangerous commands** — search for:
    - `kill`, `pkill`, `killall` (process termination)
@@ -133,10 +174,21 @@ For each Codex session active during the incident window:
    - `signal`, `SIGKILL`, `SIGTERM` (signal sending)
    - Any command referencing the crashed process
 
+<!-- claude-only -->
+3. **Extract subagent launches** — check for Agent tool calls, especially background agents:
+<!-- /claude-only -->
+<!-- codex-only -->
 3. **Extract subagent launches** — check for Codex `spawn_agent` and `wait_agent` tool calls in logs. Do not call either tool from this read-only RCA skill:
+<!-- /codex-only -->
    ```python
+<!-- claude-only -->
+   # Same pattern but filter for block.get('name') == 'Agent'
+   # Check run_in_background, prompt content
+<!-- /claude-only -->
+<!-- codex-only -->
    # Same pattern but filter for spawn_agent tool calls
    # Check agent_type, prompt content, and whether the parent waited for results
+<!-- /codex-only -->
    ```
 
 4. **Identify the LAST command before the crash** — cross-reference the session's final tool call timestamp with the system log timestamps from Phase 2.
@@ -247,8 +299,8 @@ Concrete, minimal actions to prevent recurrence. Reference specific files and li
 
 This skill is read-only. If the user asks to implement a fix based on your findings, **do not start editing files**. Instead, hand off to the appropriate skill:
 
-- Bug fix or prevention → suggest `$agent-dashboard:fix <description>`
-- Structural change to prevent recurrence → suggest `$agent-dashboard:refactor <description>`
-- New safeguard or feature → suggest `$agent-dashboard:feature <description>`
+- Bug fix or prevention → suggest `/agent-dashboard:fix <description>`
+- Structural change to prevent recurrence → suggest `/agent-dashboard:refactor <description>`
+- New safeguard or feature → suggest `/agent-dashboard:feature <description>`
 
-These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `$agent-dashboard:rca` skips those gates.
+These skills handle branch/worktree setup, TDD, review, and delivery. Starting implementation inline from `/agent-dashboard:rca` skips those gates.

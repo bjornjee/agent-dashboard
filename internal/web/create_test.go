@@ -431,17 +431,34 @@ func TestCreate_CodexAllowsCustomSkill(t *testing.T) {
 	}
 }
 
-func TestCreate_CodexRejectsBlockedSkill(t *testing.T) {
+func TestCreate_CodexAllowsImplementSkill(t *testing.T) {
 	m := withMockTmuxRunner(t)
-	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+	mockReadAgentState(m)
 
 	folder := t.TempDir()
-	ts, _ := createTestServer(t)
+	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
+	ts, _ := createTestServer(t, existingAgent)
+
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
 
 	resp := postCreate(t, ts, `{"folder":"`+folder+`","harness":"codex","skill":"implement","message":"hi"}`)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	want := "codex '$agent-dashboard:implement hi'"
+	if capturedCmd != want {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
 	}
 }
 

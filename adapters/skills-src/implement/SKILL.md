@@ -6,9 +6,25 @@ disable-model-invocation: true
 effort: max
 ---
 
+<!-- codex-only -->
+<codex_skill_must>
+1. Cwd must match `.../worktrees/<app>/<name>`. Halt with a clear error otherwise — this skill runs only inside a feature worktree.
+2. Read `.feature-plan-path` first; fall back to a plan-file search only if the sentinel file is missing.
+3. Dispatch each pending `- [ ]` phase to a fresh `spawn_agent` with role `worker`. Strictly sequential — never overlap phases.
+4. After each phase: the phase's Verification profile proof must pass AND `git log --oneline <prev-sha>..HEAD` must show exactly one new commit. Halt on either failure.
+5. When marking a phase done, flip only the `- [ ]` → `- [x]` checklist line. Never edit the `### Phase X:` body.
+6. Every `spawn_agent` call must be followed by `wait_agent`.
+</codex_skill_must>
+
+<!-- /codex-only -->
 Run the dispatch loop on a worktree with an approved multi-phase plan.
 
+<!-- claude-only -->
 Opt-in. Invoked after `/agent-dashboard:feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to /agent-dashboard:implement". Each phase dispatches to a fresh `Agent()` subagent, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
+<!-- /claude-only -->
+<!-- codex-only -->
+Opt-in. Invoked after `/agent-dashboard:feature` (or a sibling task skill) probes the user at plan approval and the user picks "Hand off to /agent-dashboard:implement". Each phase dispatches to a fresh Codex `worker` via `spawn_agent`, keeping the orchestrator session slim. Re-invoking on a partially-done worktree resumes from the first pending phase — no separate resume mode.
+<!-- /codex-only -->
 
 ## Instructions
 
@@ -29,9 +45,16 @@ Include `../_shared/verification-profiles.md` in every subagent prompt so Verifi
    cat .feature-plan-path
    ```
 
+<!-- claude-only -->
 3. **Fallback if the sentinel is missing** (older `/agent-dashboard:feature` run, or deleted):
    - `ls -lt ~/.claude/plans/*.md | head -5`
    - Show the top 3 candidates via `AskUserQuestion`, including the current branch name in the prompt for context. User picks one or "Other" to type a path.
+<!-- /claude-only -->
+<!-- codex-only -->
+3. **Fallback if the sentinel is missing** (older `/agent-dashboard:feature` run, or deleted):
+   - Search the worktree for approved plan markdown files such as `.feature-plan.md` or `plans/*.md`.
+   - Show the top 3 candidates via `request_user_input` when available, including the current branch name in the prompt for context. User picks one or "Other" to type a path. If `request_user_input` is unavailable, ask one concise direct question.
+<!-- /codex-only -->
 
 4. **Wait for env setup.** Check the worktree root for the env sentinels:
    - `.env-setup-done` → proceed.
@@ -60,19 +83,39 @@ Read the plan's `## Phases` checklist, dispatch each pending phase to a subagent
 
 5. **Record pre-state.** `<prev-sha> = git rev-parse HEAD`. The post-dispatch check uses this to confirm one new commit landed.
 
+<!-- claude-only -->
 6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Do not set `model`; the dashboard controls model selection at session level:
+<!-- /claude-only -->
+<!-- codex-only -->
+6. **Dispatch the subagent** (foreground, sequential — never overlap phases). Use Codex `spawn_agent` with the `worker` role, then call `wait_agent` for that agent before continuing. Do not set `model`; the dashboard controls model selection at session level:
+<!-- /codex-only -->
    ```
+<!-- claude-only -->
    Agent({
      description: "Phase X dispatch",
      subagent_type: "general-purpose",
      prompt: <subagent prompt template, see below>,
+<!-- /claude-only -->
+<!-- codex-only -->
+   spawn_agent({
+     agent_type: "worker",
+     message: <subagent prompt template, see below>,
+<!-- /codex-only -->
    })
+<!-- codex-only -->
+   wait_agent({ targets: ["<agent-id>"] })
+<!-- /codex-only -->
    ```
 
 7. **Verify** when the subagent returns:
    - Run the phase's Verification profile proof command from the plan. If the phase omitted one, default to Targeted and choose the smallest relevant package/test command from the changed files; use full `make test`/`make test-fast` only when the phase is Full or the risk cannot be bounded. On failure, surface output verbatim.
    - `git log --oneline <prev-sha>..HEAD` → must show exactly one new commit. Zero: subagent didn't commit; halt. Multiple: surface and ask the user to inspect.
+<!-- claude-only -->
    - On any failure, call `AskUserQuestion` with options `["Retry the phase", "Skip and mark done anyway", "Abort the loop"]`.
+<!-- /claude-only -->
+<!-- codex-only -->
+   - On any failure, call `request_user_input` when available with options `["Retry the phase", "Skip and mark done anyway", "Abort the loop"]`. If unavailable, ask one concise direct question with those choices.
+<!-- /codex-only -->
 
 8. **Mark done.** Edit the plan: flip the matching `- [ ]` → `- [x]`, append the short commit SHA in parens. **Only** the checklist line — don't touch the `### Phase X:` body.
    ```
@@ -153,8 +196,14 @@ The plan file's checkbox state is the source of truth — the orchestrator's in-
 
 ## Red Flags — STOP
 
+<!-- claude-only -->
 If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
+<!-- /claude-only -->
+<!-- codex-only -->
+Failure modes the MUST block doesn't already cover:
+<!-- /codex-only -->
 
+<!-- claude-only -->
 - "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially — a later phase may depend on an earlier one's commit.
 - "The subagent's proof command failed but the diff looks fine, I'll move on" → Phase 2 step 7 violation. Halt and surface to the user.
 - "Subagent didn't commit, but the changes are there — I'll mark it done" → Phase 2 step 7 violation. No commit means no phase. Retry or abort.
@@ -162,3 +211,10 @@ If you catch yourself saying or thinking any of these, pause and re-read the rel
 - "No `## Phases` block, but I can infer the phases from the prose" → Phase 2 step 2 violation. Halt and point the user back to `/agent-dashboard:feature` for inline implementation.
 - "`.feature-plan-path` is missing, but the latest plan is probably right" → Phase 1 step 3 violation. Show recent plans and let the user confirm.
 - "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `/agent-dashboard:pr`.
+<!-- /claude-only -->
+<!-- codex-only -->
+- "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially; a later phase may depend on an earlier one's commit.
+- "The subagent's proof command failed but the diff looks fine, I'll move on" → halt and surface to the user.
+- "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `/agent-dashboard:pr`.
+- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `/agent-dashboard:feature` for inline implementation.
+<!-- /codex-only -->
