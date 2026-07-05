@@ -1674,15 +1674,7 @@ func (m model) renderHelpBar() string {
 		return m.truncateHelpBar(parts)
 	}
 
-	if m.mode == modeCreateModel {
-		parts = append(parts, boldStyle.Render("enter")+" select")
-		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
-		parts = append(parts, boldStyle.Render("esc")+" back")
-		parts = append(parts, boldStyle.Render("^c")+" cancel")
-		return m.truncateHelpBar(parts)
-	}
-
-	if m.mode == modeCreateEffort {
+	if m.mode == modeCreateModel || m.mode == modeCreateEffort {
 		parts = append(parts, boldStyle.Render("enter")+" select")
 		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
 		parts = append(parts, boldStyle.Render("esc")+" back")
