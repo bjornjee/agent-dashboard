@@ -55,13 +55,14 @@ async function setupAgent(page, { pending, conversation }) {
   const agent = makeAgent();
   let answerPosts = [];
   let pendingState = pending;
+  let conversationState = conversation || [];
   await page.route('**/events', (route) => route.abort('connectionrefused'));
   await page.route(/\/api\//, async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path === '/api/agents') return route.fulfill({ json: [agent] });
     if (path === `/api/agents/${AGENT_ID}/conversation`) {
-      return route.fulfill({ json: conversation || [] });
+      return route.fulfill({ json: conversationState });
     }
     if (path === `/api/agents/${AGENT_ID}/pending-question`) {
       return route.fulfill({ json: pendingState });
@@ -90,7 +91,20 @@ async function setupAgent(page, { pending, conversation }) {
   return {
     answerPosts,
     setPending(next) { pendingState = next; },
+    setConversation(next) { conversationState = next; },
   };
+}
+
+function longConversation(n) {
+  const out = [{ role: 'human', content: 'plan it', timestamp: '2026-06-04T10:00:00Z' }];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      role: 'assistant',
+      content: 'Progress update ' + i + ' — still working through the plan, more scrollback filler text here.',
+      timestamp: '2026-06-04T10:01:00Z',
+    });
+  }
+  return out;
 }
 
 test.describe('AskUserQuestion card lifecycle', () => {
@@ -238,5 +252,67 @@ test.describe('AskUserQuestion card lifecycle', () => {
     ctx.setPending(null);
     // Card disappears on the next poll tick
     await expect(card).toBeHidden({ timeout: 5000 });
+  });
+});
+
+// Arrival + gate UX around the card. The card is the turn's workflow
+// gate: it must be seen when it arrives, and the composer must not
+// advertise a competing reply path (typed text into a native picker is
+// silently dropped by the harness — see submitQuestionCard's comment).
+test.describe('question-card arrival & composer gate', () => {
+  test('mid-session card mount scrolls the card into view when at bottom', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const ctx = await setupAgent(page, { pending: null, conversation: longConversation(24) });
+    await page.waitForSelector('.conversation', { timeout: 5000 });
+    await expect(page.locator('.question-card')).toHaveCount(0);
+    // Initial load leaves the reader at the bottom; the question then
+    // arrives mid-session on a poll tick.
+    ctx.setPending(PENDING_NO_TOOL_USE_ID);
+    const card = page.locator('.question-card').first();
+    await expect(card).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(400); // let the rAF scroll settle
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y, 'card top should be pulled into the upper viewport, not below the fold').toBeLessThan(844 * 0.6);
+  });
+
+  test('composer is gated while a question is pending and released after', async ({ page }) => {
+    const ctx = await setupAgent(page, {
+      pending: PENDING_NO_TOOL_USE_ID,
+      conversation: [{ role: 'human', content: 'plan it', timestamp: '2026-06-04T10:00:00Z' }],
+    });
+    await expect(page.locator('.question-card')).toBeVisible({ timeout: 5000 });
+    const input = page.locator('#reply-input');
+    await expect(input).toBeDisabled({ timeout: 3000 });
+    await expect(input).toHaveAttribute('placeholder', /Answer the question card above/);
+    await expect(page.locator('.ui-composer__send')).toBeDisabled();
+    // Question resolves — the composer comes back with its normal placeholder.
+    ctx.setPending(null);
+    await expect(input).toBeEnabled({ timeout: 5000 });
+    await expect(input).not.toHaveAttribute('placeholder', /Answer the question card above/);
+    await expect(page.locator('.ui-composer__send')).toBeEnabled();
+  });
+
+  test('jump chip appears for new activity while scrolled up and jumps down', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const convo = longConversation(24);
+    const ctx = await setupAgent(page, { pending: null, conversation: convo });
+    await page.waitForSelector('.conversation', { timeout: 5000 });
+    await page.evaluate(() => { document.querySelector('.detail-scroll').scrollTop = 0; });
+    ctx.setConversation([
+      ...convo,
+      { role: 'assistant', content: 'A brand new update arrives at the bottom.', timestamp: '2026-06-04T10:09:00Z' },
+    ]);
+    const chip = page.locator('.jump-latest');
+    await expect(chip).toBeVisible({ timeout: 5000 });
+    await expect(chip).toHaveText(/New activity/);
+    await chip.click();
+    await expect(chip).toHaveCount(0);
+    const atBottom = await page.evaluate(() => {
+      const s = document.querySelector('.detail-scroll');
+      return s.scrollHeight - s.scrollTop - s.clientHeight < 60;
+    });
+    expect(atBottom).toBe(true);
   });
 });

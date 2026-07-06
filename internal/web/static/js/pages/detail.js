@@ -1,7 +1,7 @@
 // Agent detail view with tabs and stats disclosure.
 import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
+import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge, questionBadge } from '../state.js';
 import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -135,7 +135,12 @@ export function updateActionBar(agent) {
   // bail out when none of them changed so the focused textarea is
   // never detached. This is what keeps the mobile keyboard open.
   const sig = actionBarSignature(agent);
-  if (bar.dataset.sig === sig) return;
+  if (bar.dataset.sig === sig) {
+    // Bar HTML is unchanged, but the composer gate rides on
+    // agent.pending_question which is not part of the signature.
+    applyComposerGate(!!questionBadge(agent));
+    return;
+  }
 
   // Capture in-flight composer state so the SSE-driven re-render doesn't
   // wipe what the user is typing.
@@ -164,6 +169,7 @@ export function updateActionBar(agent) {
     }
   }
   if (newInput) attachSlashAutocomplete(newInput, agent.harness);
+  applyComposerGate(!!questionBadge(agent));
 }
 
 // Track optimistic messages so refreshConversation can preserve them
@@ -307,6 +313,71 @@ export function cancelPendingUserMessage() {
 // 2s conversation poll (which doesn't carry an agent reference) so that
 // the rebuilt .conversation can re-mount the working indicator.
 let lastKnownAgent = null;
+
+// --- Composer gate (pending AskUserQuestion) ---
+// While a question card is pending, the composer is a lying affordance:
+// typed text POSTs to /input but Claude Code's native picker swallows it
+// (see submitQuestionCard). One gate, one input — disable the composer
+// and point at the card until the question resolves.
+const GATED_PLACEHOLDER = 'Answer the question card above';
+
+function applyComposerGate(gated) {
+  const input = document.getElementById('reply-input');
+  if (!input) return;
+  const composer = input.closest('.ui-composer');
+  const send = composer ? composer.querySelector('.ui-composer__send') : null;
+  if (gated) {
+    if (input.dataset.qcGated !== '1') {
+      input.dataset.qcGated = '1';
+      input.dataset.qcPlaceholder = input.placeholder || '';
+      input.placeholder = GATED_PLACEHOLDER;
+      input.disabled = true;
+    }
+    if (send) send.disabled = true;
+  } else if (input.dataset.qcGated === '1') {
+    delete input.dataset.qcGated;
+    input.placeholder = input.dataset.qcPlaceholder || '';
+    delete input.dataset.qcPlaceholder;
+    input.disabled = false;
+    if (send) send.disabled = false;
+  }
+}
+
+// --- Jump-to-latest chip ---
+// Floating affordance shown when new conversation activity (entries or
+// a question card) lands while the reader is scrolled up in history.
+// Clicking jumps to the question card when one is pending (it is the
+// gate), else to the bottom. Removed on click, on reaching the bottom,
+// and on tab/view changes.
+function showJumpChip(hasQuestion) {
+  let chip = document.querySelector('.jump-latest');
+  if (!chip) {
+    chip = document.createElement('button');
+    chip.className = 'jump-latest';
+    chip.setAttribute('aria-label', 'Jump to latest activity');
+    const host = document.querySelector('.detail-layout') || document.body;
+    host.appendChild(chip);
+    chip.addEventListener('click', () => {
+      const sp = document.querySelector('.detail-scroll');
+      if (sp) {
+        const card = sp.querySelector('.question-card');
+        if (card) {
+          const parentRect = sp.getBoundingClientRect();
+          const cardRect = card.getBoundingClientRect();
+          sp.scrollTop += (cardRect.top - parentRect.top) - 12;
+        } else {
+          sp.scrollTop = sp.scrollHeight;
+        }
+      }
+      hideJumpChip();
+    });
+  }
+  chip.textContent = hasQuestion ? '↓ 1 question' : '↓ New activity';
+}
+
+function hideJumpChip() {
+  document.querySelectorAll('.jump-latest').forEach(el => el.remove());
+}
 
 const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
 
@@ -1230,6 +1301,11 @@ function entryInsertAnchor(conv) {
 // refresh. Decoration siblings are kept outside the indexed entry set.
 function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
   const visible = visibleEntries(entries);
+  // Report whether anything actually changed. A count comparison is not
+  // enough: consecutive assistant entries MERGE in visibleEntries, so a
+  // growing transcript often re-renders one entry in place instead of
+  // adding a node. The jump-chip trigger rides on this signal.
+  let changed = false;
 
   for (let i = 0; i < visible.length; i++) {
     const sig = entryRenderSignature(visible[i], suppressPlanActions);
@@ -1247,12 +1323,17 @@ function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
     } else {
       conv.insertBefore(el, entryInsertAnchor(conv));
     }
+    changed = true;
   }
   conv.querySelectorAll(':scope > [data-entry-idx]').forEach(el => {
     const idx = parseInt(el.dataset.entryIdx || '-1', 10);
-    if (idx < 0 || idx >= visible.length) el.remove();
+    if (idx < 0 || idx >= visible.length) {
+      el.remove();
+      changed = true;
+    }
   });
   conv.dataset.renderedCount = String(visible.length);
+  return changed;
 }
 
 // Reconcile the AskUserQuestion card without touching it when the
@@ -1275,6 +1356,7 @@ function reconcileQuestionCard(conv, pending, agentId) {
       && existing.dataset.sig === sig) {
     return; // identical card — leave it alone
   }
+  const isNewCard = !existing || existing.dataset.toolUseId !== pendingCardId;
   if (existing) {
     if (existing._qcPagerObserver) existing._qcPagerObserver.disconnect();
     existing.remove();
@@ -1285,9 +1367,34 @@ function reconcileQuestionCard(conv, pending, agentId) {
   if (!cardEl) return;
   // Insert ahead of optimistic msg / caption / working indicator, after
   // all entry messages — same slot the original full-render path used.
+  const scrollParent = conv.closest('.detail-scroll');
+  // "Following" is looser here than the strict isAtBottom threshold:
+  // async layout shifts (webfont reflow, indicator mounts) can leave a
+  // passive follower a few hundred px off the exact bottom. Within one
+  // viewport of the bottom still counts as following; only a reader
+  // genuinely up in history keeps their position.
+  const nearBottom = !!scrollParent
+    && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight)
+       < scrollParent.clientHeight;
   const anchor = conv.querySelector('[data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working');
   conv.insertBefore(cardEl, anchor);
   attachQuestionCardInteractions(cardEl, agentId, pendingCardId);
+  // Arrival visibility: the card is the turn's gate — a mid-session
+  // mount below the fold with no cue costs the user the whole point of
+  // the page. If the reader was following the bottom, align the card's
+  // top edge (same anchor the initial-load path uses); if they were up
+  // reading history, don't yank — surface the jump chip instead.
+  if (isNewCard && scrollParent) {
+    if (nearBottom) {
+      requestAnimationFrame(() => {
+        const parentRect = scrollParent.getBoundingClientRect();
+        const cardRect = cardEl.getBoundingClientRect();
+        scrollParent.scrollTop += (cardRect.top - parentRect.top) - 12;
+      });
+    } else {
+      showJumpChip(true);
+    }
+  }
 }
 
 // Reconcile the in-flight optimistic user message. Three states:
@@ -1374,10 +1481,15 @@ async function refreshConversation(agentId, agent) {
     conv = container.querySelector('.conversation');
   }
 
-  appendNewEntries(conv, entries, agentId, actionPanelHasApproveReject(agent));
+  const grew = appendNewEntries(conv, entries, agentId, actionPanelHasApproveReject(agent));
   reconcileQuestionCard(conv, pending, agentId);
   reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
+  applyComposerGate(hasPendingQuestionPayload(pending));
+  // New entries landed while the reader was up in history — offer the
+  // jump affordance instead of silently growing the page below them.
+  if (!wasAtBottom && grew) showJumpChip(!!conv.querySelector('.question-card'));
+  else if (wasAtBottom) hideJumpChip();
 
   // Don't snap to bottom when a question card is mounted — the visitor
   // is filling out the card and must keep it in view.
@@ -1620,6 +1732,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       // Only show skeleton when the tab is empty (first visit) — avoids flicker on re-clicks.
       if (!container.dataset.loaded) container.innerHTML = skeletonLoading(target === 'activity' ? 6 : target === 'conversation' ? 4 : 3);
       currentDetailTab = target;
+      if (target !== 'conversation') hideJumpChip();
       try { sessionStorage.setItem('detail-tab-' + agentId, target); } catch {}
       loadTabContent(target, agentId);
       if (target === 'conversation') startConversationPoll(agentId);
@@ -1653,6 +1766,18 @@ export async function renderDetail(app, agents, agentId, setView) {
   // skill list returned from /api/skills?harness=.
   const composerInput = document.getElementById('reply-input');
   if (composerInput) attachSlashAutocomplete(composerInput, agent.harness);
+  applyComposerGate(!!questionBadge(agent));
+
+  // Jump chip is per-mount state — clear leftovers from a previous
+  // detail view, and dismiss automatically once the reader reaches the
+  // bottom on their own.
+  hideJumpChip();
+  const detailScrollEl = app.querySelector('.detail-scroll');
+  if (detailScrollEl) {
+    detailScrollEl.addEventListener('scroll', () => {
+      if (isAtBottom(detailScrollEl)) hideJumpChip();
+    }, { passive: true });
+  }
 
   // Start conversation polling only when the conversation tab is active.
   if (savedTab === 'conversation') startConversationPoll(agentId);
