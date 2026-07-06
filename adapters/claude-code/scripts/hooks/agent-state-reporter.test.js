@@ -10,6 +10,7 @@ const {
   resolveChangedFiles,
   shouldGuardWrite,
 } = require('./agent-state-reporter');
+const { detectHarness } = require('./agent-state-fast');
 const { detectState } = require('../../packages/agent-state/detect');
 
 const BASE_INPUT = {
@@ -65,11 +66,10 @@ describe('buildReportEntry', () => {
         last_message_preview: null,
         permission_mode: 'default',
         files_changed: [],
-        // BASE_INPUT has no PLUGIN_ROOT env and no gpt model → detectHarness
-        // returns "claude". Stamping harness counts as a change on first
-        // sight; we pre-populate existing.harness so the no-change branch
-        // is exercised cleanly.
-        harness: 'claude',
+        // Stamping harness counts as a change on first sight; pre-populate
+        // the same value detectHarness will derive in this process so the
+        // no-change branch is exercised under both CLI and hook envs.
+        harness: detectHarness(BASE_INPUT),
       },
       target: 'main:1.0',
       tmuxPane: '%0',
