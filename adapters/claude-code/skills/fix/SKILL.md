@@ -29,7 +29,7 @@ Follow `../_shared/worktree-setup.md` with branch prefix `fix`.
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment per `../_shared/env-setup.md`.
+**Background — Environment setup:** First check for a reusable environment: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse — the setup from a prior run in this worktree is current. Otherwise, launch a background agent (`run_in_background: true`) to set up the dev environment per `../_shared/env-setup.md`.
 
 **Foreground — Evidence gathering:**
 

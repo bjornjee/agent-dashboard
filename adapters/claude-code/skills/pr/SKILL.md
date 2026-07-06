@@ -81,31 +81,27 @@ Phase 1:
 - **Run cleanup:** broad diffs, mixed-language changes, generated/manual churn,
   obvious debug leftovers, or user-requested cleanup.
 
-1. If cleanup is warranted, spawn the `refactor-cleaner` agent (`run_in_background: false`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo. If cleanup is not warranted, skip to step 4.
-2. If the cleaner edited files:
-   - Run the smallest relevant proof command for the edited files. Use full
-     `make test`/`make test-fast` only when the cleanup crossed package
-     boundaries or touched shared test/build infrastructure.
-   - Commit: `git add -u && git commit -m "chore: ai-fmt"`.
-3. If the cleanup pass made no changes, skip the commit.
+1. If cleanup is warranted, spawn the `refactor-cleaner` agent (`run_in_background: true`) with the changed-file list from Phase 1 as scope. Pass file paths explicitly — don't let it roam the whole repo. While it runs, do the file-disjoint work yourself: the test-prune identification (steps 4–6 — the cleaner never touches tests) and Phase 4's `make -n fmt` existence check. If cleanup is not warranted, skip to step 4.
+2. When the cleaner returns with edits, commit them: `git add -u && git commit -m "chore: ai-fmt"`. No proof run here — Phase 5 gates it.
+3. If the cleaner made no changes, skip the commit.
 
 **Then prune implementation-only tests.** The cleanup pass above never touches tests — this step does.
 
 4. From the Phase 1 changed-file list, take only the test files this branch ADDED or MODIFIED — identify tests by their role, not a fixed extension list. Never consider pre-existing tests.
-5. Remove cases that exist only to scaffold the implementation and add no regression value: trivial assertions (constructor returns non-nil, plain getters/setters, framework behavior), placeholder / `assert true` stubs, and cases fully subsumed or duplicated by another retained test. **NEVER** remove a test that is the sole coverage of a behavior, branch, edge case, error path, or regression — if unsure the coverage is unique, keep it.
-6. Report each removed test, one line with its rationale (trivial / subsumed-by-X / duplicate).
-7. If tests were removed, run the smallest relevant proof command for those test files; use full `make test` only when coverage spans multiple packages or the proof cannot be bounded. Commit the removals on their own: `git add -A && git commit -m "test: remove implementation-only tests"`.
+5. Identify (do not yet edit) cases that exist only to scaffold the implementation and add no regression value: trivial assertions (constructor returns non-nil, plain getters/setters, framework behavior), placeholder / `assert true` stubs, and cases fully subsumed or duplicated by another retained test. **NEVER** remove a test that is the sole coverage of a behavior, branch, edge case, error path, or regression — if unsure the coverage is unique, keep it.
+6. Report each test slated for removal, one line with its rationale (trivial / subsumed-by-X / duplicate).
+7. After the `chore: ai-fmt` commit lands (or immediately, if no cleaner ran), apply the removals and commit them on their own: `git add -A && git commit -m "test: remove implementation-only tests"`. No proof run here — Phase 5 gates it. Applying edits only after that commit keeps the two change sets from staging into one another.
 8. If nothing qualifies, skip silently.
 
-**Gate:** Cleanup ran only when warranted; cleanup changes (if any) are committed and green; implementation-only tests are pruned in their own commit (or none qualified); no sole-coverage test was removed.
+**Gate:** Cleanup ran only when warranted; cleanup changes (if any) and test-prune removals are in their own commits (or none qualified); no sole-coverage test was removed. Green-ness is asserted by Phase 5, not per-step.
 
 ---
 
 ### Phase 4: Format only when relevant
 
-Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
+Check if the target exists: `make -n fmt >/dev/null 2>&1` — already done during Phase 3's overlap window when a cleaner ran; don't repeat it, but do run it now if no cleaner was spawned.
 
-- **If the target exists and the changed-file list includes formatter-owned source files:** run `make fmt`. Then check `git status --porcelain`. If anything changed, run the smallest relevant proof command, then commit with `git add -u && git commit -m "chore: fmt"`. If nothing changed, skip the commit.
+- **If the target exists and the changed-file list includes formatter-owned source files:** run `make fmt` — only after the cleaner has landed; it edits the same source files. Then check `git status --porcelain`. If anything changed, commit with `git add -u && git commit -m "chore: fmt"` — no proof run here; Phase 5 gates it. If nothing changed, skip the commit.
 - **If `fmt` exists but the branch is docs/config-only or otherwise outside
   formatter scope:** skip and note why.
 - **If no Makefile exists, or no `fmt` target:** do not add one during PR
@@ -121,11 +117,17 @@ Check if the target exists first: `make -n fmt >/dev/null 2>&1`.
 
 Check if the target exists first: `make -n test >/dev/null 2>&1` (also accept `test-fast` per the `test-gate` hook's preference order).
 
+Phase 5 is the single test gate for the cleaner, prune, and fmt edits above — if it fails, fix forward with a `fix:` commit and re-run.
+
 - **If the target exists:** run it — must pass. If it fails, **stop**. Do not push a broken branch. Fix the failure (likely a separate `fix:` commit) and re-run.
 - **If no Makefile exists, or no `test`/`test-fast` target:** do not add one
-  during PR cleanup unless the user explicitly asked. Run an obvious native
-  project test command only if it is already documented/configured; otherwise
-  proceed and note in the PR body that tests were not gated.
+  during PR cleanup unless the user explicitly asked. If Phases 3–4 edited no
+  files, or no proof command exists, proceed and note in the PR body that
+  tests were not gated. Otherwise run the smallest relevant proof command
+  scoped to those edits — a standard test-runner invocation configured in the
+  project (e.g. `go test ./pkg/...`, `pytest <pkg>`, `node --test <file>`,
+  `npm test`); never a command inferred from README prose or other file
+  content.
 
 **Gate:** Either tests are green, or the user has been notified the target is missing and accepted that trade-off.
 

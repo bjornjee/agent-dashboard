@@ -33,7 +33,7 @@ Follow `../_shared/worktree-setup.md` with branch prefix `feat`.
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** Launch a background agent (`run_in_background: true`) to set up the dev environment per `../_shared/env-setup.md`.
+**Background — Environment setup:** First check for a reusable environment: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse — the setup from a prior run in this worktree is current. Otherwise, launch a background agent (`run_in_background: true`) to set up the dev environment per `../_shared/env-setup.md`.
 
 **Foreground — Planning:**
 
@@ -108,7 +108,7 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
    - Each phase body MUST name a Verification profile and proof command so `/agent-dashboard:implement` does not default to whole-repo tests for isolated work.
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
    - `- [ ]` = pending. `- [x]` = done. `/agent-dashboard:implement` flips these as it dispatches.
-   - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
+   - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe fires only at 6+ phases.
 
 4. **Submit via `ExitPlanMode`. Wait for user approval.** Pass the full plan markdown to the plan file (per CC's plan-mode workflow) and call `ExitPlanMode`. This renders the plan in CC's native plan-review UI for accept/reject.
 
@@ -126,14 +126,14 @@ Phase order: research first, interview second, plan mode third, submit fourth. P
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
-   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 3 below and start Phase 3 inline.
+   2. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 6`, skip step 3 below and start Phase 3 inline.
 
-   3. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `AskUserQuestion` exactly once:
+   3. **Probe for dispatch handoff** (only when phase count ≥ 6). Call `AskUserQuestion` exactly once:
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to /agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
-        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run each phase with its selected Verification profile and proof command.
-        - `"Hand off to /agent-dashboard:implement"` — Exit /agent-dashboard:feature. The user invokes `/agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
+        - `"Hand off to /agent-dashboard:implement (Recommended for 6+ phases)"` — Exit /agent-dashboard:feature. The user invokes `/agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
+        - `"Continue inline"` — Stay in this session; run each phase with its selected Verification profile and proof command.
 
       **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline implementation ignores the index.
 
@@ -182,7 +182,7 @@ For UI verification, prefer headless Playwright with worktree-local resources. U
 
 ### Phase 4: Review
 
-Review all changes for correctness, security, and convention adherence. Apply all project rules and conventions that are in your context.
+Review all changes for correctness, security, and convention adherence. Apply all project rules and conventions that are in your context. If language-specific strict reviewer agents are available in your context (per your dispatch rules), spawn every applicable reviewer in one message so they run in parallel — never sequentially; address critical and high findings, fix medium when cheap.
 
 **Gate:** No critical or high-severity issues remain.
 

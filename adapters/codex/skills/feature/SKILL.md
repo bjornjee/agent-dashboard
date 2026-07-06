@@ -108,7 +108,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
    - Each phase body MUST name a Verification profile and proof command so `$agent-dashboard:implement` does not default to whole-repo tests for isolated work.
    - `deps:` defaults to "depends on previous phase". Use `-` for "no dependencies".
    - `- [ ]` = pending. `- [x]` = done. `$agent-dashboard:implement` flips these as it dispatches.
-   - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe won't fire below the threshold.
+   - **Fewer than 3 work units?** Skip this format. Inline paragraphs are fine; the probe fires only at 6+ phases.
 
    **`<proposed_plan>` is the only acceptable submission.** Pasting the plan as ordinary assistant text is a violation, even if you also update a checklist afterwards. The user reviews and approves through the plan-review UI — nowhere else.
 
@@ -124,16 +124,16 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
-   2. **Kick off environment setup as a background `exec_command`** (always). The setup task runs in parallel with the dispatch probe and any pre-Phase-3 work so its install time is amortised. It must follow `../_shared/env-setup.md`.
+   2. **Kick off environment setup as a background `exec_command`** — unless a reusable environment exists: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse. Otherwise the setup task runs in parallel with the dispatch probe and any pre-Phase-3 work so its install time is amortised. It must follow `../_shared/env-setup.md`.
 
-   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 3`, skip step 4 below and start Phase 3 inline.
+   3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 6`, skip step 4 below and start Phase 3 inline.
 
-   4. **Probe for dispatch handoff** (only when phase count ≥ 3). Call `request_user_input` exactly once when available; otherwise ask one concise direct question and wait for the user's answer. Never choose the recommended option yourself.
+   4. **Probe for dispatch handoff** (only when phase count ≥ 6). Call `request_user_input` exactly once when available; otherwise ask one concise direct question and wait for the user's answer. Never choose the recommended option yourself.
       - Question: `"Plan has {N} phases. Continue inline here, or hand off to $agent-dashboard:implement for context isolation?"`
       - Header: `"Dispatch"`
       - Options (recommended first):
-        - `"Continue inline (Recommended for ≤4 phases)"` — Stay in this session; run each phase with its selected Verification profile and proof command.
-        - `"Hand off to $agent-dashboard:implement"` — Exit $agent-dashboard:feature. The user invokes `$agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
+        - `"Hand off to $agent-dashboard:implement (Recommended for 6+ phases)"` — Exit $agent-dashboard:feature. The user invokes `$agent-dashboard:implement` in a fresh session; each phase dispatches to its own subagent.
+        - `"Continue inline"` — Stay in this session; run each phase with its selected Verification profile and proof command.
 
       **If `Continue inline`:** start Phase 3. The `## Phases` structure becomes documentation — inline implementation ignores the index.
 
@@ -182,7 +182,7 @@ For UI verification, prefer headless Playwright with worktree-local resources. U
 
 ### Phase 4: Review
 
-Review all changes for correctness, security, and convention adherence. Apply all project rules and conventions that are in your context.
+Review all changes for correctness, security, and convention adherence. Apply all project rules and conventions that are in your context. If language-specific review workers are available, spawn every applicable reviewer in one message (parallel `spawn_agent` calls) — never sequentially; address critical and high findings, fix medium when cheap.
 
 **Gate:** No critical or high-severity issues remain.
 

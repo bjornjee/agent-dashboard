@@ -37,7 +37,7 @@ vet: ## Run go vet (checks formatting + vets)
 	go vet ./...
 
 test-js: ## Run JS unit tests (node --test), including both adapter hook suites
-	node --test internal/web/static/js/*.test.js internal/web/static/js/pages/*.test.js
+	node --test internal/web/static/js/*.test.js internal/web/static/js/pages/*.test.js scripts/*.test.js
 	cd adapters/claude-code && npm test --silent
 	cd adapters/codex/hooks && npm test --silent
 
