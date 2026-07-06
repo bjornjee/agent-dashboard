@@ -89,6 +89,30 @@ func TestReadState_FallbackToFilename(t *testing.T) {
 	}
 }
 
+func TestReadState_NormalizesCodexWaitingInput(t *testing.T) {
+	tmp := t.TempDir()
+	writeAgentFile(t, tmp, "sess-codex.json", domain.Agent{
+		SessionID: "sess-codex",
+		Target:    "main:1.0",
+		State:     "waiting_input",
+		Harness:   "codex",
+	})
+
+	sf := ReadState(tmp)
+	agent := sf.Agents["sess-codex"]
+	if agent.State != "idle_prompt" {
+		t.Fatalf("State = %q, want idle_prompt", agent.State)
+	}
+
+	sorted := SortedAgents(sf, "")
+	if len(sorted) != 1 {
+		t.Fatalf("SortedAgents returned %d agents, want 1", len(sorted))
+	}
+	if got := domain.StatePriority[sorted[0].State]; got != 4 {
+		t.Errorf("sorted state priority = %d, want REVIEW priority 4", got)
+	}
+}
+
 func TestSortedAgents_Priority(t *testing.T) {
 	sf := domain.StateFile{
 		Agents: map[string]domain.Agent{

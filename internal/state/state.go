@@ -47,6 +47,15 @@ func AgentsDir(dir string) string {
 	return filepath.Join(dir, "agents")
 }
 
+func normalizeAgentState(state string) string {
+	switch state {
+	case "waiting_input":
+		return "idle_prompt"
+	default:
+		return state
+	}
+}
+
 // ReadState reads all per-agent JSON files from dir/agents/*.json.
 // Agents are keyed by session_id (the filename stem). Returns empty state on error.
 func ReadState(dir string) domain.StateFile {
@@ -69,6 +78,7 @@ func ReadState(dir string) domain.StateFile {
 		if err := json.Unmarshal(data, &agent); err != nil {
 			continue
 		}
+		agent.State = normalizeAgentState(agent.State)
 		// Use session_id as the key; fall back to filename stem
 		key := agent.SessionID
 		if key == "" {
@@ -824,6 +834,7 @@ func ReadAgent(dir, sessionID string) (domain.Agent, bool) {
 	if err := json.Unmarshal(data, &agent); err != nil {
 		return domain.Agent{}, false
 	}
+	agent.State = normalizeAgentState(agent.State)
 	return agent, true
 }
 
