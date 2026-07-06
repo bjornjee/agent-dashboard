@@ -107,7 +107,8 @@ var groupHeaders = map[int]struct {
 	6: {"MERGED", mergedColor},
 	// Restart-survivors (Agent.Resumable) — dimmed: dead sessions offered
 	// for resume, not live work.
-	domain.ResumablePriority: {"RESUMABLE", resumableColor},
+	domain.ResumablePriority:    {"RESUMABLE", resumableColor},
+	domain.UnknownStatePriority: {"OTHER", themeOverlay1},
 }
 
 // isBlocked returns true when the agent needs a mechanical action (y/n) to continue.

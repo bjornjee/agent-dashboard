@@ -120,6 +120,11 @@ type StateFile struct {
 // in a dedicated RESUMABLE section at the bottom of the tree.
 const ResumablePriority = 7
 
+// UnknownStatePriority is the display group for unrecognized raw states. It
+// sorts after known live states so new/invalid states are visible without being
+// mislabeled as active work.
+const UnknownStatePriority = 99
+
 // StatePriority defines state groups: blocked → waiting → running → review → pr → merged.
 // PR and merged are user-driven (pinned) states set by the dashboard.
 var StatePriority = map[string]int{

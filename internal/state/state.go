@@ -631,7 +631,7 @@ func sortPriority(a domain.Agent) int {
 	}
 	p := domain.StatePriority[a.State]
 	if p == 0 {
-		p = 99
+		p = domain.UnknownStatePriority
 	}
 	return p
 }

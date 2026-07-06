@@ -432,7 +432,7 @@ func agentGroup(agent domain.Agent) int {
 	}
 	group := domain.StatePriority[agent.State]
 	if group == 0 {
-		group = 3
+		group = domain.UnknownStatePriority
 	}
 	return group
 }
@@ -1168,10 +1168,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					pi := domain.StatePriority[m.agents[i].State]
 					pj := domain.StatePriority[m.agents[j].State]
 					if pi == 0 {
-						pi = 99
+						pi = domain.UnknownStatePriority
 					}
 					if pj == 0 {
-						pj = 99
+						pj = domain.UnknownStatePriority
 					}
 					if pi != pj {
 						return pi < pj

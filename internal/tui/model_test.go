@@ -103,6 +103,56 @@ func TestBuildTree_CoalescesNonContiguousStateGroups(t *testing.T) {
 	}
 }
 
+func TestAgentListContent_CoalescesLiveStateShape(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.leftWidth = 80
+	m.agents = []domain.Agent{
+		{Target: "main:2.1", Window: 2, Pane: 1, State: "pr", PinnedState: "pr", Session: "pr-one"},
+		{Target: "main:2.2", Window: 2, Pane: 2, State: "question", Session: "raw-waiting-input-normalized"},
+		{Target: "main:4.3", Window: 4, Pane: 3, State: "running", PinnedState: "pr", Session: "active-pr"},
+		{Target: "main:1.1", Window: 1, Pane: 1, State: "done", Session: "done-agent"},
+		{Target: "main:4.2", Window: 4, Pane: 2, State: "pr", PinnedState: "pr", Session: "pr-two"},
+	}
+
+	m.buildTree()
+	content := m.agentListContent()
+
+	if got := strings.Count(content, "RUNNING"); got != 1 {
+		t.Fatalf("RUNNING header count = %d, want 1\n%s", got, content)
+	}
+}
+
+func TestAgentListContent_UnknownStateDoesNotRenderAsRunning(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.leftWidth = 80
+	m.agents = []domain.Agent{
+		{Target: "main:2.1", Window: 2, Pane: 1, State: "running", Session: "running-agent"},
+		{Target: "main:3.1", Window: 3, Pane: 1, State: "pr", Session: "pr-agent"},
+		{Target: "main:4.1", Window: 4, Pane: 1, State: "new_raw_state", Session: "unknown-agent"},
+	}
+
+	m.buildTree()
+
+	var groups []int
+	for _, node := range m.treeNodes {
+		if node.GroupHeader > 0 {
+			groups = append(groups, node.GroupHeader)
+		}
+	}
+	wantGroups := []int{3, 5, domain.UnknownStatePriority}
+	if fmt.Sprint(groups) != fmt.Sprint(wantGroups) {
+		t.Fatalf("group headers = %v, want %v", groups, wantGroups)
+	}
+
+	content := m.agentListContent()
+	if got := strings.Count(content, "RUNNING"); got != 1 {
+		t.Fatalf("RUNNING header count = %d, want 1\n%s", got, content)
+	}
+	if !strings.Contains(content, "OTHER") {
+		t.Fatalf("content missing OTHER header:\n%s", content)
+	}
+}
+
 func TestCurrentTool_InAgentStruct(t *testing.T) {
 	// Verify CurrentTool field is available and serializes correctly
 	agent := domain.Agent{
