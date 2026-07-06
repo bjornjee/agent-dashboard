@@ -34,7 +34,7 @@ func mockReadAgentState(m *mocks.MockRunner) {
 
 	// TmuxListPanes (Output: list-panes -a -F ...)
 	m.On("Output", mock.Anything,
-		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}",
+		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}",
 	).Return([]byte(""), nil)
 }
 

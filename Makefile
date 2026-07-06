@@ -36,8 +36,10 @@ vet: ## Run go vet (checks formatting + vets)
 	  fi
 	go vet ./...
 
-test-js: ## Run JS unit tests (node --test)
+test-js: ## Run JS unit tests (node --test), including both adapter hook suites
 	node --test internal/web/static/js/*.test.js internal/web/static/js/pages/*.test.js
+	cd adapters/claude-code && npm test --silent
+	cd adapters/codex/hooks && npm test --silent
 
 test: vet test-js ## Run all tests (vets first, then JS, then Go)
 	CGO_ENABLED=0 go test ./...

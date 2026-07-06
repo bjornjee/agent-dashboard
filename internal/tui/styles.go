@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
 // -- Theme palette --
@@ -60,6 +61,7 @@ var (
 	errorColor      = themeRed
 	runningColor    = themeBlue
 	idlePromptColor = themeOverlay1
+	resumableColor  = themeOverlay1
 	doneColor       = themeGreen
 	prColor         = themeMauve
 	mergedColor     = themeTeal
@@ -103,6 +105,9 @@ var groupHeaders = map[int]struct {
 	4: {"REVIEW", doneColor},
 	5: {"PR", prColor},
 	6: {"MERGED", mergedColor},
+	// Restart-survivors (Agent.Resumable) — dimmed: dead sessions offered
+	// for resume, not live work.
+	domain.ResumablePriority: {"RESUMABLE", resumableColor},
 }
 
 // isBlocked returns true when the agent needs a mechanical action (y/n) to continue.

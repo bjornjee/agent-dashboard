@@ -597,14 +597,8 @@ func SortedAgents(sf domain.StateFile, selfPaneID string) []domain.Agent {
 	}
 
 	sort.Slice(agents, func(i, j int) bool {
-		pi := domain.StatePriority[agents[i].State]
-		pj := domain.StatePriority[agents[j].State]
-		if pi == 0 {
-			pi = 99
-		}
-		if pj == 0 {
-			pj = 99
-		}
+		pi := sortPriority(agents[i])
+		pj := sortPriority(agents[j])
 		if pi != pj {
 			return pi < pj
 		}
@@ -618,39 +612,112 @@ func SortedAgents(sf domain.StateFile, selfPaneID string) []domain.Agent {
 	return agents
 }
 
+// sortPriority is the sort key for SortedAgents: restart-survivor orphans sink
+// to the dedicated RESUMABLE group after every live state group; everything
+// else sorts by its state's priority. Callers must flag Resumable (see
+// FlagResumable) before sorting or orphans interleave with live groups.
+func sortPriority(a domain.Agent) int {
+	if a.Resumable {
+		return domain.ResumablePriority
+	}
+	p := domain.StatePriority[a.State]
+	if p == 0 {
+		p = 99
+	}
+	return p
+}
+
 // finishedStates are terminal/shipped states that are not worth resuming: a
 // done task, an opened PR, or a merged branch. Orphans in these states are
 // still GC'd by PruneDead; only active sessions are retained for resume.
 var finishedStates = map[string]bool{"done": true, "pr": true, "merged": true}
 
+// resumableTTL bounds how long a restart-survivor stays resumable. It is the
+// backstop for shipped work the structural checks can't see — e.g. a
+// squash-merged branch (invisible to merge-base ancestry) whose worktree
+// still exists.
+const resumableTTL = 72 * time.Hour
+
 // IsResumableOrphan reports whether an agent is a restart-survivor worth
-// continuing: it has a real session, was in an active (non-finished) state, and
-// its recorded tmux pane is no longer live. livePanes is the set of currently
-// live pane IDs (%N format). Used by PruneDead (retention), the web JSON
-// (`resumable` flag), and both Cmd+K palettes (orphan marker + resume action),
-// so "orphan" means the same thing everywhere.
-func IsResumableOrphan(a domain.Agent, livePanes map[string]bool) bool {
+// continuing. Resumability is event-scoped to tmux server restarts: a pane
+// that died while the current server kept running was closed deliberately and
+// is never resumable. livePanes is the set of currently live pane IDs (%N
+// format) and serverPID the current tmux server PID — both must come from the
+// same enumeration (tmux.TmuxListPanes / TmuxListLivePaneIDs return them
+// atomically). Used by PruneDead (retention), the web JSON (`resumable` flag),
+// and both Cmd+K palettes (orphan marker + resume action), so "orphan" means
+// the same thing everywhere.
+func IsResumableOrphan(a domain.Agent, livePanes map[string]bool, serverPID string, now time.Time) bool {
 	if a.SessionID == "" || a.State == "" || a.TmuxPaneID == "" {
 		return false
 	}
 	// A nil set means tmux pane enumeration failed — we can't distinguish a live
 	// pane from a dead one, so refuse to classify anything as an orphan rather
 	// than risk treating a live agent as resumable. A non-nil empty set (tmux
-	// succeeded, zero panes) correctly falls through: the agent is dead.
-	if livePanes == nil {
+	// succeeded, zero panes) correctly falls through: the agent is dead. The
+	// server PID rides on the same enumeration, so it can only be empty when
+	// the set is nil — the guard keeps the invariant explicit anyway.
+	if livePanes == nil || serverPID == "" {
 		return false
 	}
 	if livePanes[a.TmuxPaneID] {
 		return false // pane is alive — not an orphan
 	}
-	return !finishedStates[a.State]
+	// Event scope: no stamped server PID (pre-upgrade file, or the hook ran
+	// outside tmux) or a PID matching the current server means the pane died
+	// under a living server — a deliberate close, not a restart-survivor.
+	if a.TmuxServerPID == "" || a.TmuxServerPID == serverPID {
+		return false
+	}
+	// Finished work is not worth resuming. Pin-aware: arbitrateState applies a
+	// pinned pr/merged over an idle resting state, so a pr-pinned idle_prompt
+	// agent counts as finished even though its raw state field does not.
+	if finishedStates[arbitrateState(a, "")] {
+		return false
+	}
+	// No branch means no work product to resume toward (ad-hoc interactive
+	// sessions); the branch is stamped by the worktree-reconcile hook for
+	// every dashboard-spawned agent, including ones on the default branch.
+	if a.Branch == "" {
+		return false
+	}
+	// The resume spawns into EffectiveDir — a cleaned-up worktree means the
+	// session cannot be meaningfully continued. Filesystem is the source of
+	// truth, not the cached state fields.
+	if _, err := os.Stat(a.EffectiveDir()); err != nil {
+		return false
+	}
+	// Age backstop: a survivor nobody resumed within the TTL is stale.
+	if a.UpdatedAt != "" {
+		if t, err := time.Parse(time.RFC3339, a.UpdatedAt); err == nil && now.Sub(t) > resumableTTL {
+			return false
+		}
+	}
+	return true
+}
+
+// FlagResumable stamps the transient Resumable flag on every agent in the
+// state file. Must run before SortedAgents so orphans sort into the
+// RESUMABLE group (see sortPriority).
+func FlagResumable(sf *domain.StateFile, livePanes map[string]bool, serverPID string, now time.Time) {
+	for key, agent := range sf.Agents {
+		if r := IsResumableOrphan(agent, livePanes, serverPID, now); r != agent.Resumable {
+			agent.Resumable = r
+			sf.Agents[key] = agent
+		}
+	}
 }
 
 // PruneDead removes agent files whose tmux panes no longer exist and
 // deduplicates agents sharing the same live pane (keeps only the newest).
-// livePaneIDs is the set of currently live tmux pane IDs (%N format).
-// Returns the number of agents removed.
-func PruneDead(dir string, livePaneIDs map[string]bool) int {
+// livePaneIDs is the set of currently live tmux pane IDs (%N format) and
+// serverPID the current tmux server PID from the same enumeration. Only
+// restart-survivors (IsResumableOrphan) are retained on a dead pane; a pane
+// closed under a living server is pruned like before the resume feature.
+// isBranchMerged, when non-nil, additionally GCs survivors whose branch is
+// already merged (checked in the survivor's EffectiveDir; the caller owns
+// caching and the default-branch guard). Returns the number of agents removed.
+func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBranchMerged func(dir, branch string) bool) int {
 	entries, err := os.ReadDir(AgentsDir(dir))
 	if err != nil {
 		return 0
@@ -692,6 +759,7 @@ func PruneDead(dir string, livePaneIDs map[string]bool) int {
 	// (subject to the safety net). Keeping them separate ensures the safety
 	// net only fires when every agent appears dead — not when dedup removals
 	// inflate the count.
+	now := time.Now()
 	var dedupPaths, deadPaths []string
 	for _, f := range files {
 		// Dedup: when multiple agents share a pane, remove all but the newest.
@@ -699,13 +767,16 @@ func PruneDead(dir string, livePaneIDs map[string]bool) int {
 			dedupPaths = append(dedupPaths, f.path)
 			continue
 		}
-		// Dead: pane no longer exists. Resumable orphans (an active session
-		// whose pane died — e.g. a tmux/server restart) are kept on disk so the
-		// user can find and continue them, and so resuming one doesn't
-		// cascade-delete its restart-survivor siblings once it gets a live pane.
+		// Dead: pane no longer exists. Restart-survivors (an active session
+		// whose pane died with its tmux server) are kept on disk so the user
+		// can find and continue them, and so resuming one doesn't
+		// cascade-delete its siblings once it gets a live pane — unless the
+		// survivor's branch is already merged, which means the work shipped.
 		if f.agent.TmuxPaneID == "" || !livePaneIDs[f.agent.TmuxPaneID] {
-			if IsResumableOrphan(f.agent, livePaneIDs) {
-				continue
+			if IsResumableOrphan(f.agent, livePaneIDs, serverPID, now) {
+				if isBranchMerged == nil || !isBranchMerged(f.agent.EffectiveDir(), f.agent.Branch) {
+					continue
+				}
 			}
 			deadPaths = append(deadPaths, f.path)
 		}

@@ -340,6 +340,77 @@ describe('packages/tmux', () => {
     });
   });
 
+  describe('getServerPid', () => {
+    it('parses the server PID from $TMUX', () => {
+      const orig = process.env.TMUX;
+      process.env.TMUX = '/private/tmp/tmux-502/default,12345,3';
+
+      delete require.cache[require.resolve('./index')];
+      const { getServerPid } = require('./index');
+
+      assert.equal(getServerPid(), '12345');
+
+      if (orig !== undefined) process.env.TMUX = orig;
+      else delete process.env.TMUX;
+      delete require.cache[require.resolve('./index')];
+    });
+
+    it('falls back to tmux display-message when $TMUX is unset', () => {
+      const orig = process.env.TMUX;
+      delete process.env.TMUX;
+
+      const cp = require('child_process');
+      const origSpawn = cp.spawnSync;
+      cp.spawnSync = () => ({ status: 0, stdout: '67890\n' });
+
+      delete require.cache[require.resolve('./index')];
+      const { getServerPid } = require('./index');
+
+      assert.equal(getServerPid(), '67890');
+
+      if (orig !== undefined) process.env.TMUX = orig;
+      cp.spawnSync = origSpawn;
+      delete require.cache[require.resolve('./index')];
+    });
+
+    it('returns null when $TMUX is unset and tmux fails', () => {
+      const orig = process.env.TMUX;
+      delete process.env.TMUX;
+
+      const cp = require('child_process');
+      const origSpawn = cp.spawnSync;
+      cp.spawnSync = () => ({ status: 1, stdout: '' });
+
+      delete require.cache[require.resolve('./index')];
+      const { getServerPid } = require('./index');
+
+      assert.equal(getServerPid(), null);
+
+      if (orig !== undefined) process.env.TMUX = orig;
+      cp.spawnSync = origSpawn;
+      delete require.cache[require.resolve('./index')];
+    });
+
+    it('ignores a malformed $TMUX and falls back', () => {
+      const orig = process.env.TMUX;
+      process.env.TMUX = 'garbage-without-commas';
+
+      const cp = require('child_process');
+      const origSpawn = cp.spawnSync;
+      cp.spawnSync = () => ({ status: 0, stdout: '424242\n' });
+
+      delete require.cache[require.resolve('./index')];
+      const { getServerPid } = require('./index');
+
+      assert.equal(getServerPid(), '424242');
+
+      if (orig !== undefined) process.env.TMUX = orig;
+      else delete process.env.TMUX;
+      cp.spawnSync = origSpawn;
+      delete require.cache[require.resolve('./index')];
+    });
+  });
+
   describe('parseTarget', () => {
     it('parses simple target', () => {
       delete require.cache[require.resolve('./index')];

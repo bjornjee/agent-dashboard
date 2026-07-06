@@ -40,12 +40,15 @@ func TestResumeOrphanSplitsIntoWindow(t *testing.T) {
 		Session:    "main",
 		Window:     1,
 		TmuxPaneID: "%9", // dead pane (not in live set)
+		// Survivor fields: stamped by a previous tmux server, real branch.
+		TmuxServerPID: "99",
+		Branch:        "feat/x",
 	}
 	ts, stateDir := createTestServer(t, orphan)
 
 	// TmuxListLivePaneIDs — %9 (the orphan's pane) is NOT live, so it qualifies.
-	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}").
-		Return([]byte("%0\n%1\n"), nil)
+	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}\t#{pid}").
+		Return([]byte("%0\t100\n%1\t100\n"), nil)
 
 	// FindWindowForRepo Pass-1 matches the orphan's own dir → "main:1".
 	m.On("Output", mock.Anything,
@@ -98,11 +101,14 @@ func TestResumeCodexOrphanSplitsIntoWindow(t *testing.T) {
 		Session:    "main",
 		Window:     1,
 		TmuxPaneID: "%9", // dead pane
+		// Survivor fields: stamped by a previous tmux server, real branch.
+		TmuxServerPID: "99",
+		Branch:        "feat/x",
 	}
 	ts, stateDir := createTestServer(t, orphan)
 
-	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}").
-		Return([]byte("%0\n%1\n"), nil) // %9 not live → orphan
+	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}\t#{pid}").
+		Return([]byte("%0\t100\n%1\t100\n"), nil) // %9 not live → orphan
 
 	m.On("Output", mock.Anything,
 		"list-panes", "-t", "main:1", "-F", "#{pane_index}",
@@ -148,8 +154,8 @@ func TestResumeLiveAgentRejected(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	m.On("Run", mock.Anything, "list-sessions").Return(nil) // TmuxIsAvailable
 	// TmuxListLivePaneIDs reports %5 alive → the agent is not an orphan.
-	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}").
-		Return([]byte("%5\n"), nil)
+	m.On("Output", mock.Anything, "list-panes", "-a", "-F", "#{pane_id}\t#{pid}").
+		Return([]byte("%5\t100\n"), nil)
 
 	folder := t.TempDir()
 	live := domain.Agent{

@@ -4,6 +4,6 @@
   "private": true,
   "description": "Claude Code adapter for agent-dashboard",
   "scripts": {
-    "test": "node --test packages/*/test.js scripts/hooks/*.test.js scripts/*.test.js"
+    "test": "CLAUDE_PLUGIN_ROOT='' node --test packages/*/test.js scripts/hooks/*.test.js scripts/*.test.js"
   }
 }

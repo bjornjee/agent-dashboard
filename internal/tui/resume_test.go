@@ -24,6 +24,8 @@ func (r *resumeSpawnRunner) Output(_ context.Context, args ...string) ([]byte, e
 		return nil, fmt.Errorf("no self pane")
 	case "new-window":
 		return []byte("%99\tmain:3.0\n"), nil
+	case "list-panes": // dashboard pane only, server PID 100 — %9 is dead
+		return []byte("%0\t100\n"), nil
 	}
 	return []byte(""), nil
 }
@@ -38,7 +40,7 @@ func TestResumeSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	folder := t.TempDir()
-	orphan := domain.Agent{SessionID: "orphan-sid", Harness: "claude", State: "running", Cwd: folder, TmuxPaneID: "%9"}
+	orphan := domain.Agent{SessionID: "orphan-sid", Harness: "claude", State: "running", Cwd: folder, TmuxPaneID: "%9", TmuxServerPID: "99", Branch: "feat/x"}
 	data, _ := json.Marshal(orphan)
 	if err := os.WriteFile(filepath.Join(agentsDir, "orphan-sid.json"), data, 0600); err != nil {
 		t.Fatal(err)
@@ -87,7 +89,7 @@ type liveAgentRunner struct{}
 func (liveAgentRunner) Output(_ context.Context, args ...string) ([]byte, error) {
 	switch {
 	case len(args) > 0 && args[0] == "list-panes":
-		return []byte("%9\n"), nil // the agent's pane is alive
+		return []byte("%9\t100\n"), nil // the agent's pane is alive
 	case len(args) > 0 && args[0] == "new-window":
 		return []byte("%99\tmain:3.0\n"), nil
 	case len(args) > 0 && args[0] == "display-message":
@@ -106,7 +108,7 @@ func TestResumeSessionRejectsLiveAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	folder := t.TempDir()
-	agent := domain.Agent{SessionID: "s", Harness: "claude", State: "running", Cwd: folder, TmuxPaneID: "%9"}
+	agent := domain.Agent{SessionID: "s", Harness: "claude", State: "running", Cwd: folder, TmuxPaneID: "%9", TmuxServerPID: "99", Branch: "feat/x"}
 
 	t.Cleanup(tmux.SetTestRunner(liveAgentRunner{}))
 	cfg := testConfig(stateDir)
@@ -125,7 +127,7 @@ func TestResumeSessionCodex(t *testing.T) {
 		t.Fatal(err)
 	}
 	folder := t.TempDir()
-	orphan := domain.Agent{SessionID: "orphan-cx", Harness: "codex", State: "running", Cwd: folder, TmuxPaneID: "%9"}
+	orphan := domain.Agent{SessionID: "orphan-cx", Harness: "codex", State: "running", Cwd: folder, TmuxPaneID: "%9", TmuxServerPID: "99", Branch: "feat/x"}
 	data, _ := json.Marshal(orphan)
 	if err := os.WriteFile(filepath.Join(agentsDir, "orphan-cx.json"), data, 0600); err != nil {
 		t.Fatal(err)

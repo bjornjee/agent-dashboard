@@ -6,18 +6,29 @@ import (
 	"testing"
 
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/stretchr/testify/mock"
 )
 
-// GET /api/agents must flag restart-survivor orphans (dead pane, active
-// session) with resumable:true so the frontend Cmd+K palette can mark and
-// resume them. Finished agents (done/pr/merged) on dead panes stay false.
+// GET /api/agents must flag restart-survivors (pane died with a previous
+// tmux server, active session, real branch, existing workdir) with
+// resumable:true so the frontend Cmd+K palette can mark and resume them.
+// Finished agents (done/pr/merged) on dead panes stay false.
 func TestHandleAgents_ResumableFlag(t *testing.T) {
 	m := withMockTmuxRunner(t)
-	mockReadAgentState(m) // empty list-panes ⇒ no live panes, every pane is dead
+	// TmuxIsAvailable + list-panes: only the dashboard pane %0 is live under
+	// server PID 100, so %2/%3 are dead.
+	m.On("Run", mock.Anything, "list-sessions").Return(nil)
+	m.On("Output", mock.Anything,
+		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}",
+	).Return([]byte("%0\tmain\t0\t0\t100\t/tmp\n"), nil)
 
+	// WorktreeCwd + Branch is the pinned case: ResolveAgentBranches leaves the
+	// stamped branch authoritative (a bare Cwd would be re-resolved via git
+	// and cleared because the temp dir is not a repo).
+	dir := t.TempDir()
 	ts, _ := createTestServer(t,
-		domain.Agent{SessionID: "running-orphan", State: "running", TmuxPaneID: "%2", Cwd: "/tmp/a"},
-		domain.Agent{SessionID: "done-orphan", State: "done", TmuxPaneID: "%3", Cwd: "/tmp/b"},
+		domain.Agent{SessionID: "running-orphan", State: "running", TmuxPaneID: "%2", TmuxServerPID: "99", Branch: "feat/x", WorktreeCwd: dir},
+		domain.Agent{SessionID: "done-orphan", State: "done", TmuxPaneID: "%3", TmuxServerPID: "99", Branch: "feat/y", WorktreeCwd: dir},
 	)
 
 	req, _ := http.NewRequest("GET", ts.URL+"/api/agents", nil)

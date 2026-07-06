@@ -202,8 +202,11 @@ func harnessBadgeToken(harness string, selected bool) string {
 // rendered in the full harness color (selected) or dimmed (unselected).
 func agentBadges(agent domain.Agent, selected bool) string {
 	parts := []string{harnessBadgeToken(agent.Harness, selected)}
+	// Survivors sit under the RESUMABLE group header with a ⏏ row icon, which
+	// already says it — no "resumable" pill, and no stale tool/permission
+	// badges from a session that is no longer running.
 	if agent.Resumable {
-		parts = append(parts, lipgloss.NewStyle().Foreground(themePeach).Render("⏏ resumable"))
+		return parts[0]
 	}
 	if agent.PermissionMode != "" && agent.PermissionMode != "default" {
 		parts = append(parts, permissionModeStyle(agent.PermissionMode))
