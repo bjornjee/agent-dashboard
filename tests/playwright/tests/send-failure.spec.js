@@ -39,10 +39,13 @@ function makeAgent(overrides) {
   };
 }
 
-// inputMode: 'fail-json' | 'fail-network' | 'ok'
+// inputMode: 'fail-json' | 'fail-network' | 'ok' | 'fail-json-slow'
+// ('fail-json-slow' holds the POST ~1.4s so a pending question can land
+// mid-flight — the gate/finally race regression lock below.)
 async function setupAgent(page, inputMode) {
   const agent = makeAgent();
   const inputPosts = [];
+  let pendingState = null;
   await page.route('**/events', (route) => route.abort('connectionrefused'));
   await page.route(/\/api\//, async (route) => {
     const url = new URL(route.request().url());
@@ -52,6 +55,10 @@ async function setupAgent(page, inputMode) {
       if (inputMode === 'fail-json') {
         return route.fulfill({ status: 500, json: { ok: false, error: 'tmux pane is gone' } });
       }
+      if (inputMode === 'fail-json-slow') {
+        await new Promise((r) => setTimeout(r, 1400));
+        return route.fulfill({ status: 500, json: { ok: false, error: 'tmux pane is gone' } });
+      }
       if (inputMode === 'fail-network') {
         return route.abort('connectionrefused');
       }
@@ -59,7 +66,7 @@ async function setupAgent(page, inputMode) {
     }
     if (path === '/api/agents') return route.fulfill({ json: [agent] });
     if (path === `/api/agents/${AGENT_ID}/conversation`) return route.fulfill({ json: CONVERSATION });
-    if (path === `/api/agents/${AGENT_ID}/pending-question`) return route.fulfill({ json: null });
+    if (path === `/api/agents/${AGENT_ID}/pending-question`) return route.fulfill({ json: pendingState });
     if (path === `/api/agents/${AGENT_ID}/usage`) return route.fulfill({ json: { CostUSD: 0 } });
     if (path === `/api/agents/${AGENT_ID}/subagents`) return route.fulfill({ json: [] });
     if (path === `/api/agents/${AGENT_ID}/plan`) return route.fulfill({ json: { content: '' } });
@@ -71,7 +78,10 @@ async function setupAgent(page, inputMode) {
   await page.waitForSelector('.ui-row, .ui-dock', { timeout: 5000 });
   await page.evaluate((id) => window.Dashboard.selectAgent(id), AGENT_ID);
   await page.waitForSelector('#reply-input', { timeout: 5000 });
-  return { inputPosts };
+  return {
+    inputPosts,
+    setPending(next) { pendingState = next; },
+  };
 }
 
 const MESSAGE = 'please also update the changelog';
@@ -124,4 +134,41 @@ test.describe('failed-send recovery', () => {
     await expect(page.locator('[data-optimistic="1"]')).toHaveCount(1);
     await expect(page.locator('[data-optimistic="1"]')).not.toHaveClass(/ui-msg--optimistic/);
   });
+});
+
+// Regression lock for the gate/finally race: a question card arriving
+// DURING the /input round-trip applies the composer gate; the send's
+// finally block must not override it. The failed message's text still
+// lands back in the (disabled) composer so nothing is destroyed, but
+// the input stays gated until the question resolves.
+test('question gate applied mid-flight survives the send failure path', async ({ page }) => {
+  const ctx = await setupAgent(page, 'fail-json-slow');
+  const input = page.locator('#reply-input');
+  await input.click();
+  await page.keyboard.type(MESSAGE, { delay: 5 });
+  await page.locator('.ui-composer__send').click();
+  // While the POST is in flight (~1.4s), a pending question lands and
+  // the 750ms poll applies the gate.
+  ctx.setPending({
+    tool_use_id: 'toolu_race',
+    questions: [{
+      question: 'Which option?', header: 'Race', multi_select: false,
+      options: [{ label: 'A', description: 'a' }, { label: 'B', description: 'b' }],
+    }],
+  });
+  await expect(page.locator('.question-card')).toBeVisible({ timeout: 4000 });
+  await expect.poll(() => ctx.inputPosts.length, { timeout: 4000 }).toBe(1);
+  // Wait for the failure path to fully unwind (sticky toast is its last
+  // observable step) — asserting earlier would see the in-flight
+  // disabled state and vacuously pass.
+  await expect(page.locator('.ui-toast--error.ui-toast--sticky')).toBeVisible({ timeout: 4000 });
+  // Gate must hold after the failure path unwinds.
+  await expect(input).toBeDisabled({ timeout: 3000 });
+  await expect(input).toHaveAttribute('placeholder', /Answer the question card above/);
+  // The message is preserved in the gated composer, not destroyed.
+  await expect(input).toHaveValue(MESSAGE);
+  // Gate releases once the question resolves — text still there.
+  ctx.setPending(null);
+  await expect(input).toBeEnabled({ timeout: 5000 });
+  await expect(input).toHaveValue(MESSAGE);
 });

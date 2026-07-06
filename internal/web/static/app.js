@@ -363,13 +363,20 @@ window.Dashboard = {
       // The SSE-driven action-bar swap can replace the textarea node
       // mid-flight; re-query so the restore lands in the live composer.
       const live = document.getElementById('reply-input') || input;
-      live.disabled = false;
+      // A question card can arrive DURING the POST round-trip and apply
+      // the composer gate (qcGated). Re-enabling here would bypass the
+      // gate and route the next Enter into a native picker that drops
+      // free text — leave gated composers disabled; the gate release
+      // path re-enables once the question resolves.
+      const gated = live.dataset.qcGated === '1';
+      if (!gated) live.disabled = false;
       if (!sent) {
         cancelPendingUserMessage();
-        // Give the user their message back to edit and retry.
+        // Give the user their message back to edit and retry. It also
+        // survives inside a gated (disabled) composer.
         live.value = text;
         live.dispatchEvent(new Event('input', { bubbles: true }));
-        live.focus();
+        if (!gated) live.focus();
       }
     }
   },
