@@ -16,7 +16,10 @@
   --text-secondary: #EBEBF5;
   --text-muted: #98989A;
   --text-tertiary: #98989A;
-  --text-faint: #6E6E70;
+  /* Was #6E6E70 (4.13:1 on #000) — under WCAG AA 4.5:1 for the small
+   * text this token carries (tally, "Sending…" caption, shimmer base).
+   * #7D7D82 ≈ 5.1:1 keeps the faint register while passing. */
+  --text-faint: #7D7D82;
   --text-disabled: #48484A;
 
   /* CTA — the one prominent fill per screen */
@@ -778,7 +781,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   font-size: 12.5px;
 }
 .slash-autocomplete__hint {
-  color: var(--text-faint);
+  /* Sits on the elevated popup surface — needs the muted tier to clear
+   * WCAG AA there (faint was 2.7:1 on --bg-elevated). */
+  color: var(--text-muted);
   font-size: 11px;
   margin-left: auto;
 }
@@ -871,6 +876,55 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
 }
 @media (prefers-reduced-motion: reduce) {
   .ui-msg-status__orb { animation: none; opacity: 0.7; }
+  /* Shimmer collapses to a static solid label — the gradient sweep is
+   * pure motion, so reduced-motion users get plain readable text. */
+  .ui-msg-status__label {
+    animation: none;
+    background: none;
+    color: var(--text-muted);
+    -webkit-text-fill-color: currentColor;
+  }
+  .status-dot--running { animation: none; }
+}
+/* Blocked-on-human notice — static amber-dotted line rendered by
+ * blockedNoticeHtml() while the agent waits on the user (permission /
+ * plan / question / error). Deliberately motionless: shimmer and orb
+ * both read as "busy", the inverse of these states. */
+.ui-msg-status__blocked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 15px;
+  color: var(--text-secondary);
+  min-height: 22px;
+}
+.ui-msg-status__blocked-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  flex: none;
+}
+/* Jump-to-latest chip — floats above the action bar when new activity
+ * (entries or a question card) lands while the reader is scrolled up. */
+.jump-latest {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(140px + env(safe-area-inset-bottom));
+  z-index: 90;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.jump-latest:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 .ui-msg__tool {
   display: inline-flex;
@@ -962,6 +1016,15 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   padding: var(--space-2) var(--space-4);
   font-size: 13px;
 }
+/* Static receipt swapped in after an in-card Approve/Reject lands —
+ * the decision's residue, deliberately non-interactive. */
+.chat-plan-link__receipt {
+  padding: var(--space-3) 0 2px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
 .ui-msg__tool > svg:first-child { color: var(--accent-green); width: 14px; height: 14px; }
 .ui-msg__tool > svg:last-child { color: var(--text-muted); }
 .ui-msg__tool > span { flex: 1; }
@@ -981,8 +1044,10 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
 }
 .ui-composer__attach,
 .ui-composer__send {
-  width: 36px;
-  height: 36px;
+  /* 44px minimum touch target on the phone (PRODUCT.md commitment);
+   * the desktop @media block compacts these for pointer input. */
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   background: var(--bg-surface);
   color: var(--text-muted);
@@ -1000,11 +1065,22 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
 /* Same de-emphasis when send is nested inside .ui-composer__rail (desktop). */
 .ui-composer:has(.ui-composer__input:placeholder-shown) .ui-composer__send { background: var(--bg-surface); color: var(--text-faint); }
 .ui-composer:has(.ui-composer__input:placeholder-shown) .ui-composer__send:hover { opacity: 1; }
+/* Interruptible composer (running/permission/plan): Stop is the resting
+ * affordance; Send appears the moment the composer has text so steering
+ * a running agent has a visible tap path. */
+.ui-composer--interruptible:has(.ui-composer__input:placeholder-shown) .ui-composer__send { display: none; }
 /* Mobile: the rail wrapper is a layout no-op so attach + send still flex as siblings of the textarea (pill pattern). */
 .ui-composer__rail { display: contents; }
-.ui-composer__chip,
-.ui-composer__mic,
+.ui-composer__meta,
 .ui-composer__rail-spacer { display: none; }
+/* Composer icon buttons share one always-on focus treatment — these are
+ * primary chat controls on both form factors. */
+.ui-composer__attach:focus-visible,
+.ui-composer__send:focus-visible,
+.ui-composer__stop:focus-visible {
+  outline: 1px solid var(--text-primary);
+  outline-offset: -1px;
+}
 /* Attach button is hidden on mobile: the server-side file picker
  * (osascript "choose file") runs on the Mac running the dashboard, not
  * on the phone. Tapping it from a phone-on-LAN would pop the dialog on
@@ -1084,6 +1160,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
 .detail-tabs__tab {
   position: relative;
   padding: var(--space-2) var(--space-3);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-muted);
@@ -1536,8 +1615,8 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
 
 /* Stop button — composer trailing slot. */
 .ui-composer__stop {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   background: rgba(239, 68, 68, 0.14);
   color: var(--accent-red);
@@ -1649,6 +1728,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
  * dominate the composer that sits below. */
 .action-panel .ui-modal-btn {
   padding: var(--space-2) var(--space-4);
+  min-height: 44px;
   font-size: 13px;
 }
 .detail-composer { position: relative; bottom: auto; }
@@ -1735,10 +1815,11 @@ button.btn-ghost.btn-sm {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Warn toasts carry actionable text (folder paths, instructions) that
- * must not truncate at any viewport — see /skills:uiux-design-loop
- * iter-2 critique. Success/error stay single-line by precedent. */
-.ui-toast--warn .ui-toast__text {
+/* Warn + error toasts carry actionable text (folder paths, backend
+ * error strings) that must not truncate at any viewport — a clipped
+ * error is unrecoverable information. Success stays single-line. */
+.ui-toast--warn .ui-toast__text,
+.ui-toast--error .ui-toast__text {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
@@ -2682,7 +2763,9 @@ button.btn-ghost.btn-sm {
   --text-secondary: #3F3F46;
   --text-muted: #71717A;
   --text-tertiary: #71717A;
-  --text-faint: #A1A1AA;
+  /* Was #A1A1AA (2.6:1 on #FFF) — far under WCAG AA for the small text
+   * this token carries. #75757A ≈ 4.6:1 on white. */
+  --text-faint: #75757A;
   --text-disabled: #C8C8CC;
 
   --accent-green: #16A34A;
@@ -3198,15 +3281,6 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     text-decoration-color: var(--text-primary);
   }
 
-  /* Composer attach + send + stop: underline-equivalent focus ring
-   * via outline (these have no text label to underline). */
-  .ui-composer__attach:focus-visible,
-  .ui-composer__send:focus-visible,
-  .ui-composer__stop:focus-visible {
-    outline: 1px solid var(--text-primary);
-    outline-offset: -1px;
-  }
-
   /* Restore the attach (+) button on desktop. Mobile hides it because
    * the file picker uses osascript on the dashboard server (the user's
    * Mac), which is the wrong picker for a phone client. Desktop is the
@@ -3214,11 +3288,11 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   .ui-composer__attach { display: inline-flex; }
 
   /* ============================================================
-   * Composer — Codex desktop parity (tall card + internal chip rail).
+   * Composer — Codex desktop parity (tall card + internal rail).
    * Replaces the mobile pill pattern with a rounded-rectangle card
    * containing two rows on one elevated surface:
    *   row 1: textarea (multi-line, transparent)
-   *   row 2: chip rail [attach, model, branch, effort, spacer, mic, send/stop]
+   *   row 2: rail [attach, meta text (model · branch · effort), spacer, send/stop]
    * ============================================================ */
   /* Action-bar is a transparent shell on desktop so the composer card
    * appears to float on top of the chat (Codex pattern). Card uses a
@@ -3273,47 +3347,18 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     display: block;
     flex: 1;
   }
-  .ui-composer.detail-composer .ui-composer__chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: transparent;
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-    color: var(--text-secondary);
-    padding: 4px 10px;
-    border-radius: var(--radius-pill);
+  /* Informational meta text (model · branch · effort) — deliberately
+   * NOT a control: the old chip buttons had no handlers and read as
+   * dead taps to anyone fluent in this register. */
+  .ui-composer.detail-composer .ui-composer__meta {
+    display: inline-block;
+    color: var(--text-muted);
     font-size: 12.5px;
     line-height: 1;
-    max-width: 220px;
-  }
-  .ui-composer.detail-composer .ui-composer__chip:hover {
-    background: var(--bg-base);
-    border-color: var(--border-subtle, rgba(255, 255, 255, 0.12));
-  }
-  .ui-composer.detail-composer .ui-composer__chip > span {
+    max-width: 420px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .ui-composer.detail-composer .ui-composer__chip::after {
-    content: "";
-    width: 10px;
-    height: 10px;
-    margin-left: 2px;
-    background-color: currentColor;
-    color: var(--text-muted);
-    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>") center / contain no-repeat;
-    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>") center / contain no-repeat;
-  }
-  .ui-composer.detail-composer .ui-composer__mic {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
   }
   .ui-composer.detail-composer .ui-composer__send,
   .ui-composer.detail-composer .ui-composer__stop {
@@ -3352,12 +3397,6 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   [data-theme="light"] .ui-composer.detail-composer {
     border-color: var(--border-default);
     box-shadow: 0 8px 24px var(--shadow-medium);
-  }
-  [data-theme="light"] .ui-composer.detail-composer .ui-composer__chip {
-    border-color: var(--border-default);
-  }
-  [data-theme="light"] .ui-composer.detail-composer .ui-composer__chip:hover {
-    border-color: var(--border-hover);
   }
 
   /* Sidebar selected row — light only. The 2 px dark left-border the
@@ -3719,8 +3758,8 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 }
 .question-card__pager-prev,
 .question-card__pager-next {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--bg-elevated);
   background: transparent;
@@ -3742,6 +3781,12 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
 .question-card__pager-next:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.question-card__pager-prev:focus-visible,
+.question-card__pager-next:focus-visible,
+.question-card__submit:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 @media (min-width: 641px) {
   .question-card__pager-nav { display: inline-flex; }

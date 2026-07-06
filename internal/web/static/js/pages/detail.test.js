@@ -148,10 +148,11 @@ test('formatLatestToolDisplay shows <inline code> for multi-line bash heredocs',
   assert.equal(formatLatestToolDisplay(entry), 'Running command · <inline code>');
 });
 
-test('formatLatestToolDisplay falls back to raw tool name when not classified', () => {
+test('formatLatestToolDisplay uses a generic verb for unclassified tools', () => {
   const entry = { content: '→ SomethingNovel: arg here' };
-  // classifyTool returns { bucket: 'other', live: 'Running SomethingNovel' }
-  assert.equal(formatLatestToolDisplay(entry), 'Running SomethingNovel · arg here');
+  // classifyTool returns { bucket: 'other', live: 'Working' } — raw
+  // internal tool names must never reach the chat copy.
+  assert.equal(formatLatestToolDisplay(entry), 'Working · arg here');
 });
 
 // isAgentMidTurn must be deterministic on agent.state — independent of
@@ -257,4 +258,96 @@ test('actionBarSignature: changes when permission_mode flips into/out of plan', 
   const sigOff = actionBarSignature({ ...base, permission_mode: 'bypassPermissions' });
   const sigOn = actionBarSignature({ ...base, permission_mode: 'plan' });
   assert.notEqual(sigOff, sigOn);
+});
+
+test('blockedNoticeHtml: static notice per blocked-on-human state', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { blockedNoticeHtml } = mod;
+  assert.equal(typeof blockedNoticeHtml, 'function');
+  assert.match(blockedNoticeHtml('permission'), /Waiting for your approval/);
+  assert.match(blockedNoticeHtml('plan'), /Plan ready for your review/);
+  assert.match(blockedNoticeHtml('question'), /Waiting for your reply/);
+  assert.match(blockedNoticeHtml('error'), /Stopped on an error/);
+  // Not a shimmer line — the shimmer class must never appear in the
+  // blocked notice, that treatment means "busy".
+  for (const st of ['permission', 'plan', 'question', 'error']) {
+    assert.doesNotMatch(blockedNoticeHtml(st), /ui-msg-status__label/);
+  }
+  // Non-blocked states produce nothing.
+  assert.equal(blockedNoticeHtml('running'), '');
+  assert.equal(blockedNoticeHtml('done'), '');
+});
+
+test('isAgentBlockedOnUser: blocked set is permission/plan/question/error', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { isAgentBlockedOnUser } = mod;
+  assert.equal(typeof isAgentBlockedOnUser, 'function');
+  for (const st of ['permission', 'plan', 'question', 'error']) {
+    assert.equal(isAgentBlockedOnUser({ state: st }), true, st + ' should be blocked-on-user');
+  }
+  for (const st of ['running', 'done', 'pr', 'merged', 'idle_prompt']) {
+    assert.equal(isAgentBlockedOnUser({ state: st }), false, st + ' should not be blocked-on-user');
+  }
+  assert.equal(isAgentBlockedOnUser(null), false);
+});
+
+test('planCardActionsVisible: only the final visible entry may arm a plan card', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { planCardActionsVisible } = mod;
+  assert.equal(typeof planCardActionsVisible, 'function');
+  const planEntry = { role: 'plan-saved', timestamp: '2026-06-04T10:02:00Z' };
+  const human = { role: 'human', content: 'plan it' };
+  const assistant = { role: 'assistant', content: 'done' };
+  const running = { state: 'running' };
+
+  // Mid-history plan card: transcript moved on — never armed.
+  assert.equal(planCardActionsVisible([human, planEntry, assistant], 1, running), false);
+  // Final entry + running (codex flow): armed.
+  assert.equal(planCardActionsVisible([human, planEntry], 1, running), true);
+  // Final entry but the action panel already shows Approve/Reject
+  // (claude plan/permission states): suppressed — single button system.
+  assert.equal(planCardActionsVisible([human, planEntry], 1, { state: 'plan' }), false);
+  assert.equal(planCardActionsVisible([human, planEntry], 1, { state: 'permission' }), false);
+  // Terminal state never re-arms.
+  assert.equal(planCardActionsVisible([human, planEntry], 1, { state: 'merged' }), false);
+  // Non-plan entries are never armed.
+  assert.equal(planCardActionsVisible([human, assistant], 1, running), false);
+  // Index out of final position.
+  assert.equal(planCardActionsVisible([planEntry, human], 0, running), false);
+});
+
+test('renderActionBar: interruptible states render both Stop and Send, no dead controls', () => {
+  const agent = { session_id: 'a1', state: 'running', model: 'opus', branch: 'feat/x', effort: 'high' };
+  const html = renderActionBar(agent);
+  assert.match(html, /ui-composer__stop/);
+  assert.match(html, /ui-composer__send/, 'send must stay reachable while running');
+  assert.match(html, /ui-composer--interruptible/);
+  // Dead controls are gone: no mic, no button-shaped chips.
+  assert.doesNotMatch(html, /ui-composer__mic/);
+  assert.doesNotMatch(html, /ui-composer__chip/);
+});
+
+test('renderActionBar: idle states render Send only', () => {
+  const html = renderActionBar({ session_id: 'a1', state: 'done' });
+  assert.match(html, /ui-composer__send/);
+  assert.doesNotMatch(html, /ui-composer__stop/);
+  assert.doesNotMatch(html, /ui-composer--interruptible/);
+});
+
+test('renderActionBar: meta rail shows only real values, never fabricated defaults', () => {
+  // All three set → joined meta text.
+  const full = renderActionBar({ session_id: 'a1', state: 'done', model: 'opus', branch: 'feat/x', effort: 'high' });
+  assert.match(full, /ui-composer__meta/);
+  assert.match(full, /opus · feat\/x · high/);
+  // Meta is plain text, not a button.
+  assert.doesNotMatch(full, /<button[^>]*ui-composer__meta/);
+  // Nothing set → no meta span, and no invented "auto"/"no branch"/"⚡".
+  const bare = renderActionBar({ session_id: 'a1', state: 'done' });
+  assert.doesNotMatch(bare, /ui-composer__meta/);
+  assert.doesNotMatch(bare, />auto</);
+  assert.doesNotMatch(bare, /no branch/);
+  assert.doesNotMatch(bare, /⚡/);
 });

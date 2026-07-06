@@ -1,7 +1,7 @@
 // Agent detail view with tabs and stats disclosure.
 import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
+import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge, questionBadge } from '../state.js';
 import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -38,11 +38,15 @@ const STATE_LABELS = {
   review: 'Review',
   failed: 'Failed',
   completed: 'Completed',
+  waiting_input: 'Waiting',
 };
 
 function inlineStatusPill(state) {
   const group = stateGroup(state).toLowerCase();
-  const label = STATE_LABELS[state] || (state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown');
+  // Unknown states are humanized (underscores → spaces), never rendered
+  // raw — a "Waiting_input" pill reads as debug output.
+  const label = STATE_LABELS[state]
+    || (state ? (state.charAt(0).toUpperCase() + state.slice(1)).replace(/_/g, ' ') : 'Unknown');
   return `<span class="ui-status-pill ui-status-pill--${group}"><span class="status-dot status-dot--${group}"></span>${escapeHtml(label)}</span>`;
 }
 
@@ -131,7 +135,12 @@ export function updateActionBar(agent) {
   // bail out when none of them changed so the focused textarea is
   // never detached. This is what keeps the mobile keyboard open.
   const sig = actionBarSignature(agent);
-  if (bar.dataset.sig === sig) return;
+  if (bar.dataset.sig === sig) {
+    // Bar HTML is unchanged, but the composer gate rides on
+    // agent.pending_question which is not part of the signature.
+    applyComposerGate(!!questionBadge(agent));
+    return;
+  }
 
   // Capture in-flight composer state so the SSE-driven re-render doesn't
   // wipe what the user is typing.
@@ -160,6 +169,7 @@ export function updateActionBar(agent) {
     }
   }
   if (newInput) attachSlashAutocomplete(newInput, agent.harness);
+  applyComposerGate(!!questionBadge(agent));
 }
 
 // Track optimistic messages so refreshConversation can preserve them
@@ -170,8 +180,13 @@ export function updateActionBar(agent) {
 //                       the conversation refresh stops re-rendering the
 //                       "Sending…" caption (the message is delivered;
 //                       only the API echo is still pending).
+// preSendAgentState   — lastKnownAgent.state captured before
+//                       appendUserMessage forces 'running', so a failed
+//                       POST can restore reality (see
+//                       cancelPendingUserMessage).
 let pendingUserMessage = null;
 let pendingMessageAcked = false;
+let preSendAgentState = null;
 
 // Auto-follow threshold. If the user has scrolled more than this many
 // pixels above the bottom, treat them as "reading older messages" and
@@ -213,6 +228,9 @@ let conversationScrolledThisSession = false;
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   pendingMessageAcked = false;
+  // Stash the real state so cancelPendingUserMessage can undo the
+  // synthetic 'running' override below if the POST fails.
+  preSendAgentState = lastKnownAgent ? lastKnownAgent.state : null;
   const tab = document.getElementById('tab-conversation');
   let container = tab ? tab.querySelector('.conversation') : null;
   if (!container && tab) {
@@ -259,16 +277,107 @@ export function appendUserMessage(text) {
 // visitor saw immediate feedback.
 export function confirmUserMessageSent() {
   pendingMessageAcked = true;
+  preSendAgentState = null;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
   container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
 }
 
+// Failure path for Dashboard.sendInput: unwind everything
+// appendUserMessage staged optimistically — the bubble, the "Sending…"
+// caption, and the forced working indicator — so the chat stops claiming
+// a message is in flight. Restores the pre-send agent state, but only
+// while lastKnownAgent still carries the synthetic 'running' override;
+// if SSE delivered a real update in the meantime, that truth wins.
+export function cancelPendingUserMessage() {
+  pendingUserMessage = null;
+  pendingMessageAcked = false;
+  toolBuckets = {};
+  latestToolEntry = null;
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (container) {
+    container.querySelectorAll('[data-optimistic="1"]').forEach(el => el.remove());
+    container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
+    const working = container.querySelector('.ui-msg-status--working');
+    if (working) working.remove();
+  }
+  if (lastKnownAgent && lastKnownAgent.state === 'running' && preSendAgentState !== null) {
+    lastKnownAgent = { ...lastKnownAgent, state: preSendAgentState };
+    refreshWorkingIndicator(lastKnownAgent);
+  }
+  preSendAgentState = null;
+}
+
 // Last-known agent for the currently-mounted detail view. Used by the
 // 2s conversation poll (which doesn't carry an agent reference) so that
 // the rebuilt .conversation can re-mount the working indicator.
 let lastKnownAgent = null;
+
+// --- Composer gate (pending AskUserQuestion) ---
+// While a question card is pending, the composer is a lying affordance:
+// typed text POSTs to /input but Claude Code's native picker swallows it
+// (see submitQuestionCard). One gate, one input — disable the composer
+// and point at the card until the question resolves.
+const GATED_PLACEHOLDER = 'Answer the question card above';
+
+function applyComposerGate(gated) {
+  const input = document.getElementById('reply-input');
+  if (!input) return;
+  const composer = input.closest('.ui-composer');
+  const send = composer ? composer.querySelector('.ui-composer__send') : null;
+  if (gated) {
+    if (input.dataset.qcGated !== '1') {
+      input.dataset.qcGated = '1';
+      input.dataset.qcPlaceholder = input.placeholder || '';
+      input.placeholder = GATED_PLACEHOLDER;
+      input.disabled = true;
+    }
+    if (send) send.disabled = true;
+  } else if (input.dataset.qcGated === '1') {
+    delete input.dataset.qcGated;
+    input.placeholder = input.dataset.qcPlaceholder || '';
+    delete input.dataset.qcPlaceholder;
+    input.disabled = false;
+    if (send) send.disabled = false;
+  }
+}
+
+// --- Jump-to-latest chip ---
+// Floating affordance shown when new conversation activity (entries or
+// a question card) lands while the reader is scrolled up in history.
+// Clicking jumps to the question card when one is pending (it is the
+// gate), else to the bottom. Removed on click, on reaching the bottom,
+// and on tab/view changes.
+function showJumpChip(hasQuestion) {
+  let chip = document.querySelector('.jump-latest');
+  if (!chip) {
+    chip = document.createElement('button');
+    chip.className = 'jump-latest';
+    chip.setAttribute('aria-label', 'Jump to latest activity');
+    const host = document.querySelector('.detail-layout') || document.body;
+    host.appendChild(chip);
+    chip.addEventListener('click', () => {
+      const sp = document.querySelector('.detail-scroll');
+      if (sp) {
+        const card = sp.querySelector('.question-card');
+        if (card) {
+          const parentRect = sp.getBoundingClientRect();
+          const cardRect = card.getBoundingClientRect();
+          sp.scrollTop += (cardRect.top - parentRect.top) - 12;
+        } else {
+          sp.scrollTop = sp.scrollHeight;
+        }
+      }
+      hideJumpChip();
+    });
+  }
+  chip.textContent = hasQuestion ? '↓ 1 question' : '↓ New activity';
+}
+
+function hideJumpChip() {
+  document.querySelectorAll('.jump-latest').forEach(el => el.remove());
+}
 
 const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
 
@@ -289,7 +398,9 @@ function classifyTool(name) {
   if (n.startsWith('mcp__plugin_playwright') || n.startsWith('mcp__playwright')) return { bucket: 'browser', live: 'Driving browser' };
   if (n.startsWith('mcp__')) return { bucket: 'mcp', live: 'Calling MCP tool' };
   if (n === 'WebFetch' || n === 'WebSearch') return { bucket: 'web', live: 'Fetching web content' };
-  return { bucket: 'other', live: 'Running ' + n };
+  // Unknown tools get a generic verb — raw internal names like
+  // "TaskUpdate" or "AskUserQuestion" must never reach the chat copy.
+  return { bucket: 'other', live: 'Working' };
 }
 
 const BUCKET_LABELS = {
@@ -420,6 +531,47 @@ export function isAgentMidTurn(agent) {
   return WORKING_STATES.has(effectiveState(agent));
 }
 
+// Subset of WORKING_STATES where the agent is waiting on the HUMAN, not
+// computing. Mid-turn (the poll keeps running, the indicator stays
+// mounted) but the visual treatment must invert: static notice, no
+// shimmer, no orb — motion here would say "busy, don't act" at exactly
+// the moment action is needed.
+const BLOCKED_STATES = new Set(['permission', 'plan', 'question', 'error']);
+
+export function isAgentBlockedOnUser(agent) {
+  if (!agent) return false;
+  return BLOCKED_STATES.has(effectiveState(agent));
+}
+
+// Static "the agent needs you" line for blocked-on-human states.
+// Exported for unit tests.
+const BLOCKED_COPY = {
+  permission: 'Waiting for your approval',
+  plan: 'Plan ready for your review',
+  question: 'Waiting for your reply',
+  error: 'Stopped on an error',
+};
+
+export function blockedNoticeHtml(state) {
+  const label = BLOCKED_COPY[state];
+  if (!label) return '';
+  return '<div class="ui-msg-status__blocked">'
+    + '<span class="ui-msg-status__blocked-dot" aria-hidden="true"></span>'
+    + escapeHtml(label)
+    + '</div>';
+}
+
+// Shared factory for the inline status element so every variant (orb,
+// tally+shimmer, blocked notice) carries the same live-region wiring —
+// screen readers hear turn progress without a dedicated announcement.
+function createStatusEl() {
+  const el = document.createElement('div');
+  el.className = 'ui-msg-status ui-msg-status--working';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  return el;
+}
+
 // Mounts / updates / removes the inline "working" block at the end of
 // the conversation stream. Two stacked lines:
 //   1. (optional) muted tally — "Read 3 files · ran 2 commands"
@@ -437,6 +589,29 @@ export function refreshWorkingIndicator(agent) {
     toolBuckets = {};
     return;
   }
+  // Blocked-on-human: static notice instead of shimmer/orb. Keep the
+  // tally line — it summarizes what the turn did before it stopped.
+  if (isAgentBlockedOnUser(agent)) {
+    const blockedTally = renderToolTally(toolBuckets);
+    const blockedHtml =
+      (blockedTally ? '<div class="ui-msg-status__tally">' + escapeHtml(blockedTally) + '</div>' : '')
+      + blockedNoticeHtml(effectiveState(agent));
+    if (existing) {
+      existing.classList.add('ui-msg-status--blocked');
+      if (existing.innerHTML !== blockedHtml) existing.innerHTML = blockedHtml;
+    } else {
+      const scrollParent = container.closest('.detail-scroll');
+      const wasAtBottom = isAtBottom(scrollParent);
+      const el = createStatusEl();
+      el.classList.add('ui-msg-status--blocked');
+      el.innerHTML = blockedHtml;
+      container.appendChild(el);
+      const hasCard = !!container.querySelector('.question-card');
+      if (scrollParent && wasAtBottom && !hasCard) scrollParent.scrollTop = scrollParent.scrollHeight;
+    }
+    return;
+  }
+  if (existing) existing.classList.remove('ui-msg-status--blocked');
   const classified = classifyTool(agent.current_tool);
   const liveLabel = classified ? classified.live : 'Thinking';
   const tally = renderToolTally(toolBuckets);
@@ -455,8 +630,7 @@ export function refreshWorkingIndicator(agent) {
     } else {
       const scrollParent = container.closest('.detail-scroll');
       const wasAtBottom = isAtBottom(scrollParent);
-      const el = document.createElement('div');
-      el.className = 'ui-msg-status ui-msg-status--working';
+      const el = createStatusEl();
       el.innerHTML = orbHtml;
       container.appendChild(el);
       // When a question card is pending, the visitor's focus belongs at
@@ -495,8 +669,7 @@ export function refreshWorkingIndicator(agent) {
     // scrollHeight, which would otherwise flip wasAtBottom to false.
     const scrollParent = container.closest('.detail-scroll');
     const wasAtBottom = isAtBottom(scrollParent);
-    const el = document.createElement('div');
-    el.className = 'ui-msg-status ui-msg-status--working';
+    const el = createStatusEl();
     el.innerHTML = html;
     container.appendChild(el);
     // Only pull the indicator into view if the user was already at the
@@ -603,9 +776,9 @@ function timelineIcon(kind) {
   return `<div class="timeline-icon ${cls}">${svg}</div>`;
 }
 
-function kindLabel(kind) {
+function kindLabel(kind, harness) {
   if (kind === 'human') return 'You';
-  if (kind === 'assistant') return 'Claude';
+  if (kind === 'assistant') return harness === 'codex' ? 'Codex' : 'Claude';
   return 'Tool';
 }
 
@@ -646,21 +819,25 @@ export function renderActionBar(agent) {
   }
 
   // Composer is always present so the user can ask follow-up questions
-  // regardless of the agent's terminal state. Stop only fits while the
-  // agent's own stream can be interrupted (running) or while a paired
-  // action-panel chip is the primary affordance (permission, plan). For
-  // idle reply-expecting states (question, error) the placeholder below
-  // says "Type a reply…" — the trailing button must agree and offer send.
+  // regardless of the agent's terminal state. While the agent's stream
+  // can be interrupted (running, or gate states permission/plan) BOTH
+  // buttons render: Stop is the resting affordance, Send appears (CSS,
+  // driven by :placeholder-shown) the moment the composer has text —
+  // steering a running agent keeps a visible tap path on the phone.
   const STOP_STATES = new Set(['running', 'permission', 'plan']);
+  const interruptible = STOP_STATES.has(st);
   const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
-    : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
-  const trailing = STOP_STATES.has(st)
-    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`
-    : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
-  const modelLabel = agent.model ? escapeHtml(agent.model) : 'auto';
-  const branchLabel = agent.branch ? escapeHtml(agent.branch) : 'no branch';
-  const effortLabel = agent.effort ? escapeHtml(agent.effort) : 'high';
-  const composer = `<div class="ui-composer detail-composer">
+    : (interruptible ? 'Message' : 'Ask for follow-up changes…');
+  const sendBtn = `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
+  const stopBtn = `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`;
+  const trailing = interruptible ? stopBtn + sendBtn : sendBtn;
+  // Meta rail: informational text only — never button-shaped, and only
+  // fields that actually exist (no fabricated "auto"/"no branch").
+  const metaParts = [agent.model, agent.branch, agent.effort].filter(Boolean).map(escapeHtml);
+  const metaHtml = metaParts.length
+    ? `<span class="ui-composer__meta">${metaParts.join(' · ')}</span>`
+    : '';
+  const composer = `<div class="ui-composer detail-composer${interruptible ? ' ui-composer--interruptible' : ''}">
     <textarea
       class="ui-composer__input"
       id="reply-input"
@@ -671,11 +848,8 @@ export function renderActionBar(agent) {
     ></textarea>
     <div class="ui-composer__rail">
       <button class="ui-composer__attach" aria-label="Attach file" title="Attach file from your Mac" onclick="Dashboard.attachFile()">${ICONS.attach}</button>
-      <button class="ui-composer__chip" data-chip="model" tabindex="-1" aria-label="Model"><span>${modelLabel}</span></button>
-      <button class="ui-composer__chip" data-chip="branch" tabindex="-1" aria-label="Branch"><span>${branchLabel}</span></button>
-      <button class="ui-composer__chip" data-chip="effort" tabindex="-1" aria-label="Effort"><span>⚡ ${effortLabel}</span></button>
+      ${metaHtml}
       <span class="ui-composer__rail-spacer"></span>
-      <button class="ui-composer__mic" aria-label="Voice input" tabindex="-1">${ICONS.mic || '<svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"12\" rx=\"3\"/><path d=\"M5 11a7 7 0 0014 0\"/><path d=\"M12 18v3\"/></svg>'}</button>
       ${trailing}
     </div>
   </div>`;
@@ -772,18 +946,18 @@ export function visibleEntries(entries) {
 // path (appendNewEntries) emit identical markup. agentId is threaded
 // through so plan-saved entries can render their inline approve/reject
 // buttons against the right session.
-function renderEntryHtml(entry, agentId, suppressPlanActions) {
+function renderEntryHtml(entry, agentId, showPlanActions) {
   const role = entry.Role || entry.role;
-  if (role === 'plan-saved') return renderPlanLinkCard(agentId, suppressPlanActions);
+  if (role === 'plan-saved') return renderPlanLinkCard(agentId, !showPlanActions);
   const content = entry.Content || entry.content || '';
   if (role === 'human') return UI.message('user', content);
   return UI.message('assistant', renderMarkdown(content), { html: true });
 }
 
-function entryRenderSignature(entry, suppressPlanActions) {
+function entryRenderSignature(entry, showPlanActions) {
   const role = entry.Role || entry.role || '';
   const content = entry.Content || entry.content || '';
-  return JSON.stringify([role, content, role === 'plan-saved' && !!suppressPlanActions]);
+  return JSON.stringify([role, content, role === 'plan-saved' && !!showPlanActions]);
 }
 
 // True when the action panel above the composer is already rendering
@@ -796,10 +970,33 @@ function actionPanelHasApproveReject(agent) {
   return st === 'plan' || st === 'permission';
 }
 
+// Decides whether a plan-saved entry renders live Approve/Reject.
+// Historical cards are a loaded gun: a card that regains buttons after
+// its moment passed can inject stray picker keystrokes into a live CLI
+// session. The rule is positional + stateful:
+//   - only the FINAL visible entry may carry actions (once the
+//     transcript moves on, the decision moved on), AND
+//   - the action panel must not already be rendering the same pair
+//     (claude plan/permission states — single button system), AND
+//   - terminal states (merged) never re-arm a card.
+// Pure — exported for unit tests.
+export function planCardActionsVisible(visible, index, agent) {
+  if (!Array.isArray(visible) || index !== visible.length - 1) return false;
+  const entry = visible[index];
+  const role = entry && (entry.Role || entry.role);
+  if (role !== 'plan-saved') return false;
+  if (actionPanelHasApproveReject(agent)) return false;
+  if (agent && effectiveState(agent) === 'merged') return false;
+  return true;
+}
+
 // Build conversation HTML from an array of message entries — Codex flat-prose.
-function renderConversationHtml(entries, agentId, suppressPlanActions) {
+function renderConversationHtml(entries, agentId, agent) {
+  const visible = visibleEntries(entries);
   let html = '<div class="conversation">';
-  for (const entry of visibleEntries(entries)) html += renderEntryHtml(entry, agentId, suppressPlanActions);
+  for (let i = 0; i < visible.length; i++) {
+    html += renderEntryHtml(visible[i], agentId, planCardActionsVisible(visible, i, agent));
+  }
   html += '</div>';
   return html;
 }
@@ -1085,14 +1282,14 @@ export async function submitQuestionCard(agentId, toolUseId) {
       option_counts: optionCounts,
     });
     if (!result || !result.ok) {
-      toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       card.classList.remove('question-card--answered');
       if (btn) btn.disabled = false;
       return false;
     }
     return true;
   } catch (err) {
-    toast('Failed: ' + err.message, 'error');
+    toast('Failed: ' + err.message, 'error', { sticky: true });
     card.classList.remove('question-card--answered');
     if (btn) btn.disabled = false;
     return false;
@@ -1126,16 +1323,22 @@ function entryInsertAnchor(conv) {
 // poll; entries whose content changed in place are replaced, which is
 // how Codex partial assistant text grows without waiting for a full page
 // refresh. Decoration siblings are kept outside the indexed entry set.
-function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
+function appendNewEntries(conv, entries, agentId, agent) {
   const visible = visibleEntries(entries);
+  // Report whether anything actually changed. A count comparison is not
+  // enough: consecutive assistant entries MERGE in visibleEntries, so a
+  // growing transcript often re-renders one entry in place instead of
+  // adding a node. The jump-chip trigger rides on this signal.
+  let changed = false;
 
   for (let i = 0; i < visible.length; i++) {
-    const sig = entryRenderSignature(visible[i], suppressPlanActions);
+    const showActions = planCardActionsVisible(visible, i, agent);
+    const sig = entryRenderSignature(visible[i], showActions);
     const existing = conv.querySelector(`:scope > [data-entry-idx="${i}"]`);
     if (existing && existing.dataset.entrySig === sig) continue;
 
     const wrap = document.createElement('div');
-    wrap.innerHTML = renderEntryHtml(visible[i], agentId, suppressPlanActions);
+    wrap.innerHTML = renderEntryHtml(visible[i], agentId, showActions);
     const el = wrap.firstElementChild;
     if (!el) continue;
     el.dataset.entryIdx = String(i);
@@ -1145,12 +1348,17 @@ function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
     } else {
       conv.insertBefore(el, entryInsertAnchor(conv));
     }
+    changed = true;
   }
   conv.querySelectorAll(':scope > [data-entry-idx]').forEach(el => {
     const idx = parseInt(el.dataset.entryIdx || '-1', 10);
-    if (idx < 0 || idx >= visible.length) el.remove();
+    if (idx < 0 || idx >= visible.length) {
+      el.remove();
+      changed = true;
+    }
   });
   conv.dataset.renderedCount = String(visible.length);
+  return changed;
 }
 
 // Reconcile the AskUserQuestion card without touching it when the
@@ -1173,6 +1381,7 @@ function reconcileQuestionCard(conv, pending, agentId) {
       && existing.dataset.sig === sig) {
     return; // identical card — leave it alone
   }
+  const isNewCard = !existing || existing.dataset.toolUseId !== pendingCardId;
   if (existing) {
     if (existing._qcPagerObserver) existing._qcPagerObserver.disconnect();
     existing.remove();
@@ -1183,9 +1392,34 @@ function reconcileQuestionCard(conv, pending, agentId) {
   if (!cardEl) return;
   // Insert ahead of optimistic msg / caption / working indicator, after
   // all entry messages — same slot the original full-render path used.
+  const scrollParent = conv.closest('.detail-scroll');
+  // "Following" is looser here than the strict isAtBottom threshold:
+  // async layout shifts (webfont reflow, indicator mounts) can leave a
+  // passive follower a few hundred px off the exact bottom. Within one
+  // viewport of the bottom still counts as following; only a reader
+  // genuinely up in history keeps their position.
+  const nearBottom = !!scrollParent
+    && (scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight)
+       < scrollParent.clientHeight;
   const anchor = conv.querySelector('[data-optimistic="1"], .ui-msg__caption--sending, .ui-msg-status--working');
   conv.insertBefore(cardEl, anchor);
   attachQuestionCardInteractions(cardEl, agentId, pendingCardId);
+  // Arrival visibility: the card is the turn's gate — a mid-session
+  // mount below the fold with no cue costs the user the whole point of
+  // the page. If the reader was following the bottom, align the card's
+  // top edge (same anchor the initial-load path uses); if they were up
+  // reading history, don't yank — surface the jump chip instead.
+  if (isNewCard && scrollParent) {
+    if (nearBottom) {
+      requestAnimationFrame(() => {
+        const parentRect = scrollParent.getBoundingClientRect();
+        const cardRect = cardEl.getBoundingClientRect();
+        scrollParent.scrollTop += (cardRect.top - parentRect.top) - 12;
+      });
+    } else {
+      showJumpChip(true);
+    }
+  }
 }
 
 // Reconcile the in-flight optimistic user message. Three states:
@@ -1272,10 +1506,15 @@ async function refreshConversation(agentId, agent) {
     conv = container.querySelector('.conversation');
   }
 
-  appendNewEntries(conv, entries, agentId, actionPanelHasApproveReject(agent));
+  const grew = appendNewEntries(conv, entries, agentId, agent);
   reconcileQuestionCard(conv, pending, agentId);
   reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
+  applyComposerGate(hasPendingQuestionPayload(pending));
+  // New entries landed while the reader was up in history — offer the
+  // jump affordance instead of silently growing the page below them.
+  if (!wasAtBottom && grew) showJumpChip(!!conv.querySelector('.question-card'));
+  else if (wasAtBottom) hideJumpChip();
 
   // Don't snap to bottom when a question card is mounted — the visitor
   // is filling out the card and must keep it in view.
@@ -1518,6 +1757,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       // Only show skeleton when the tab is empty (first visit) — avoids flicker on re-clicks.
       if (!container.dataset.loaded) container.innerHTML = skeletonLoading(target === 'activity' ? 6 : target === 'conversation' ? 4 : 3);
       currentDetailTab = target;
+      if (target !== 'conversation') hideJumpChip();
       try { sessionStorage.setItem('detail-tab-' + agentId, target); } catch {}
       loadTabContent(target, agentId);
       if (target === 'conversation') startConversationPoll(agentId);
@@ -1551,6 +1791,18 @@ export async function renderDetail(app, agents, agentId, setView) {
   // skill list returned from /api/skills?harness=.
   const composerInput = document.getElementById('reply-input');
   if (composerInput) attachSlashAutocomplete(composerInput, agent.harness);
+  applyComposerGate(!!questionBadge(agent));
+
+  // Jump chip is per-mount state — clear leftovers from a previous
+  // detail view, and dismiss automatically once the reader reaches the
+  // bottom on their own.
+  hideJumpChip();
+  const detailScrollEl = app.querySelector('.detail-scroll');
+  if (detailScrollEl) {
+    detailScrollEl.addEventListener('scroll', () => {
+      if (isAtBottom(detailScrollEl)) hideJumpChip();
+    }, { passive: true });
+  }
 
   // Start conversation polling only when the conversation tab is active.
   if (savedTab === 'conversation') startConversationPoll(agentId);
@@ -1618,7 +1870,7 @@ async function loadTabContent(tab, agentId) {
         markLoaded();
         return;
       }
-      container.innerHTML = renderConversationHtml(entries, agentId, actionPanelHasApproveReject(lastKnownAgent));
+      container.innerHTML = renderConversationHtml(entries, agentId, lastKnownAgent);
       const conv = container.querySelector('.conversation');
       if (conv) {
         // Seed the incremental-render bookkeeping so the next poll's
@@ -1629,7 +1881,7 @@ async function loadTabContent(tab, agentId) {
         const msgs = conv.querySelectorAll(':scope > .ui-msg');
         for (let i = 0; i < msgs.length && i < visible.length; i++) {
           msgs[i].dataset.entryIdx = String(i);
-          msgs[i].dataset.entrySig = entryRenderSignature(visible[i], actionPanelHasApproveReject(lastKnownAgent));
+          msgs[i].dataset.entrySig = entryRenderSignature(visible[i], planCardActionsVisible(visible, i, lastKnownAgent));
         }
         conv.dataset.renderedCount = String(visible.length);
         if (hasPendingQuestionPayload(pending)) {
@@ -1727,7 +1979,7 @@ async function loadTabContent(tab, agentId) {
           html += `<div class="timeline-entry activity-entry" data-kind="${kind}">`;
           html += timelineIcon(kind);
           html += '<div class="timeline-content">';
-          html += `<div class="timeline-header"><span class="timeline-title">${kindLabel(kind)}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></div>`;
+          html += `<div class="timeline-header"><span class="timeline-title">${kindLabel(kind, lastKnownAgent && lastKnownAgent.harness)}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></div>`;
           if (kind === 'assistant') {
             html += `<div class="timeline-detail">${renderMarkdown(displayContent)}</div>`;
           } else {

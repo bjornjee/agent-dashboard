@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll, updateQuestionCardSubmit, submitQuestionCard } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, cancelPendingUserMessage, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll, updateQuestionCardSubmit, submitQuestionCard } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -128,6 +128,20 @@ window.addEventListener('popstate', (e) => {
   }
 });
 
+// Swap a plan-card's in-card action row for a static receipt once the
+// tap lands. The poll's entry-signature rule keeps historical cards
+// disarmed on re-render; this closes the feedback loop in the same
+// frame so the tapper sees their decision stick.
+function markPlanCardResolved(evt, label) {
+  const btn = evt && evt.target ? evt.target.closest('button') : null;
+  const actions = btn ? btn.closest('.chat-plan-link__actions') : null;
+  if (!actions) return;
+  const receipt = document.createElement('div');
+  receipt.className = 'chat-plan-link__receipt';
+  receipt.textContent = label;
+  actions.replaceWith(receipt);
+}
+
 // Wrap an async action with button spinner feedback.
 //   default          — append spinner as sibling (text buttons: "Save" → "Save ●")
 //   { replace: true } — swap content for the spinner (icon-only round CTAs,
@@ -251,7 +265,7 @@ window.Dashboard = {
   async resumeAgent(id) {
     const result = await post('/api/agents/' + encodeURIComponent(id) + '/resume');
     if (result && result.ok) toast('Resumed session', 'success');
-    else toast('Resume failed: ' + (result?.error || 'unknown'), 'error');
+    else toast('Resume failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
   },
 
   // Programmatic tab switch — used by the chat plan-link card so it
@@ -265,16 +279,24 @@ window.Dashboard = {
   async approve(id, evt) {
     await withSpinner(evt, async () => {
       const result = await post('/api/agents/' + id + '/approve');
-      if (result && result.ok) toast('Approved', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (result && result.ok) {
+        toast('Approved', 'success');
+        markPlanCardResolved(evt, 'Approved ✓');
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
+      }
     });
   },
 
   async reject(id, evt) {
     await withSpinner(evt, async () => {
       const result = await post('/api/agents/' + id + '/reject');
-      if (result && result.ok) toast('Rejected', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (result && result.ok) {
+        toast('Rejected', 'success');
+        markPlanCardResolved(evt, 'Rejected ✕');
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
+      }
     });
   },
 
@@ -291,7 +313,7 @@ window.Dashboard = {
       const result = await post('/api/file-picker');
       path = (result && result.path) || '';
     } catch (err) {
-      toast('File picker failed: ' + err.message, 'error');
+      toast('File picker failed: ' + err.message, 'error', { sticky: true });
       return;
     }
     if (!path) return; // user cancelled
@@ -326,15 +348,36 @@ window.Dashboard = {
     input.value = '';
     input.disabled = true;
     appendUserMessage(text);
+    let sent = false;
     try {
       const result = await post('/api/agents/' + id + '/input', { text });
       if (result && result.ok) {
+        sent = true;
         confirmUserMessageSent();
       } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        toast('Message not sent: ' + (result?.error || 'unknown error'), 'error', { sticky: true });
       }
+    } catch {
+      toast('Message not sent — check connection', 'error', { sticky: true });
     } finally {
-      if (input) input.disabled = false;
+      // The SSE-driven action-bar swap can replace the textarea node
+      // mid-flight; re-query so the restore lands in the live composer.
+      const live = document.getElementById('reply-input') || input;
+      // A question card can arrive DURING the POST round-trip and apply
+      // the composer gate (qcGated). Re-enabling here would bypass the
+      // gate and route the next Enter into a native picker that drops
+      // free text — leave gated composers disabled; the gate release
+      // path re-enables once the question resolves.
+      const gated = live.dataset.qcGated === '1';
+      if (!gated) live.disabled = false;
+      if (!sent) {
+        cancelPendingUserMessage();
+        // Give the user their message back to edit and retry. It also
+        // survives inside a gated (disabled) composer.
+        live.value = text;
+        live.dispatchEvent(new Event('input', { bubbles: true }));
+        if (!gated) live.focus();
+      }
     }
   },
 
@@ -343,7 +386,7 @@ window.Dashboard = {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/stop');
         if (result && result.ok) toast('Stopped', 'success');
-        else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        else toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       });
     }, { confirmLabel: 'Stop agent', confirmVariant: 'danger' });
   },
@@ -367,12 +410,12 @@ window.Dashboard = {
                 toast('Cleaned up', 'success');
                 navigateTo('list', null, true);
               } else {
-                toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error');
+                toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error', { sticky: true });
               }
             });
           }, { confirmLabel: 'Clean up', confirmVariant: 'danger' });
         } else {
-          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+          toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
         }
       });
     }, { confirmLabel: 'Merge PR' });
@@ -386,7 +429,7 @@ window.Dashboard = {
           toast('Closed', 'success');
           navigateTo('list', null, true);
         } else {
-          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+          toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
         }
       });
     }, { confirmLabel: 'Close agent', confirmVariant: 'danger' });
@@ -449,7 +492,7 @@ window.Dashboard = {
         toast('Agent created', 'success');
         navigateTo('list', null, true);
       } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       }
     }, { replace: true });
   },
@@ -470,6 +513,12 @@ window.Dashboard = {
     }
   },
 };
+
+// Inline handlers in HTML strings (oninput="UI.composerAutoSize(this)" in
+// ui.js/detail.js/create.js) resolve `UI` in global scope — same bridge
+// contract as window.Dashboard above. Without this every composer
+// keystroke throws ReferenceError and auto-grow never runs.
+window.UI = UI;
 
 // --- Viewport breakpoint changes ---
 // When the user crosses the desktop breakpoint, re-mount the current view

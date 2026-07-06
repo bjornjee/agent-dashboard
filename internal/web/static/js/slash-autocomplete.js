@@ -75,9 +75,10 @@ function render(popup, matches, fragment) {
   popup.hidden = false;
   popup.innerHTML = matches.map((m, i) => {
     const cls = i === activeIndex ? ' slash-autocomplete__item--active' : '';
+    const hint = m.hint ? `<span class="slash-autocomplete__hint">${escapeHtml(m.hint)}</span>` : '';
     return `<button class="slash-autocomplete__item${cls}" data-idx="${i}" type="button">
       <span class="slash-autocomplete__cmd">${escapeHtml(m.full)}</span>
-      <span class="slash-autocomplete__hint">${escapeHtml(m.hint || '')}</span>
+      ${hint}
     </button>`;
   }).join('');
 }

@@ -1,218 +1,150 @@
 // @ts-check
+// Detail-view action bar + composer contracts, per agent state.
+//
+// Rewritten 2026-07: the previous generation of this file asserted the
+// pre-Codex-iOS UI (.agent-card rows, text-labeled "Send" buttons,
+// "Send a message..." placeholder, .vital-signs, the since-removed
+// subagents disclosure) and failed 12/12 against the current renderer.
+// Send-flow lifecycles live in send-failure.spec.js; question-card
+// behavior in ask-user-question.spec.js / question-card-input.spec.js;
+// working-indicator states in blocked-indicator.spec.js. This file pins
+// what remains: composer presence/placeholder per state, the trailing
+// Send/Stop pair, action-panel chips, and the Stats disclosure.
 const { test, expect } = require('@playwright/test');
 
-// Mock agent data for different states
+const AGENT_ID = 'agt-detail-test';
+
 function makeAgent(overrides) {
   return {
-    session_id: 'test-001',
-    repo: 'https://github.com/test/repo',
+    session_id: AGENT_ID,
+    cwd: '/Users/test/Code/myapp',
     branch: 'feat/test',
     model: 'opus',
     state: 'running',
     started_at: new Date().toISOString(),
+    subagent_count: 0,
     ...overrides,
   };
 }
 
-// Set up API mocks for a given agent and navigate to its detail view
 async function setupAndNavigate(page, agent) {
-  const agents = [agent];
-
-  // Block SSE so real server data doesn't override mocks
-  await page.route('**/events', async (route) => {
-    route.abort('connectionrefused');
-  });
-
-  // Mock ALL /api/agents* routes with a single handler to avoid conflicts
-  await page.route(/\/api\/agents/, async (route) => {
+  await page.route('**/events', (route) => route.abort('connectionrefused'));
+  await page.route(/\/api\//, async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-
-    if (path === '/api/agents') {
-      await route.fulfill({ json: agents });
-    } else if (path.endsWith('/conversation')) {
-      await route.fulfill({
+    if (path === '/api/agents') return route.fulfill({ json: [agent] });
+    if (path.endsWith('/conversation')) {
+      return route.fulfill({
         json: [
-          { Role: 'human', Content: 'Hello', Timestamp: new Date().toISOString() },
-          { Role: 'assistant', Content: 'Hi there', Timestamp: new Date().toISOString() },
+          { Role: 'human', Content: 'Hello', Timestamp: '2026-06-04T10:00:00Z' },
+          { Role: 'assistant', Content: 'Hi there', Timestamp: '2026-06-04T10:01:00Z' },
         ],
       });
-    } else if (path.endsWith('/usage')) {
-      await route.fulfill({ json: { InputTokens: 1000, OutputTokens: 500, CostUSD: 0.05 } });
-    } else if (path.endsWith('/subagents')) {
-      await route.fulfill({
-        json: [
-          { AgentType: 'explore', Description: 'Search code', StartedAt: new Date().toISOString(), Completed: true },
-          { AgentType: 'plan', Description: 'Design approach', StartedAt: new Date().toISOString(), Completed: false },
-        ],
-      });
-    } else if (path.endsWith('/input')) {
-      await route.fulfill({ json: { ok: true } });
-    } else {
-      await route.fulfill({ json: {} });
     }
+    if (path.endsWith('/pending-question')) return route.fulfill({ json: null });
+    if (path.endsWith('/usage')) {
+      return route.fulfill({ json: { InputTokens: 1000, OutputTokens: 500, CostUSD: 0.05 } });
+    }
+    if (path.endsWith('/activity')) return route.fulfill({ json: [] });
+    if (path.endsWith('/plan')) return route.fulfill({ json: { content: '' } });
+    if (path.endsWith('/input') && route.request().method() === 'POST') {
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (path === '/api/skills' || path === '/api/suggestions') return route.fulfill({ json: [] });
+    return route.fulfill({ json: {} });
   });
-
-  // Navigate to the app — routes and initScript are already set
-  await page.addInitScript(() => sessionStorage.clear());
   await page.goto('/');
-  await page.evaluate(() => sessionStorage.clear());
-  // Wait for the app to render with SSE data, then click the agent card
-  await page.waitForSelector('.agent-card', { timeout: 5000 });
-  await page.click('.agent-card');
-  // Wait for detail view to render
+  await page.waitForSelector('.ui-row, .ui-dock', { timeout: 5000 });
+  await page.evaluate((id) => window.Dashboard.selectAgent(id), AGENT_ID);
   await page.waitForSelector('.detail-layout', { timeout: 5000 });
 }
 
-// --- Reply Input Tests ---
-
-test.describe('Reply Input Box', () => {
-  test('should show reply input for running agent', async ({ page }) => {
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
+test.describe('Composer per state', () => {
+  test('running agent offers Message placeholder with Stop AND Send', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({ state: 'running' }));
     const input = page.locator('#reply-input');
     await expect(input).toBeVisible();
-    await expect(input).toHaveAttribute('placeholder', 'Send a message...');
-
-    const sendBtn = page.locator('.action-bar button', { hasText: 'Send' });
-    await expect(sendBtn).toBeVisible();
+    await expect(input).toHaveAttribute('placeholder', 'Message');
+    await expect(page.locator('.ui-composer__stop')).toBeVisible();
+    // Send exists in the DOM (CSS reveals it once text is typed).
+    await expect(page.locator('.ui-composer__send')).toHaveCount(1);
+    await input.fill('steer the work');
+    await expect(page.locator('.ui-composer__send')).toBeVisible();
   });
 
-  test('should show reply input with contextual placeholder for question state', async ({ page }) => {
-    const agent = makeAgent({ state: 'question' });
-    await setupAndNavigate(page, agent);
-
+  test('question state keeps the reply placeholder when no card is pending', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({ state: 'question' }));
     const input = page.locator('#reply-input');
     await expect(input).toBeVisible();
-    await expect(input).toHaveAttribute('placeholder', 'Type a reply...');
+    await expect(input).toHaveAttribute('placeholder', 'Type a reply…');
+    await expect(page.locator('.ui-composer__send')).toBeVisible();
+    await expect(page.locator('.ui-composer__stop')).toHaveCount(0);
   });
 
-  test('should NOT show reply input for merged agent', async ({ page }) => {
-    const agent = makeAgent({ state: 'merged' });
-    await setupAndNavigate(page, agent);
-
+  test('merged agent keeps the follow-up composer alongside Close', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({ state: 'merged' }));
     const input = page.locator('#reply-input');
-    await expect(input).not.toBeVisible();
+    await expect(input).toBeVisible();
+    await expect(input).toHaveAttribute('placeholder', 'Ask for follow-up changes…');
+    await expect(page.locator('.action-panel .ui-modal-btn', { hasText: 'Close' })).toBeVisible();
   });
 
-  test('should not show Open Claude button', async ({ page }) => {
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
-    const openClaudeBtn = page.locator('button', { hasText: 'Open Claude' });
-    await expect(openClaudeBtn).toHaveCount(0);
-  });
-
-  test('should send input on button click', async ({ page }) => {
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
-    const requestPromise = page.waitForRequest(req =>
+  test('send on click posts the text and clears the composer', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({ state: 'done' }));
+    const requestPromise = page.waitForRequest((req) =>
       req.url().includes('/input') && req.method() === 'POST'
     );
-
     const input = page.locator('#reply-input');
     await input.fill('test message');
-    await page.click('.action-bar button:has-text("Send")');
-
+    await page.locator('.ui-composer__send').click();
     const request = await requestPromise;
     expect(request.postDataJSON()).toEqual({ text: 'test message' });
-
-    // Input should be cleared after send
     await expect(input).toHaveValue('');
   });
+
+  test('no dead controls: composer renders no mic and no chip buttons', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({ state: 'running' }));
+    await expect(page.locator('.ui-composer__mic')).toHaveCount(0);
+    await expect(page.locator('button.ui-composer__chip')).toHaveCount(0);
+  });
 });
 
-// --- Collapsible Sections Tests ---
-
-test.describe('Collapsible Sections', () => {
-  test('should render collapsible toggles for vital signs and subagent pills', async ({ page }) => {
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
-    // Wait for vital signs to load
-    await page.waitForSelector('.vital-signs', { timeout: 5000 });
-
-    const toggles = page.locator('.collapsible-summary');
-    await expect(toggles).toHaveCount(2);
+test.describe('Action panel per state', () => {
+  test('permission state shows Approve and Reject with the composer', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({ state: 'permission' }));
+    await expect(page.locator('#reply-input')).toBeVisible();
+    await expect(page.locator('.action-panel .ui-modal-btn', { hasText: 'Approve' })).toBeVisible();
+    await expect(page.locator('.action-panel .ui-modal-btn', { hasText: 'Reject' })).toBeVisible();
   });
 
-  test('should collapse vital signs on toggle click', async ({ page }) => {
-    // Use desktop viewport so sections start expanded (open)
+  test('open PR shows Open PR and Merge chips', async ({ page }) => {
+    await setupAndNavigate(page, makeAgent({
+      state: 'pr',
+      pinned_state: 'pr',
+      pr_url: 'https://github.com/test/repo/pull/1',
+    }));
+    await expect(page.locator('#reply-input')).toBeVisible();
+    await expect(page.locator('.action-panel .ui-modal-btn', { hasText: 'Open PR' })).toBeVisible();
+    await expect(page.locator('.action-panel .ui-modal-btn', { hasText: 'Merge' })).toBeVisible();
+  });
+});
+
+test.describe('Stats disclosure', () => {
+  test('desktop starts expanded and toggles closed on click', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
-    await page.waitForSelector('.vital-signs', { timeout: 5000 });
-
-    const vitalSection = page.locator('#vital-signs-container-section');
-    await expect(vitalSection).toHaveAttribute('open', '');
-
-    // Click the summary to collapse
-    await page.click('.collapsible-summary[data-section="vital-signs-container"]');
-    await expect(vitalSection).not.toHaveAttribute('open', '');
+    await setupAndNavigate(page, makeAgent({ state: 'running' }));
+    await page.waitForSelector('.vital-strip', { timeout: 5000 });
+    const section = page.locator('#vital-signs-container-section');
+    await expect(section).toHaveAttribute('open', '');
+    await page.click('summary[data-section="vital-signs-container"]');
+    await expect(section).not.toHaveAttribute('open', '');
   });
 
-  test('should expand vital signs after second click', async ({ page }) => {
-    await page.setViewportSize({ width: 1024, height: 768 });
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
-    await page.waitForSelector('.vital-signs', { timeout: 5000 });
-
-    const vitalSection = page.locator('#vital-signs-container-section');
-
-    // Collapse
-    await page.click('.collapsible-summary[data-section="vital-signs-container"]');
-    await expect(vitalSection).not.toHaveAttribute('open', '');
-
-    // Expand
-    await page.click('.collapsible-summary[data-section="vital-signs-container"]');
-    await expect(vitalSection).toHaveAttribute('open', '');
-  });
-
-  test('should default to collapsed on mobile viewport', async ({ page }) => {
+  test('mobile starts collapsed', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    const agent = makeAgent({ state: 'running' });
-    await setupAndNavigate(page, agent);
-
-    await page.waitForSelector('.collapsible-summary', { timeout: 5000 });
-
-    const vitalSection = page.locator('#vital-signs-container-section');
-    await expect(vitalSection).not.toHaveAttribute('open', '');
-
-    const subagentSection = page.locator('#subagent-summary-section');
-    await expect(subagentSection).not.toHaveAttribute('open', '');
-  });
-});
-
-// --- Action Bar State Tests ---
-
-test.describe('Action Bar States', () => {
-  test('permission state shows Approve and Reject with input', async ({ page }) => {
-    const agent = makeAgent({ state: 'permission' });
-    await setupAndNavigate(page, agent);
-
-    await expect(page.locator('#reply-input')).toBeVisible();
-    await expect(page.locator('.action-bar button', { hasText: 'Approve' })).toBeVisible();
-    await expect(page.locator('.action-bar button', { hasText: 'Reject' })).toBeVisible();
-  });
-
-  test('pr state shows Open PR and Merge with input', async ({ page }) => {
-    const agent = makeAgent({ state: 'pr', pr_url: 'https://github.com/test/repo/pull/1' });
-    await setupAndNavigate(page, agent);
-
-    await expect(page.locator('#reply-input')).toBeVisible();
-    await expect(page.locator('.action-bar button', { hasText: 'Open PR' })).toBeVisible();
-    await expect(page.locator('.action-bar button', { hasText: 'Merge' })).toBeVisible();
-  });
-
-  test('merged state shows Close button without input', async ({ page }) => {
-    const agent = makeAgent({ state: 'merged' });
-    await setupAndNavigate(page, agent);
-
-    await expect(page.locator('#reply-input')).not.toBeVisible();
-    await expect(page.locator('.action-bar button', { hasText: 'Close' })).toBeVisible();
+    await setupAndNavigate(page, makeAgent({ state: 'running' }));
+    const section = page.locator('#vital-signs-container-section');
+    await expect(section).toBeVisible();
+    await expect(section).not.toHaveAttribute('open', '');
   });
 });
