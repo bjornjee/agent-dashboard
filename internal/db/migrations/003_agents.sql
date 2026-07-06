@@ -9,7 +9,7 @@ CREATE TABLE agents (
   state            TEXT NOT NULL DEFAULT '',
   report_seq       INTEGER NOT NULL DEFAULT 0,
   updated_at       TEXT NOT NULL DEFAULT '',
-  created_at       TEXT NOT NULL DEFAULT '',
+  created_at       TEXT NOT NULL DEFAULT '', -- first dashboard sync, not agent start time
   payload          TEXT NOT NULL,
   source           TEXT NOT NULL DEFAULT 'hook',
   dismissed_at     TEXT,

@@ -46,7 +46,7 @@ func ResolveChain(opts ResolveOptions) []domain.Agent {
 		livePanes = livePanesFromTargets(targets)
 		opts.Store.Hydrate(&sf, livePanes, pid)
 		ResolveAgentTargets(&sf, targets)
-		ReconcileUnregistered(&sf, targets, cwds, cmds, time.Now())
+		ReconcileUnregistered(&sf, targets, cwds, cmds, pid, time.Now())
 		ReconcileIdentities(&sf, ReconcileIdentityOptions{
 			Store:             opts.Store,
 			ClaudeProjectsDir: opts.ClaudeProjectsDir,

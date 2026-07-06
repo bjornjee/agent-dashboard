@@ -14,6 +14,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
+	"golang.org/x/sync/singleflight"
 )
 
 //go:embed static
@@ -35,6 +36,11 @@ type Server struct {
 	opts  ServerOptions
 	auth  *authHandler
 	hub   *sseHub
+
+	// Per-server coalescing of concurrent readAgentState calls; a
+	// package-level group would wrongly coalesce across Server instances
+	// in tests.
+	readAgentStateGroup singleflight.Group
 
 	// Cached codex sessions root ($CODEX_HOME/sessions or
 	// ~/.codex/sessions). Resolved once at construction so request

@@ -248,6 +248,20 @@ func Test_parsePanesOutput(t *testing.T) {
 			wantTargets: map[string]domain.PaneTarget{},
 			wantCwds:    map[string]string{},
 		},
+		{
+			// tmux that doesn't know a format variable emits it as literal
+			// text. A literal "#{pid}" server PID would poison the
+			// hydrate/sweep server-identity guards — it must be dropped so
+			// callers see the enumeration-failed ("") case instead.
+			name:   "non-numeric pid column yields no server pid",
+			output: "%85\ttomoro\t1\t1\t#{pid}\t/home/a\tclaude\n",
+			wantTargets: map[string]domain.PaneTarget{
+				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
+			},
+			wantCwds:      map[string]string{"%85": "/home/a"},
+			wantCmds:      map[string]string{"%85": "claude"},
+			wantServerPID: "",
+		},
 	}
 
 	for _, tt := range tests {

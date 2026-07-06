@@ -15,7 +15,7 @@ import (
 // agent state file claims. pane_current_command only reports the foreground
 // process, so a pane running a shell command from inside the harness can miss
 // this path for one refresh and appear on the next idle cycle.
-func ReconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneTarget, cwds, cmds map[string]string, now time.Time) {
+func ReconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneTarget, cwds, cmds map[string]string, serverPID string, now time.Time) {
 	if sf == nil || len(targets) == 0 || len(cmds) == 0 {
 		return
 	}
@@ -46,8 +46,12 @@ func ReconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneT
 			Cwd:        cwds[paneID],
 			SessionID:  sessionID,
 			TmuxPaneID: paneID,
-			UpdatedAt:  now.UTC().Format(time.RFC3339),
-			Harness:    harness,
+			// Stamp the enumeration's server identity so identity-adopted
+			// agents synced before their first hook write stay protected by
+			// the pane-ID-reuse guards in Hydrate/SweepDeadRows.
+			TmuxServerPID: serverPID,
+			UpdatedAt:     now.UTC().Format(time.RFC3339),
+			Harness:       harness,
 		}
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/fsnotify/fsnotify"
-	"golang.org/x/sync/singleflight"
 )
 
 // sseHub manages SSE client connections and broadcasts state updates.
@@ -112,7 +111,7 @@ func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 // via singleflight so a burst of state writes only triggers one tmux +
 // git resolution pass.
 func (s *Server) readAgentState() []domain.Agent {
-	v, _, _ := readAgentStateGroup.Do("readAgentState", func() (any, error) {
+	v, _, _ := s.readAgentStateGroup.Do("readAgentState", func() (any, error) {
 		agents := state.ResolveChain(state.ResolveOptions{
 			StateDir:          s.cfg.Profile.StateDir,
 			ClaudeProjectsDir: s.cfg.Profile.ProjectsDir,
@@ -126,8 +125,6 @@ func (s *Server) readAgentState() []domain.Agent {
 	agents, _ := v.([]domain.Agent)
 	return agents
 }
-
-var readAgentStateGroup singleflight.Group
 
 // pruneDeadOnce runs one prune/sweep cycle with the TUI's enumeration guard:
 // an unknown server PID or empty pane set means the enumeration can't be

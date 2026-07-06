@@ -64,9 +64,10 @@ func main() {
 
 	// Web-only deployments need the periodic prune/sweep the TUI runs on
 	// its tick; without it dead files and orphaned read-model rows linger.
-	pruneStop := make(chan struct{})
-	defer close(pruneStop)
-	srv.StartPruneLoop(pruneStop)
+	// No close: log.Fatal below exits via os.Exit, so defers never run —
+	// the prune goroutine is process-scoped and dies with the process. The
+	// stop channel exists for callers that do have a shutdown path (tests).
+	srv.StartPruneLoop(make(chan struct{}))
 
 	addr := fmt.Sprintf("%s:%d", *bind, *port)
 	log.Printf("Agent Dashboard web UI: http://%s", addr)

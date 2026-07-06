@@ -24,7 +24,7 @@ func TestReconcileUnregistered(t *testing.T) {
 	cwds := map[string]string{"%2": "/repo/codex", "%3": "/repo/claude", "%4": "/repo/shell"}
 	cmds := map[string]string{"%1": "claude", "%2": "codex-aarch64-a", "%3": "claude", "%4": "zsh"}
 
-	ReconcileUnregistered(&sf, targets, cwds, cmds, now)
+	ReconcileUnregistered(&sf, targets, cwds, cmds, "222", now)
 
 	if _, ok := sf.Agents["unregistered-%1"]; ok {
 		t.Fatal("claimed pane got placeholder")
@@ -35,6 +35,12 @@ func TestReconcileUnregistered(t *testing.T) {
 	}
 	if codexAgent.Harness != "codex" || codexAgent.Cwd != "/repo/codex" || codexAgent.Target != "s:1.1" {
 		t.Fatalf("codex placeholder = %+v", codexAgent)
+	}
+	// The placeholder must carry the enumeration's server identity so an
+	// identity-adopted agent synced before its first hook write is still
+	// protected by the pane-ID-reuse guards.
+	if codexAgent.TmuxServerPID != "222" {
+		t.Fatalf("codex placeholder TmuxServerPID = %q, want 222", codexAgent.TmuxServerPID)
 	}
 	claudeAgent, ok := sf.Agents["unregistered-%3"]
 	if !ok {

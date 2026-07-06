@@ -367,7 +367,7 @@ func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]s
 			Target:  fmt.Sprintf("%s:%d.%d", session, w, p),
 		}
 		if serverPID == "" {
-			serverPID = parts[4]
+			serverPID = numericPID(parts[4])
 		}
 		if len(parts) == 6 && parts[5] != "" {
 			cwds[paneID] = parts[5]
@@ -405,10 +405,28 @@ func TmuxListLivePaneIDs() (map[string]bool, string) {
 		parts := strings.SplitN(line, "\t", 2)
 		panes[parts[0]] = true
 		if serverPID == "" && len(parts) == 2 {
-			serverPID = parts[1]
+			serverPID = numericPID(parts[1])
 		}
 	}
 	return panes, serverPID
+}
+
+// numericPID returns pid only when it is a plain decimal number. A tmux
+// that doesn't know the #{pid} format variable emits it as literal text;
+// treating that as a server identity would poison every consumer that
+// compares stamped server PIDs (orphan event-scoping, hydrate, sweep).
+// Dropping it yields the enumeration-failed ("") case, which every
+// consumer already fails safe on.
+func numericPID(pid string) string {
+	if pid == "" {
+		return ""
+	}
+	for _, r := range pid {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return pid
 }
 
 // parseListWindowsOutput parses the output of tmux list-windows -F "#{window_index}\t#{window_name}".
