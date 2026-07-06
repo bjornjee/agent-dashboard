@@ -51,12 +51,12 @@ test('questionCardId is stable when tool_use_id is blank', () => {
   const pending = {
     tool_use_id: '',
     questions: [{
-      question: 'Plan has 3 phases. Continue inline here, or hand off?',
+      question: 'Plan has 6 phases. Continue inline here, or hand off?',
       header: 'Dispatch',
       multi_select: false,
       options: [
-        { label: 'Continue inline (Recommended)', description: 'Stay here.' },
-        { label: 'Hand off', description: 'Use implementation dispatch.' },
+        { label: 'Hand off to /agent-dashboard:implement (Recommended for 6+ phases)', description: 'Use implementation dispatch.' },
+        { label: 'Continue inline', description: 'Stay here.' },
       ],
     }],
   };
@@ -68,12 +68,12 @@ test('renderQuestionCard renders a card when tool_use_id is blank', () => {
   const pending = {
     tool_use_id: '',
     questions: [{
-      question: 'Plan has 3 phases. Continue inline here, or hand off?',
+      question: 'Plan has 6 phases. Continue inline here, or hand off?',
       header: 'Dispatch',
       multi_select: false,
       options: [
-        { label: 'Continue inline (Recommended)', description: 'Stay here.' },
-        { label: 'Hand off', description: 'Use implementation dispatch.' },
+        { label: 'Hand off to /agent-dashboard:implement (Recommended for 6+ phases)', description: 'Use implementation dispatch.' },
+        { label: 'Continue inline', description: 'Stay here.' },
       ],
     }],
   };
@@ -81,7 +81,7 @@ test('renderQuestionCard renders a card when tool_use_id is blank', () => {
   const html = renderQuestionCard(pending, 'agent-1');
   assert.match(html, /class="question-card"/);
   assert.match(html, /data-tool-use-id="[^"]+"/);
-  assert.match(html, /Plan has 3 phases/);
+  assert.match(html, /Plan has 6 phases/);
 });
 
 test('formatLatestToolDisplay returns empty for null/empty entry', () => {

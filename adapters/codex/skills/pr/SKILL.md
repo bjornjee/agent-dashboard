@@ -124,7 +124,7 @@ Do not launch a cleanup worker by default. First classify the diff from Phase
    > After your changes, report the files edited and any risk that needs a
    > targeted proof command. Do not commit — the parent skill commits.
 
-2. When `wait_agent` returns and the worker edited files, commit them: `git add -u && git commit -m "chore: ai-fmt"`. No proof run here — Phase 5 gates it.
+2. Call `wait_agent` only after finishing the overlap work from step 1 (steps 4–6 and the fmt check). When it returns and the worker edited files, commit them: `git add -u && git commit -m "chore: ai-fmt"`. No proof run here — Phase 5 gates it.
 3. If the worker made no changes, skip the commit.
 
 **Prune implementation-only tests.** The cleaner above never touches tests — this step does. Do it inline yourself; do not spawn a subagent.
@@ -163,9 +163,11 @@ Phase 5 is the single test gate for the cleaner, prune, and fmt edits above — 
 
 - **If the target exists:** run it — must pass. If it fails, **stop**. Do not push a broken branch. Fix the failure (likely a separate `fix:` commit) and re-run.
 - **If no Makefile exists, or no `test`/`test-fast` target:** do not add one
-  during PR cleanup unless the user explicitly asked. Run an obvious native
-  project test command only if it is already documented/configured; otherwise
-  proceed and note in the PR body that tests were not gated.
+  during PR cleanup unless the user explicitly asked. Fall back to the
+  smallest relevant proof command scoped to the files edited in Phases 3–4
+  (a documented/configured native test runner on the touched packages); only
+  when no proof command exists at all, proceed and note in the PR body that
+  tests were not gated.
 
 **Gate:** Either tests are green, or the user has been notified the target is missing and accepted that trade-off.
 

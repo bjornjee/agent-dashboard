@@ -37,7 +37,7 @@ vet: ## Run go vet (checks formatting + vets)
 	go vet ./...
 
 test-js: ## Run JS unit tests (node --test)
-	node --test internal/web/static/js/*.test.js internal/web/static/js/pages/*.test.js
+	node --test internal/web/static/js/*.test.js internal/web/static/js/pages/*.test.js scripts/*.test.js
 
 test: vet test-js ## Run all tests (vets first, then JS, then Go)
 	CGO_ENABLED=0 go test ./...
