@@ -3,11 +3,9 @@ package web
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -115,46 +113,14 @@ func (s *Server) StartWatcher() (*fsnotify.Watcher, error) {
 // git resolution pass.
 func (s *Server) readAgentState() []domain.Agent {
 	v, _, _ := readAgentStateGroup.Do("readAgentState", func() (any, error) {
-		sf := state.ReadState(s.cfg.Profile.StateDir)
-		var paneCwds map[string]string
-		var livePanes map[string]bool
-		var serverPID string
-		if tmux.TmuxIsAvailable() {
-			targets, cwds, cmds, pid := tmux.TmuxListPanes()
-			livePanes = livePanesFromTargets(targets)
-			s.store.Hydrate(&sf, livePanes, pid)
-			state.ResolveAgentTargets(&sf, targets)
-			state.ReconcileUnregistered(&sf, targets, cwds, cmds, time.Now())
-			state.ReconcileIdentities(&sf, state.ReconcileIdentityOptions{
-				Store:             s.store,
-				ClaudeProjectsDir: s.cfg.Profile.ProjectsDir,
-				ClaudeSessionsDir: s.cfg.Profile.SessionsDir,
-				CodexRoot:         filepath.Dir(s.codexSessionsRootDir),
-			})
-			paneCwds = cwds
-			serverPID = pid
-			// targets is keyed by pane ID (%N) — the live-pane set used to flag
-			// restart-survivor (resumable) orphans below. Leave livePanes nil
-			// when targets is nil (tmux enumeration failed) so a transient
-			// failure doesn't flag every live agent resumable.
-		}
-		state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
-		// Apply spawn-pins BEFORE marker-scan so freshly-spawned agents
-		// render with the dashboard-staged pin before the JS hook fires.
-		state.ApplySpawnPins(&sf, s.cfg.Profile.StateDir)
-		state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
-		state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
-		state.GCSpawnPins(s.cfg.Profile.StateDir, 10*time.Minute)
-		state.ApplyStateArbitration(&sf, s.codexSessionsRootDir)
-		// Flag restart-survivor orphans before sorting so the frontend Cmd+K
-		// palette can mark and resume them and they sort into the RESUMABLE
-		// group, mirroring the TUI's resolveAgents.
-		state.FlagResumable(&sf, livePanes, serverPID, time.Now())
-		agents := conversation.TopLevelAgents(
-			state.SortedAgents(sf, ""),
-			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
-		)
-		s.store.Sync(&sf)
+		agents := state.ResolveChain(state.ResolveOptions{
+			StateDir:          s.cfg.Profile.StateDir,
+			ClaudeProjectsDir: s.cfg.Profile.ProjectsDir,
+			ClaudeSessionsDir: s.cfg.Profile.SessionsDir,
+			CodexSessionsDir:  s.codexSessionsRootDir,
+			TmuxAvailable:     tmux.TmuxIsAvailable(),
+			Store:             s.store,
+		})
 		return s.applyTrustFlags(agents), nil
 	})
 	agents, _ := v.([]domain.Agent)
@@ -163,13 +129,35 @@ func (s *Server) readAgentState() []domain.Agent {
 
 var readAgentStateGroup singleflight.Group
 
-func livePanesFromTargets(targets map[string]domain.PaneTarget) map[string]bool {
-	if targets == nil {
-		return nil
+// pruneDeadOnce runs one prune/sweep cycle with the TUI's enumeration guard:
+// an unknown server PID or empty pane set means the enumeration can't be
+// trusted, so the cycle is skipped rather than treating every agent as dead.
+// The merged-branch checker is nil here — the web surface skips merged-GC
+// and relies on the resumable TTL backstop, avoiding a second git fanout.
+func (s *Server) pruneDeadOnce() int {
+	livePaneIDs, serverPID := tmux.TmuxListLivePaneIDs()
+	if len(livePaneIDs) == 0 || serverPID == "" {
+		return 0
 	}
-	livePanes := make(map[string]bool, len(targets))
-	for paneID := range targets {
-		livePanes[paneID] = true
-	}
-	return livePanes
+	return state.PruneDead(s.cfg.Profile.StateDir, livePaneIDs, serverPID, nil, s.store)
+}
+
+// StartPruneLoop gives web-only deployments the same periodic prune/sweep
+// the TUI runs on its tick: without it, dead-pane files and orphaned
+// read-model rows accumulate until a TUI happens to start. Runs once
+// immediately, then on a long interval; stops when stop is closed.
+func (s *Server) StartPruneLoop(stop <-chan struct{}) {
+	go func() {
+		_ = s.pruneDeadOnce()
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = s.pruneDeadOnce()
+			case <-stop:
+				return
+			}
+		}
+	}()
 }

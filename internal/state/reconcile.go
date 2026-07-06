@@ -1,10 +1,7 @@
 package state
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -160,51 +157,22 @@ func codexCandidates(cwd string, rows []codexthreads.Thread) []identityCandidate
 	return out
 }
 
-type claudeSessionFile struct {
-	SessionID string `json:"sessionId"`
-	Cwd       string `json:"cwd"`
-	StartedAt int64  `json:"startedAt"`
-}
-
 func claudeCandidates(cwd, sessionsDir, projectsDir string) []identityCandidate {
-	if cwd == "" || sessionsDir == "" {
-		return nil
-	}
-	entries, err := os.ReadDir(sessionsDir)
-	if err != nil {
-		return nil
-	}
-	var sessions []claudeSessionFile
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(sessionsDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		var sf claudeSessionFile
-		if json.Unmarshal(data, &sf) != nil || filepath.Clean(sf.Cwd) != filepath.Clean(cwd) {
-			continue
-		}
-		sessions = append(sessions, sf)
-	}
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].StartedAt > sessions[j].StartedAt
-	})
-
+	// Session-file knowledge lives in the conversation package; this layer
+	// only maps metadata onto identity candidates.
+	sessions := conversation.SessionMetas(sessionsDir, cwd)
 	candidates := make([]identityCandidate, 0, len(sessions))
-	for _, sf := range sessions {
-		projDir := conversation.PickProjDir(projectsDir, sf.SessionID, cwd)
+	for _, meta := range sessions {
+		projDir := conversation.PickProjDir(projectsDir, meta.SessionID, cwd)
 		preview := ""
-		if entries := conversation.ReadConversation(projDir, sf.SessionID, 1); len(entries) > 0 {
+		if entries := conversation.ReadConversation(projDir, meta.SessionID, 1); len(entries) > 0 {
 			preview = entries[0].Content
 		}
 		candidates = append(candidates, identityCandidate{
-			sessionID: sf.SessionID,
-			branch:    conversation.LastGitBranch(projDir, sf.SessionID),
+			sessionID: meta.SessionID,
+			branch:    conversation.LastGitBranch(projDir, meta.SessionID),
 			preview:   preview,
-			updatedAt: fmt.Sprintf("%020d", sf.StartedAt),
+			updatedAt: fmt.Sprintf("%020d", meta.StartedAt),
 		})
 	}
 	return candidates

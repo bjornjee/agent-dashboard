@@ -589,58 +589,15 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	if len(stores) > 0 {
 		store = stores[0]
 	}
-	sf := state.ReadState(path)
-	var paneCwds map[string]string
-	var livePanes map[string]bool
-	var serverPID string
-	if tmuxAvailable {
-		targets, cwds, cmds, pid := tmux.TmuxListPanes()
-		livePanes = livePanesFromTargets(targets)
-		store.Hydrate(&sf, livePanes, pid)
-		state.ResolveAgentTargets(&sf, targets)
-		state.ReconcileUnregistered(&sf, targets, cwds, cmds, time.Now())
-		state.ReconcileIdentities(&sf, state.ReconcileIdentityOptions{
-			Store:             store,
-			ClaudeProjectsDir: projectsDir,
-			ClaudeSessionsDir: sessionsDir,
-			CodexRoot:         filepath.Dir(codexSessionsDir),
-		})
-		paneCwds = cwds
-		serverPID = pid
-		// targets is keyed by pane ID (%N) — the live-pane set used to flag
-		// restart-survivor orphans. Leave livePanes nil when targets is nil
-		// (tmux enumeration failed) so IsResumableOrphan can't misclassify
-		// live agents as orphans; a non-nil empty targets (zero panes) yields a
-		// non-nil empty set (genuinely all dead).
-	}
-	state.ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
-	// Apply spawn-pins BEFORE marker-scan / scan-on-init so freshly-spawned
-	// agents render with the dashboard-staged pin even when the JS hook
-	// hasn't fired yet.
-	state.ApplySpawnPins(&sf, path)
-	state.ResolveAgentWorktree(&sf, path)
-	state.ResolveAgentBranches(&sf, paneCwds, path)
-	state.GCSpawnPins(path, 10*time.Minute)
-	state.ApplyStateArbitration(&sf, codexSessionsDir)
-	// Flag survivors before sorting so they sink into the RESUMABLE group.
-	state.FlagResumable(&sf, livePanes, serverPID, time.Now())
-	agents := conversation.TopLevelAgents(
-		state.SortedAgents(sf, selfPaneID),
-		conversation.Roots{CodexSessionsRoot: codexSessionsDir},
-	)
-	store.Sync(&sf)
-	return agents
-}
-
-func livePanesFromTargets(targets map[string]domain.PaneTarget) map[string]bool {
-	if targets == nil {
-		return nil
-	}
-	livePanes := make(map[string]bool, len(targets))
-	for paneID := range targets {
-		livePanes[paneID] = true
-	}
-	return livePanes
+	return state.ResolveChain(state.ResolveOptions{
+		StateDir:          path,
+		ClaudeProjectsDir: projectsDir,
+		ClaudeSessionsDir: sessionsDir,
+		CodexSessionsDir:  codexSessionsDir,
+		TmuxAvailable:     tmuxAvailable,
+		SelfPaneID:        selfPaneID,
+		Store:             store,
+	})
 }
 
 // loadStateGroup deduplicates concurrent loadState calls. The TUI tick
