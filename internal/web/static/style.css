@@ -618,6 +618,12 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
  * change; CSS just hides it. */
 .ui-msg__avatar { display: none; }
 .ui-msg--assistant { gap: 0; }
+/* Turn grouping: consecutive assistant blocks are separate messages
+ * (one per backend entry — see visibleEntries in pages/detail.js) but
+ * belong to the same agent turn, so the inter-block gap tightens to
+ * read as one flow while each block still appears the moment its
+ * entry lands. */
+.ui-msg--assistant + .ui-msg--assistant { padding-top: 0; }
 .ui-msg__card {
   flex: 1;
   min-width: 0;
@@ -1975,10 +1981,17 @@ button.btn-ghost.btn-sm {
 .markdown-body th { background: var(--bg-elevated); font-weight: 500; }
 
 /* === LEGACY: diff-view === */
+/* The diff tab owns its scrolling: the tab fills the .detail-scroll
+ * viewport exactly and the outer scroller is disabled while it's
+ * active, so .diff-content is the ONE scroll context. The previous
+ * calc(100vh - 250px) height overflowed the viewport, stranding the
+ * last rows behind a second, outer scroll. */
+.detail-scroll:has(> #tab-diff.active) { overflow-y: hidden; }
+#tab-diff.active { height: 100%; }
 .diff-view {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 250px);
+  height: 100%;
 }
 
 .diff-summary-bar {
@@ -1997,11 +2010,14 @@ button.btn-ghost.btn-sm {
 
 .diff-controls { display: flex; align-items: center; gap: 12px; }
 .diff-view-toggle { display: inline-flex; gap: 0; border-radius: var(--radius-sm); overflow: hidden; }
+/* Toggle buttons (Split/Unified pair + standalone Files): inactive is
+ * a transparent outline, active is a filled chip — the state must read
+ * at the same glance-fidelity as the Wrap switch next to them. */
 .diff-toggle-btn {
   padding: 4px 12px;
   font-size: 12px;
   font-family: var(--font-primary);
-  background: var(--bg-elevated);
+  background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--border-default);
   cursor: pointer;
@@ -2012,6 +2028,10 @@ button.btn-ghost.btn-sm {
 .diff-toggle-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .diff-toggle-btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: none; }
 .diff-toggle-btn.active { background: var(--bg-elevated); border-color: var(--border-hover); color: var(--text-primary); font-weight: 500; }
+/* Project focus language (same as .detail-tabs__tab) instead of the UA ring. */
+.diff-toggle-btn:focus-visible,
+.diff-sidebar-file:focus-visible,
+.diff-file-header:focus-visible { outline: 2px solid var(--text-faint); outline-offset: -2px; }
 .diff-toggle-btn:hover:not(.active) { background: var(--interactive-bg); }
 
 .diff-layout {
@@ -2029,6 +2049,14 @@ button.btn-ghost.btn-sm {
   overflow-y: auto;
   flex-shrink: 0;
 }
+
+/* Collapsed file list: code column takes the full tab width. */
+.diff-layout.diff-sidebar-collapsed .diff-sidebar { display: none; }
+
+/* Standalone "Files" toggle (not part of the Split/Unified pair). */
+.diff-sidebar-toggle,
+.diff-sidebar-toggle:first-child,
+.diff-sidebar-toggle:last-child { border-radius: var(--radius-sm); border-left: 1px solid var(--border-default); }
 
 .diff-sidebar-header {
   padding: 10px 12px;
@@ -2069,11 +2097,19 @@ button.btn-ghost.btn-sm {
 .diff-dir-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .diff-dir-summary .diff-stats { font-weight: 400; }
 
+/* Rendered as a real <button> for keyboard reach — reset the UA
+ * button chrome, keep the row look. */
 .diff-sidebar-file {
+  width: 100%;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
   padding: 5px 12px 5px 24px;
   font-size: 12px;
   cursor: pointer;
-  border-left: 2px solid transparent;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2108,7 +2144,20 @@ button.btn-ghost.btn-sm {
 }
 .diff-content .d2h-file-name-wrapper { color: var(--text-primary); }
 .diff-content .d2h-file-name { color: var(--text-primary); }
-.diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; table-layout: auto; }
+/* Auto layout + real table-cell line numbers (see below): the gutter
+ * sizes to its 7.5em width, the code column takes all remaining space.
+ * fixed layout is NOT usable here — the first row is the hidden hunk
+ * header (display:none), so fixed's first-row algorithm falls back to
+ * equal 50/50 columns and halves the code width. */
+.diff-content .d2h-diff-table { font-family: var(--font-mono); font-size: 12px; border-collapse: collapse; width: 100%; table-layout: auto; tab-size: 4; }
+
+/* Reclaim diff2html's dead gutters: stock CSS pads code rows 8em on
+ * both sides (4.5em in split view) to clear an absolutely-positioned
+ * line-number column — but this theme renders line numbers as real
+ * static table cells, so BOTH pads are dead space (~380px per row at
+ * 12px mono). Fill the cell, keep a 1em breathing pad. */
+.diff-content .d2h-code-line { display: block; padding: 0 1em; width: auto; }
+.diff-content .d2h-code-side-line { display: block; padding: 0 1em; width: auto; }
 
 /* Horizontal scroll for long lines */
 .diff-content .d2h-code-line-ctn { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -2117,9 +2166,14 @@ button.btn-ghost.btn-sm {
 .diff-content .d2h-code-line-ctn::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 .diff-content .d2h-code-line-ctn::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-/* Wrap toggle */
-.diff-content.diff-wrap .d2h-code-line-ctn { white-space: pre-wrap; word-break: break-all; overflow-x: visible; }
-.diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; position: static !important; }
+/* Wrap toggle — overflow-wrap:anywhere breaks only when a token can't
+ * fit the line, keeping identifiers whole far more often than
+ * word-break:break-all's break-anywhere behavior. */
+.diff-content.diff-wrap .d2h-code-line-ctn { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
+/* display:table-cell overrides stock inline-block — an inline-block
+ * "cell" gets wrapped in an anonymous cell that table-layout:fixed
+ * sizes at 50%, shoving the code column into half the table. */
+.diff-content .d2h-code-linenumber { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; position: static !important; display: table-cell; width: 7.5em; }
 .diff-content .d2h-code-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-line-ctn { color: var(--text-primary); }
 
@@ -2147,7 +2201,7 @@ button.btn-ghost.btn-sm {
 
 /* Side-by-side layout */
 .diff-content .d2h-file-side-diff { width: 50%; display: inline-block; vertical-align: top; }
-.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; position: static !important; }
+.diff-content .d2h-code-side-linenumber { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-tertiary); cursor: default; text-align: right; vertical-align: top; position: static !important; display: table-cell; width: 4em; }
 .diff-content .d2h-code-side-line { background: var(--bg-base); color: var(--text-primary); }
 .diff-content .d2h-code-side-line .d2h-code-line-ctn { color: var(--text-primary); }
 
@@ -2177,12 +2231,18 @@ button.btn-ghost.btn-sm {
 /* File sections */
 .diff-file-section { border-bottom: 1px solid var(--border-default); }
 .diff-file-section:last-child { border-bottom: none; }
+/* Rendered as a real <button> so per-file collapse is keyboard-reachable. */
 .diff-file-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
   padding: 8px 16px;
   background: var(--bg-elevated);
+  border: none;
   border-bottom: 1px solid var(--border-default);
   cursor: pointer;
   user-select: none;
@@ -2712,7 +2772,22 @@ button.btn-ghost.btn-sm {
   display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
 }
 .toggle-switch__label { font-size: 13px; color: var(--text-tertiary); }
-.toggle-switch__input { display: none; }
+/* Visually hidden but focusable — display:none removed the checkbox
+ * from the tab order entirely, making the switch keyboard-inoperable. */
+.toggle-switch__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.toggle-switch__input:focus-visible + .toggle-switch__track {
+  box-shadow: 0 0 0 2px var(--text-secondary);
+}
 .toggle-switch__track {
   width: 28px; height: 14px; border-radius: 7px;
   background: var(--border-default); position: relative; transition: background var(--transition-default);
@@ -3471,6 +3546,13 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
     padding-left: var(--page-padding-monitor);
     padding-right: var(--page-padding-monitor);
     box-sizing: border-box;
+  }
+  /* The reading-measure cap exists for prose (transcript, plan).
+   * The Diff tab is a data surface — split view needs every pixel,
+   * and a 1080px cap at 1728+ starves both panes. Lift the cap only
+   * while the diff tab is the active tab content. */
+  #app-main .detail-layout .detail-scroll:has(> #tab-diff.active) {
+    max-width: none;
   }
   /* The laptop @media block at line ~2470 sets
    *   .action-bar padding: 0 0 var(--space-4);

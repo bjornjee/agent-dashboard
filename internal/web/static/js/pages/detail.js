@@ -910,8 +910,12 @@ function renderPlanLinkCard(agentId, suppressActions) {
 // Drop entries the renderer wouldn't display (internal notifications,
 // empty content). plan-saved synthetic entries pass through (no
 // content body — they render the plan-link card from their role
-// alone). Pure — exported for unit tests so the same predicate
-// drives appendNewEntries' count math.
+// alone). Consecutive assistant entries stay SEPARATE: one block per
+// backend message, so a multi-message turn appears progressively as
+// the 750ms poll picks up new entries instead of collapsing into one
+// wall of text. Visual turn-grouping is pure CSS (adjacent-sibling
+// rules on .ui-msg--assistant). Pure — exported for unit tests so the
+// same predicate drives appendNewEntries' count math.
 export function visibleEntries(entries) {
   if (!Array.isArray(entries)) return [];
   const out = [];
@@ -921,21 +925,6 @@ export function visibleEntries(entries) {
     if (role === 'plan-saved') { out.push(entry); continue; }
     const content = entry.Content || entry.content || '';
     if (!content) continue;
-    const prev = out[out.length - 1];
-    const prevRole = prev ? (prev.Role || prev.role) : '';
-    if (role === 'assistant' && prevRole === 'assistant') {
-      const prevContent = prev.Content || prev.content || '';
-      const sep = prevContent.endsWith('\n') || content.startsWith('\n') || content.startsWith(' ')
-        ? ''
-        : '\n\n';
-      out[out.length - 1] = {
-        ...prev,
-        Content: prevContent + sep + content,
-        content: undefined,
-        Timestamp: entry.Timestamp || entry.timestamp || prev.Timestamp || prev.timestamp,
-      };
-      continue;
-    }
     out.push(entry);
   }
   return out;
@@ -1326,9 +1315,9 @@ function entryInsertAnchor(conv) {
 function appendNewEntries(conv, entries, agentId, agent) {
   const visible = visibleEntries(entries);
   // Report whether anything actually changed. A count comparison is not
-  // enough: consecutive assistant entries MERGE in visibleEntries, so a
-  // growing transcript often re-renders one entry in place instead of
-  // adding a node. The jump-chip trigger rides on this signal.
+  // enough: Codex partial assistant text grows in place, so an existing
+  // entry can re-render without adding a node. The jump-chip trigger
+  // rides on this signal.
   let changed = false;
 
   for (let i = 0; i < visible.length; i++) {
@@ -1746,8 +1735,17 @@ export async function renderDetail(app, agents, agentId, setView) {
   // navigating Agent A → B → A snaps back to the bottom of A's
   // conversation on the second visit (the DOM was torn down).
   conversationScrolledThisSession = false;
+  // Per-tab scroll memory: all tabs share the one .detail-scroll
+  // scroller, but each tab is its own reading context. Leaving a tab
+  // records its offset; entering restores it (0 on first visit, so
+  // Diff/Plan open at their summary bar + controls instead of
+  // inheriting chat's bottom-follow offset). Chat's first-load bottom
+  // snap stays owned by loadTabContent's one-shot flag.
+  const tabScrollTop = {};
   document.querySelectorAll('.detail-tabs__tab').forEach(tab => {
     tab.addEventListener('click', () => {
+      const scroller = document.querySelector('.detail-scroll');
+      if (scroller) tabScrollTop[currentDetailTab] = scroller.scrollTop;
       document.querySelectorAll('.detail-tabs__tab').forEach(t => t.classList.remove('detail-tabs__tab--active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       tab.classList.add('detail-tabs__tab--active');
@@ -1756,6 +1754,7 @@ export async function renderDetail(app, agents, agentId, setView) {
       container.classList.add('active');
       // Only show skeleton when the tab is empty (first visit) — avoids flicker on re-clicks.
       if (!container.dataset.loaded) container.innerHTML = skeletonLoading(target === 'activity' ? 6 : target === 'conversation' ? 4 : 3);
+      if (scroller) scroller.scrollTop = tabScrollTop[target] || 0;
       currentDetailTab = target;
       if (target !== 'conversation') hideJumpChip();
       try { sessionStorage.setItem('detail-tab-' + agentId, target); } catch {}
@@ -2086,10 +2085,18 @@ async function loadTabContent(tab, agentId) {
       const totalAdds = files.reduce((s, f) => s + (f.additions || 0), 0);
       const totalDels = files.reduce((s, f) => s + (f.deletions || 0), 0);
 
-      // View mode from localStorage
-      let viewMode = localStorage.getItem('diff-view-mode') || 'side-by-side';
-      // Force unified on narrow screens
-      if (window.innerWidth <= 768) viewMode = 'line-by-line';
+      // View mode: explicit user choice wins; otherwise pick by available
+      // width. Side-by-side halves the code column, so it only earns its
+      // keep when each pane still fits typical lines (~100 cols of 12px
+      // mono ≈ 720px per pane + gutters + sidebar). Below that, unified
+      // uses the full width and avoids per-line horizontal scrolling.
+      const AUTO_SPLIT_MIN_WIDTH = 1600;
+      const storedViewMode = localStorage.getItem('diff-view-mode');
+      const autoViewMode = () =>
+        window.innerWidth >= AUTO_SPLIT_MIN_WIDTH ? 'side-by-side' : 'line-by-line';
+      // (No ≤768px guard needed here — the mobile branch above already
+      // returned before this point at those widths.)
+      let viewMode = storedViewMode || autoViewMode();
 
       // Build sidebar
       const dirGroups = {};
@@ -2115,11 +2122,11 @@ async function loadTabContent(tab, agentId) {
           const status = f.status || 'modified';
           const adds = f.additions || 0;
           const dels = f.deletions || 0;
-          sidebarHtml += '<div class="diff-sidebar-file' + (f.idx === 0 ? ' active' : '') + '" data-file-idx="' + f.idx + '" title="' + escapeHtml(f.path) + '">'
+          sidebarHtml += '<button type="button" class="diff-sidebar-file' + (f.idx === 0 ? ' active' : '') + '" data-file-idx="' + f.idx + '" title="' + escapeHtml(f.path) + '">'
             + inlineFileStatus(status)
             + '<span class="diff-sidebar-name">' + escapeHtml(f.fileName) + '</span>'
             + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
-            + '</div>';
+            + '</button>';
         }
         sidebarHtml += '</details>';
       }
@@ -2133,12 +2140,12 @@ async function loadTabContent(tab, agentId) {
         const adds = f.additions || 0;
         const dels = f.deletions || 0;
         sectionsHtml += '<div class="diff-file-section" data-file-idx="' + i + '" id="diff-file-' + i + '">'
-          + '<div class="diff-file-header">'
+          + '<button type="button" class="diff-file-header" aria-expanded="true">'
           + '<span class="diff-file-chevron expanded">&#9656;</span>'
           + inlineFileStatus(status)
           + '<span class="diff-file-path">' + escapeHtml(f.path) + '</span>'
           + '<span class="diff-stats"><span class="diff-stats-add">+' + adds + '</span> <span class="diff-stats-del">-' + dels + '</span></span>'
-          + '</div>'
+          + '</button>'
           + '<div class="diff-file-body">' + inlineLoading() + '</div>'
           + '</div>';
       }
@@ -2149,7 +2156,8 @@ async function loadTabContent(tab, agentId) {
         + ' with <span class="diff-stats-add">+' + totalAdds + '</span> addition' + (totalAdds !== 1 ? 's' : '')
         + ' and <span class="diff-stats-del">-' + totalDels + '</span> deletion' + (totalDels !== 1 ? 's' : '') + '</span>'
         + '<div class="diff-controls">'
-        + inlineToggleSwitch('Wrap', 'diff-wrap-lines', sessionStorage.getItem('diff-wrap-lines') === 'true')
+        + '<button class="diff-toggle-btn diff-sidebar-toggle" type="button" aria-expanded="true" title="Show or hide the file list">Files</button>'
+        + inlineToggleSwitch('Wrap', 'diff-wrap-lines', sessionStorage.getItem('diff-wrap-lines') !== 'false')
         + '<div class="diff-view-toggle">'
         + '<button class="diff-toggle-btn' + (viewMode === 'side-by-side' ? ' active' : '') + '" data-mode="side-by-side">Split</button>'
         + '<button class="diff-toggle-btn' + (viewMode === 'line-by-line' ? ' active' : '') + '" data-mode="line-by-line">Unified</button>'
@@ -2248,6 +2256,7 @@ async function loadTabContent(tab, agentId) {
           const chevron = header.querySelector('.diff-file-chevron');
           const isCollapsed = body.style.display === 'none';
           body.style.display = isCollapsed ? '' : 'none';
+          header.setAttribute('aria-expanded', String(isCollapsed));
           chevron.classList.toggle('expanded', isCollapsed);
           // Trigger lazy render if expanding an unrendered file
           if (isCollapsed) {
@@ -2274,6 +2283,8 @@ async function loadTabContent(tab, agentId) {
             if (body && body.style.display === 'none') {
               body.style.display = '';
               section.querySelector('.diff-file-chevron').classList.add('expanded');
+              const hdr = section.querySelector('.diff-file-header');
+              if (hdr) hdr.setAttribute('aria-expanded', 'true');
               if (!rendered.has(idx)) {
                 rendered.add(idx);
                 renderSingleFile(body, idx);
@@ -2288,30 +2299,75 @@ async function loadTabContent(tab, agentId) {
         });
       });
 
-      // Unified/split toggle
-      container.querySelectorAll('.diff-toggle-btn').forEach(btn => {
+      // Switch the rendered view mode in place: update toggle chrome and
+      // queue expanded files for lazy re-render in the new format.
+      function applyViewMode(mode) {
+        viewMode = mode;
+        container.querySelectorAll('.diff-toggle-btn[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+        rendered.clear();
+        container.querySelectorAll('.diff-file-section').forEach(section => {
+          const body = section.querySelector('.diff-file-body');
+          if (body && body.style.display !== 'none') {
+            body.innerHTML = inlineLoading();
+            lazyObserver.observe(section);
+          }
+        });
+      }
+
+      // Unified/split toggle — an explicit click pins the choice; until
+      // then the mode is auto-picked from window width.
+      let viewModePinned = !!storedViewMode;
+      container.querySelectorAll('.diff-toggle-btn[data-mode]').forEach(btn => {
         btn.addEventListener('click', () => {
           const mode = btn.dataset.mode;
-          if (mode === viewMode) return;
-          viewMode = mode;
+          viewModePinned = true;
           localStorage.setItem('diff-view-mode', mode);
-          container.querySelectorAll('.diff-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-          // Re-render only expanded files
-          rendered.clear();
-          container.querySelectorAll('.diff-file-section').forEach(section => {
-            const body = section.querySelector('.diff-file-body');
-            if (body && body.style.display !== 'none') {
-              body.innerHTML = inlineLoading();
-              lazyObserver.observe(section);
-            }
-          });
+          if (mode === viewMode) return;
+          applyViewMode(mode);
         });
       });
 
-      // Wrap toggle
+      // While unpinned, follow window resizes across the split threshold
+      // (debounced) so the diff always uses the width it actually has.
+      let viewModeResizeTimer = 0;
+      const onDiffResize = () => {
+        clearTimeout(viewModeResizeTimer);
+        viewModeResizeTimer = setTimeout(() => {
+          if (viewModePinned) return;
+          const mode = window.innerWidth <= 768 ? 'line-by-line' : autoViewMode();
+          if (mode !== viewMode) applyViewMode(mode);
+        }, 200);
+      };
+      window.addEventListener('resize', onDiffResize);
+      signal.addEventListener('abort', () => {
+        clearTimeout(viewModeResizeTimer);
+        window.removeEventListener('resize', onDiffResize);
+      }, { once: true });
+
+      // Sidebar collapse — folds the 240px file list so the code gets
+      // the full width; persisted across sessions.
+      const diffLayout = container.querySelector('.diff-layout');
+      const sidebarBtn = container.querySelector('.diff-sidebar-toggle');
+      if (sidebarBtn && diffLayout) {
+        const applySidebarCollapsed = (collapsed) => {
+          diffLayout.classList.toggle('diff-sidebar-collapsed', collapsed);
+          sidebarBtn.classList.toggle('active', !collapsed);
+          sidebarBtn.setAttribute('aria-expanded', String(!collapsed));
+        };
+        applySidebarCollapsed(localStorage.getItem('diff-sidebar-collapsed') === 'true');
+        sidebarBtn.addEventListener('click', () => {
+          const collapsed = !diffLayout.classList.contains('diff-sidebar-collapsed');
+          localStorage.setItem('diff-sidebar-collapsed', collapsed);
+          applySidebarCollapsed(collapsed);
+        });
+      }
+
+      // Wrap toggle — defaults ON so full lines are visible without
+      // per-line horizontal scrolling; opting out is remembered for the
+      // session.
       const wrapInput = container.querySelector('.toggle-switch__input[data-key="diff-wrap-lines"]');
       if (wrapInput && diffContent) {
-        if (sessionStorage.getItem('diff-wrap-lines') === 'true') diffContent.classList.add('diff-wrap');
+        if (sessionStorage.getItem('diff-wrap-lines') !== 'false') diffContent.classList.add('diff-wrap');
         wrapInput.addEventListener('change', () => {
           diffContent.classList.toggle('diff-wrap', wrapInput.checked);
           sessionStorage.setItem('diff-wrap-lines', wrapInput.checked);

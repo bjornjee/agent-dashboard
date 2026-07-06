@@ -319,6 +319,44 @@ test('planCardActionsVisible: only the final visible entry may arm a plan card',
   assert.equal(planCardActionsVisible([planEntry, human], 0, running), false);
 });
 
+test('visibleEntries: consecutive assistant messages stay separate blocks', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { visibleEntries } = mod;
+  assert.equal(typeof visibleEntries, 'function');
+  const entries = [
+    { Role: 'human', Content: 'please explain', Timestamp: '2026-06-02T10:00:00Z' },
+    { Role: 'assistant', Content: 'First message.', Timestamp: '2026-06-02T10:00:01Z' },
+    { Role: 'assistant', Content: 'Second message.', Timestamp: '2026-06-02T10:00:02Z' },
+    { Role: 'assistant', Content: 'Third message.', Timestamp: '2026-06-02T10:00:03Z' },
+  ];
+  const visible = visibleEntries(entries);
+  // One block per backend entry — a turn must not collapse into one wall.
+  assert.equal(visible.length, 4);
+  assert.equal(visible[1].Content, 'First message.');
+  assert.equal(visible[2].Content, 'Second message.');
+  assert.equal(visible[3].Content, 'Third message.');
+});
+
+test('visibleEntries: still filters notifications and empty content', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { visibleEntries } = mod;
+  const entries = [
+    { Role: 'human', Content: 'hi' },
+    { Role: 'assistant', Content: 'internal', IsNotification: true },
+    { Role: 'assistant', Content: '' },
+    { Role: 'plan-saved' },
+    { Role: 'assistant', Content: 'reply' },
+  ];
+  const visible = visibleEntries(entries);
+  assert.deepEqual(
+    visible.map(e => e.Role),
+    ['human', 'plan-saved', 'assistant'],
+  );
+  assert.equal(visible[2].Content, 'reply');
+});
+
 test('renderActionBar: interruptible states render both Stop and Send, no dead controls', () => {
   const agent = { session_id: 'a1', state: 'running', model: 'opus', branch: 'feat/x', effort: 'high' };
   const html = renderActionBar(agent);

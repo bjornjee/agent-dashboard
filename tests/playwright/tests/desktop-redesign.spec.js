@@ -1041,7 +1041,7 @@ test.describe('Codex conversation incremental refresh', () => {
     await expect(page.locator('.ui-msg--assistant')).toContainText('Arrived from poll.', { timeout: 1200 });
   });
 
-  test('adjacent assistant fragments render as one growing bubble', async ({ page }) => {
+  test('adjacent assistant messages render as separate blocks', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
 
     await page.route('**/events', (route) => route.abort('connectionrefused'));
@@ -1075,9 +1075,9 @@ test.describe('Codex conversation incremental refresh', () => {
     await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
     await page.click('#app-sidebar .app-sidebar__row[data-agent-id] .ui-row');
 
-    await expect(page.locator('.ui-msg--assistant')).toHaveCount(1);
-    await expect(page.locator('.ui-msg--assistant')).toContainText('First chunk.');
-    await expect(page.locator('.ui-msg--assistant')).toContainText('Second chunk.');
+    await expect(page.locator('.ui-msg--assistant')).toHaveCount(2);
+    await expect(page.locator('.ui-msg--assistant').nth(0)).toContainText('First chunk.');
+    await expect(page.locator('.ui-msg--assistant').nth(1)).toContainText('Second chunk.');
   });
 });
 
