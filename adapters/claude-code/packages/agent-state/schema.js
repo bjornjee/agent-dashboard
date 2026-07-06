@@ -1,12 +1,11 @@
 'use strict';
 
-const VALID_STATES = ['permission', 'question', 'error', 'waiting_input', 'running', 'idle_prompt', 'done', 'pr', 'merged'];
+const VALID_STATES = ['permission', 'question', 'error', 'running', 'idle_prompt', 'done', 'pr', 'merged'];
 
 const STATE_PRIORITY = {
   permission: 1, // blocked — needs y/n approval
   question: 2,   // waiting — needs user reply
   error: 2,      // waiting — needs investigation
-  waiting_input: 2, // waiting — needs free-form user input
   running: 3,
   idle_prompt: 4, // review — finished turn, at prompt
   done: 4,        // review — finished task
@@ -14,11 +13,20 @@ const STATE_PRIORITY = {
   merged: 6,      // branch merged — cleanup
 };
 
+function normalizeState(state) {
+  return state === 'waiting_input' ? 'question' : state;
+}
+
+function normalizeAgent(agent) {
+  if (!agent || typeof agent !== 'object') return agent;
+  return { ...agent, state: normalizeState(agent.state) };
+}
+
 function validateAgent(agent) {
   if (!agent || typeof agent !== 'object') return false;
   if (!agent.target || typeof agent.target !== 'string') return false;
   if (!agent.session_id || typeof agent.session_id !== 'string') return false;
-  if (!VALID_STATES.includes(agent.state)) return false;
+  if (!VALID_STATES.includes(normalizeState(agent.state))) return false;
   return true;
 }
 
@@ -29,14 +37,14 @@ function validateState(state) {
   const valid = { agents: {} };
   for (const [id, agent] of Object.entries(state.agents)) {
     if (validateAgent(agent)) {
-      valid.agents[id] = agent;
+      valid.agents[id] = normalizeAgent(agent);
     }
   }
   return valid;
 }
 
 function sortAgentsByPriority(agents) {
-  return [...agents].sort((a, b) => {
+  return agents.map(normalizeAgent).sort((a, b) => {
     const pa = STATE_PRIORITY[a.state] || 99;
     const pb = STATE_PRIORITY[b.state] || 99;
     if (pa !== pb) return pa - pb;
@@ -44,4 +52,4 @@ function sortAgentsByPriority(agents) {
   });
 }
 
-module.exports = { VALID_STATES, STATE_PRIORITY, validateAgent, validateState, sortAgentsByPriority };
+module.exports = { VALID_STATES, STATE_PRIORITY, normalizeState, validateAgent, validateState, sortAgentsByPriority };

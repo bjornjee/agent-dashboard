@@ -1441,8 +1441,6 @@ func (m model) renderRightPanel() string {
 			if rpEffState == "error" {
 				waitColor = errorColor
 				waitLabel = "── Agent hit an error"
-			} else if rpEffState == "waiting_input" {
-				waitLabel = "── Agent needs input"
 			}
 			messageLabel = " " + lipgloss.NewStyle().Foreground(waitColor).Bold(true).
 				Render(waitLabel) + focusMarker(focusMessage) + scrollHint(m.messageVP) +

@@ -138,12 +138,12 @@ test('stateLabel: maps each state group to a human label for aria', () => {
   assert.equal(stateLabel('merged'), 'Merged');
 });
 
-test('waiting_input: maps to actionable waiting state', () => {
+test('waiting_input: aliases to question', () => {
   assert.equal(statePriority('waiting_input'), 2);
   assert.equal(stateGroup('waiting_input'), 'WAITING');
-  assert.equal(STATE_BADGE.waiting_input, 'waiting');
-  assert.equal(STATE_BORDER.waiting_input, 'var(--accent-amber)');
-  assert.equal(stateLabel('waiting_input'), 'Needs input');
+  assert.equal(STATE_BADGE.waiting_input, undefined);
+  assert.equal(STATE_BORDER.waiting_input, undefined);
+  assert.equal(stateLabel('waiting_input'), 'Needs reply');
 });
 
 test('stateLabel: returns "" for unknown states', () => {

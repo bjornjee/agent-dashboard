@@ -50,12 +50,13 @@ describe('schema/validateAgent', () => {
     }
   });
 
-  it('accepts waiting_input as an actionable waiting state', () => {
-    assert.equal(validateAgent({
-      target: 'a:0.1',
-      session_id: 'abc-123',
-      state: 'waiting_input',
-    }), true);
+  it('accepts waiting_input as an alias for question', () => {
+    const result = validateState({
+      agents: {
+        waiting: { target: 'a:0.1', session_id: 'abc-123', state: 'waiting_input' },
+      },
+    });
+    assert.equal(result.agents.waiting.state, 'question');
   });
 });
 
@@ -90,8 +91,8 @@ describe('schema/sortAgentsByPriority', () => {
     ];
     const sorted = sortAgentsByPriority(agents);
     const states = sorted.map(a => a.state);
-    // permission (1) → error+question+waiting_input (2, stable order from input) → running (3) → done+idle_prompt (4, stable order from input)
-    assert.deepEqual(states, ['permission', 'error', 'question', 'waiting_input', 'running', 'done', 'idle_prompt']);
+    // permission (1) → error+question aliases (2, stable order from input) → running (3) → done+idle_prompt (4, stable order from input)
+    assert.deepEqual(states, ['permission', 'error', 'question', 'question', 'running', 'done', 'idle_prompt']);
   });
 });
 

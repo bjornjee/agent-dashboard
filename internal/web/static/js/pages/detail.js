@@ -1,7 +1,7 @@
 // Agent detail view with tabs and stats disclosure.
 import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
+import { canonicalState, effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
 import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -28,7 +28,6 @@ const STATE_LABELS = {
   plan: 'Plan ready',
   question: 'Needs reply',
   error: 'Errored',
-  waiting_input: 'Needs input',
   pr: 'PR',
   merged: 'Merged',
   done: 'Done',
@@ -42,8 +41,9 @@ const STATE_LABELS = {
 };
 
 function inlineStatusPill(state) {
-  const group = stateGroup(state).toLowerCase();
-  const label = STATE_LABELS[state] || (state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown');
+  const st = canonicalState(state);
+  const group = stateGroup(st).toLowerCase();
+  const label = STATE_LABELS[st] || (st ? st.charAt(0).toUpperCase() + st.slice(1) : 'Unknown');
   return `<span class="ui-status-pill ui-status-pill--${group}"><span class="status-dot status-dot--${group}"></span>${escapeHtml(label)}</span>`;
 }
 
@@ -271,7 +271,7 @@ export function confirmUserMessageSent() {
 // the rebuilt .conversation can re-mount the working indicator.
 let lastKnownAgent = null;
 
-const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error', 'waiting_input']);
+const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
 
 // Map raw tool names to user-legible action verbs. Anything not in this
 // table falls into the "ran tool" bucket; the bucket is what surfaces
@@ -413,7 +413,7 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
 
 // Detect whether the agent is BETWEEN turns. Deterministic on agent.state:
 // the backend transitions out of WORKING_STATES (running/permission/plan/
-// question/error/waiting_input) the moment the turn ends, and SSE pushes that state
+// question/error) the moment the turn ends, and SSE pushes that state
 // change. Relying on last_hook_event === 'Stop' was racy — a dropped or
 // late Stop event left the indicator stuck on a non-working state.
 export function isAgentMidTurn(agent) {
@@ -650,10 +650,10 @@ export function renderActionBar(agent) {
   // regardless of the agent's terminal state. Stop only fits while the
   // agent's own stream can be interrupted (running) or while a paired
   // action-panel chip is the primary affordance (permission, plan). For
-  // idle reply-expecting states (question, error, waiting_input) the placeholder below
+  // idle reply-expecting states (question, error) the placeholder below
   // says "Type a reply…" — the trailing button must agree and offer send.
   const STOP_STATES = new Set(['running', 'permission', 'plan']);
-  const placeholder = (st === 'question' || st === 'error' || st === 'waiting_input') ? 'Type a reply…'
+  const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
     : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
   const trailing = STOP_STATES.has(st)
     ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`

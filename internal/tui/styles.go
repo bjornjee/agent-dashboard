@@ -84,16 +84,15 @@ type stateIcon struct {
 }
 
 var stateIcons = map[string]stateIcon{
-	"permission":    {"⚿", permissionColor},
-	"question":      {"?", questionColor},
-	"error":         {"✗", errorColor},
-	"waiting_input": {"?", questionColor},
-	"running":       {"▶", runningColor},
-	"idle_prompt":   {"○", idlePromptColor},
-	"done":          {"✓", doneColor},
-	"pr":            {"↑", prColor},
-	"merged":        {"⏏", mergedColor},
-	"plan":          {"☐", planColor},
+	"permission":  {"⚿", permissionColor},
+	"question":    {"?", questionColor},
+	"error":       {"✗", errorColor},
+	"running":     {"▶", runningColor},
+	"idle_prompt": {"○", idlePromptColor},
+	"done":        {"✓", doneColor},
+	"pr":          {"↑", prColor},
+	"merged":      {"⏏", mergedColor},
+	"plan":        {"☐", planColor},
 }
 
 var groupHeaders = map[int]struct {
@@ -119,7 +118,7 @@ func isBlocked(state string) bool {
 // isWaiting returns true when the agent is stuck and needs user input or investigation.
 func isWaiting(state string) bool {
 	switch state {
-	case "question", "error", "waiting_input":
+	case "question", "error":
 		return true
 	}
 	return false
@@ -146,13 +145,12 @@ func isMerged(state string) bool {
 
 // stateLabel returns a human-readable label for the agent state.
 var stateLabels = map[string]string{
-	"permission":    "Waiting for approval",
-	"question":      "Asked a question",
-	"error":         "Error",
-	"waiting_input": "Needs input",
-	"running":       "Running",
-	"idle_prompt":   "Idle at prompt",
-	"pr":            "PR open",
-	"merged":        "Branch merged",
-	"done":          "Done",
+	"permission":  "Waiting for approval",
+	"question":    "Asked a question",
+	"error":       "Error",
+	"running":     "Running",
+	"idle_prompt": "Idle at prompt",
+	"pr":          "PR open",
+	"merged":      "Branch merged",
+	"done":        "Done",
 }

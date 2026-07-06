@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { validateAgent } = require('./schema');
+const { normalizeState, validateAgent } = require('./schema');
 const { detectState } = require('./detect');
 const { withFileLock } = require('./filelock');
 
@@ -64,7 +64,7 @@ function readAllState(agentsDir = DEFAULT_AGENTS_DIR) {
         const agent = JSON.parse(raw);
         const sessionId = file.slice(0, -5); // strip .json
         if (validateAgent(agent)) {
-          result.agents[sessionId] = agent;
+          result.agents[sessionId] = { ...agent, state: normalizeState(agent.state) };
         }
       } catch {
         // Skip corrupted files

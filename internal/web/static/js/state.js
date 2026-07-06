@@ -2,7 +2,7 @@
 
 export const STATE_BADGE = {
   permission: 'blocked', plan: 'blocked',
-  question: 'waiting', error: 'waiting', waiting_input: 'waiting',
+  question: 'waiting', error: 'waiting',
   running: 'running',
   idle_prompt: 'review', done: 'review',
   pr: 'pr',
@@ -11,17 +11,22 @@ export const STATE_BADGE = {
 
 export const STATE_BORDER = {
   permission: 'var(--accent-red)', plan: 'var(--accent-red)',
-  question: 'var(--accent-amber)', error: 'var(--accent-amber)', waiting_input: 'var(--accent-amber)',
+  question: 'var(--accent-amber)', error: 'var(--accent-amber)',
   running: 'var(--accent-green)',
   idle_prompt: 'var(--accent-green)', done: 'var(--accent-green)',
   pr: 'var(--accent-indigo)',
   merged: 'var(--text-tertiary)',
 };
 
+export function canonicalState(state) {
+  return state === 'waiting_input' ? 'question' : state;
+}
+
 export function statePriority(state) {
+  state = canonicalState(state);
   const map = {
     permission: 1, plan: 1,
-    question: 2, error: 2, waiting_input: 2,
+    question: 2, error: 2,
     running: 3,
     idle_prompt: 4, done: 4,
     pr: 5,
@@ -47,7 +52,7 @@ export function stateGroup(state) {
 // with a PR pin gets state="pr" (renders under PR). Reading raw
 // `state` here matches what the TUI does via `SortedAgents`.
 export function effectiveState(agent) {
-  return agent.state;
+  return canonicalState(agent.state);
 }
 
 // Returns a "PR" tag when the user has pinned a PR on this agent.
@@ -69,12 +74,12 @@ export function prTag(agent) {
 // the aria-label on .status-dot so screen readers announce the meaning
 // of the color signal. Mirrors STATE_BADGE keys.
 export function stateLabel(state) {
+  state = canonicalState(state);
   switch (state) {
     case 'permission':  return 'Needs approval';
     case 'plan':        return 'Plan review';
     case 'question':    return 'Needs reply';
     case 'error':       return 'Error';
-    case 'waiting_input': return 'Needs input';
     case 'running':     return 'Running';
     case 'idle_prompt': return 'Ready for review';
     case 'done':        return 'Done';

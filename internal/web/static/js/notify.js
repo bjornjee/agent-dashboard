@@ -1,6 +1,7 @@
 // Notification system — state transition detection and browser Notification API.
 
 import { toast } from './modal.js';
+import { canonicalState } from './state.js';
 
 const STORAGE_KEY = 'notify-enabled';
 
@@ -25,7 +26,6 @@ const NOTIFY_STATES = {
   plan:       'Plan ready',
   question:   'Question',
   error:      'Error',
-  waiting_input: 'Needs input',
   done:       'Finished',
   idle_prompt:'Finished',
   pr:         'PR ready',
@@ -112,7 +112,6 @@ export function initNotify(agents) {
     prevTrustMap.set(agent.session_id, !!agent.trust_prompt_detected);
   }
   seeded = true;
-  console.log('[notify] seeded with', agents.length, 'agents');
 }
 
 // Diff new agent states against previous, fire browser notification for transitions
@@ -126,13 +125,12 @@ export function processNotifications(newAgents) {
   for (const agent of newAgents) {
     const id = agent.session_id;
     currentIds.add(id);
-    const newState = agent.state;
+    const newState = canonicalState(agent.state);
     const oldState = prevStateMap.get(id);
     prevStateMap.set(id, newState);
 
     const label = NOTIFY_STATES[newState];
     if (newState !== oldState && label) {
-      console.log('[notify] transition:', id, oldState, '→', newState);
       fireBrowserNotification(agent, label);
     }
 

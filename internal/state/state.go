@@ -490,6 +490,13 @@ func arbitrateState(agent domain.Agent, transcriptOverride string) string {
 	return agent.State
 }
 
+func normalizeState(raw string) string {
+	if raw == "waiting_input" {
+		return "question"
+	}
+	return raw
+}
+
 // transcriptOverrideFor recovers a pending plan review (claude's ExitPlanMode /
 // codex's item.type="Plan") or pending question (claude's AskUserQuestion /
 // codex's request_user_input) from the agent's transcript. The most recent
@@ -527,6 +534,8 @@ func transcriptOverrideFor(agent domain.Agent, codexSessionsRoot string) string 
 // and only idle candidates (isIdleCandidate) consult the transcript.
 func ApplyStateArbitration(sf *domain.StateFile, codexSessionsRoot string) {
 	for key, agent := range sf.Agents {
+		originalState := agent.State
+		agent.State = normalizeState(agent.State)
 		override := ""
 		// Skip the transcript read when a pin already decides the state (matches
 		// ApplyPinnedStates running before the candidate-gated override).
@@ -534,7 +543,7 @@ func ApplyStateArbitration(sf *domain.StateFile, codexSessionsRoot string) {
 		if !pinWins && isIdleCandidate(agent) && agent.SessionID != "" {
 			override = transcriptOverrideFor(agent, codexSessionsRoot)
 		}
-		if next := arbitrateState(agent, override); next != agent.State {
+		if next := arbitrateState(agent, override); next != agent.State || originalState != agent.State {
 			agent.State = next
 			sf.Agents[key] = agent
 		}
