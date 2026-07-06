@@ -1,6 +1,6 @@
 // Agent Dashboard — ES Module entry point
 import { renderList } from './js/pages/list.js';
-import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll, updateQuestionCardSubmit, submitQuestionCard } from './js/pages/detail.js';
+import { renderDetail, showModal, toast, updateActionBar, appendUserMessage, confirmUserMessageSent, cancelPendingUserMessage, refreshWorkingIndicator, refreshActiveTab, refreshDetailHeader, stopConversationPoll, updateQuestionCardSubmit, submitQuestionCard } from './js/pages/detail.js';
 import { renderUsage } from './js/pages/usage.js';
 import { renderCreate } from './js/pages/create.js';
 import { get, post, cancelNav } from './js/api.js';
@@ -326,15 +326,29 @@ window.Dashboard = {
     input.value = '';
     input.disabled = true;
     appendUserMessage(text);
+    let sent = false;
     try {
       const result = await post('/api/agents/' + id + '/input', { text });
       if (result && result.ok) {
+        sent = true;
         confirmUserMessageSent();
       } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        toast('Message not sent: ' + (result?.error || 'unknown error'), 'error', { sticky: true });
       }
+    } catch {
+      toast('Message not sent — check connection', 'error', { sticky: true });
     } finally {
-      if (input) input.disabled = false;
+      // The SSE-driven action-bar swap can replace the textarea node
+      // mid-flight; re-query so the restore lands in the live composer.
+      const live = document.getElementById('reply-input') || input;
+      live.disabled = false;
+      if (!sent) {
+        cancelPendingUserMessage();
+        // Give the user their message back to edit and retry.
+        live.value = text;
+        live.dispatchEvent(new Event('input', { bubbles: true }));
+        live.focus();
+      }
     }
   },
 

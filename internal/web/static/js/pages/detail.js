@@ -170,8 +170,13 @@ export function updateActionBar(agent) {
 //                       the conversation refresh stops re-rendering the
 //                       "Sending…" caption (the message is delivered;
 //                       only the API echo is still pending).
+// preSendAgentState   — lastKnownAgent.state captured before
+//                       appendUserMessage forces 'running', so a failed
+//                       POST can restore reality (see
+//                       cancelPendingUserMessage).
 let pendingUserMessage = null;
 let pendingMessageAcked = false;
+let preSendAgentState = null;
 
 // Auto-follow threshold. If the user has scrolled more than this many
 // pixels above the bottom, treat them as "reading older messages" and
@@ -213,6 +218,9 @@ let conversationScrolledThisSession = false;
 export function appendUserMessage(text) {
   pendingUserMessage = text;
   pendingMessageAcked = false;
+  // Stash the real state so cancelPendingUserMessage can undo the
+  // synthetic 'running' override below if the POST fails.
+  preSendAgentState = lastKnownAgent ? lastKnownAgent.state : null;
   const tab = document.getElementById('tab-conversation');
   let container = tab ? tab.querySelector('.conversation') : null;
   if (!container && tab) {
@@ -259,10 +267,36 @@ export function appendUserMessage(text) {
 // visitor saw immediate feedback.
 export function confirmUserMessageSent() {
   pendingMessageAcked = true;
+  preSendAgentState = null;
   const container = document.querySelector('#tab-conversation .conversation');
   if (!container) return;
   container.querySelectorAll('.ui-msg--optimistic').forEach(el => el.classList.remove('ui-msg--optimistic'));
   container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
+}
+
+// Failure path for Dashboard.sendInput: unwind everything
+// appendUserMessage staged optimistically — the bubble, the "Sending…"
+// caption, and the forced working indicator — so the chat stops claiming
+// a message is in flight. Restores the pre-send agent state, but only
+// while lastKnownAgent still carries the synthetic 'running' override;
+// if SSE delivered a real update in the meantime, that truth wins.
+export function cancelPendingUserMessage() {
+  pendingUserMessage = null;
+  pendingMessageAcked = false;
+  toolBuckets = {};
+  latestToolEntry = null;
+  const container = document.querySelector('#tab-conversation .conversation');
+  if (container) {
+    container.querySelectorAll('[data-optimistic="1"]').forEach(el => el.remove());
+    container.querySelectorAll('.ui-msg__caption--sending').forEach(el => el.remove());
+    const working = container.querySelector('.ui-msg-status--working');
+    if (working) working.remove();
+  }
+  if (lastKnownAgent && lastKnownAgent.state === 'running' && preSendAgentState !== null) {
+    lastKnownAgent = { ...lastKnownAgent, state: preSendAgentState };
+    refreshWorkingIndicator(lastKnownAgent);
+  }
+  preSendAgentState = null;
 }
 
 // Last-known agent for the currently-mounted detail view. Used by the
