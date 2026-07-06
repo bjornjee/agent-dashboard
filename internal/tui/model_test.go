@@ -81,6 +81,28 @@ func TestBuildTree_CollapsedHidesSubs(t *testing.T) {
 	}
 }
 
+func TestBuildTree_CoalescesNonContiguousStateGroups(t *testing.T) {
+	m := NewModel(testConfig(""), nil)
+	m.agents = []domain.Agent{
+		{Target: "main:3.1", Window: 3, Pane: 1, State: "running"},
+		{Target: "main:4.3", Window: 4, Pane: 3, State: "pr"},
+		{Target: "main:2.2", Window: 2, Pane: 2, State: "running"},
+	}
+
+	m.buildTree()
+
+	var groups []int
+	for _, node := range m.treeNodes {
+		if node.GroupHeader > 0 {
+			groups = append(groups, node.GroupHeader)
+		}
+	}
+	want := []int{3, 5}
+	if fmt.Sprint(groups) != fmt.Sprint(want) {
+		t.Fatalf("group headers = %v, want %v", groups, want)
+	}
+}
+
 func TestCurrentTool_InAgentStruct(t *testing.T) {
 	// Verify CurrentTool field is available and serializes correctly
 	agent := domain.Agent{
