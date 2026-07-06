@@ -91,13 +91,14 @@ func (s *Store) Sync(sf *domain.StateFile) {
 		agent := item.agent
 		if _, err := tx.Exec(`
 			INSERT INTO agents (
-				session_id, harness, tmux_pane_id, target, cwd, branch, state,
-				report_seq, updated_at, payload, source, dismissed_at, dismissed_reason
+				session_id, harness, tmux_pane_id, tmux_server_pid, target, cwd, branch, state,
+				report_seq, updated_at, created_at, payload, source, dismissed_at, dismissed_reason
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
 			ON CONFLICT(session_id) DO UPDATE SET
 				harness = excluded.harness,
 				tmux_pane_id = excluded.tmux_pane_id,
+				tmux_server_pid = excluded.tmux_server_pid,
 				target = excluded.target,
 				cwd = excluded.cwd,
 				branch = excluded.branch,
@@ -124,12 +125,14 @@ func (s *Store) Sync(sf *domain.StateFile) {
 			agent.SessionID,
 			defaultHarness(agent.Harness),
 			agent.TmuxPaneID,
+			agent.TmuxServerPID,
 			agent.Target,
 			agent.Cwd,
 			agent.Branch,
 			agent.State,
 			reportSeq(agent),
 			agent.UpdatedAt,
+			time.Now().UTC().Format(time.RFC3339), // created_at: insert-only, conflict update leaves it
 			item.payload,
 			item.source,
 		); err != nil {
@@ -192,9 +195,10 @@ func (s *Store) Hydrate(sf *domain.StateFile, livePanes map[string]bool, serverP
 		// Compound liveness: pane IDs restart from small numbers after a
 		// tmux server restart, so a matching %N alone can be an unrelated
 		// pane. A row stamped under a previous server must not resurrect
-		// onto a reused ID. Unstamped rows (pre-upgrade hooks) stay
-		// undecidable and keep trusting pane liveness.
-		if agent.TmuxServerPID != "" && serverPID != "" && agent.TmuxServerPID != serverPID {
+		// onto a reused ID — and when the current server identity is
+		// unknown, stamped rows fail closed. Unstamped rows (pre-upgrade
+		// hooks) stay undecidable and keep trusting pane liveness.
+		if agent.TmuxServerPID != "" && agent.TmuxServerPID != serverPID {
 			continue
 		}
 		if agent.SessionID == "" {
@@ -229,21 +233,36 @@ func (s *Store) Dismiss(dir, sessionID, reason string) error {
 // model convergent with (files ∪ tmux) across process downtime. livePanes
 // must come from a successful enumeration (callers gate on that);
 // knownSessions is the set of session IDs currently present as files.
-func (s *Store) SweepDeadRows(livePanes map[string]bool, knownSessions map[string]bool) {
+func (s *Store) SweepDeadRows(livePanes map[string]bool, serverPID string, knownSessions map[string]bool) {
 	conn := s.conn()
 	if conn == nil {
 		return
 	}
+	// Same whole-body locking discipline as Sync: without it a sweep that
+	// selected a row before a concurrent Sync upserted it could tombstone
+	// the fresh row and drop its cache entry.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var rows []struct {
-		SessionID  string `db:"session_id"`
-		TmuxPaneID string `db:"tmux_pane_id"`
+		SessionID     string `db:"session_id"`
+		TmuxPaneID    string `db:"tmux_pane_id"`
+		TmuxServerPID string `db:"tmux_server_pid"`
 	}
-	if err := conn.Select(&rows, "SELECT session_id, tmux_pane_id FROM agents WHERE dismissed_at IS NULL"); err != nil {
+	if err := conn.Select(&rows, "SELECT session_id, tmux_pane_id, tmux_server_pid FROM agents WHERE dismissed_at IS NULL"); err != nil {
 		return
 	}
 	var orphans []string
 	for _, row := range rows {
-		if livePanes[row.TmuxPaneID] || knownSessions[row.SessionID] {
+		if knownSessions[row.SessionID] {
+			continue
+		}
+		// A live pane ID only proves the row's pane exists when the row was
+		// stamped under the current server: IDs restart from small numbers
+		// after a tmux restart, so a reused %N must not shield a dead
+		// server's row — left undismissed it would stay a valid
+		// identity-adoption candidate.
+		staleServer := row.TmuxServerPID != "" && serverPID != "" && row.TmuxServerPID != serverPID
+		if livePanes[row.TmuxPaneID] && !staleServer {
 			continue
 		}
 		orphans = append(orphans, row.SessionID)
@@ -251,20 +270,23 @@ func (s *Store) SweepDeadRows(livePanes map[string]bool, knownSessions map[strin
 	if len(orphans) == 0 {
 		return
 	}
-	query, args, err := sqlx.In(
-		"UPDATE agents SET dismissed_at = ?, dismissed_reason = 'dead_pane' WHERE session_id IN (?)",
-		time.Now().UTC().Format(time.RFC3339),
-		orphans,
-	)
-	if err != nil {
-		return
+	now := time.Now().UTC().Format(time.RFC3339)
+	// SQLite caps bound variables (default 999) — batch the IN list.
+	for start := 0; start < len(orphans); start += 500 {
+		batch := orphans[start:min(start+500, len(orphans))]
+		query, args, err := sqlx.In(
+			"UPDATE agents SET dismissed_at = ?, dismissed_reason = 'dead_pane' WHERE session_id IN (?)",
+			now,
+			batch,
+		)
+		if err != nil {
+			return
+		}
+		_, _ = conn.Exec(conn.Rebind(query), args...)
 	}
-	_, _ = conn.Exec(conn.Rebind(query), args...)
-	s.mu.Lock()
 	for _, id := range orphans {
 		delete(s.lastSynced, id)
 	}
-	s.mu.Unlock()
 }
 
 // GC removes old dismissed rows from the read model.

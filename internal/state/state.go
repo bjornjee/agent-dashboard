@@ -819,7 +819,7 @@ func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBran
 			knownSessions[f.agent.SessionID] = true
 		}
 	}
-	store.SweepDeadRows(livePaneIDs, knownSessions)
+	store.SweepDeadRows(livePaneIDs, serverPID, knownSessions)
 
 	return removed
 }

@@ -183,6 +183,27 @@ func TestStoreHydrate_SkipsPaneIDReuseAcrossServerRestart(t *testing.T) {
 	}
 }
 
+func TestStoreHydrate_FailsClosedWhenServerPIDUnknown(t *testing.T) {
+	store, _ := testStore(t)
+	stamped := domain.Agent{
+		SessionID:     "stamped",
+		TmuxPaneID:    "%1",
+		TmuxServerPID: "111",
+		State:         "running",
+		UpdatedAt:     "2026-07-06T10:00:00Z",
+	}
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"stamped": stamped}})
+
+	// Enumeration produced live panes but no server identity: the stamped
+	// row's server may be dead and %1 reused — fail closed, don't hydrate.
+	sf := domain.StateFile{Agents: map[string]domain.Agent{}}
+	store.Hydrate(&sf, map[string]bool{"%1": true}, "")
+
+	if _, ok := sf.Agents["stamped"]; ok {
+		t.Fatal("stamped row hydrated although the current server PID is unknown")
+	}
+}
+
 func TestStoreHydrate_FiltersRows(t *testing.T) {
 	store, d := testStore(t)
 	live := domain.Agent{
@@ -303,7 +324,7 @@ func TestStoreSweepDeadRows_TombstonesOrphanRows(t *testing.T) {
 	// live: pane alive → kept. filed: pane dead but its hook file still
 	// exists (restart-survivor) → kept. orphan: pane dead, no file — its
 	// deletion happened while no dashboard was running → tombstoned.
-	store.SweepDeadRows(map[string]bool{"%1": true}, map[string]bool{"filed": true})
+	store.SweepDeadRows(map[string]bool{"%1": true}, "", map[string]bool{"filed": true})
 
 	type row struct {
 		SessionID       string  `db:"session_id"`
@@ -331,7 +352,52 @@ func TestStoreSweepDeadRows_TombstonesOrphanRows(t *testing.T) {
 
 func TestStoreSweepDeadRows_NilSafe(t *testing.T) {
 	var store *Store
-	store.SweepDeadRows(map[string]bool{"%1": true}, nil) // must not panic
+	store.SweepDeadRows(map[string]bool{"%1": true}, "", nil) // must not panic
+}
+
+func TestStoreSweepDeadRows_ReusedPaneIDUnderNewServer(t *testing.T) {
+	store, d := testStore(t)
+	// Row stamped under tmux server 111. After a restart the new server
+	// (222) hands out small pane IDs again, so %5 is live — but it is not
+	// this row's pane. A reused ID must not protect a dead server's row:
+	// left undismissed, it stays a valid identity-adoption candidate.
+	stale := domain.Agent{
+		SessionID:     "stale",
+		TmuxPaneID:    "%5",
+		TmuxServerPID: "111",
+		State:         "running",
+		UpdatedAt:     "2026-07-06T10:00:00Z",
+	}
+	// Unstamped row on a live pane: undecidable, kept.
+	unstamped := domain.Agent{
+		SessionID:  "unstamped",
+		TmuxPaneID: "%6",
+		State:      "running",
+		UpdatedAt:  "2026-07-06T10:00:00Z",
+	}
+	// Stamped under the current server, pane live: kept.
+	current := domain.Agent{
+		SessionID:     "current",
+		TmuxPaneID:    "%7",
+		TmuxServerPID: "222",
+		State:         "running",
+		UpdatedAt:     "2026-07-06T10:00:00Z",
+	}
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+		"stale":     stale,
+		"unstamped": unstamped,
+		"current":   current,
+	}})
+
+	store.SweepDeadRows(map[string]bool{"%5": true, "%6": true, "%7": true}, "222", nil)
+
+	var dismissedIDs []string
+	if err := d.Conn().Select(&dismissedIDs, "SELECT session_id FROM agents WHERE dismissed_at IS NOT NULL ORDER BY session_id"); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if len(dismissedIDs) != 1 || dismissedIDs[0] != "stale" {
+		t.Fatalf("dismissed = %v, want [stale]", dismissedIDs)
+	}
 }
 
 func TestStoreGC_RemovesOldDismissedRows(t *testing.T) {
