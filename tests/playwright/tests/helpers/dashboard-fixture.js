@@ -56,6 +56,7 @@ async function setupDashboard(page, options = {}) {
       codex: ['agent-dashboard:feature', 'agent-dashboard:fix'],
       claude: ['feature', 'implement'],
     },
+    harnessOptions: options.harnessOptions || { models: [], efforts: [] },
     suggestions: options.suggestions || [],
     dailyUsage: options.dailyUsage || {
       days: [],
@@ -142,6 +143,7 @@ async function setupDashboard(page, options = {}) {
       return route.fulfill({ json: mutable.skillsByHarness[harness] || [] });
     }
     if (path === '/api/suggestions') return route.fulfill({ json: mutable.suggestions });
+    if (path === '/api/harness-options') return route.fulfill({ json: mutable.harnessOptions });
     if (path === '/api/usage/daily') return route.fulfill({ json: mutable.dailyUsage });
     if (path === '/api/usage/ratelimit') return route.fulfill({ json: mutable.rateLimit });
     if (path === '/api/file-picker' && method === 'POST') {
