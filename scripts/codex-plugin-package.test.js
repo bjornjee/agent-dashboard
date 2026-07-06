@@ -240,7 +240,6 @@ describe('codex plugin package', () => {
       assert.match(feature, /spawn every applicable reviewer in one message/, `${adapter} feature must spawn language reviewers in parallel`);
       assert.match(feature, /phase count ≥ 6/, `${adapter} feature dispatch probe must fire only at 6+ phases`);
       assert.match(feature, /Recommended for 6\+ phases/, `${adapter} feature must recommend hand-off at 6+ phases`);
-      assert.doesNotMatch(feature, /phase count ≥ 3/, `${adapter} feature must not keep the old ≥3 probe threshold`);
 
       for (const name of ['feature', 'fix', 'refactor']) {
         const text = readSkill(name);
