@@ -245,7 +245,7 @@ function report(input) {
 
   // Determine agent state based on hook event.
   // PreToolUse/PostToolUse/PermissionRequest are handled by agent-state-fast.js.
-  const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+  const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
   // hasPendingTool is hoisted out of the else branch so the writeState call
   // below can decide whether to pass guardStates.
   let hasPendingTool = false;
@@ -303,7 +303,8 @@ function report(input) {
 
 // shouldGuardWrite decides whether writeState should pass guardStates so that
 // a stale, concurrent write from this script cannot clobber a STOP_STATES
-// value (question/plan/idle_prompt/done) just written by agent-state-fast.js.
+// value (question/waiting_input/plan/idle_prompt/done) just written by
+// agent-state-fast.js.
 //
 // SubagentStop: always guard. The async Stop hook reads stale state; the
 // guard runs against the fresh on-disk read inside writeState.

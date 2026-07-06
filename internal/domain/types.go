@@ -123,15 +123,16 @@ const ResumablePriority = 7
 // StatePriority defines state groups: blocked → waiting → running → review → pr → merged.
 // PR and merged are user-driven (pinned) states set by the dashboard.
 var StatePriority = map[string]int{
-	"permission":  1, // blocked — needs y/n approval
-	"plan":        1, // blocked — plan ready for review
-	"question":    2, // waiting — needs user reply
-	"error":       2, // waiting — needs investigation
-	"running":     3,
-	"idle_prompt": 4, // review — finished turn, at prompt
-	"done":        4, // review — finished task
-	"pr":          5, // PR created — waiting on GitHub
-	"merged":      6, // branch merged — cleanup
+	"permission":    1, // blocked — needs y/n approval
+	"plan":          1, // blocked — plan ready for review
+	"question":      2, // waiting — needs user reply
+	"error":         2, // waiting — needs investigation
+	"waiting_input": 2, // waiting — needs free-form user input
+	"running":       3,
+	"idle_prompt":   4, // review — finished turn, at prompt
+	"done":          4, // review — finished task
+	"pr":            5, // PR created — waiting on GitHub
+	"merged":        6, // branch merged — cleanup
 }
 
 // ConversationEntry represents a single turn in the conversation.

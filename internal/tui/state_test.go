@@ -41,7 +41,7 @@ func TestIsBlocked(t *testing.T) {
 }
 
 func TestIsWaiting(t *testing.T) {
-	waiting := []string{"question", "error"}
+	waiting := []string{"question", "error", "waiting_input"}
 	for _, s := range waiting {
 		if !isWaiting(s) {
 			t.Errorf("expected isWaiting(%q) = true", s)
@@ -104,5 +104,11 @@ func TestIsBlocked_IncludesPlan(t *testing.T) {
 	}
 	if isBlocked("idle_prompt") {
 		t.Error("idle_prompt should not be blocked")
+	}
+}
+
+func TestWaitingInputStatePriority(t *testing.T) {
+	if got := domain.StatePriority["waiting_input"]; got != 2 {
+		t.Errorf("StatePriority[waiting_input] = %d, want 2", got)
 	}
 }

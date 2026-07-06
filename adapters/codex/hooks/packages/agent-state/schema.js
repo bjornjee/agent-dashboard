@@ -1,11 +1,12 @@
 'use strict';
 
-const VALID_STATES = ['permission', 'question', 'error', 'running', 'idle_prompt', 'done', 'pr', 'merged'];
+const VALID_STATES = ['permission', 'question', 'error', 'waiting_input', 'running', 'idle_prompt', 'done', 'pr', 'merged'];
 
 const STATE_PRIORITY = {
   permission: 1, // blocked — needs y/n approval
   question: 2,   // waiting — needs user reply
   error: 2,      // waiting — needs investigation
+  waiting_input: 2, // waiting — needs free-form user input
   running: 3,
   idle_prompt: 4, // review — finished turn, at prompt
   done: 4,        // review — finished task

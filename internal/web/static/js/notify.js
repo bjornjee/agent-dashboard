@@ -25,6 +25,7 @@ const NOTIFY_STATES = {
   plan:       'Plan ready',
   question:   'Question',
   error:      'Error',
+  waiting_input: 'Needs input',
   done:       'Finished',
   idle_prompt:'Finished',
   pr:         'PR ready',

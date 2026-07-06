@@ -110,13 +110,14 @@ The dashboard maps raw states to display groups, sorted by priority:
 | `plan` | BLOCKED | 1 | Plan review pending |
 | `question` | WAITING | 2 | Agent asked a question |
 | `error` | WAITING | 2 | Agent encountered an error |
+| `waiting_input` | WAITING | 2 | Agent is waiting for free-form user input |
 | `running` | RUNNING | 3 | Actively executing |
 | `idle_prompt` | REVIEW | 4 | Idle, waiting for user input |
 | `done` | REVIEW | 4 | Session completed |
 | `pr` | PR | 5 | Pull request created |
 | `merged` | MERGED | 6 | Pull request merged |
 
-**Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active states (`running`, `permission`) display through normally so the dashboard reflects live work.
+**Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active/actionable states (`running`, `permission`, `waiting_input`) display through normally so the dashboard reflects live work.
 
 **Group headers:** when a priority-1 or priority-2 group is homogeneous, the TUI renders a more specific label — `PLAN` or `PERMISSION` instead of `BLOCKED`, and `QUESTION` or `ERROR` instead of `WAITING`. Mixed groups keep the generic header.
 

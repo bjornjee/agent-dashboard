@@ -28,6 +28,7 @@ const STATE_LABELS = {
   plan: 'Plan ready',
   question: 'Needs reply',
   error: 'Errored',
+  waiting_input: 'Needs input',
   pr: 'PR',
   merged: 'Merged',
   done: 'Done',
@@ -270,7 +271,7 @@ export function confirmUserMessageSent() {
 // the rebuilt .conversation can re-mount the working indicator.
 let lastKnownAgent = null;
 
-const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error']);
+const WORKING_STATES = new Set(['running', 'permission', 'plan', 'question', 'error', 'waiting_input']);
 
 // Map raw tool names to user-legible action verbs. Anything not in this
 // table falls into the "ran tool" bucket; the bucket is what surfaces
@@ -412,7 +413,7 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
 
 // Detect whether the agent is BETWEEN turns. Deterministic on agent.state:
 // the backend transitions out of WORKING_STATES (running/permission/plan/
-// question/error) the moment the turn ends, and SSE pushes that state
+// question/error/waiting_input) the moment the turn ends, and SSE pushes that state
 // change. Relying on last_hook_event === 'Stop' was racy — a dropped or
 // late Stop event left the indicator stuck on a non-working state.
 export function isAgentMidTurn(agent) {
@@ -649,10 +650,10 @@ export function renderActionBar(agent) {
   // regardless of the agent's terminal state. Stop only fits while the
   // agent's own stream can be interrupted (running) or while a paired
   // action-panel chip is the primary affordance (permission, plan). For
-  // idle reply-expecting states (question, error) the placeholder below
+  // idle reply-expecting states (question, error, waiting_input) the placeholder below
   // says "Type a reply…" — the trailing button must agree and offer send.
   const STOP_STATES = new Set(['running', 'permission', 'plan']);
-  const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
+  const placeholder = (st === 'question' || st === 'error' || st === 'waiting_input') ? 'Type a reply…'
     : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
   const trailing = STOP_STATES.has(st)
     ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`

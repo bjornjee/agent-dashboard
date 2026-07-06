@@ -177,11 +177,12 @@ test('isAgentMidTurn returns false once state leaves WORKING_STATES — Stop hoo
   assert.equal(isAgentMidTurn({ state: 'merged' }), false);
 });
 
-test('isAgentMidTurn keeps other working states (permission/plan/question/error) as mid-turn', () => {
-  assert.equal(isAgentMidTurn({ state: 'permission' }), true);
-  assert.equal(isAgentMidTurn({ state: 'plan' }), true);
-  assert.equal(isAgentMidTurn({ state: 'question' }), true);
-  assert.equal(isAgentMidTurn({ state: 'error' }), true);
+test('isAgentMidTurn keeps other working states (permission/plan/question/error/waiting_input) as mid-turn', () => {
+	assert.equal(isAgentMidTurn({ state: 'permission' }), true);
+	assert.equal(isAgentMidTurn({ state: 'plan' }), true);
+	assert.equal(isAgentMidTurn({ state: 'question' }), true);
+	assert.equal(isAgentMidTurn({ state: 'error' }), true);
+	assert.equal(isAgentMidTurn({ state: 'waiting_input' }), true);
 });
 
 // Pure DOM helper: read the assistant-message prose for the clipboard.

@@ -2,7 +2,7 @@
 
 export const STATE_BADGE = {
   permission: 'blocked', plan: 'blocked',
-  question: 'waiting', error: 'waiting',
+  question: 'waiting', error: 'waiting', waiting_input: 'waiting',
   running: 'running',
   idle_prompt: 'review', done: 'review',
   pr: 'pr',
@@ -11,7 +11,7 @@ export const STATE_BADGE = {
 
 export const STATE_BORDER = {
   permission: 'var(--accent-red)', plan: 'var(--accent-red)',
-  question: 'var(--accent-amber)', error: 'var(--accent-amber)',
+  question: 'var(--accent-amber)', error: 'var(--accent-amber)', waiting_input: 'var(--accent-amber)',
   running: 'var(--accent-green)',
   idle_prompt: 'var(--accent-green)', done: 'var(--accent-green)',
   pr: 'var(--accent-indigo)',
@@ -19,7 +19,14 @@ export const STATE_BORDER = {
 };
 
 export function statePriority(state) {
-  const map = { permission: 1, plan: 1, question: 2, error: 2, running: 3, idle_prompt: 4, done: 4, pr: 5, merged: 6 };
+  const map = {
+    permission: 1, plan: 1,
+    question: 2, error: 2, waiting_input: 2,
+    running: 3,
+    idle_prompt: 4, done: 4,
+    pr: 5,
+    merged: 6,
+  };
   return map[state] || 99;
 }
 
@@ -67,6 +74,7 @@ export function stateLabel(state) {
     case 'plan':        return 'Plan review';
     case 'question':    return 'Needs reply';
     case 'error':       return 'Error';
+    case 'waiting_input': return 'Needs input';
     case 'running':     return 'Running';
     case 'idle_prompt': return 'Ready for review';
     case 'done':        return 'Done';

@@ -461,7 +461,7 @@ describe('SubagentStop writeState guard prevents TOCTOU race', () => {
   it('guardStates aborts write when on-disk state is idle_prompt', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
     const sessionId = 'race-test-session';
-    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
 
     // Simulate: Stop hook already wrote idle_prompt to disk
     writeState(sessionId, { state: 'idle_prompt', target: 'main:2.1' }, tmpDir);
@@ -479,7 +479,7 @@ describe('SubagentStop writeState guard prevents TOCTOU race', () => {
   it('allows write when on-disk state is running (no guard hit)', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
     const sessionId = 'race-test-session-2';
-    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
+    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
 
     // On-disk state is running (Stop hook hasn't fired yet)
     writeState(sessionId, { state: 'running', target: 'main:2.1', subagent_count: 1 }, tmpDir);
