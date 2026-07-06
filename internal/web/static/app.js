@@ -265,7 +265,7 @@ window.Dashboard = {
   async resumeAgent(id) {
     const result = await post('/api/agents/' + encodeURIComponent(id) + '/resume');
     if (result && result.ok) toast('Resumed session', 'success');
-    else toast('Resume failed: ' + (result?.error || 'unknown'), 'error');
+    else toast('Resume failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
   },
 
   // Programmatic tab switch — used by the chat plan-link card so it
@@ -283,7 +283,7 @@ window.Dashboard = {
         toast('Approved', 'success');
         markPlanCardResolved(evt, 'Approved ✓');
       } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       }
     });
   },
@@ -295,7 +295,7 @@ window.Dashboard = {
         toast('Rejected', 'success');
         markPlanCardResolved(evt, 'Rejected ✕');
       } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       }
     });
   },
@@ -313,7 +313,7 @@ window.Dashboard = {
       const result = await post('/api/file-picker');
       path = (result && result.path) || '';
     } catch (err) {
-      toast('File picker failed: ' + err.message, 'error');
+      toast('File picker failed: ' + err.message, 'error', { sticky: true });
       return;
     }
     if (!path) return; // user cancelled
@@ -379,7 +379,7 @@ window.Dashboard = {
       await withSpinner(evt, async () => {
         const result = await post('/api/agents/' + id + '/stop');
         if (result && result.ok) toast('Stopped', 'success');
-        else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        else toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       });
     }, { confirmLabel: 'Stop agent', confirmVariant: 'danger' });
   },
@@ -403,12 +403,12 @@ window.Dashboard = {
                 toast('Cleaned up', 'success');
                 navigateTo('list', null, true);
               } else {
-                toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error');
+                toast('Cleanup failed: ' + (cleanResult?.error || 'unknown'), 'error', { sticky: true });
               }
             });
           }, { confirmLabel: 'Clean up', confirmVariant: 'danger' });
         } else {
-          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+          toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
         }
       });
     }, { confirmLabel: 'Merge PR' });
@@ -422,7 +422,7 @@ window.Dashboard = {
           toast('Closed', 'success');
           navigateTo('list', null, true);
         } else {
-          toast('Failed: ' + (result?.error || 'unknown'), 'error');
+          toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
         }
       });
     }, { confirmLabel: 'Close agent', confirmVariant: 'danger' });
@@ -485,7 +485,7 @@ window.Dashboard = {
         toast('Agent created', 'success');
         navigateTo('list', null, true);
       } else {
-        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+        toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       }
     }, { replace: true });
   },

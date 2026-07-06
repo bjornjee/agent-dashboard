@@ -819,21 +819,25 @@ export function renderActionBar(agent) {
   }
 
   // Composer is always present so the user can ask follow-up questions
-  // regardless of the agent's terminal state. Stop only fits while the
-  // agent's own stream can be interrupted (running) or while a paired
-  // action-panel chip is the primary affordance (permission, plan). For
-  // idle reply-expecting states (question, error) the placeholder below
-  // says "Type a reply…" — the trailing button must agree and offer send.
+  // regardless of the agent's terminal state. While the agent's stream
+  // can be interrupted (running, or gate states permission/plan) BOTH
+  // buttons render: Stop is the resting affordance, Send appears (CSS,
+  // driven by :placeholder-shown) the moment the composer has text —
+  // steering a running agent keeps a visible tap path on the phone.
   const STOP_STATES = new Set(['running', 'permission', 'plan']);
+  const interruptible = STOP_STATES.has(st);
   const placeholder = (st === 'question' || st === 'error') ? 'Type a reply…'
-    : (STOP_STATES.has(st) ? 'Message' : 'Ask for follow-up changes…');
-  const trailing = STOP_STATES.has(st)
-    ? `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`
-    : `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
-  const modelLabel = agent.model ? escapeHtml(agent.model) : 'auto';
-  const branchLabel = agent.branch ? escapeHtml(agent.branch) : 'no branch';
-  const effortLabel = agent.effort ? escapeHtml(agent.effort) : 'high';
-  const composer = `<div class="ui-composer detail-composer">
+    : (interruptible ? 'Message' : 'Ask for follow-up changes…');
+  const sendBtn = `<button class="ui-composer__send" aria-label="Send" onclick="Dashboard.sendInput('${id}')">${ICONS.send}</button>`;
+  const stopBtn = `<button class="ui-composer__stop" aria-label="Stop" onclick="Dashboard.confirmStop('${id}')">${ICONS.stop}</button>`;
+  const trailing = interruptible ? stopBtn + sendBtn : sendBtn;
+  // Meta rail: informational text only — never button-shaped, and only
+  // fields that actually exist (no fabricated "auto"/"no branch").
+  const metaParts = [agent.model, agent.branch, agent.effort].filter(Boolean).map(escapeHtml);
+  const metaHtml = metaParts.length
+    ? `<span class="ui-composer__meta">${metaParts.join(' · ')}</span>`
+    : '';
+  const composer = `<div class="ui-composer detail-composer${interruptible ? ' ui-composer--interruptible' : ''}">
     <textarea
       class="ui-composer__input"
       id="reply-input"
@@ -844,11 +848,8 @@ export function renderActionBar(agent) {
     ></textarea>
     <div class="ui-composer__rail">
       <button class="ui-composer__attach" aria-label="Attach file" title="Attach file from your Mac" onclick="Dashboard.attachFile()">${ICONS.attach}</button>
-      <button class="ui-composer__chip" data-chip="model" tabindex="-1" aria-label="Model"><span>${modelLabel}</span></button>
-      <button class="ui-composer__chip" data-chip="branch" tabindex="-1" aria-label="Branch"><span>${branchLabel}</span></button>
-      <button class="ui-composer__chip" data-chip="effort" tabindex="-1" aria-label="Effort"><span>⚡ ${effortLabel}</span></button>
+      ${metaHtml}
       <span class="ui-composer__rail-spacer"></span>
-      <button class="ui-composer__mic" aria-label="Voice input" tabindex="-1">${ICONS.mic || '<svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"12\" rx=\"3\"/><path d=\"M5 11a7 7 0 0014 0\"/><path d=\"M12 18v3\"/></svg>'}</button>
       ${trailing}
     </div>
   </div>`;
@@ -1281,14 +1282,14 @@ export async function submitQuestionCard(agentId, toolUseId) {
       option_counts: optionCounts,
     });
     if (!result || !result.ok) {
-      toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      toast('Failed: ' + (result?.error || 'unknown'), 'error', { sticky: true });
       card.classList.remove('question-card--answered');
       if (btn) btn.disabled = false;
       return false;
     }
     return true;
   } catch (err) {
-    toast('Failed: ' + err.message, 'error');
+    toast('Failed: ' + err.message, 'error', { sticky: true });
     card.classList.remove('question-card--answered');
     if (btn) btn.disabled = false;
     return false;

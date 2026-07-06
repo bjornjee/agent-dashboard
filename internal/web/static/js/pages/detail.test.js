@@ -318,3 +318,36 @@ test('planCardActionsVisible: only the final visible entry may arm a plan card',
   // Index out of final position.
   assert.equal(planCardActionsVisible([planEntry, human], 0, running), false);
 });
+
+test('renderActionBar: interruptible states render both Stop and Send, no dead controls', () => {
+  const agent = { session_id: 'a1', state: 'running', model: 'opus', branch: 'feat/x', effort: 'high' };
+  const html = renderActionBar(agent);
+  assert.match(html, /ui-composer__stop/);
+  assert.match(html, /ui-composer__send/, 'send must stay reachable while running');
+  assert.match(html, /ui-composer--interruptible/);
+  // Dead controls are gone: no mic, no button-shaped chips.
+  assert.doesNotMatch(html, /ui-composer__mic/);
+  assert.doesNotMatch(html, /ui-composer__chip/);
+});
+
+test('renderActionBar: idle states render Send only', () => {
+  const html = renderActionBar({ session_id: 'a1', state: 'done' });
+  assert.match(html, /ui-composer__send/);
+  assert.doesNotMatch(html, /ui-composer__stop/);
+  assert.doesNotMatch(html, /ui-composer--interruptible/);
+});
+
+test('renderActionBar: meta rail shows only real values, never fabricated defaults', () => {
+  // All three set → joined meta text.
+  const full = renderActionBar({ session_id: 'a1', state: 'done', model: 'opus', branch: 'feat/x', effort: 'high' });
+  assert.match(full, /ui-composer__meta/);
+  assert.match(full, /opus · feat\/x · high/);
+  // Meta is plain text, not a button.
+  assert.doesNotMatch(full, /<button[^>]*ui-composer__meta/);
+  // Nothing set → no meta span, and no invented "auto"/"no branch"/"⚡".
+  const bare = renderActionBar({ session_id: 'a1', state: 'done' });
+  assert.doesNotMatch(bare, /ui-composer__meta/);
+  assert.doesNotMatch(bare, />auto</);
+  assert.doesNotMatch(bare, /no branch/);
+  assert.doesNotMatch(bare, /⚡/);
+});
