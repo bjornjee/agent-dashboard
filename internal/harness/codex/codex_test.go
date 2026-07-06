@@ -32,24 +32,27 @@ func TestCodex_SpawnCommand(t *testing.T) {
 	}{
 		{"empty everything", "", "", domain.SpawnOpts{}, "codex"},
 		{"prompt only", "", "hello", domain.SpawnOpts{}, "codex 'hello'"},
+		// Plan-required skills (feature) defer the prompt: the CLI positional
+		// auto-submits on TUI startup before plan mode can be entered, so the
+		// spawn paths inject it post-boot via BootstrapPlanMode instead.
+		{"feature defers prompt", "feature", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex -c model_reasoning_effort=high"},
 		// Codex requires the fully-qualified `$<plugin>:<skill>` form for
-		// plugin dispatch — bare `$feature` is treated as prompt text and
+		// plugin dispatch — bare `$fix` is treated as prompt text and
 		// the plugin is never invoked. All dashboard-discovered skills live
 		// under the `agent-dashboard` plugin (internal/skills/skills.go).
-		{"feature passes skill marker", "feature", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex -c model_reasoning_effort=high '$agent-dashboard:feature'"},
 		{"fix opted-in pins effort", "fix", "", domain.SpawnOpts{DefaultEffort: "medium"}, "codex -c model_reasoning_effort=medium '$agent-dashboard:fix'"},
 		{"refactor opted-in pins effort", "refactor", "", domain.SpawnOpts{DefaultEffort: "low"}, "codex -c model_reasoning_effort=low '$agent-dashboard:refactor'"},
 		// Claude has a `max` level; codex's enum tops out at `high`
 		// (codex-rs/protocol/src/config_types.rs ReasoningEffort). Map max → high.
-		{"max effort maps to high on feature", "feature", "", domain.SpawnOpts{DefaultEffort: "max"}, "codex -c model_reasoning_effort=high '$agent-dashboard:feature'"},
+		{"max effort maps to high on feature", "feature", "", domain.SpawnOpts{DefaultEffort: "max"}, "codex -c model_reasoning_effort=high"},
 		{"chore not opted-in", "chore", "", domain.SpawnOpts{DefaultEffort: "high"}, "codex '$agent-dashboard:chore'"},
 		{"explicit effort applies to non-opted skill", "chore", "", domain.SpawnOpts{Effort: "low"}, "codex -c model_reasoning_effort=low '$agent-dashboard:chore'"},
-		{"explicit effort wins over default effort", "feature", "", domain.SpawnOpts{DefaultEffort: "high", Effort: "minimal"}, "codex -c model_reasoning_effort=minimal '$agent-dashboard:feature'"},
+		{"explicit effort wins over default effort", "feature", "", domain.SpawnOpts{DefaultEffort: "high", Effort: "minimal"}, "codex -c model_reasoning_effort=minimal"},
 		{"explicit max effort maps to high", "chore", "", domain.SpawnOpts{Effort: "max"}, "codex -c model_reasoning_effort=high '$agent-dashboard:chore'"},
 		{"model flag", "", "", domain.SpawnOpts{Model: "gpt-5.5"}, "codex --model 'gpt-5.5'"},
 		{"approval flag", "", "", domain.SpawnOpts{Approval: "on-request"}, "codex -a 'on-request'"},
 		{"sandbox flag", "", "", domain.SpawnOpts{Sandbox: "workspace-write"}, "codex -s 'workspace-write'"},
-		{"feature passes message + flags", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write' '$agent-dashboard:feature add login'"},
+		{"feature defers prompt but keeps flags", "feature", "add login", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5", Approval: "on-request", Sandbox: "workspace-write"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' -a 'on-request' -s 'workspace-write'"},
 		{"non-plan skill keeps prompt + flags", "fix", "fix the thing", domain.SpawnOpts{DefaultEffort: "high", Model: "gpt-5.5"}, "codex -c model_reasoning_effort=high --model 'gpt-5.5' '$agent-dashboard:fix fix the thing'"},
 		{"model and explicit effort compose", "chore", "fix lint", domain.SpawnOpts{Effort: "medium", Model: "gpt-5.4"}, "codex -c model_reasoning_effort=medium --model 'gpt-5.4' '$agent-dashboard:chore fix lint'"},
 	}
@@ -82,6 +85,33 @@ func TestCodex_SpawnCommand_Resume(t *testing.T) {
 	want := "codex resume '019e39d0-581e-7f81-beb0-ea3c04ffa2e4'"
 	if got != want {
 		t.Errorf("resume SpawnCommand = %q, want %q", got, want)
+	}
+}
+
+// DeferredPlanPrompt returns the composed skill prompt only for codex spawns
+// of plan-required skills; those spawns omit the CLI prompt positional and
+// inject it post-boot behind /plan instead (see BootstrapPlanMode).
+func TestCodex_DeferredPlanPrompt(t *testing.T) {
+	tests := []struct {
+		name    string
+		harness string
+		skill   string
+		message string
+		want    string
+	}{
+		{"codex feature defers", "codex", "feature", "add login", "$agent-dashboard:feature add login"},
+		{"codex feature without message", "codex", "feature", "", "$agent-dashboard:feature"},
+		{"codex fix is not plan-required", "codex", "fix", "fix it", ""},
+		{"claude feature is not deferred", "claude", "feature", "add login", ""},
+		{"codex empty skill (resume/plain)", "codex", "", "hello", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := codex.DeferredPlanPrompt(tc.harness, tc.skill, tc.message)
+			if got != tc.want {
+				t.Errorf("DeferredPlanPrompt(%q, %q, %q) = %q, want %q", tc.harness, tc.skill, tc.message, got, tc.want)
+			}
+		})
 	}
 }
 

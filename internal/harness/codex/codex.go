@@ -90,9 +90,13 @@ func (c *Codex) SpawnCommand(skill, message string, opts domain.SpawnOpts) strin
 		cmd += " -s " + shellQuote(opts.Sandbox)
 	}
 
-	prompt := buildPrompt(skill, message)
-	if prompt != "" {
-		cmd += " " + shellQuote(prompt)
+	// Plan-required skills get their prompt injected post-boot behind /plan
+	// (BootstrapPlanMode) — the positional would auto-submit before plan
+	// mode is active.
+	if _, planned := planRequiredSkills[skill]; !planned {
+		if prompt := buildPrompt(skill, message); prompt != "" {
+			cmd += " " + shellQuote(prompt)
+		}
 	}
 	return cmd
 }
@@ -103,6 +107,15 @@ var effortOptedSkills = map[string]struct{}{
 	"feature":  {},
 	"fix":      {},
 	"refactor": {},
+}
+
+// planRequiredSkills are the skills whose Phase 2 hard-gates on
+// permission_mode='plan' (adapters/skills-src/<skill>/SKILL.md). Their
+// spawns omit the CLI prompt positional — codex auto-submits it on TUI
+// startup, before plan mode can be entered — and BootstrapPlanMode injects
+// it behind /plan instead.
+var planRequiredSkills = map[string]struct{}{
+	"feature": {},
 }
 
 // mapEffort translates dashboard-level effort to codex's reasoning_effort
@@ -116,6 +129,22 @@ func mapEffort(level string) string {
 		return "high"
 	}
 	return level
+}
+
+// DeferredPlanPrompt returns the prompt that must be injected into the pane
+// after spawn (behind /plan), instead of being passed as the CLI positional.
+// Empty means SpawnCommand's output is self-contained. Package function
+// keyed by harness name (like skills.SupportsHarness) so the TUI and web
+// spawn paths can call it against any domain.Harness without an interface
+// change.
+func DeferredPlanPrompt(harnessName, skill, message string) string {
+	if harnessName != "codex" {
+		return ""
+	}
+	if _, planned := planRequiredSkills[skill]; !planned {
+		return ""
+	}
+	return buildPrompt(skill, message)
 }
 
 // dashboardPluginNamespace is the plugin name codex must dispatch through.
