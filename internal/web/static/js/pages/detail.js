@@ -38,11 +38,15 @@ const STATE_LABELS = {
   review: 'Review',
   failed: 'Failed',
   completed: 'Completed',
+  waiting_input: 'Waiting',
 };
 
 function inlineStatusPill(state) {
   const group = stateGroup(state).toLowerCase();
-  const label = STATE_LABELS[state] || (state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown');
+  // Unknown states are humanized (underscores → spaces), never rendered
+  // raw — a "Waiting_input" pill reads as debug output.
+  const label = STATE_LABELS[state]
+    || (state ? (state.charAt(0).toUpperCase() + state.slice(1)).replace(/_/g, ' ') : 'Unknown');
   return `<span class="ui-status-pill ui-status-pill--${group}"><span class="status-dot status-dot--${group}"></span>${escapeHtml(label)}</span>`;
 }
 
@@ -323,7 +327,9 @@ function classifyTool(name) {
   if (n.startsWith('mcp__plugin_playwright') || n.startsWith('mcp__playwright')) return { bucket: 'browser', live: 'Driving browser' };
   if (n.startsWith('mcp__')) return { bucket: 'mcp', live: 'Calling MCP tool' };
   if (n === 'WebFetch' || n === 'WebSearch') return { bucket: 'web', live: 'Fetching web content' };
-  return { bucket: 'other', live: 'Running ' + n };
+  // Unknown tools get a generic verb — raw internal names like
+  // "TaskUpdate" or "AskUserQuestion" must never reach the chat copy.
+  return { bucket: 'other', live: 'Working' };
 }
 
 const BUCKET_LABELS = {
@@ -454,6 +460,47 @@ export function isAgentMidTurn(agent) {
   return WORKING_STATES.has(effectiveState(agent));
 }
 
+// Subset of WORKING_STATES where the agent is waiting on the HUMAN, not
+// computing. Mid-turn (the poll keeps running, the indicator stays
+// mounted) but the visual treatment must invert: static notice, no
+// shimmer, no orb — motion here would say "busy, don't act" at exactly
+// the moment action is needed.
+const BLOCKED_STATES = new Set(['permission', 'plan', 'question', 'error']);
+
+export function isAgentBlockedOnUser(agent) {
+  if (!agent) return false;
+  return BLOCKED_STATES.has(effectiveState(agent));
+}
+
+// Static "the agent needs you" line for blocked-on-human states.
+// Exported for unit tests.
+const BLOCKED_COPY = {
+  permission: 'Waiting for your approval',
+  plan: 'Plan ready for your review',
+  question: 'Waiting for your reply',
+  error: 'Stopped on an error',
+};
+
+export function blockedNoticeHtml(state) {
+  const label = BLOCKED_COPY[state];
+  if (!label) return '';
+  return '<div class="ui-msg-status__blocked">'
+    + '<span class="ui-msg-status__blocked-dot" aria-hidden="true"></span>'
+    + escapeHtml(label)
+    + '</div>';
+}
+
+// Shared factory for the inline status element so every variant (orb,
+// tally+shimmer, blocked notice) carries the same live-region wiring —
+// screen readers hear turn progress without a dedicated announcement.
+function createStatusEl() {
+  const el = document.createElement('div');
+  el.className = 'ui-msg-status ui-msg-status--working';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  return el;
+}
+
 // Mounts / updates / removes the inline "working" block at the end of
 // the conversation stream. Two stacked lines:
 //   1. (optional) muted tally — "Read 3 files · ran 2 commands"
@@ -471,6 +518,29 @@ export function refreshWorkingIndicator(agent) {
     toolBuckets = {};
     return;
   }
+  // Blocked-on-human: static notice instead of shimmer/orb. Keep the
+  // tally line — it summarizes what the turn did before it stopped.
+  if (isAgentBlockedOnUser(agent)) {
+    const blockedTally = renderToolTally(toolBuckets);
+    const blockedHtml =
+      (blockedTally ? '<div class="ui-msg-status__tally">' + escapeHtml(blockedTally) + '</div>' : '')
+      + blockedNoticeHtml(effectiveState(agent));
+    if (existing) {
+      existing.classList.add('ui-msg-status--blocked');
+      if (existing.innerHTML !== blockedHtml) existing.innerHTML = blockedHtml;
+    } else {
+      const scrollParent = container.closest('.detail-scroll');
+      const wasAtBottom = isAtBottom(scrollParent);
+      const el = createStatusEl();
+      el.classList.add('ui-msg-status--blocked');
+      el.innerHTML = blockedHtml;
+      container.appendChild(el);
+      const hasCard = !!container.querySelector('.question-card');
+      if (scrollParent && wasAtBottom && !hasCard) scrollParent.scrollTop = scrollParent.scrollHeight;
+    }
+    return;
+  }
+  if (existing) existing.classList.remove('ui-msg-status--blocked');
   const classified = classifyTool(agent.current_tool);
   const liveLabel = classified ? classified.live : 'Thinking';
   const tally = renderToolTally(toolBuckets);
@@ -489,8 +559,7 @@ export function refreshWorkingIndicator(agent) {
     } else {
       const scrollParent = container.closest('.detail-scroll');
       const wasAtBottom = isAtBottom(scrollParent);
-      const el = document.createElement('div');
-      el.className = 'ui-msg-status ui-msg-status--working';
+      const el = createStatusEl();
       el.innerHTML = orbHtml;
       container.appendChild(el);
       // When a question card is pending, the visitor's focus belongs at
@@ -529,8 +598,7 @@ export function refreshWorkingIndicator(agent) {
     // scrollHeight, which would otherwise flip wasAtBottom to false.
     const scrollParent = container.closest('.detail-scroll');
     const wasAtBottom = isAtBottom(scrollParent);
-    const el = document.createElement('div');
-    el.className = 'ui-msg-status ui-msg-status--working';
+    const el = createStatusEl();
     el.innerHTML = html;
     container.appendChild(el);
     // Only pull the indicator into view if the user was already at the
@@ -637,9 +705,9 @@ function timelineIcon(kind) {
   return `<div class="timeline-icon ${cls}">${svg}</div>`;
 }
 
-function kindLabel(kind) {
+function kindLabel(kind, harness) {
   if (kind === 'human') return 'You';
-  if (kind === 'assistant') return 'Claude';
+  if (kind === 'assistant') return harness === 'codex' ? 'Codex' : 'Claude';
   return 'Tool';
 }
 
@@ -1761,7 +1829,7 @@ async function loadTabContent(tab, agentId) {
           html += `<div class="timeline-entry activity-entry" data-kind="${kind}">`;
           html += timelineIcon(kind);
           html += '<div class="timeline-content">';
-          html += `<div class="timeline-header"><span class="timeline-title">${kindLabel(kind)}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></div>`;
+          html += `<div class="timeline-header"><span class="timeline-title">${kindLabel(kind, lastKnownAgent && lastKnownAgent.harness)}</span><span class="timeline-timestamp">${formatTimeShort(time)}</span></div>`;
           if (kind === 'assistant') {
             html += `<div class="timeline-detail">${renderMarkdown(displayContent)}</div>`;
           } else {

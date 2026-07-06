@@ -148,10 +148,11 @@ test('formatLatestToolDisplay shows <inline code> for multi-line bash heredocs',
   assert.equal(formatLatestToolDisplay(entry), 'Running command · <inline code>');
 });
 
-test('formatLatestToolDisplay falls back to raw tool name when not classified', () => {
+test('formatLatestToolDisplay uses a generic verb for unclassified tools', () => {
   const entry = { content: '→ SomethingNovel: arg here' };
-  // classifyTool returns { bucket: 'other', live: 'Running SomethingNovel' }
-  assert.equal(formatLatestToolDisplay(entry), 'Running SomethingNovel · arg here');
+  // classifyTool returns { bucket: 'other', live: 'Working' } — raw
+  // internal tool names must never reach the chat copy.
+  assert.equal(formatLatestToolDisplay(entry), 'Working · arg here');
 });
 
 // isAgentMidTurn must be deterministic on agent.state — independent of
@@ -257,4 +258,37 @@ test('actionBarSignature: changes when permission_mode flips into/out of plan', 
   const sigOff = actionBarSignature({ ...base, permission_mode: 'bypassPermissions' });
   const sigOn = actionBarSignature({ ...base, permission_mode: 'plan' });
   assert.notEqual(sigOff, sigOn);
+});
+
+test('blockedNoticeHtml: static notice per blocked-on-human state', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { blockedNoticeHtml } = mod;
+  assert.equal(typeof blockedNoticeHtml, 'function');
+  assert.match(blockedNoticeHtml('permission'), /Waiting for your approval/);
+  assert.match(blockedNoticeHtml('plan'), /Plan ready for your review/);
+  assert.match(blockedNoticeHtml('question'), /Waiting for your reply/);
+  assert.match(blockedNoticeHtml('error'), /Stopped on an error/);
+  // Not a shimmer line — the shimmer class must never appear in the
+  // blocked notice, that treatment means "busy".
+  for (const st of ['permission', 'plan', 'question', 'error']) {
+    assert.doesNotMatch(blockedNoticeHtml(st), /ui-msg-status__label/);
+  }
+  // Non-blocked states produce nothing.
+  assert.equal(blockedNoticeHtml('running'), '');
+  assert.equal(blockedNoticeHtml('done'), '');
+});
+
+test('isAgentBlockedOnUser: blocked set is permission/plan/question/error', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { isAgentBlockedOnUser } = mod;
+  assert.equal(typeof isAgentBlockedOnUser, 'function');
+  for (const st of ['permission', 'plan', 'question', 'error']) {
+    assert.equal(isAgentBlockedOnUser({ state: st }), true, st + ' should be blocked-on-user');
+  }
+  for (const st of ['running', 'done', 'pr', 'merged', 'idle_prompt']) {
+    assert.equal(isAgentBlockedOnUser({ state: st }), false, st + ' should not be blocked-on-user');
+  }
+  assert.equal(isAgentBlockedOnUser(null), false);
 });
