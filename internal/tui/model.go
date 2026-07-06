@@ -20,7 +20,6 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/skills"
-	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/bjornjee/agent-dashboard/internal/zsuggest"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
@@ -160,8 +159,7 @@ type model struct {
 	// Cmd+K agent-search palette (modeSearch)
 	searchInput      textinput.Model
 	searchText       string
-	searchOrphanOnly bool            // show only resumable orphans
-	livePanes        map[string]bool // live tmux pane IDs (%N); drives isOrphan
+	searchOrphanOnly bool // show only resumable orphans
 
 	// Help overlay
 	helpVisible bool
@@ -347,18 +345,13 @@ func (m *model) buildTree() {
 	}
 }
 
-// isOrphan reports whether an agent is a resumable restart-survivor: a real
-// session whose tmux pane is dead. Requires tmux so live panes can be told from
-// dead ones. Shares state.IsResumableOrphan with the web/prune paths.
-func (m model) isOrphan(a domain.Agent) bool {
-	return m.tmuxAvailable && state.IsResumableOrphan(a, m.livePanes)
-}
-
 // agentMatchesSearch reports whether an agent passes the active palette filters:
 // the orphan-only toggle and a case-insensitive substring query over repo,
-// branch, dir, last message, session id, and harness.
+// branch, dir, last message, session id, and harness. Orphan status comes from
+// the Resumable flag stamped by resolveAgents (state.IsResumableOrphan against
+// the same tmux enumeration snapshot the targets came from).
 func (m model) agentMatchesSearch(a domain.Agent) bool {
-	if m.searchOrphanOnly && !m.isOrphan(a) {
+	if m.searchOrphanOnly && !a.Resumable {
 		return false
 	}
 	q := strings.ToLower(strings.TrimSpace(m.searchText))
@@ -411,7 +404,12 @@ func (m *model) moveSearchSelection(delta int) {
 }
 
 // agentGroup returns the status group priority for the given agent.
+// Restart-survivors override their stale state field: a dead "running"
+// session must not render inside RUNNING next to genuinely live agents.
 func agentGroup(agent domain.Agent) int {
+	if agent.Resumable {
+		return domain.ResumablePriority
+	}
 	group := domain.StatePriority[agent.State]
 	if group == 0 {
 		group = 3
@@ -778,16 +776,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				prevDiagramCounts[a.SessionID] = a.DiagramCount
 			}
 		}
-		// Agents arrive pre-resolved (sort + idle-override + codex filter all
-		// done in the goroutine that produced this message), so the handler
-		// pays no filesystem cost — no walk of ~/.codex/sessions on the main
-		// bubbletea goroutine.
+		// Agents arrive pre-resolved (sort + idle-override + codex filter +
+		// Resumable flagging all done in the goroutine that produced this
+		// message), so the handler pays no filesystem cost — no walk of
+		// ~/.codex/sessions on the main bubbletea goroutine.
 		m.agents = msg.agents
-		m.livePanes = msg.livePanes
-		// Flag restart-survivor orphans so the row badge + palette can mark them.
-		for i := range m.agents {
-			m.agents[i].Resumable = m.isOrphan(m.agents[i])
-		}
 		// Flash status when any agent gains a new diagram while panel is closed.
 		for _, a := range m.agents {
 			if a.SessionID == "" || a.DiagramCount == 0 {

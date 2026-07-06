@@ -306,20 +306,24 @@ func TmuxListSessions() ([]string, error) {
 	return lines, nil
 }
 
-// TmuxListPanes returns both the pane → target map and the pane → cwd map
-// from a single `tmux list-panes -a` invocation. The dashboard's hot-path
-// state refresh used to issue two separate calls back-to-back; collapsing
-// them halves the subprocess fanout per refresh tick.
+// TmuxListPanes returns the pane → target map, the pane → cwd map, and the
+// tmux server PID from a single `tmux list-panes -a` invocation. The
+// dashboard's hot-path state refresh used to issue two separate calls
+// back-to-back; collapsing them halves the subprocess fanout per refresh
+// tick. The server PID rides along in the same format string so pane
+// liveness and server identity always come from the same server —
+// enumeration succeeds ⟺ server PID known, which is what lets
+// state.IsResumableOrphan event-scope orphan resume to server restarts.
 //
-// Returns (nil, nil) on tmux error — callers must handle nil gracefully
+// Returns (nil, nil, "") on tmux error — callers must handle nil gracefully
 // (ResolveAgentTargets / ResolveAgentBranches do).
-func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string) {
+func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	out, err := runner.Output(ctx, "list-panes", "-a",
-		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pane_current_path}")
+		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}")
 	if err != nil {
-		return nil, nil
+		return nil, nil, ""
 	}
 	return parsePanesOutput(string(out))
 }
@@ -327,19 +331,21 @@ func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string) {
 // parsePanesOutput parses the tab-separated rows produced by the combined
 // list-panes format. Each row is:
 //
-//	pane_id<TAB>session<TAB>window_idx<TAB>pane_idx<TAB>pane_current_path
+//	pane_id<TAB>session<TAB>window_idx<TAB>pane_idx<TAB>server_pid<TAB>pane_current_path
 //
 // Rows missing the cwd column are tolerated for the targets map; the cwd
-// map only gets entries whose path is non-empty.
-func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]string) {
+// map only gets entries whose path is non-empty. The server PID is the
+// same on every row; the first valid row wins.
+func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]string, string) {
 	targets := make(map[string]domain.PaneTarget)
 	cwds := make(map[string]string)
+	serverPID := ""
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 5)
-		if len(parts) < 4 {
+		parts := strings.SplitN(line, "\t", 6)
+		if len(parts) < 5 {
 			continue
 		}
 		paneID := parts[0]
@@ -358,29 +364,41 @@ func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]s
 			Pane:    p,
 			Target:  fmt.Sprintf("%s:%d.%d", session, w, p),
 		}
-		if len(parts) == 5 && parts[4] != "" {
-			cwds[paneID] = parts[4]
+		if serverPID == "" {
+			serverPID = parts[4]
+		}
+		if len(parts) == 6 && parts[5] != "" {
+			cwds[paneID] = parts[5]
 		}
 	}
-	return targets, cwds
+	return targets, cwds, serverPID
 }
 
-// TmuxListLivePaneIDs returns the set of all live tmux pane IDs (%N format).
-func TmuxListLivePaneIDs() map[string]bool {
+// TmuxListLivePaneIDs returns the set of all live tmux pane IDs (%N format)
+// and the tmux server PID, from one invocation (same rationale as
+// TmuxListPanes: liveness and server identity must be observed atomically).
+// Returns (nil, "") on tmux error.
+func TmuxListLivePaneIDs() (map[string]bool, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	out, err := runner.Output(ctx, "list-panes", "-a",
-		"-F", "#{pane_id}")
+		"-F", "#{pane_id}\t#{pid}")
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	panes := make(map[string]bool)
+	serverPID := ""
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line != "" {
-			panes[line] = true
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		panes[parts[0]] = true
+		if serverPID == "" && len(parts) == 2 {
+			serverPID = parts[1]
 		}
 	}
-	return panes
+	return panes, serverPID
 }
 
 // parseListWindowsOutput parses the output of tmux list-windows -F "#{window_index}\t#{window_name}".

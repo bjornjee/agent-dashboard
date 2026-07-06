@@ -20,7 +20,7 @@ const { spawnSync } = require('child_process');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..', '..');
 const { readAgentState, writeState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
-const { getTarget, getPaneId } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const { getTarget, getPaneId, getServerPid } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { reconcileWorktree } = require(path.join(pluginRoot, 'packages', 'worktree-reconcile'));
 const { readEffortConfig } = require('./effort-config');
 
@@ -155,9 +155,10 @@ function effortTransition(existingMode, newMode) {
  * @param {object} params.existing - current agent state from disk
  * @param {string} params.target - tmux target string
  * @param {string} params.tmuxPane - TMUX_PANE env value
+ * @param {string} [params.serverPid] - tmux server PID (event-scopes orphan resume)
  * @returns {{ changed: boolean, update: object|null }}
  */
-function buildUpdate({ input, existing, target, tmuxPane }) {
+function buildUpdate({ input, existing, target, tmuxPane, serverPid }) {
   // Worktree pinning is delegated to a deterministic helper that reads
   // git + a marker file at <git-dir>/agent-dashboard-session. No regex
   // on agent commands; no path mangling. The helper short-circuits to
@@ -253,7 +254,8 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
     || stampPendingQ
     || clearPendingQ
     || !!newEffort
-    || (existing.harness || '') !== harness;
+    || (existing.harness || '') !== harness
+    || (existing.tmux_server_pid || '') !== (serverPid || '');
 
   if (!changed && existing.state) {
     return { changed: false, update: null, dispatchEffort: false };
@@ -262,6 +264,7 @@ function buildUpdate({ input, existing, target, tmuxPane }) {
   const update = {
     target,
     tmux_pane_id: tmuxPane,
+    tmux_server_pid: serverPid || '',
     session_id: input.session_id,
     state,
     current_tool: currentTool,
@@ -326,7 +329,7 @@ function fastUpdate(input) {
     if (/\bgh\s+pr\s+(create|merge)\b/.test(cmd)) return;
   }
 
-  const { changed, update, dispatchEffort } = buildUpdate({ input, existing, target, tmuxPane });
+  const { changed, update, dispatchEffort } = buildUpdate({ input, existing, target, tmuxPane, serverPid: getServerPid() });
   if (changed && update) {
     update.report_seq = reportSeq;
     // Pass guardStates on PostToolUse to eliminate the TOCTOU race with the

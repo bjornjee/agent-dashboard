@@ -92,3 +92,13 @@ func parsePorcelain(data []byte) []Worktree {
 	flush()
 	return out
 }
+
+// IsBranchMerged reports whether branch is an ancestor of base in the repo at
+// dir — i.e. the branch's commits are already reachable from base (true merge
+// or fast-forward). Squash merges are invisible to ancestry and are covered
+// by the resume TTL instead. Callers must not pass the repo's default branch
+// as branch: a ref is always an ancestor of itself.
+func IsBranchMerged(ctx context.Context, runner Runner, dir, branch, base string) bool {
+	_, err := runner.Output(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", branch, base)
+	return err == nil
+}

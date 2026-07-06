@@ -29,15 +29,21 @@ type RateLimit struct {
 
 // Agent represents a single Claude Code agent's state.
 type Agent struct {
-	Target             string   `json:"target"`
-	Session            string   `json:"session"`
-	Window             int      `json:"window"`
-	Pane               int      `json:"pane"`
-	State              string   `json:"state"`
-	Cwd                string   `json:"cwd"`
-	Branch             string   `json:"branch"`
-	SessionID          string   `json:"session_id"`
-	TmuxPaneID         string   `json:"tmux_pane_id"`
+	Target     string `json:"target"`
+	Session    string `json:"session"`
+	Window     int    `json:"window"`
+	Pane       int    `json:"pane"`
+	State      string `json:"state"`
+	Cwd        string `json:"cwd"`
+	Branch     string `json:"branch"`
+	SessionID  string `json:"session_id"`
+	TmuxPaneID string `json:"tmux_pane_id"`
+	// TmuxServerPID is the tmux server PID stamped by the state hooks
+	// (parsed from $TMUX). A dead pane whose server PID matches the current
+	// server was closed deliberately; only a PID from a previous server
+	// (tmux restarted underneath the agent) marks a restart-survivor worth
+	// resuming. Empty on pre-upgrade files — treated as not resumable.
+	TmuxServerPID      string   `json:"tmux_server_pid,omitempty"`
 	StartedAt          string   `json:"started_at"`
 	UpdatedAt          string   `json:"updated_at"`
 	LastMessagePreview string   `json:"last_message_preview"`
@@ -108,6 +114,11 @@ func (a Agent) EffectiveDir() string {
 type StateFile struct {
 	Agents map[string]Agent `json:"agents"`
 }
+
+// ResumablePriority is the display group for restart-survivor orphans
+// (Agent.Resumable). It sorts after every live state group so survivors sit
+// in a dedicated RESUMABLE section at the bottom of the tree.
+const ResumablePriority = 7
 
 // StatePriority defines state groups: blocked → waiting → running → review → pr → merged.
 // PR and merged are user-driven (pinned) states set by the dashboard.

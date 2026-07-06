@@ -198,14 +198,15 @@ func TestParseTarget(t *testing.T) {
 
 func Test_parsePanesOutput(t *testing.T) {
 	tests := []struct {
-		name        string
-		output      string
-		wantTargets map[string]domain.PaneTarget
-		wantCwds    map[string]string
+		name          string
+		output        string
+		wantTargets   map[string]domain.PaneTarget
+		wantCwds      map[string]string
+		wantServerPID string
 	}{
 		{
-			name:   "targets and cwds",
-			output: "%85\ttomoro\t1\t1\t/home/a\n%87\ttomoro\t2\t1\t/home/b\n%90\ttomoro\t3\t2\t\n",
+			name:   "targets, cwds, and server pid",
+			output: "%85\ttomoro\t1\t1\t4242\t/home/a\n%87\ttomoro\t2\t1\t4242\t/home/b\n%90\ttomoro\t3\t2\t4242\t\n",
 			wantTargets: map[string]domain.PaneTarget{
 				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
 				"%87": {Session: "tomoro", Window: 2, Pane: 1, Target: "tomoro:2.1"},
@@ -215,6 +216,7 @@ func Test_parsePanesOutput(t *testing.T) {
 				"%85": "/home/a",
 				"%87": "/home/b",
 			},
+			wantServerPID: "4242",
 		},
 		{
 			name:        "empty output",
@@ -224,7 +226,7 @@ func Test_parsePanesOutput(t *testing.T) {
 		},
 		{
 			name:   "malformed line skipped, missing cwd column tolerated for targets",
-			output: "%85\ttomoro\t1\t1\nbadline\n%87\ttomoro\t2\t0\t/x\n",
+			output: "%85\ttomoro\t1\t1\t4242\nbadline\n%87\ttomoro\t2\t0\t4242\t/x\n",
 			wantTargets: map[string]domain.PaneTarget{
 				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
 				"%87": {Session: "tomoro", Window: 2, Pane: 0, Target: "tomoro:2.0"},
@@ -232,12 +234,22 @@ func Test_parsePanesOutput(t *testing.T) {
 			wantCwds: map[string]string{
 				"%87": "/x",
 			},
+			wantServerPID: "4242",
+		},
+		{
+			name:        "pre-pid five-column row is skipped (no pid to trust)",
+			output:      "%85\ttomoro\t1\t1\n",
+			wantTargets: map[string]domain.PaneTarget{},
+			wantCwds:    map[string]string{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotTargets, gotCwds := parsePanesOutput(tt.output)
+			gotTargets, gotCwds, gotServerPID := parsePanesOutput(tt.output)
+			if gotServerPID != tt.wantServerPID {
+				t.Errorf("serverPID: got %q, want %q", gotServerPID, tt.wantServerPID)
+			}
 			if len(gotTargets) != len(tt.wantTargets) {
 				t.Fatalf("targets: got %d entries, want %d", len(gotTargets), len(tt.wantTargets))
 			}

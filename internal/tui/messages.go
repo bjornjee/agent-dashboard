@@ -19,10 +19,10 @@ import (
 // walk — including the codex sessions tree walk that previously froze
 // keystrokes whenever the per-session cache expired.
 type stateUpdatedMsg struct {
+	// agents arrive with Resumable already flagged (resolveAgents runs
+	// state.FlagResumable against the same tmux enumeration that produced
+	// the targets), so the handler never re-derives orphan status.
 	agents []domain.Agent
-	// livePanes is the set of currently live tmux pane IDs (%N), used to flag
-	// restart-survivor (resumable) orphans. nil when tmux is unavailable.
-	livePanes map[string]bool
 }
 type tickMsg time.Time
 type jumpResultMsg struct{ err error }
@@ -123,6 +123,7 @@ const (
 	modeReply
 	modeUsage
 	modeConfirmClose
+	modeConfirmDismissAll // confirm before dismissing every resumable orphan
 	modeConfirmDeleteDiagram
 	modeConfirmMerge   // confirm before merging a PR
 	modeConfirmCleanup // confirm before post-merge cleanup

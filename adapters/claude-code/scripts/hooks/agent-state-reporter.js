@@ -19,7 +19,7 @@ const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..
 const { readAgentState, writeState, detectState } = require(path.join(pluginRoot, 'packages', 'agent-state'));
 const { detectHarness } = require('./agent-state-fast');
 const { hasPendingParentToolUse } = require(path.join(pluginRoot, 'packages', 'agent-state', 'pending-tools'));
-const { getTarget, getPaneId, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
+const { getTarget, getPaneId, getServerPid, capture, parseTarget } = require(path.join(pluginRoot, 'packages', 'tmux'));
 const { getChangedFiles } = require(path.join(pluginRoot, 'packages', 'git-status'));
 
 // readSettingsEffort returns the persisted effortLevel from
@@ -116,6 +116,7 @@ function buildReportEntry({ input, existing, target, tmuxPane, state, filesChang
   const entry = {
     target,
     tmux_pane_id: tmuxPane,
+    tmux_server_pid: getServerPid() || '',
     session: parsed.session,
     window: parsed.window,
     pane: parsed.pane,

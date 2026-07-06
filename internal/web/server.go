@@ -235,7 +235,7 @@ func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
 	sf := state.ReadState(s.cfg.Profile.StateDir)
 	var paneCwds map[string]string
 	if tmux.TmuxIsAvailable() {
-		targets, cwds := tmux.TmuxListPanes()
+		targets, cwds, _ := tmux.TmuxListPanes()
 		state.ResolveAgentTargets(&sf, targets)
 		paneCwds = cwds
 	}

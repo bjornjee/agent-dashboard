@@ -149,4 +149,20 @@ function getPaneId() {
   return result.stdout.trim() || null;
 }
 
-module.exports = { isAvailable, capture, jump, sendKeys, listPanes, getTarget, getPaneId, extractSessionWindow, parseTarget };
+/**
+ * Get the tmux server PID. $TMUX is "socket_path,server_pid,session_id";
+ * fall back to querying the server (popups can lack $TMUX).
+ * @returns {string|null} server PID as a string, or null
+ */
+function getServerPid() {
+  const env = process.env.TMUX;
+  if (env) {
+    const pid = env.split(',')[1];
+    if (pid && /^\d+$/.test(pid)) return pid;
+  }
+  const result = tmux(['display-message', '-p', '#{pid}']);
+  if (!result || result.status !== 0 || !result.stdout) return null;
+  return result.stdout.trim() || null;
+}
+
+module.exports = { isAvailable, capture, jump, sendKeys, listPanes, getTarget, getPaneId, getServerPid, extractSessionWindow, parseTarget };

@@ -18,6 +18,7 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
+	"github.com/bjornjee/agent-dashboard/internal/git"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
 	"github.com/bjornjee/agent-dashboard/internal/repo"
@@ -327,12 +328,40 @@ func (m model) loadAllSubagents() tea.Cmd {
 
 func pruneDead(statePath string) tea.Cmd {
 	return func() tea.Msg {
-		livePaneIDs := tmux.TmuxListLivePaneIDs()
-		if len(livePaneIDs) == 0 {
+		livePaneIDs, serverPID := tmux.TmuxListLivePaneIDs()
+		// An unknown server PID with a non-empty pane set (malformed
+		// list-panes output) would make IsResumableOrphan refuse every
+		// survivor and PruneDead delete them — skip the cycle instead.
+		if len(livePaneIDs) == 0 || serverPID == "" {
 			return pruneDeadMsg{removed: 0}
 		}
-		removed := state.PruneDead(statePath, livePaneIDs)
+		removed := state.PruneDead(statePath, livePaneIDs, serverPID, branchMergedChecker())
 		return pruneDeadMsg{removed: removed}
+	}
+}
+
+// branchMergedChecker returns a per-prune memoized predicate reporting whether
+// branch is merged into the repo's default branch at dir. The default branch
+// itself is never reported merged — a ref is always an ancestor of itself, so
+// checking it would GC every on-main survivor.
+func branchMergedChecker() func(dir, branch string) bool {
+	cache := make(map[string]bool)
+	return func(dir, branch string) bool {
+		if dir == "" || branch == "" {
+			return false
+		}
+		key := dir + "\x00" + branch
+		if v, ok := cache[key]; ok {
+			return v
+		}
+		merged := false
+		if base := gitDefaultBranch(dir); branch != base {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			merged = git.IsBranchMerged(ctx, gitRunner, dir, branch, base)
+			cancel()
+		}
+		cache[key] = merged
+		return merged
 	}
 }
 
@@ -436,6 +465,27 @@ func closePane(paneID, sessionID, stateDir string) tea.Cmd {
 	}
 }
 
+// dismissAllResumable removes the state file of every restart-survivor in one
+// go (x on the RESUMABLE group header). Files are already dead sessions —
+// there is no pane to kill.
+func dismissAllResumable(stateDir string, agents []domain.Agent) tea.Cmd {
+	dismiss := make([]string, 0, len(agents))
+	for _, a := range agents {
+		if a.Resumable && a.SessionID != "" {
+			dismiss = append(dismiss, a.SessionID)
+		}
+	}
+	return func() tea.Msg {
+		var firstErr error
+		for _, sid := range dismiss {
+			if err := state.RemoveAgent(stateDir, sid); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		return closeResultMsg{err: firstErr}
+	}
+}
+
 // pinAgentStateCmd writes a pinned_state to the agent's JSON file.
 func pinAgentStateCmd(stateDir, sessionID, pinnedState string) tea.Cmd {
 	return func() tea.Msg {
@@ -499,21 +549,13 @@ func loadCodexDBUsage(database *db.DB) tea.Cmd {
 	}
 }
 
-// resolvedState bundles resolveAgents' two return values for the singleflight
-// cache (which carries a single any value).
-type resolvedState struct {
-	agents    []domain.Agent
-	livePanes map[string]bool
-}
-
 func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) tea.Cmd {
 	return func() tea.Msg {
 		v, _, _ := loadStateGroup.Do(path, func() (any, error) {
-			agents, livePanes := resolveAgents(path, projectsDir, sessionsDir, tmuxAvailable, selfPaneID, codexSessionsDir)
-			return resolvedState{agents: agents, livePanes: livePanes}, nil
+			return resolveAgents(path, projectsDir, sessionsDir, tmuxAvailable, selfPaneID, codexSessionsDir), nil
 		})
-		rs, _ := v.(resolvedState)
-		return stateUpdatedMsg{agents: rs.agents, livePanes: rs.livePanes}
+		agents, _ := v.([]domain.Agent)
+		return stateUpdatedMsg{agents: agents}
 	}
 }
 
@@ -521,17 +563,19 @@ func loadState(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPa
 // goroutine — including the codex ParentThreadID lookups that previously
 // blocked keystrokes inside the stateUpdatedMsg handler whenever the
 // codex sessions cache expired.
-func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) ([]domain.Agent, map[string]bool) {
+func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, selfPaneID, codexSessionsDir string) []domain.Agent {
 	sf := state.ReadState(path)
 	var paneCwds map[string]string
 	var livePanes map[string]bool
+	var serverPID string
 	if tmuxAvailable {
-		targets, cwds := tmux.TmuxListPanes()
+		targets, cwds, pid := tmux.TmuxListPanes()
 		state.ResolveAgentTargets(&sf, targets)
 		paneCwds = cwds
-		// targets is keyed by pane ID (%N) — the live-pane set used by the
-		// palette's orphan filter/marker. Leave livePanes nil when targets is
-		// nil (tmux enumeration failed) so IsResumableOrphan can't misclassify
+		serverPID = pid
+		// targets is keyed by pane ID (%N) — the live-pane set used to flag
+		// restart-survivor orphans. Leave livePanes nil when targets is nil
+		// (tmux enumeration failed) so IsResumableOrphan can't misclassify
 		// live agents as orphans; a non-nil empty targets (zero panes) yields a
 		// non-nil empty set (genuinely all dead).
 		if targets != nil {
@@ -550,11 +594,12 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	state.ResolveAgentBranches(&sf, paneCwds, path)
 	state.GCSpawnPins(path, 10*time.Minute)
 	state.ApplyStateArbitration(&sf, codexSessionsDir)
-	agents := conversation.TopLevelAgents(
+	// Flag survivors before sorting so they sink into the RESUMABLE group.
+	state.FlagResumable(&sf, livePanes, serverPID, time.Now())
+	return conversation.TopLevelAgents(
 		state.SortedAgents(sf, selfPaneID),
 		conversation.Roots{CodexSessionsRoot: codexSessionsDir},
 	)
-	return agents, livePanes
 }
 
 // loadStateGroup deduplicates concurrent loadState calls. The TUI tick
@@ -739,10 +784,11 @@ func spawnCmdInWindow(agents []domain.Agent, absFolder, selfPaneID string, profi
 // the session id, harness, and dir — no resolve chain is needed.
 func resumeSession(agent domain.Agent, agents []domain.Agent, selfPaneID string, profile domain.AgentProfile, settings domain.Settings) tea.Cmd {
 	return func() tea.Msg {
-		// Re-check orphan status against live panes now, not against the
-		// (possibly stale) m.livePanes captured at keypress — resuming an agent
-		// whose pane revived would spawn a duplicate and delete its state file.
-		if !state.IsResumableOrphan(agent, tmux.TmuxListLivePaneIDs()) {
+		// Re-check orphan status against a fresh enumeration now, not against
+		// the Resumable flag captured at keypress — resuming an agent whose
+		// pane revived would spawn a duplicate and delete its state file.
+		livePanes, serverPID := tmux.TmuxListLivePaneIDs()
+		if !state.IsResumableOrphan(agent, livePanes, serverPID, time.Now()) {
 			return createSessionMsg{err: fmt.Errorf("agent is no longer a resumable orphan (its pane may be alive)")}
 		}
 		absFolder, err := validateFolder(agent.EffectiveDir())
@@ -1188,8 +1234,8 @@ func WatchStateDir(dir, projectsDir, sessionsDir string, p *tea.Program, tmuxRea
 						if ptr := selfPaneID.Load(); ptr != nil {
 							pane = *ptr
 						}
-						agents, livePanes := resolveAgents(dir, projectsDir, sessionsDir, tmuxReady.Load(), pane, codexSessionsDir)
-						p.Send(stateUpdatedMsg{agents: agents, livePanes: livePanes})
+						agents := resolveAgents(dir, projectsDir, sessionsDir, tmuxReady.Load(), pane, codexSessionsDir)
+						p.Send(stateUpdatedMsg{agents: agents})
 					})
 				}
 			case _, ok := <-watcher.Errors:
