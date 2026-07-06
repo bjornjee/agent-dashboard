@@ -122,7 +122,7 @@ func (s *Server) readAgentState() []domain.Agent {
 		if tmux.TmuxIsAvailable() {
 			targets, cwds, cmds, pid := tmux.TmuxListPanes()
 			livePanes = livePanesFromTargets(targets)
-			s.store.Hydrate(&sf, livePanes)
+			s.store.Hydrate(&sf, livePanes, pid)
 			state.ResolveAgentTargets(&sf, targets)
 			state.ReconcileUnregistered(&sf, targets, cwds, cmds, time.Now())
 			state.ReconcileIdentities(&sf, state.ReconcileIdentityOptions{

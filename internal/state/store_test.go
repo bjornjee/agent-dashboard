@@ -147,6 +147,42 @@ func TestStoreSync_ResurrectionRules(t *testing.T) {
 	}
 }
 
+func TestStoreHydrate_SkipsPaneIDReuseAcrossServerRestart(t *testing.T) {
+	store, _ := testStore(t)
+	// Agent stamped under a previous tmux server. After a server restart,
+	// pane IDs restart from small numbers, so a NEW unrelated pane can get
+	// the same %N — pane liveness alone must not resurrect this row.
+	stale := domain.Agent{
+		SessionID:     "stale",
+		TmuxPaneID:    "%40",
+		TmuxServerPID: "111",
+		State:         "running",
+		UpdatedAt:     "2026-07-06T10:00:00Z",
+	}
+	// Same pane ID but no stamped server PID (pre-upgrade hook file):
+	// undecidable, so hydrate keeps trusting pane liveness.
+	unstamped := domain.Agent{
+		SessionID:  "unstamped",
+		TmuxPaneID: "%41",
+		State:      "running",
+		UpdatedAt:  "2026-07-06T10:00:00Z",
+	}
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+		"stale":     stale,
+		"unstamped": unstamped,
+	}})
+
+	sf := domain.StateFile{Agents: map[string]domain.Agent{}}
+	store.Hydrate(&sf, map[string]bool{"%40": true, "%41": true}, "222")
+
+	if _, ok := sf.Agents["stale"]; ok {
+		t.Fatal("row stamped with a previous server PID was hydrated onto a reused pane ID")
+	}
+	if _, ok := sf.Agents["unstamped"]; !ok {
+		t.Fatal("row without a stamped server PID was not hydrated")
+	}
+}
+
 func TestStoreHydrate_FiltersRows(t *testing.T) {
 	store, d := testStore(t)
 	live := domain.Agent{
@@ -179,7 +215,7 @@ func TestStoreHydrate_FiltersRows(t *testing.T) {
 	sf := domain.StateFile{Agents: map[string]domain.Agent{
 		"existing": {SessionID: "existing", TmuxPaneID: "%1"},
 	}}
-	store.Hydrate(&sf, map[string]bool{"%1": true, "%3": true})
+	store.Hydrate(&sf, map[string]bool{"%1": true, "%3": true}, "")
 
 	if _, ok := sf.Agents["live"]; !ok {
 		t.Fatal("live row was not hydrated")
@@ -335,12 +371,12 @@ func TestStoreNilSafe(t *testing.T) {
 		"sess-a": {SessionID: "sess-a", UpdatedAt: "2026-07-06T10:00:00Z"},
 	}}
 	nilStore.Sync(&sf)
-	nilStore.Hydrate(&sf, map[string]bool{"%1": true})
+	nilStore.Hydrate(&sf, map[string]bool{"%1": true}, "")
 	nilStore.GC()
 
 	store := NewStore(nil)
 	store.Sync(&sf)
-	store.Hydrate(&sf, map[string]bool{"%1": true})
+	store.Hydrate(&sf, map[string]bool{"%1": true}, "")
 	store.GC()
 }
 

@@ -596,7 +596,7 @@ func resolveAgents(path, projectsDir, sessionsDir string, tmuxAvailable bool, se
 	if tmuxAvailable {
 		targets, cwds, cmds, pid := tmux.TmuxListPanes()
 		livePanes = livePanesFromTargets(targets)
-		store.Hydrate(&sf, livePanes)
+		store.Hydrate(&sf, livePanes, pid)
 		state.ResolveAgentTargets(&sf, targets)
 		state.ReconcileUnregistered(&sf, targets, cwds, cmds, time.Now())
 		state.ReconcileIdentities(&sf, state.ReconcileIdentityOptions{

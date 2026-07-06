@@ -147,7 +147,7 @@ func (s *Store) Sync(sf *domain.StateFile) {
 
 // Hydrate injects non-dismissed read-model rows whose panes are live and whose
 // session IDs are missing from the file state.
-func (s *Store) Hydrate(sf *domain.StateFile, livePanes map[string]bool) {
+func (s *Store) Hydrate(sf *domain.StateFile, livePanes map[string]bool, serverPID string) {
 	conn := s.conn()
 	if conn == nil || sf == nil || len(livePanes) == 0 {
 		return
@@ -187,6 +187,14 @@ func (s *Store) Hydrate(sf *domain.StateFile, livePanes map[string]bool) {
 		}
 		var agent domain.Agent
 		if err := json.Unmarshal([]byte(row.Payload), &agent); err != nil {
+			continue
+		}
+		// Compound liveness: pane IDs restart from small numbers after a
+		// tmux server restart, so a matching %N alone can be an unrelated
+		// pane. A row stamped under a previous server must not resurrect
+		// onto a reused ID. Unstamped rows (pre-upgrade hooks) stay
+		// undecidable and keep trusting pane liveness.
+		if agent.TmuxServerPID != "" && serverPID != "" && agent.TmuxServerPID != serverPID {
 			continue
 		}
 		if agent.SessionID == "" {
