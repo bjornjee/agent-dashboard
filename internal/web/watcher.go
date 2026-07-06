@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -119,20 +120,23 @@ func (s *Server) readAgentState() []domain.Agent {
 		var livePanes map[string]bool
 		var serverPID string
 		if tmux.TmuxIsAvailable() {
-			targets, cwds, pid := tmux.TmuxListPanes()
+			targets, cwds, cmds, pid := tmux.TmuxListPanes()
+			livePanes = livePanesFromTargets(targets)
+			s.store.Hydrate(&sf, livePanes)
 			state.ResolveAgentTargets(&sf, targets)
+			state.ReconcileUnregistered(&sf, targets, cwds, cmds, time.Now())
+			state.ReconcileIdentities(&sf, state.ReconcileIdentityOptions{
+				Store:             s.store,
+				ClaudeProjectsDir: s.cfg.Profile.ProjectsDir,
+				ClaudeSessionsDir: s.cfg.Profile.SessionsDir,
+				CodexRoot:         filepath.Dir(s.codexSessionsRootDir),
+			})
 			paneCwds = cwds
 			serverPID = pid
 			// targets is keyed by pane ID (%N) — the live-pane set used to flag
 			// restart-survivor (resumable) orphans below. Leave livePanes nil
 			// when targets is nil (tmux enumeration failed) so a transient
 			// failure doesn't flag every live agent resumable.
-			if targets != nil {
-				livePanes = make(map[string]bool, len(targets))
-				for paneID := range targets {
-					livePanes[paneID] = true
-				}
-			}
 		}
 		state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
 		// Apply spawn-pins BEFORE marker-scan so freshly-spawned agents
@@ -150,6 +154,7 @@ func (s *Server) readAgentState() []domain.Agent {
 			state.SortedAgents(sf, ""),
 			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
 		)
+		s.store.Sync(&sf)
 		return s.applyTrustFlags(agents), nil
 	})
 	agents, _ := v.([]domain.Agent)
@@ -157,3 +162,14 @@ func (s *Server) readAgentState() []domain.Agent {
 }
 
 var readAgentStateGroup singleflight.Group
+
+func livePanesFromTargets(targets map[string]domain.PaneTarget) map[string]bool {
+	if targets == nil {
+		return nil
+	}
+	livePanes := make(map[string]bool, len(targets))
+	for paneID := range targets {
+		livePanes[paneID] = true
+	}
+	return livePanes
+}

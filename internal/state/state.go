@@ -717,7 +717,11 @@ func FlagResumable(sf *domain.StateFile, livePanes map[string]bool, serverPID st
 // isBranchMerged, when non-nil, additionally GCs survivors whose branch is
 // already merged (checked in the survivor's EffectiveDir; the caller owns
 // caching and the default-branch guard). Returns the number of agents removed.
-func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBranchMerged func(dir, branch string) bool) int {
+func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBranchMerged func(dir, branch string) bool, stores ...*Store) int {
+	var store *Store
+	if len(stores) > 0 {
+		store = stores[0]
+	}
 	entries, err := os.ReadDir(AgentsDir(dir))
 	if err != nil {
 		return 0
@@ -792,18 +796,30 @@ func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBran
 
 	removed := 0
 	for _, path := range dedupPaths {
-		if os.Remove(path) == nil {
+		if dismissPruned(store, dir, path, "dedup") == nil {
 			removed++
 		}
 	}
 	if applyDead {
 		for _, path := range deadPaths {
-			if os.Remove(path) == nil {
+			if dismissPruned(store, dir, path, "dead_pane") == nil {
 				removed++
 			}
 		}
 	}
 	return removed
+}
+
+func dismissPruned(store *Store, dir, path, reason string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var agent domain.Agent
+	if err := json.Unmarshal(data, &agent); err != nil || agent.SessionID == "" {
+		return os.Remove(path)
+	}
+	return store.Dismiss(dir, agent.SessionID, reason)
 }
 
 // ReadAgent reads a single agent's persisted state by session ID without

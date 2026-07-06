@@ -53,10 +53,9 @@ func main() {
 	}
 	defer lockFile.Close()
 
-	dbPath := filepath.Join(stateDir, "usage.db")
-	database, err := db.OpenDB(dbPath)
+	database, err := db.Open(stateDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: usage DB not available: %v\n", err)
+		fmt.Fprintf(os.Stderr, "warning: dashboard DB not available: %v\n", err)
 	}
 	if database != nil {
 		defer database.Close()
@@ -81,7 +80,7 @@ func main() {
 	// m.TmuxReady is an atomic.Bool updated by deferredStartup once the
 	// real TmuxIsAvailable() check completes; the watcher reads it on
 	// each event to decide whether to call tmux for target resolution.
-	watcher, err := tui.WatchStateDir(stateDir, cfg.Profile.ProjectsDir, cfg.Profile.SessionsDir, p, m.TmuxReady, m.SelfPaneID, m.CodexSessionsDir())
+	watcher, err := tui.WatchStateDir(stateDir, cfg.Profile.ProjectsDir, cfg.Profile.SessionsDir, p, m.TmuxReady, m.SelfPaneID, m.CodexSessionsDir(), m.AgentStore())
 	if err != nil {
 		// Non-fatal: dashboard works without live updates
 		fmt.Fprintf(os.Stderr, "warning: file watcher not available: %v\n", err)

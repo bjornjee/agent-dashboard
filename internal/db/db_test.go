@@ -1,6 +1,9 @@
 package db
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"math"
 	"testing"
@@ -28,6 +31,56 @@ func TestOpenDB_CreatesTable(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("UpsertUsage: %v", err)
+	}
+}
+
+func TestOpen_RenamesLegacyUsageDB(t *testing.T) {
+	tmp := t.TempDir()
+	legacyPath := filepath.Join(tmp, "usage.db")
+	legacyWal := legacyPath + "-wal"
+	legacyShm := legacyPath + "-shm"
+
+	if err := os.WriteFile(legacyPath, []byte{}, 0600); err != nil {
+		t.Fatalf("write legacy db: %v", err)
+	}
+	if err := os.WriteFile(legacyWal, []byte("wal"), 0600); err != nil {
+		t.Fatalf("write legacy wal: %v", err)
+	}
+	if err := os.WriteFile(legacyShm, []byte("shm"), 0600); err != nil {
+		t.Fatalf("write legacy shm: %v", err)
+	}
+
+	d, err := Open(tmp)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { d.Close() })
+
+	for _, path := range []string{
+		filepath.Join(tmp, Filename),
+		filepath.Join(tmp, Filename) + "-wal",
+		filepath.Join(tmp, Filename) + "-shm",
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected renamed file %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{legacyPath, legacyWal, legacyShm} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("expected legacy file %s removed, got %v", path, err)
+		}
+	}
+}
+
+func TestOpenDB_CreatesAgentsTable(t *testing.T) {
+	d := testDB(t)
+
+	var tableCount int
+	if err := d.conn.Get(&tableCount, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agents'"); err != nil {
+		t.Fatalf("query agents table: %v", err)
+	}
+	if tableCount != 1 {
+		t.Fatalf("agents table count = %d, want 1", tableCount)
 	}
 }
 

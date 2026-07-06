@@ -56,18 +56,19 @@ var (
 			Background(themeSurface1).
 			Foreground(themeText)
 
-	permissionColor = themePeach
-	questionColor   = themeYellow
-	errorColor      = themeRed
-	runningColor    = themeBlue
-	idlePromptColor = themeOverlay1
-	resumableColor  = themeOverlay1
-	doneColor       = themeGreen
-	prColor         = themeMauve
-	mergedColor     = themeTeal
-	planColor       = themeMauve
-	effortColor     = themePink
-	textInputColor  = themeYellow
+	permissionColor   = themePeach
+	questionColor     = themeYellow
+	errorColor        = themeRed
+	runningColor      = themeBlue
+	idlePromptColor   = themeOverlay1
+	unregisteredColor = themeOverlay1
+	resumableColor    = themeOverlay1
+	doneColor         = themeGreen
+	prColor           = themeMauve
+	mergedColor       = themeTeal
+	planColor         = themeMauve
+	effortColor       = themePink
+	textInputColor    = themeYellow
 
 	helpStyle      = lipgloss.NewStyle().Foreground(themeOverlay1)
 	boldStyle      = lipgloss.NewStyle().Bold(true)
@@ -84,15 +85,16 @@ type stateIcon struct {
 }
 
 var stateIcons = map[string]stateIcon{
-	"permission":  {"⚿", permissionColor},
-	"question":    {"?", questionColor},
-	"error":       {"✗", errorColor},
-	"running":     {"▶", runningColor},
-	"idle_prompt": {"○", idlePromptColor},
-	"done":        {"✓", doneColor},
-	"pr":          {"↑", prColor},
-	"merged":      {"⏏", mergedColor},
-	"plan":        {"☐", planColor},
+	"permission":   {"⚿", permissionColor},
+	"question":     {"?", questionColor},
+	"error":        {"✗", errorColor},
+	"running":      {"▶", runningColor},
+	"idle_prompt":  {"○", idlePromptColor},
+	"done":         {"✓", doneColor},
+	"pr":           {"↑", prColor},
+	"merged":       {"⏏", mergedColor},
+	"plan":         {"☐", planColor},
+	"unregistered": {"◇", unregisteredColor},
 }
 
 var groupHeaders = map[int]struct {
@@ -105,6 +107,9 @@ var groupHeaders = map[int]struct {
 	4: {"REVIEW", doneColor},
 	5: {"PR", prColor},
 	6: {"MERGED", mergedColor},
+	// Live harness panes without a registered state file — dimmed until
+	// hooks re-register or identity lookup catches up.
+	domain.UnregisteredPriority: {"UNREGISTERED", unregisteredColor},
 	// Restart-survivors (Agent.Resumable) — dimmed: dead sessions offered
 	// for resume, not live work.
 	domain.ResumablePriority: {"RESUMABLE", resumableColor},

@@ -23,11 +23,11 @@ func TestRunMigrations_FreshDB(t *testing.T) {
 		t.Fatalf("runMigrations: %v", err)
 	}
 
-	// Verify schema_version has 2 entries
+	// Verify schema_version has all migration entries.
 	var count int
 	conn.Get(&count, "SELECT COUNT(*) FROM schema_version")
-	if count != 2 {
-		t.Errorf("schema_version count = %d, want 2", count)
+	if count != 3 {
+		t.Errorf("schema_version count = %d, want 3", count)
 	}
 
 	// Verify provider column exists
@@ -42,6 +42,13 @@ func TestRunMigrations_FreshDB(t *testing.T) {
 	conn.Get(&quotesCount, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quotes'")
 	if quotesCount != 1 {
 		t.Errorf("quotes table not found after migrations")
+	}
+
+	// Verify agents table exists.
+	var agentsCount int
+	conn.Get(&agentsCount, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agents'")
+	if agentsCount != 1 {
+		t.Errorf("agents table not found after migrations")
 	}
 }
 
@@ -58,8 +65,8 @@ func TestRunMigrations_Idempotent(t *testing.T) {
 
 	var count int
 	conn.Get(&count, "SELECT COUNT(*) FROM schema_version")
-	if count != 2 {
-		t.Errorf("schema_version count = %d after 2 runs, want 2", count)
+	if count != 3 {
+		t.Errorf("schema_version count = %d after 2 runs, want 3", count)
 	}
 }
 
@@ -82,11 +89,11 @@ func TestRunMigrations_BootstrapV1(t *testing.T) {
 		t.Fatalf("runMigrations on V1 DB: %v", err)
 	}
 
-	// Should have detected V1 and only run migration 002.
+	// Should have detected V1 and only run migrations 002+.
 	var version int
 	conn.Get(&version, "SELECT MAX(version) FROM schema_version")
-	if version != 2 {
-		t.Errorf("max version = %d, want 2", version)
+	if version != 3 {
+		t.Errorf("max version = %d, want 3", version)
 	}
 
 	// Provider column should exist.
@@ -125,11 +132,11 @@ func TestRunMigrations_BootstrapV2(t *testing.T) {
 		t.Fatalf("runMigrations on V2 DB: %v", err)
 	}
 
-	// Should detect V2 and skip all migrations.
+	// Should detect V2 and apply migrations added after the legacy bootstrap.
 	var version int
 	conn.Get(&version, "SELECT MAX(version) FROM schema_version")
-	if version != 2 {
-		t.Errorf("max version = %d, want 2", version)
+	if version != 3 {
+		t.Errorf("max version = %d, want 3", version)
 	}
 
 	// Existing data should be untouched.

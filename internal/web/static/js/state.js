@@ -7,6 +7,7 @@ export const STATE_BADGE = {
   idle_prompt: 'review', done: 'review',
   pr: 'pr',
   merged: 'merged',
+  unregistered: 'unregistered',
 };
 
 export const STATE_BORDER = {
@@ -16,10 +17,11 @@ export const STATE_BORDER = {
   idle_prompt: 'var(--accent-green)', done: 'var(--accent-green)',
   pr: 'var(--accent-indigo)',
   merged: 'var(--text-tertiary)',
+  unregistered: 'var(--text-tertiary)',
 };
 
 export function statePriority(state) {
-  const map = { permission: 1, plan: 1, question: 2, error: 2, running: 3, idle_prompt: 4, done: 4, pr: 5, merged: 6 };
+  const map = { permission: 1, plan: 1, question: 2, error: 2, running: 3, idle_prompt: 4, done: 4, pr: 5, merged: 6, unregistered: 7 };
   return map[state] || 99;
 }
 
@@ -31,6 +33,7 @@ export function stateGroup(state) {
   if (p === 4) return 'REVIEW';
   if (p === 5) return 'PR';
   if (p === 6) return 'MERGED';
+  if (p === 7) return 'UNREGISTERED';
   return 'OTHER';
 }
 
@@ -72,6 +75,7 @@ export function stateLabel(state) {
     case 'done':        return 'Done';
     case 'pr':          return 'PR open';
     case 'merged':      return 'Merged';
+    case 'unregistered': return 'Unregistered';
     default:            return '';
   }
 }

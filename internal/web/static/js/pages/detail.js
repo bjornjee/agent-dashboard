@@ -30,6 +30,7 @@ const STATE_LABELS = {
   error: 'Errored',
   pr: 'PR',
   merged: 'Merged',
+  unregistered: 'Unregistered',
   done: 'Done',
   idle_prompt: 'Idle',
   blocked: 'Blocked',

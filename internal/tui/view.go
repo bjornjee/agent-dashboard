@@ -524,6 +524,8 @@ func (m model) agentListContentWithLine() (string, int) {
 				duration = age + " ago"
 			}
 			repoStyled = lipgloss.NewStyle().Foreground(resumableColor).Render(repo)
+		} else if effState == "unregistered" {
+			repoStyled = lipgloss.NewStyle().Foreground(unregisteredColor).Render(repo)
 		} else if effState == "running" {
 			duration = state.FormatDuration(agent.UpdatedAt)
 		}
@@ -576,6 +578,8 @@ func (m model) agentListContentWithLine() (string, int) {
 			styled := styledBranch(branchStr)
 			if agent.Resumable {
 				styled = lipgloss.NewStyle().Foreground(resumableColor).Render(branchStr)
+			} else if effState == "unregistered" {
+				styled = lipgloss.NewStyle().Foreground(unregisteredColor).Render(branchStr)
 			}
 			branchLine := branchIndent + styled
 			if nodeIdx == m.selected {

@@ -20,11 +20,10 @@ func main() {
 
 	cfg := config.DefaultConfig()
 
-	// Open usage database
-	dbPath := cfg.Profile.StateDir + "/usage.db"
-	database, err := db.OpenDB(dbPath)
+	// Open dashboard database
+	database, err := db.Open(cfg.Profile.StateDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: usage DB not available: %v\n", err)
+		fmt.Fprintf(os.Stderr, "warning: dashboard DB not available: %v\n", err)
 	}
 	if database != nil {
 		defer database.Close()

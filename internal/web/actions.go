@@ -389,8 +389,8 @@ func (s *Server) handleClose(w http.ResponseWriter, r *http.Request) {
 	}
 	s.clearTrustPane(agent.TmuxPaneID)
 
-	// Remove state file
-	if err := state.RemoveAgent(s.cfg.Profile.StateDir, id); err != nil {
+	// Dismiss state file
+	if err := s.store.Dismiss(s.cfg.Profile.StateDir, id, "pane_closed"); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -494,8 +494,8 @@ func (s *Server) handleCleanup(w http.ResponseWriter, r *http.Request) {
 		cmdRunner.CombinedOutput(ctx, cwd, "git", "-C", cwd, "branch", "-d", branch)
 	}
 
-	// 6. Remove agent state file
-	if err := state.RemoveAgent(s.cfg.Profile.StateDir, id); err != nil {
+	// 6. Dismiss agent state file
+	if err := s.store.Dismiss(s.cfg.Profile.StateDir, id, "merged"); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove state file"})
 		return
 	}
@@ -742,7 +742,7 @@ func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
 
 	_ = state.StageSpawnPin(s.cfg.Profile.StateDir, folder, paneID, target)
 	// Drop the stale orphan entry; the resumed agent re-registers live.
-	_ = state.RemoveAgent(s.cfg.Profile.StateDir, agent.SessionID)
+	_ = s.store.Dismiss(s.cfg.Profile.StateDir, agent.SessionID, "resumed")
 
 	if paneID != "" {
 		go s.watchTrustPrompt(context.Background(), paneID, target, folder, trustWatchBudget, trustWatchTick)

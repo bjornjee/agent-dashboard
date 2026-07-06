@@ -14,7 +14,6 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/state"
-	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
 //go:embed static
@@ -30,11 +29,12 @@ type ServerOptions struct {
 
 // Server is the HTTP server for the web dashboard.
 type Server struct {
-	cfg  domain.Config
-	db   *db.DB
-	opts ServerOptions
-	auth *authHandler
-	hub  *sseHub
+	cfg   domain.Config
+	db    *db.DB
+	store *state.Store
+	opts  ServerOptions
+	auth  *authHandler
+	hub   *sseHub
 
 	// Cached codex sessions root ($CODEX_HOME/sessions or
 	// ~/.codex/sessions). Resolved once at construction so request
@@ -57,9 +57,12 @@ type Server struct {
 
 // NewServer creates a new web dashboard server.
 func NewServer(cfg domain.Config, database *db.DB, opts ServerOptions) *Server {
+	store := state.NewStore(database)
+	store.GC()
 	s := &Server{
 		cfg:                  cfg,
 		db:                   database,
+		store:                store,
 		opts:                 opts,
 		hub:                  newSSEHub(),
 		codexSessionsRootDir: resolveCodexSessionsRoot(cfg.Profile.HomeDir),
@@ -232,20 +235,12 @@ func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 // lookupAgent finds an agent by session ID from the current state.
 func (s *Server) lookupAgent(id string) (domain.Agent, bool) {
-	sf := state.ReadState(s.cfg.Profile.StateDir)
-	var paneCwds map[string]string
-	if tmux.TmuxIsAvailable() {
-		targets, cwds, _ := tmux.TmuxListPanes()
-		state.ResolveAgentTargets(&sf, targets)
-		paneCwds = cwds
+	for _, agent := range s.readAgentState() {
+		if agent.SessionID == id {
+			return agent, true
+		}
 	}
-	state.ResolveAgentProjDir(&sf, s.cfg.Profile.ProjectsDir, s.cfg.Profile.SessionsDir)
-	state.ApplySpawnPins(&sf, s.cfg.Profile.StateDir)
-	state.ResolveAgentWorktree(&sf, s.cfg.Profile.StateDir)
-	state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
-	state.ApplyStateArbitration(&sf, s.codexSessionsRootDir)
-	agent, ok := sf.Agents[id]
-	return agent, ok
+	return domain.Agent{}, false
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

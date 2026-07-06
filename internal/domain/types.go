@@ -38,6 +38,7 @@ type Agent struct {
 	Branch     string `json:"branch"`
 	SessionID  string `json:"session_id"`
 	TmuxPaneID string `json:"tmux_pane_id"`
+	ReportSeq  int    `json:"report_seq,omitempty"`
 	// TmuxServerPID is the tmux server PID stamped by the state hooks
 	// (parsed from $TMUX). A dead pane whose server PID matches the current
 	// server was closed deliberately; only a PID from a previous server
@@ -118,20 +119,26 @@ type StateFile struct {
 // ResumablePriority is the display group for restart-survivor orphans
 // (Agent.Resumable). It sorts after every live state group so survivors sit
 // in a dedicated RESUMABLE section at the bottom of the tree.
-const ResumablePriority = 7
+const (
+	UnregisteredPriority = 7
+	ResumablePriority    = 8
+)
 
-// StatePriority defines state groups: blocked → waiting → running → review → pr → merged.
+// StatePriority defines state groups: blocked → waiting → running → review → pr → merged → unregistered.
 // PR and merged are user-driven (pinned) states set by the dashboard.
+// "unregistered" is transient/display-only for live harness panes without a
+// hook-written agent file.
 var StatePriority = map[string]int{
-	"permission":  1, // blocked — needs y/n approval
-	"plan":        1, // blocked — plan ready for review
-	"question":    2, // waiting — needs user reply
-	"error":       2, // waiting — needs investigation
-	"running":     3,
-	"idle_prompt": 4, // review — finished turn, at prompt
-	"done":        4, // review — finished task
-	"pr":          5, // PR created — waiting on GitHub
-	"merged":      6, // branch merged — cleanup
+	"permission":   1, // blocked — needs y/n approval
+	"plan":         1, // blocked — plan ready for review
+	"question":     2, // waiting — needs user reply
+	"error":        2, // waiting — needs investigation
+	"running":      3,
+	"idle_prompt":  4, // review — finished turn, at prompt
+	"done":         4, // review — finished task
+	"pr":           5, // PR created — waiting on GitHub
+	"merged":       6, // branch merged — cleanup
+	"unregistered": UnregisteredPriority,
 }
 
 // ConversationEntry represents a single turn in the conversation.
