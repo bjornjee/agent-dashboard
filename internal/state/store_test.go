@@ -256,6 +256,48 @@ func TestStoreDismiss_ClearsSyncCacheForResurrection(t *testing.T) {
 	}
 }
 
+func TestStoreSweepDeadRows_TombstonesOrphanRows(t *testing.T) {
+	store, d := testStore(t)
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+		"live":   {SessionID: "live", TmuxPaneID: "%1", UpdatedAt: "2026-07-06T10:00:00Z"},
+		"filed":  {SessionID: "filed", TmuxPaneID: "%2", UpdatedAt: "2026-07-06T10:00:00Z"},
+		"orphan": {SessionID: "orphan", TmuxPaneID: "%3", UpdatedAt: "2026-07-06T10:00:00Z"},
+	}})
+
+	// live: pane alive → kept. filed: pane dead but its hook file still
+	// exists (restart-survivor) → kept. orphan: pane dead, no file — its
+	// deletion happened while no dashboard was running → tombstoned.
+	store.SweepDeadRows(map[string]bool{"%1": true}, map[string]bool{"filed": true})
+
+	type row struct {
+		SessionID       string  `db:"session_id"`
+		DismissedAt     *string `db:"dismissed_at"`
+		DismissedReason *string `db:"dismissed_reason"`
+	}
+	var rows []row
+	if err := d.Conn().Select(&rows, "SELECT session_id, dismissed_at, dismissed_reason FROM agents ORDER BY session_id"); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	got := map[string]bool{}
+	for _, r := range rows {
+		got[r.SessionID] = r.DismissedAt != nil
+		if r.SessionID == "orphan" && (r.DismissedReason == nil || *r.DismissedReason != "dead_pane") {
+			t.Fatalf("orphan dismissed_reason = %v, want dead_pane", r.DismissedReason)
+		}
+	}
+	want := map[string]bool{"live": false, "filed": false, "orphan": true}
+	for id, dismissed := range want {
+		if got[id] != dismissed {
+			t.Fatalf("session %q dismissed = %v, want %v", id, got[id], dismissed)
+		}
+	}
+}
+
+func TestStoreSweepDeadRows_NilSafe(t *testing.T) {
+	var store *Store
+	store.SweepDeadRows(map[string]bool{"%1": true}, nil) // must not panic
+}
+
 func TestStoreGC_RemovesOldDismissedRows(t *testing.T) {
 	store, d := testStore(t)
 	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{

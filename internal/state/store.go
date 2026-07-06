@@ -215,6 +215,50 @@ func (s *Store) Dismiss(dir, sessionID, reason string) error {
 	return RemoveAgent(dir, sessionID)
 }
 
+// SweepDeadRows tombstones non-dismissed rows whose pane is gone and whose
+// hook file no longer exists — deletions that happened while no dashboard
+// was running, which the file-based prune can never see. Keeps the read
+// model convergent with (files ∪ tmux) across process downtime. livePanes
+// must come from a successful enumeration (callers gate on that);
+// knownSessions is the set of session IDs currently present as files.
+func (s *Store) SweepDeadRows(livePanes map[string]bool, knownSessions map[string]bool) {
+	conn := s.conn()
+	if conn == nil {
+		return
+	}
+	var rows []struct {
+		SessionID  string `db:"session_id"`
+		TmuxPaneID string `db:"tmux_pane_id"`
+	}
+	if err := conn.Select(&rows, "SELECT session_id, tmux_pane_id FROM agents WHERE dismissed_at IS NULL"); err != nil {
+		return
+	}
+	var orphans []string
+	for _, row := range rows {
+		if livePanes[row.TmuxPaneID] || knownSessions[row.SessionID] {
+			continue
+		}
+		orphans = append(orphans, row.SessionID)
+	}
+	if len(orphans) == 0 {
+		return
+	}
+	query, args, err := sqlx.In(
+		"UPDATE agents SET dismissed_at = ?, dismissed_reason = 'dead_pane' WHERE session_id IN (?)",
+		time.Now().UTC().Format(time.RFC3339),
+		orphans,
+	)
+	if err != nil {
+		return
+	}
+	_, _ = conn.Exec(conn.Rebind(query), args...)
+	s.mu.Lock()
+	for _, id := range orphans {
+		delete(s.lastSynced, id)
+	}
+	s.mu.Unlock()
+}
+
 // GC removes old dismissed rows from the read model.
 func (s *Store) GC() {
 	conn := s.conn()

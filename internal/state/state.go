@@ -807,6 +807,20 @@ func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBran
 			}
 		}
 	}
+
+	// Read-model sweep: rows whose file vanished while no dashboard was
+	// running have no path through the file-based buckets above — tombstone
+	// them so the DB converges with (files ∪ tmux) across downtime. Files
+	// removed this cycle were dismissed individually; retained files
+	// (including restart-survivors) are protected by the known-session set.
+	knownSessions := make(map[string]bool, len(files))
+	for _, f := range files {
+		if f.agent.SessionID != "" {
+			knownSessions[f.agent.SessionID] = true
+		}
+	}
+	store.SweepDeadRows(livePaneIDs, knownSessions)
+
 	return removed
 }
 
