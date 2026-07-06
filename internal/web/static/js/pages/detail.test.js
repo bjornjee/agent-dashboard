@@ -292,3 +292,29 @@ test('isAgentBlockedOnUser: blocked set is permission/plan/question/error', asyn
   }
   assert.equal(isAgentBlockedOnUser(null), false);
 });
+
+test('planCardActionsVisible: only the final visible entry may arm a plan card', async () => {
+  const url = pathToFileURL(path.join(__dirname, 'detail.js')).href;
+  const mod = await import(url);
+  const { planCardActionsVisible } = mod;
+  assert.equal(typeof planCardActionsVisible, 'function');
+  const planEntry = { role: 'plan-saved', timestamp: '2026-06-04T10:02:00Z' };
+  const human = { role: 'human', content: 'plan it' };
+  const assistant = { role: 'assistant', content: 'done' };
+  const running = { state: 'running' };
+
+  // Mid-history plan card: transcript moved on — never armed.
+  assert.equal(planCardActionsVisible([human, planEntry, assistant], 1, running), false);
+  // Final entry + running (codex flow): armed.
+  assert.equal(planCardActionsVisible([human, planEntry], 1, running), true);
+  // Final entry but the action panel already shows Approve/Reject
+  // (claude plan/permission states): suppressed — single button system.
+  assert.equal(planCardActionsVisible([human, planEntry], 1, { state: 'plan' }), false);
+  assert.equal(planCardActionsVisible([human, planEntry], 1, { state: 'permission' }), false);
+  // Terminal state never re-arms.
+  assert.equal(planCardActionsVisible([human, planEntry], 1, { state: 'merged' }), false);
+  // Non-plan entries are never armed.
+  assert.equal(planCardActionsVisible([human, assistant], 1, running), false);
+  // Index out of final position.
+  assert.equal(planCardActionsVisible([planEntry, human], 0, running), false);
+});

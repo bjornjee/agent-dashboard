@@ -1011,6 +1011,15 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   padding: var(--space-2) var(--space-4);
   font-size: 13px;
 }
+/* Static receipt swapped in after an in-card Approve/Reject lands —
+ * the decision's residue, deliberately non-interactive. */
+.chat-plan-link__receipt {
+  padding: var(--space-3) 0 2px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
 .ui-msg__tool > svg:first-child { color: var(--accent-green); width: 14px; height: 14px; }
 .ui-msg__tool > svg:last-child { color: var(--text-muted); }
 .ui-msg__tool > span { flex: 1; }

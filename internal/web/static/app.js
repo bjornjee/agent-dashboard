@@ -128,6 +128,20 @@ window.addEventListener('popstate', (e) => {
   }
 });
 
+// Swap a plan-card's in-card action row for a static receipt once the
+// tap lands. The poll's entry-signature rule keeps historical cards
+// disarmed on re-render; this closes the feedback loop in the same
+// frame so the tapper sees their decision stick.
+function markPlanCardResolved(evt, label) {
+  const btn = evt && evt.target ? evt.target.closest('button') : null;
+  const actions = btn ? btn.closest('.chat-plan-link__actions') : null;
+  if (!actions) return;
+  const receipt = document.createElement('div');
+  receipt.className = 'chat-plan-link__receipt';
+  receipt.textContent = label;
+  actions.replaceWith(receipt);
+}
+
 // Wrap an async action with button spinner feedback.
 //   default          — append spinner as sibling (text buttons: "Save" → "Save ●")
 //   { replace: true } — swap content for the spinner (icon-only round CTAs,
@@ -265,16 +279,24 @@ window.Dashboard = {
   async approve(id, evt) {
     await withSpinner(evt, async () => {
       const result = await post('/api/agents/' + id + '/approve');
-      if (result && result.ok) toast('Approved', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (result && result.ok) {
+        toast('Approved', 'success');
+        markPlanCardResolved(evt, 'Approved ✓');
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      }
     });
   },
 
   async reject(id, evt) {
     await withSpinner(evt, async () => {
       const result = await post('/api/agents/' + id + '/reject');
-      if (result && result.ok) toast('Rejected', 'success');
-      else toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      if (result && result.ok) {
+        toast('Rejected', 'success');
+        markPlanCardResolved(evt, 'Rejected ✕');
+      } else {
+        toast('Failed: ' + (result?.error || 'unknown'), 'error');
+      }
     });
   },
 

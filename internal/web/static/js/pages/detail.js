@@ -945,18 +945,18 @@ export function visibleEntries(entries) {
 // path (appendNewEntries) emit identical markup. agentId is threaded
 // through so plan-saved entries can render their inline approve/reject
 // buttons against the right session.
-function renderEntryHtml(entry, agentId, suppressPlanActions) {
+function renderEntryHtml(entry, agentId, showPlanActions) {
   const role = entry.Role || entry.role;
-  if (role === 'plan-saved') return renderPlanLinkCard(agentId, suppressPlanActions);
+  if (role === 'plan-saved') return renderPlanLinkCard(agentId, !showPlanActions);
   const content = entry.Content || entry.content || '';
   if (role === 'human') return UI.message('user', content);
   return UI.message('assistant', renderMarkdown(content), { html: true });
 }
 
-function entryRenderSignature(entry, suppressPlanActions) {
+function entryRenderSignature(entry, showPlanActions) {
   const role = entry.Role || entry.role || '';
   const content = entry.Content || entry.content || '';
-  return JSON.stringify([role, content, role === 'plan-saved' && !!suppressPlanActions]);
+  return JSON.stringify([role, content, role === 'plan-saved' && !!showPlanActions]);
 }
 
 // True when the action panel above the composer is already rendering
@@ -969,10 +969,33 @@ function actionPanelHasApproveReject(agent) {
   return st === 'plan' || st === 'permission';
 }
 
+// Decides whether a plan-saved entry renders live Approve/Reject.
+// Historical cards are a loaded gun: a card that regains buttons after
+// its moment passed can inject stray picker keystrokes into a live CLI
+// session. The rule is positional + stateful:
+//   - only the FINAL visible entry may carry actions (once the
+//     transcript moves on, the decision moved on), AND
+//   - the action panel must not already be rendering the same pair
+//     (claude plan/permission states — single button system), AND
+//   - terminal states (merged) never re-arm a card.
+// Pure — exported for unit tests.
+export function planCardActionsVisible(visible, index, agent) {
+  if (!Array.isArray(visible) || index !== visible.length - 1) return false;
+  const entry = visible[index];
+  const role = entry && (entry.Role || entry.role);
+  if (role !== 'plan-saved') return false;
+  if (actionPanelHasApproveReject(agent)) return false;
+  if (agent && effectiveState(agent) === 'merged') return false;
+  return true;
+}
+
 // Build conversation HTML from an array of message entries — Codex flat-prose.
-function renderConversationHtml(entries, agentId, suppressPlanActions) {
+function renderConversationHtml(entries, agentId, agent) {
+  const visible = visibleEntries(entries);
   let html = '<div class="conversation">';
-  for (const entry of visibleEntries(entries)) html += renderEntryHtml(entry, agentId, suppressPlanActions);
+  for (let i = 0; i < visible.length; i++) {
+    html += renderEntryHtml(visible[i], agentId, planCardActionsVisible(visible, i, agent));
+  }
   html += '</div>';
   return html;
 }
@@ -1299,7 +1322,7 @@ function entryInsertAnchor(conv) {
 // poll; entries whose content changed in place are replaced, which is
 // how Codex partial assistant text grows without waiting for a full page
 // refresh. Decoration siblings are kept outside the indexed entry set.
-function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
+function appendNewEntries(conv, entries, agentId, agent) {
   const visible = visibleEntries(entries);
   // Report whether anything actually changed. A count comparison is not
   // enough: consecutive assistant entries MERGE in visibleEntries, so a
@@ -1308,12 +1331,13 @@ function appendNewEntries(conv, entries, agentId, suppressPlanActions) {
   let changed = false;
 
   for (let i = 0; i < visible.length; i++) {
-    const sig = entryRenderSignature(visible[i], suppressPlanActions);
+    const showActions = planCardActionsVisible(visible, i, agent);
+    const sig = entryRenderSignature(visible[i], showActions);
     const existing = conv.querySelector(`:scope > [data-entry-idx="${i}"]`);
     if (existing && existing.dataset.entrySig === sig) continue;
 
     const wrap = document.createElement('div');
-    wrap.innerHTML = renderEntryHtml(visible[i], agentId, suppressPlanActions);
+    wrap.innerHTML = renderEntryHtml(visible[i], agentId, showActions);
     const el = wrap.firstElementChild;
     if (!el) continue;
     el.dataset.entryIdx = String(i);
@@ -1481,7 +1505,7 @@ async function refreshConversation(agentId, agent) {
     conv = container.querySelector('.conversation');
   }
 
-  const grew = appendNewEntries(conv, entries, agentId, actionPanelHasApproveReject(agent));
+  const grew = appendNewEntries(conv, entries, agentId, agent);
   reconcileQuestionCard(conv, pending, agentId);
   reconcileOptimisticMessage(conv);
   if (agent) refreshWorkingIndicator(agent);
@@ -1845,7 +1869,7 @@ async function loadTabContent(tab, agentId) {
         markLoaded();
         return;
       }
-      container.innerHTML = renderConversationHtml(entries, agentId, actionPanelHasApproveReject(lastKnownAgent));
+      container.innerHTML = renderConversationHtml(entries, agentId, lastKnownAgent);
       const conv = container.querySelector('.conversation');
       if (conv) {
         // Seed the incremental-render bookkeeping so the next poll's
@@ -1856,7 +1880,7 @@ async function loadTabContent(tab, agentId) {
         const msgs = conv.querySelectorAll(':scope > .ui-msg');
         for (let i = 0; i < msgs.length && i < visible.length; i++) {
           msgs[i].dataset.entryIdx = String(i);
-          msgs[i].dataset.entrySig = entryRenderSignature(visible[i], actionPanelHasApproveReject(lastKnownAgent));
+          msgs[i].dataset.entrySig = entryRenderSignature(visible[i], planCardActionsVisible(visible, i, lastKnownAgent));
         }
         conv.dataset.renderedCount = String(visible.length);
         if (hasPendingQuestionPayload(pending)) {
