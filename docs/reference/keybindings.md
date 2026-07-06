@@ -27,6 +27,7 @@ All keyboard shortcuts grouped by context. Press `h` in the dashboard to see thi
 | `g` | Open existing PR diff or create new PR |
 | `m` | Merge PR via `gh` CLI and send cleanup |
 | `a` | Create new agent session |
+| `/` | Open search palette over the agent list |
 | `c` | Collapse/expand subagent tree |
 | `x` | Dismiss subagent or close agent pane |
 | `p` | Toggle plan view |
@@ -37,6 +38,17 @@ All keyboard shortcuts grouped by context. Press `h` in the dashboard to see thi
 | `h` | Show help overlay |
 | `J` / `K` | Line scroll (plan/diff views) |
 | `q` / `Ctrl+C` | Quit |
+
+## Search Palette
+
+Press `/` in the main dashboard to open a search palette over the agent list (matches repo, branch, directory, last message, session ID, and harness).
+
+| Key | Action |
+|:----|:-------|
+| type | Filter agents (case-insensitive substring) |
+| `Ctrl+O` | Toggle "orphans only" filter (resumable sessions whose tmux pane died) |
+| `Enter` | Jump to a live agent's pane, or resume an orphaned session in a fresh pane |
+| `Esc` | Close the palette |
 
 ## Diff Viewer
 

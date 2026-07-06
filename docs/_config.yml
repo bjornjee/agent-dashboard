@@ -24,6 +24,12 @@ baseurl: /agent-dashboard
 
 permalink: pretty
 
+# Internal working artifacts — keep out of the published site.
+exclude:
+  - design/
+  - feature-confirmation-modal-ux-plan.md
+  - skills-grades.md
+
 color_scheme: agent-dashboard-dark
 
 breadcrumbs: true

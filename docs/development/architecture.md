@@ -26,12 +26,15 @@ agent-dashboard/
 ├── settings.example.toml              # default settings (copied by installer)
 ├── go.mod / go.sum
 ├── cmd/
-│   ├── dashboard/main.go              # TUI entry point
-│   ├── web/main.go                    # web server entry point
-│   └── populate-quotes/main.go        # bulk quote fetcher for SQLite cache
+│   ├── dashboard/                     # TUI entry point
+│   ├── web/                           # web server entry point
+│   ├── skillgen/                      # generates adapter skills from adapters/skills-src/
+│   ├── populate-quotes/               # bulk quote fetcher for SQLite cache
+│   └── recompute-claude-usage/        # rebuilds usage totals from transcripts
 ├── internal/                          # core packages (see below)
-├── adapters/claude-code/                   # Claude Code plugin adapter (see Adapter reference)
-├── adapters/codex/                    # Codex plugin adapter (hooks ship inside the plugin bundle)
+├── adapters/skills-src/               # single source tree for workflow skills (make gen-skills)
+├── adapters/claude-code/              # Claude Code plugin adapter (generated skills; see Adapter reference)
+├── adapters/codex/                    # Codex plugin adapter (generated skills; hooks ship inside the plugin bundle)
 └── schema/
     └── agent-state.schema.json        # JSON Schema for agent state files
 ```
@@ -40,13 +43,20 @@ agent-dashboard/
 
 ```
 internal/
+├── codex/           # Codex state and conversation readers
 ├── config/          # agent profile + TOML settings loader
-├── conversation/    # JSONL parsing, subagent discovery
-├── gh/              # GitHub CLI helpers (CODEOWNERS, merge args)
+├── conversation/    # JSONL parsing, subagent discovery (routes per harness)
 ├── db/              # SQLite operations (usage + quotes)
-├── domain/          # shared type definitions (Agent, Message, etc.)
+├── diagrams/        # mermaid diagram capture, storage, and rendering
+├── domain/          # shared type definitions (Agent, Message, Harness, etc.)
+├── gh/              # GitHub CLI helpers (CODEOWNERS, merge args)
+├── git/             # thin layer over git subprocess invocations
+├── harness/         # harness registry + per-harness spawn commands (claude/, codex/)
 ├── lock/            # singleton instance lock
-├── skills/          # plugin skill discovery
+├── mocks/           # mockery-generated test mocks
+├── repo/            # git topology facts (worktrees, repo roots)
+├── repowin/         # repo-to-tmux-window matching
+├── skills/          # plugin skill discovery + codex skill guard
 ├── state/           # agent state structs + file I/O
 ├── tmux/            # tmux integration helpers
 ├── tui/             # Bubble Tea UI (model, view, keys, commands)
