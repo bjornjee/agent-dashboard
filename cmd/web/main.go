@@ -62,6 +62,12 @@ func main() {
 		defer watcher.Close()
 	}
 
+	// Web-only deployments need the periodic prune/sweep the TUI runs on
+	// its tick; without it dead files and orphaned read-model rows linger.
+	pruneStop := make(chan struct{})
+	defer close(pruneStop)
+	srv.StartPruneLoop(pruneStop)
+
 	addr := fmt.Sprintf("%s:%d", *bind, *port)
 	log.Printf("Agent Dashboard web UI: http://%s", addr)
 	if opts.GoogleClientID != "" {
