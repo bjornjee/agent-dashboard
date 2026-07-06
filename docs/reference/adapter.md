@@ -88,6 +88,7 @@ Codex-specific behavior:
 
 - **Workflow skills are available for Codex sessions.** The dashboard skills use Codex-native commands where the harness differs, including `$agent-dashboard:implement` and `$agent-dashboard:rca`.
 - **Plan mode is signaled, not gated.** Codex's `/plan` slash command flips the hook payload's `permission_mode` to `"plan"`. The dashboard captures this as a field but doesn't flip state to `plan` — Codex has no `ExitPlanMode` equivalent, so there's no discrete "plan ready" review moment.
+- **Plan-required skills auto-enter plan mode at spawn.** Dashboard-created Codex sessions for plan-required skills (`feature`) launch without the CLI prompt positional — Codex would auto-submit it before plan mode is active. Instead, the dashboard waits for the composer to render and injects `/plan <skill prompt>` as a bracketed paste (Codex dispatches `/plan` inline args atomically: enters Plan mode and submits the prompt in one action). If injection fails, the skill's own "stop and ask the user to run `/plan`" gate is the fallback.
 - **Subagent state comes from Codex lifecycle hooks.** Codex sessions use `spawn_agent`/`wait_agent`; the dashboard tracks those sessions through the Codex hook events emitted by the plugin.
 
 ## Agent state schema

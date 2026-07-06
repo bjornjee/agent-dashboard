@@ -694,6 +694,11 @@ func validateFolder(path string) (string, error) {
 	return absFolder, nil
 }
 
+// planBootstrap injects the deferred /plan prompt into a freshly spawned
+// codex pane. Package var so tests can swap it and assert the launch
+// without touching tmux (same seam style as tmux.SetTestRunner).
+var planBootstrap = codex.BootstrapPlanMode
+
 // createSessionWithPrompt creates a new agent session with an optional skill,
 // message, and harness override. The wizard picks the harness; per-harness
 // settings (Codex.Model/Approval/Sandbox/effort) flow
@@ -727,6 +732,13 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		newTarget, newPaneID, err := spawnCmdInWindow(agents, absFolder, selfPaneID, profile, cmd)
 		if err != nil {
 			return createSessionMsg{err: err}
+		}
+
+		// Plan-required codex skills spawn without the prompt positional;
+		// inject it behind /plan once the composer boots. Fire-and-forget:
+		// the bootstrap degrades to the skill's own /plan gate on failure.
+		if deferred := codex.DeferredPlanPrompt(h.Name(), skill, message); deferred != "" {
+			go planBootstrap(newTarget, deferred)
 		}
 
 		// Stage the worktree/branch pin keyed by the new pane_id so the

@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/mocks"
+	"github.com/bjornjee/agent-dashboard/internal/tmux"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -663,5 +665,58 @@ func TestPersistUsage_EmptyHarnessTreatedAsClaude(t *testing.T) {
 
 	if !hasClaudeRow(database) {
 		t.Errorf("empty-harness should default to claude and write")
+	}
+}
+
+// codex + feature (plan-required) spawns without the positional PROMPT and
+// launches the plan-mode bootstrap with the deferred prompt instead, so the
+// session enters /plan before the skill prompt submits. Mirrors the web
+// spawn-path contract (internal/web/create_test.go).
+func TestCreateSessionWithPrompt_CodexFeatureLaunchesPlanBootstrap(t *testing.T) {
+	m := mocks.NewMockRunner(t)
+	t.Cleanup(tmux.SetTestRunner(m))
+
+	bootCalls := make(chan [2]string, 1)
+	origBoot := planBootstrap
+	planBootstrap = func(target, prompt string) { bootCalls <- [2]string{target, prompt} }
+	t.Cleanup(func() { planBootstrap = origBoot })
+
+	folder := t.TempDir()
+	agents := []domain.Agent{{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}}
+
+	m.On("Output", mock.Anything,
+		"display-message", "-p", "-t", "%0",
+		"#{session_name}:#{window_index}.#{pane_index}",
+	).Return([]byte("main:0.0\n"), nil)
+	m.On("Output", mock.Anything,
+		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
+	).Return([]byte("0\n"), nil)
+
+	var capturedCmd string
+	m.On("Output", mock.Anything,
+		"split-window", "-t", "main:0", "-c", folder,
+		"-d", "-P", "-F", "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}",
+		mock.MatchedBy(func(s string) bool { capturedCmd = s; return true }),
+	).Return([]byte("main:0.1\n"), nil)
+	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
+
+	profile := domain.AgentProfile{Command: "claude", StateDir: t.TempDir()}
+	msg := createSessionWithPrompt(folder, agents, "%0", profile, domain.Settings{}, "codex", "feature", "hi", "", "")()
+	created, ok := msg.(createSessionMsg)
+	if !ok || created.err != nil {
+		t.Fatalf("createSessionWithPrompt msg = %#v, want createSessionMsg without error", msg)
+	}
+
+	if want := "codex"; capturedCmd != want {
+		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
+	}
+	select {
+	case got := <-bootCalls:
+		want := [2]string{"main:0.1", "$agent-dashboard:feature hi"}
+		if got != want {
+			t.Errorf("planBootstrap(%q, %q), want %q, %q", got[0], got[1], want[0], want[1])
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("planBootstrap was not launched for codex feature spawn")
 	}
 }

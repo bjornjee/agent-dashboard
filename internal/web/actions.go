@@ -23,6 +23,11 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
+// planBootstrap injects the deferred /plan prompt into a freshly spawned
+// codex pane. Package var so tests can swap it and assert the launch
+// without touching tmux (same seam style as tmux.SetTestRunner).
+var planBootstrap = codex.BootstrapPlanMode
+
 // handleApprove sends a plan / permission approval to an agent's tmux
 // pane. Claude uses the single-letter "y" shortcut at its picker. Codex
 // has no equivalent picker, so the approval is sent as a literal chat
@@ -601,6 +606,13 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// the HTTP handler returns immediately.
 	if paneID != "" {
 		go s.watchTrustPrompt(context.Background(), paneID, target, folder, trustWatchBudget, trustWatchTick)
+	}
+
+	// Plan-required codex skills spawn without the prompt positional;
+	// inject it behind /plan once the composer boots. Fire-and-forget:
+	// the bootstrap degrades to the skill's own /plan gate on failure.
+	if deferred := codex.DeferredPlanPrompt(activeHarness.Name(), req.Skill, req.Message); deferred != "" {
+		go planBootstrap(target, deferred)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})

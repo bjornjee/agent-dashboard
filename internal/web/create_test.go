@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bjornjee/agent-dashboard/internal/config"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
@@ -365,12 +366,18 @@ func TestCreate_HarnessOverrideCodex(t *testing.T) {
 	}
 }
 
-func TestCreate_HarnessOverrideCodexFeatureSkill_PassesPrompt(t *testing.T) {
-	// codex + feature spawns with the user message in the positional
-	// PROMPT slot (alongside the skill marker). Codex auto-submits the
-	// prompt on TUI startup; no post-spawn injection required.
+func TestCreate_CodexFeatureSkill_DefersPromptToPlanBootstrap(t *testing.T) {
+	// codex + feature (plan-required) spawns WITHOUT the positional PROMPT —
+	// codex would auto-submit it before plan mode is active. The prompt is
+	// instead handed to the plan-mode bootstrap, which injects it behind
+	// /plan once the composer renders (codex.BootstrapPlanMode).
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
+
+	bootCalls := make(chan [2]string, 1)
+	origBoot := planBootstrap
+	planBootstrap = func(target, prompt string) { bootCalls <- [2]string{target, prompt} }
+	t.Cleanup(func() { planBootstrap = origBoot })
 
 	folder := t.TempDir()
 	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
@@ -394,9 +401,17 @@ func TestCreate_HarnessOverrideCodexFeatureSkill_PassesPrompt(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	want := "codex '$agent-dashboard:feature hi'"
-	if capturedCmd != want {
+	if want := "codex"; capturedCmd != want {
 		t.Errorf("captured cmd = %q, want %q", capturedCmd, want)
+	}
+	select {
+	case got := <-bootCalls:
+		want := [2]string{"main:0.1", "$agent-dashboard:feature hi"}
+		if got != want {
+			t.Errorf("planBootstrap(%q, %q), want %q, %q", got[0], got[1], want[0], want[1])
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("planBootstrap was not launched for codex feature spawn")
 	}
 }
 
