@@ -90,6 +90,9 @@ type rawKeySentMsg struct {
 type selectPaneMsg struct{ err error }
 type closeResultMsg struct {
 	err error
+	// dismissed is the number of resumable orphan state files removed by a
+	// dismiss-all; 0 means a regular pane close.
+	dismissed int
 }
 type createSessionMsg struct {
 	target string

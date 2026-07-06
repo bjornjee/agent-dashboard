@@ -97,8 +97,10 @@ func parsePorcelain(data []byte) []Worktree {
 // dir — i.e. the branch's commits are already reachable from base (true merge
 // or fast-forward). Squash merges are invisible to ancestry and are covered
 // by the resume TTL instead. Callers must not pass the repo's default branch
-// as branch: a ref is always an ancestor of itself.
+// as branch: a ref is always an ancestor of itself. The "--" terminator keeps
+// an option-looking branch value from a state file (e.g. "--version") from
+// being parsed as a git flag and faking a merged verdict.
 func IsBranchMerged(ctx context.Context, runner Runner, dir, branch, base string) bool {
-	_, err := runner.Output(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", branch, base)
+	_, err := runner.Output(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", "--", branch, base)
 	return err == nil
 }

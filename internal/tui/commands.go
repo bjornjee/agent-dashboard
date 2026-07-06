@@ -355,6 +355,11 @@ func branchMergedChecker() func(dir, branch string) bool {
 			return v
 		}
 		merged := false
+		// ponytail: gitDefaultBranch falls back to "main" when origin/HEAD is
+		// unset, so merged-GC silently no-ops in master-default repos (ancestry
+		// against a missing ref exits non-zero → not merged). Safe direction —
+		// the 72h TTL still drains those survivors; probe the repo's real HEAD
+		// if that lag ever matters.
 		if base := gitDefaultBranch(dir); branch != base {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			merged = git.IsBranchMerged(ctx, gitRunner, dir, branch, base)
@@ -482,7 +487,7 @@ func dismissAllResumable(stateDir string, agents []domain.Agent) tea.Cmd {
 				firstErr = err
 			}
 		}
-		return closeResultMsg{err: firstErr}
+		return closeResultMsg{err: firstErr, dismissed: len(dismiss)}
 	}
 }
 

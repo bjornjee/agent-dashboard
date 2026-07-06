@@ -1181,9 +1181,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case closeResultMsg:
-		if msg.err != nil {
+		switch {
+		case msg.err != nil:
 			m.setStatus(fmt.Sprintf("Close failed: %v", msg.err), true)
-		} else {
+		case msg.dismissed > 0:
+			m.setStatus(fmt.Sprintf("%d resumable sessions dismissed", msg.dismissed), false)
+		default:
 			m.setStatus("Pane closed", false)
 		}
 		return m, tea.Batch(loadState(m.statePath, m.cfg.Profile.ProjectsDir, m.cfg.Profile.SessionsDir, m.tmuxAvailable, m.selfPaneID, m.codexSessionsDir), pruneDead(m.statePath))
