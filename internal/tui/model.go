@@ -318,7 +318,8 @@ func (m *model) clearStatus() {
 func (m *model) buildTree() {
 	m.treeNodes = nil
 	lastGroup := -1
-	for i, agent := range m.agents {
+	for _, i := range m.agentDisplayOrder() {
+		agent := m.agents[i]
 		// While the Cmd+K palette is open, hide agents that don't match the
 		// query / orphan filter. Skipping before the group-header insert means
 		// empty group headers never appear (a header is only added immediately
@@ -343,6 +344,25 @@ func (m *model) buildTree() {
 			}
 		}
 	}
+}
+
+func (m model) agentDisplayOrder() []int {
+	order := make([]int, len(m.agents))
+	for i := range m.agents {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		left := m.agents[order[i]]
+		right := m.agents[order[j]]
+		if lg, rg := agentGroup(left), agentGroup(right); lg != rg {
+			return lg < rg
+		}
+		if left.Window != right.Window {
+			return left.Window < right.Window
+		}
+		return left.Pane < right.Pane
+	})
+	return order
 }
 
 // agentMatchesSearch reports whether an agent passes the active palette filters:
