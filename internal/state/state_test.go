@@ -1071,20 +1071,6 @@ func TestApplyPinnedStates(t *testing.T) {
 	}
 }
 
-func TestApplyStateArbitration_NormalizesWaitingInputToQuestion(t *testing.T) {
-	sf := domain.StateFile{
-		Agents: map[string]domain.Agent{
-			"agent": {State: "waiting_input"},
-		},
-	}
-
-	ApplyStateArbitration(&sf, "")
-
-	if got := sf.Agents["agent"].State; got != "question" {
-		t.Errorf("State = %q, want question", got)
-	}
-}
-
 func TestArbitrateState(t *testing.T) {
 	tests := []struct {
 		name     string

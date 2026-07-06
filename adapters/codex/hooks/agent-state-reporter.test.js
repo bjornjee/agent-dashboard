@@ -10,7 +10,6 @@ const {
   resolveChangedFiles,
   shouldGuardWrite,
 } = require('./agent-state-reporter');
-const { detectHarness } = require('./agent-state-fast');
 const { detectState } = require('./packages/agent-state/detect');
 
 const BASE_INPUT = {
@@ -66,10 +65,11 @@ describe('buildReportEntry', () => {
         last_message_preview: null,
         permission_mode: 'default',
         files_changed: [],
-        // Stamping harness counts as a change on first sight; pre-populate
-        // the same value detectHarness will derive in this process so the
-        // no-change branch is exercised under both CLI and hook envs.
-        harness: detectHarness(BASE_INPUT),
+        // BASE_INPUT has no PLUGIN_ROOT env and no gpt model → detectHarness
+        // returns "claude". Stamping harness counts as a change on first
+        // sight; we pre-populate existing.harness so the no-change branch
+        // is exercised cleanly.
+        harness: 'claude',
       },
       target: 'main:1.0',
       tmuxPane: '%0',
@@ -461,7 +461,7 @@ describe('SubagentStop writeState guard prevents TOCTOU race', () => {
   it('guardStates aborts write when on-disk state is idle_prompt', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
     const sessionId = 'race-test-session';
-    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
 
     // Simulate: Stop hook already wrote idle_prompt to disk
     writeState(sessionId, { state: 'idle_prompt', target: 'main:2.1' }, tmpDir);
@@ -479,7 +479,7 @@ describe('SubagentStop writeState guard prevents TOCTOU race', () => {
   it('allows write when on-disk state is running (no guard hit)', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-test-'));
     const sessionId = 'race-test-session-2';
-    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+    const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
 
     // On-disk state is running (Stop hook hasn't fired yet)
     writeState(sessionId, { state: 'running', target: 'main:2.1', subagent_count: 1 }, tmpDir);

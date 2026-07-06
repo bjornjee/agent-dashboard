@@ -18,20 +18,8 @@ export const STATE_BORDER = {
   merged: 'var(--text-tertiary)',
 };
 
-export function canonicalState(state) {
-  return state === 'waiting_input' ? 'question' : state;
-}
-
 export function statePriority(state) {
-  state = canonicalState(state);
-  const map = {
-    permission: 1, plan: 1,
-    question: 2, error: 2,
-    running: 3,
-    idle_prompt: 4, done: 4,
-    pr: 5,
-    merged: 6,
-  };
+  const map = { permission: 1, plan: 1, question: 2, error: 2, running: 3, idle_prompt: 4, done: 4, pr: 5, merged: 6 };
   return map[state] || 99;
 }
 
@@ -52,7 +40,7 @@ export function stateGroup(state) {
 // with a PR pin gets state="pr" (renders under PR). Reading raw
 // `state` here matches what the TUI does via `SortedAgents`.
 export function effectiveState(agent) {
-  return canonicalState(agent.state);
+  return agent.state;
 }
 
 // Returns a "PR" tag when the user has pinned a PR on this agent.
@@ -74,7 +62,6 @@ export function prTag(agent) {
 // the aria-label on .status-dot so screen readers announce the meaning
 // of the color signal. Mirrors STATE_BADGE keys.
 export function stateLabel(state) {
-  state = canonicalState(state);
   switch (state) {
     case 'permission':  return 'Needs approval';
     case 'plan':        return 'Plan review';

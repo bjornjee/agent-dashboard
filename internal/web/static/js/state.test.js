@@ -10,10 +10,6 @@ let subagentBadge;
 let questionBadge;
 let prTag;
 let stateLabel;
-let stateGroup;
-let statePriority;
-let STATE_BADGE;
-let STATE_BORDER;
 
 test('load state module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'state.js')).href;
@@ -23,17 +19,11 @@ test('load state module', async () => {
   questionBadge = mod.questionBadge;
   prTag = mod.prTag;
   stateLabel = mod.stateLabel;
-  stateGroup = mod.stateGroup;
-  statePriority = mod.statePriority;
-  STATE_BADGE = mod.STATE_BADGE;
-  STATE_BORDER = mod.STATE_BORDER;
   assert.equal(typeof planBadge, 'function');
   assert.equal(typeof subagentBadge, 'function');
   assert.equal(typeof questionBadge, 'function');
   assert.equal(typeof prTag, 'function');
   assert.equal(typeof stateLabel, 'function');
-  assert.equal(typeof stateGroup, 'function');
-  assert.equal(typeof statePriority, 'function');
 });
 
 // -- planBadge --
@@ -136,14 +126,6 @@ test('stateLabel: maps each state group to a human label for aria', () => {
   assert.equal(stateLabel('done'), 'Done');
   assert.equal(stateLabel('pr'), 'PR open');
   assert.equal(stateLabel('merged'), 'Merged');
-});
-
-test('waiting_input: aliases to question', () => {
-  assert.equal(statePriority('waiting_input'), 2);
-  assert.equal(stateGroup('waiting_input'), 'WAITING');
-  assert.equal(STATE_BADGE.waiting_input, undefined);
-  assert.equal(STATE_BORDER.waiting_input, undefined);
-  assert.equal(stateLabel('waiting_input'), 'Needs reply');
 });
 
 test('stateLabel: returns "" for unknown states', () => {

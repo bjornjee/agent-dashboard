@@ -1,7 +1,7 @@
 // Agent detail view with tabs and stats disclosure.
 import { UI, stripLocalCommandTags } from '../ui.js';
 import { ICONS } from '../icons.js';
-import { canonicalState, effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
+import { effectiveState, stateGroup, prTag, hasOpenPR, planBadge } from '../state.js';
 import { escapeHtml, repoName, duration, formatTime, formatTimeShort, formatCost, formatTokens, renderMarkdown, skeletonLoading } from '../format.js';
 import { get, post, cancelNav, newNavSignal } from '../api.js';
 import { showModal, toast } from '../modal.js';
@@ -41,9 +41,8 @@ const STATE_LABELS = {
 };
 
 function inlineStatusPill(state) {
-  const st = canonicalState(state);
-  const group = stateGroup(st).toLowerCase();
-  const label = STATE_LABELS[st] || (st ? st.charAt(0).toUpperCase() + st.slice(1) : 'Unknown');
+  const group = stateGroup(state).toLowerCase();
+  const label = STATE_LABELS[state] || (state ? state.charAt(0).toUpperCase() + state.slice(1) : 'Unknown');
   return `<span class="ui-status-pill ui-status-pill--${group}"><span class="status-dot status-dot--${group}"></span>${escapeHtml(label)}</span>`;
 }
 

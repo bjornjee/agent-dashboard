@@ -47,7 +47,7 @@ func TestIsWaiting(t *testing.T) {
 			t.Errorf("expected isWaiting(%q) = true", s)
 		}
 	}
-	notWaiting := []string{"permission", "waiting_input", "running", "done", "idle_prompt", "pr", "merged", "unknown"}
+	notWaiting := []string{"permission", "running", "done", "idle_prompt", "pr", "merged", "unknown"}
 	for _, s := range notWaiting {
 		if isWaiting(s) {
 			t.Errorf("expected isWaiting(%q) = false", s)

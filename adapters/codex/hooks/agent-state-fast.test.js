@@ -733,28 +733,6 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update, null);
   });
 
-  it('PostToolUse skips when existing state is waiting_input (stop-state guard)', () => {
-    const existing = {
-      target: 'main:1.0',
-      state: 'waiting_input',
-      current_tool: '',
-    };
-
-    const { changed, update } = buildUpdate({
-      input: {
-        session_id: 'abc123',
-        hook_event_name: 'PostToolUse',
-        tool_name: 'Bash',
-      },
-      existing,
-      target: 'main:1.0',
-      tmuxPane: '%0',
-    });
-
-    assert.equal(changed, false, 'PostToolUse should not overwrite waiting_input');
-    assert.equal(update, null);
-  });
-
   it('PostToolUse skips when existing state is done (stop-state guard)', () => {
     const existing = {
       target: 'main:1.0',

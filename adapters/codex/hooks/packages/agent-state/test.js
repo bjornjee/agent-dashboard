@@ -49,15 +49,6 @@ describe('schema/validateAgent', () => {
       assert.equal(validateAgent({ target: 'a:0.1', session_id: 'abc-123', state }), true);
     }
   });
-
-  it('accepts waiting_input as an alias for question', () => {
-    const result = validateState({
-      agents: {
-        waiting: { target: 'a:0.1', session_id: 'abc-123', state: 'waiting_input' },
-      },
-    });
-    assert.equal(result.agents.waiting.state, 'question');
-  });
 });
 
 describe('schema/validateState', () => {
@@ -87,12 +78,11 @@ describe('schema/sortAgentsByPriority', () => {
       { state: 'error', target: 'd' },
       { state: 'idle_prompt', target: 'e' },
       { state: 'question', target: 'f' },
-      { state: 'waiting_input', target: 'g' },
     ];
     const sorted = sortAgentsByPriority(agents);
     const states = sorted.map(a => a.state);
-    // permission (1) → error+question aliases (2, stable order from input) → running (3) → done+idle_prompt (4, stable order from input)
-    assert.deepEqual(states, ['permission', 'error', 'question', 'question', 'running', 'done', 'idle_prompt']);
+    // permission (1) → error+question (2, stable order from input) → running (3) → done+idle_prompt (4, stable order from input)
+    assert.deepEqual(states, ['permission', 'error', 'question', 'running', 'done', 'idle_prompt']);
   });
 });
 
@@ -398,7 +388,7 @@ describe('writeState guardStates', () => {
     writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'idle_prompt' }, agentsDir);
 
     // Attempt to overwrite idle_prompt → running, guarded by STOP_STATES
-    const guardStates = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
     writeState(sessionId, { state: 'running' }, agentsDir, { guardStates });
 
     const state = readAgentState(sessionId, agentsDir);
@@ -409,7 +399,7 @@ describe('writeState guardStates', () => {
     const sessionId = 'sess-guard-pass';
     writeState(sessionId, { target: 'a:0.1', session_id: sessionId, state: 'running' }, agentsDir);
 
-    const guardStates = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
     writeState(sessionId, { state: 'permission' }, agentsDir, { guardStates });
 
     const state = readAgentState(sessionId, agentsDir);
@@ -436,7 +426,7 @@ describe('writeState guardStates', () => {
       files_changed: ['old'],
     }, agentsDir);
 
-    const guardStates = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
     writeState(sessionId, {
       state: 'running',
       subagent_count: 0,
@@ -497,7 +487,7 @@ describe('writeState report_seq ordering', () => {
       files_changed: ['old'],
     }, agentsDir);
 
-    const guardStates = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+    const guardStates = new Set(['idle_prompt', 'done', 'question', 'plan']);
     writeState(sessionId, {
       state: 'running',
       report_seq: 4999,

@@ -116,9 +116,7 @@ The dashboard maps raw states to display groups, sorted by priority:
 | `pr` | PR | 5 | Pull request created |
 | `merged` | MERGED | 6 | Pull request merged |
 
-Raw adapter state `waiting_input` is accepted as a compatibility alias and normalized to `question`.
-
-**Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active/actionable states (`running`, `permission`, `plan`, `error`) display through normally so the dashboard reflects live work.
+**Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active states (`running`, `permission`) display through normally so the dashboard reflects live work.
 
 **Group headers:** when a priority-1 or priority-2 group is homogeneous, the TUI renders a more specific label — `PLAN` or `PERMISSION` instead of `BLOCKED`, and `QUESTION` or `ERROR` instead of `WAITING`. Mixed groups keep the generic header.
 

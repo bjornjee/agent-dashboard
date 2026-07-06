@@ -44,7 +44,7 @@ function dispatchEffortKeys(tmuxPane, level) {
 // States that PostToolUse must not overwrite. "plan" is included because once
 // ExitPlanMode flips state to "plan" (plan ready for review), a late
 // PostToolUse from a prior tool must not clobber it before the user approves.
-const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'waiting_input', 'plan']);
+const STOP_STATES = new Set(['idle_prompt', 'done', 'question', 'plan']);
 
 /**
  * Detect which coding-agent harness invoked us. Codex CLI 0.130.0 sets
