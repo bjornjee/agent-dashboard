@@ -10,7 +10,7 @@ Question or concern: $ARGUMENTS
 
 ## Instructions
 
-Follow these phases in order. Apply all project rules and conventions that are in your context.
+Follow these phases in order.
 
 This skill is **read-only**. Do not checkout another branch, pull from remotes, fetch, stash, or otherwise mutate repo state — even "preparatory" steps. Investigate the current branch. If you need a fresher base ref than the local `origin/main`, ask before refreshing it.
 
@@ -27,8 +27,6 @@ This skill is **read-only**. Do not checkout another branch, pull from remotes, 
 ---
 
 ### Phase 2: Research
-
-Use read-only tools only. Do not edit, write, or create any files.
 
 1. **Trace code paths** — read the relevant source files, following the call chain from entry point to the area of interest.
 2. **Read tests** — understand what is tested and what is not. Look for edge cases and assumptions.

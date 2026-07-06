@@ -38,8 +38,12 @@ Lifecycle hooks run automatically during Claude Code sessions. They write agent 
 | `codex-delegation-gate.js` | Before Codex delegation | Enforces delegation rules for skills |
 | `codex-write-gate.js` | Before Codex writes | Ensures Codex uses `--write` flag in worktrees |
 | `pr-detect.js` | Before PR actions | Detects existing PRs for the branch |
+| `pr-skill-detect.js` | Every user prompt | Detects `/agent-dashboard:pr` invocations and pins agent state to `pr` |
+| `pr-skill-gate.js` | Before `gh pr create` | Blocks direct PR creation outside the `pr` skill |
 | `test-gate.js` | Before merge | Blocks merge if tests fail |
 | `warn-destructive.js` | Before destructive git ops | Warns about force pushes, resets, etc. |
+
+Two more scripts ship alongside the hooks: `claim-worktree.js`, a utility skills run to claim a freshly created worktree for the current pane, and `effort-config.js`, a shared module that reads the `[effort]` settings for `agent-state-fast.js`.
 
 #### Skills
 
@@ -52,8 +56,11 @@ Workflow skills are prompted routines that guide agents through specific tasks:
 | `chore` | Non-code changes (docs, config, CI) |
 | `refactor` | Code restructuring with test preservation |
 | `investigate` | Research and analysis without code changes |
+| `implement` | Execute an approved plan phase-by-phase with context isolation |
 | `pr` | PR review and iteration |
 | `rca` | Root cause analysis for incidents |
+
+Skills for both adapters are generated from a single source tree, `adapters/skills-src/`, via `make gen-skills` — the per-adapter copies under `adapters/claude-code/skills/` and `adapters/codex/skills/` are build outputs and never hand-edited.
 
 #### Agents
 
@@ -77,6 +84,12 @@ The Codex adapter lives in `adapters/codex/` and consists of three plugin-facing
 
 The `adapters/codex/hooks/` directory holds the same hook bundle the plugin ships to Codex when installed via `codex plugin marketplace add bjornjee/agent-dashboard`.
 
+Codex-specific behavior:
+
+- **Workflow skills are available for Codex sessions.** The dashboard skills use Codex-native commands where the harness differs, including `$agent-dashboard:implement` and `$agent-dashboard:rca`.
+- **Plan mode is signaled, not gated.** Codex's `/plan` slash command flips the hook payload's `permission_mode` to `"plan"`. The dashboard captures this as a field but doesn't flip state to `plan` — Codex has no `ExitPlanMode` equivalent, so there's no discrete "plan ready" review moment.
+- **Subagent state comes from Codex lifecycle hooks.** Codex sessions use `spawn_agent`/`wait_agent`; the dashboard tracks those sessions through the Codex hook events emitted by the plugin.
+
 ## Agent state schema
 
 Each agent's state is stored as a JSON file conforming to the schema at `schema/agent-state.schema.json`. The dashboard reads these files to populate its views. Key fields include:
@@ -86,6 +99,26 @@ Each agent's state is stored as a JSON file conforming to the schema at `schema/
 - **`branch`** — git branch name
 - **`conversation`** — path to the JSONL conversation log
 - **`subagents`** — nested agent references
+
+### Agent state model
+
+The dashboard maps raw states to display groups, sorted by priority:
+
+| Raw state | Display group | Priority | Description |
+|:----------|:-------------|:---------|:------------|
+| `permission` | BLOCKED | 1 | Waiting for tool permission |
+| `plan` | BLOCKED | 1 | Plan review pending |
+| `question` | WAITING | 2 | Agent asked a question |
+| `error` | WAITING | 2 | Agent encountered an error |
+| `running` | RUNNING | 3 | Actively executing |
+| `idle_prompt` | REVIEW | 4 | Idle, waiting for user input |
+| `done` | REVIEW | 4 | Session completed |
+| `pr` | PR | 5 | Pull request created |
+| `merged` | MERGED | 6 | Pull request merged |
+
+**Pinned states:** `pr` and `merged` are sticky — once set, idle states (`idle_prompt`, `done`, `question`) restore back to the pinned value. Active states (`running`, `permission`) display through normally so the dashboard reflects live work.
+
+**Group headers:** when a priority-1 or priority-2 group is homogeneous, the TUI renders a more specific label — `PLAN` or `PERMISSION` instead of `BLOCKED`, and `QUESTION` or `ERROR` instead of `WAITING`. Mixed groups keep the generic header.
 
 ## Installing the Claude Code adapter
 

@@ -84,7 +84,7 @@ func PhantomFilter(m tea.Model, msg tea.Msg) tea.Msg {
 	// Confirmation modes: swallow confirming keys during cooldown.
 	if !mdl.confirmEnteredAt.IsZero() && time.Since(mdl.confirmEnteredAt) < confirmCooldown {
 		switch mdl.mode {
-		case modeConfirmClose, modeConfirmMerge, modeConfirmCleanup, modeConfirmDeleteDiagram:
+		case modeConfirmClose, modeConfirmDismissAll, modeConfirmMerge, modeConfirmCleanup, modeConfirmDeleteDiagram:
 			if keyStr == "y" {
 				return nil
 			}
@@ -684,6 +684,20 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Confirm dismiss-all-resumable mode
+	if m.mode == modeConfirmDismissAll {
+		switch key {
+		case "y":
+			m.mode = modeNormal
+			return m, dismissAllResumable(m.statePath, m.agents)
+		case "n", "esc":
+			m.mode = modeNormal
+			m.clearStatus()
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Confirm merge mode
 	if m.mode == modeConfirmMerge {
 		switch key {
@@ -882,7 +896,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			resume := false
 			if agent != nil {
 				selected = *agent
-				resume = m.isOrphan(selected)
+				resume = selected.Resumable
 			}
 			m.closeSearch()
 			if agent == nil {
@@ -1161,14 +1175,35 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.loadSelectionData()
 			}
 		} else if agent := m.selectedAgent(); agent != nil && m.tmuxAvailable {
-			// Parent agent: confirm close
+			// Parent agent: confirm close. A resumable orphan has no pane to
+			// kill — x just dismisses its state file (closePane handles the
+			// dead-pane path), so say that instead of "close pane".
 			m.mode = modeConfirmClose
 			m.confirmEnteredAt = time.Now()
 			m.confirmPaneID = agent.TmuxPaneID
 			m.confirmSessionID = agent.SessionID
-			m.statusMsg = fmt.Sprintf("Close pane %s? (y/n)", agent.Target)
+			if agent.Resumable {
+				m.statusMsg = fmt.Sprintf("Dismiss resumable session %s? (y/n)", agentRepo(*agent))
+			} else {
+				m.statusMsg = fmt.Sprintf("Close pane %s? (y/n)", agent.Target)
+			}
 			m.statusMsgTick = -1 // pinned: don't auto-clear
 			return m, nil
+		} else if m.selectedGroupHeader() == domain.ResumablePriority {
+			// x on the RESUMABLE group header: dismiss every survivor at once.
+			n := 0
+			for _, a := range m.agents {
+				if a.Resumable {
+					n++
+				}
+			}
+			if n > 0 {
+				m.mode = modeConfirmDismissAll
+				m.confirmEnteredAt = time.Now()
+				m.statusMsg = fmt.Sprintf("Dismiss all %d resumable sessions? (y/n)", n)
+				m.statusMsgTick = -1 // pinned: don't auto-clear
+				return m, nil
+			}
 		}
 	case "shift+down":
 		// Jump to next parent agent (skip subagents)

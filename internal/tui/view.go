@@ -516,7 +516,15 @@ func (m model) agentListContentWithLine() (string, int) {
 		repoStyled := agentRepoStyled(agent)
 
 		duration := ""
-		if effState == "running" {
+		if agent.Resumable {
+			// Dead session: age since last activity, never a live runtime
+			// timer, and a dim ⏏ icon regardless of the stale state field.
+			si = stateIcon{"⏏", resumableColor}
+			if age := state.FormatDuration(agent.UpdatedAt); age != "" {
+				duration = age + " ago"
+			}
+			repoStyled = lipgloss.NewStyle().Foreground(resumableColor).Render(repo)
+		} else if effState == "running" {
 			duration = state.FormatDuration(agent.UpdatedAt)
 		}
 
@@ -565,7 +573,11 @@ func (m model) agentListContentWithLine() (string, int) {
 			if maxBranch > 0 && len([]rune(branchStr)) > maxBranch {
 				branchStr = string([]rune(branchStr)[:maxBranch-1]) + "…"
 			}
-			branchLine := branchIndent + styledBranch(branchStr)
+			styled := styledBranch(branchStr)
+			if agent.Resumable {
+				styled = lipgloss.NewStyle().Foreground(resumableColor).Render(branchStr)
+			}
+			branchLine := branchIndent + styled
 			if nodeIdx == m.selected {
 				branchLine = withAccentBar(branchLine, agent.Harness)
 				branchLine = highlightLine(branchLine, m.leftWidth)

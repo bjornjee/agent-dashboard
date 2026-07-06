@@ -20,8 +20,8 @@ func TestSupportsHarness(t *testing.T) {
 		{"investigate on codex", "investigate", "codex", true},
 		{"chore on codex", "chore", "codex", true},
 		{"pr on codex", "pr", "codex", true},
-		{"implement on codex", "implement", "codex", false},
-		{"rca on codex", "rca", "codex", false},
+		{"implement on codex", "implement", "codex", true},
+		{"rca on codex", "rca", "codex", true},
 
 		{"known skill on claude", "feature", "claude", true},
 		{"unknown skill on claude", "custom", "claude", true},

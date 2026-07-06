@@ -110,7 +110,7 @@ Rules:
 1. Follow the phase's Verification profile using active AGENTS.md/core instructions when present and the included verification-profile glossary as the standalone fallback. Execute the named proof command, avoid implementation-only tests, and use full `make test` only for Full phases or when the phase risk cannot be bounded.
 2. Implement ONLY this phase. Do not touch files outside this phase's declared scope.
 3. After the profile proof passes, commit with:
-     git commit -m "feat({phase-id-kebab}): <one-line description>"
+     git commit -m "feat: {phase-id-kebab} <one-line description>"
 4. Do NOT modify the plan file. Do NOT update checkboxes — the orchestrator owns that.
 5. If the phase is ambiguous or blocked, STOP and report a question instead of guessing.
 6. If this phase touches UI automation, apply the provided UI automation policy and use only the worktree-local port/base URL/profile/output paths.
@@ -162,9 +162,12 @@ The plan file's checkbox state is the source of truth — the orchestrator's in-
 
 ## Red Flags — STOP
 
-Failure modes the MUST block doesn't already cover:
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase:
 
-- "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially; a later phase may depend on an earlier one's commit.
-- "The subagent's proof command failed but the diff looks fine, I'll move on" → halt and surface to the user.
+- "I'll dispatch all phases in parallel to save time" → Phase 2 step 6 violation. Phases run sequentially — a later phase may depend on an earlier one's commit.
+- "The subagent's proof command failed but the diff looks fine, I'll move on" → Phase 2 step 7 violation. Halt and surface to the user.
+- "Subagent didn't commit, but the changes are there — I'll mark it done" → Phase 2 step 7 violation. No commit means no phase. Retry or abort.
+- "I'll fix a typo in the plan body while I'm flipping the checkbox" → Phase 2 step 8 violation. Checkbox only. Plan-content changes need a separate decision.
+- "No `## Phases` block, but I can infer the phases from the prose" → Phase 2 step 2 violation. Halt and point the user back to `$agent-dashboard:feature` for inline implementation.
+- "`.feature-plan-path` is missing, but the latest plan is probably right" → Phase 1 step 3 violation. Show recent plans and let the user confirm.
 - "I'll just `gh pr create` to skip Phase 4" → blocked by the `pr-skill-gate` hook. Use `$agent-dashboard:pr`.
-- "No `## Phases` block, but I can infer the phases from the prose" → halt and point the user back to `$agent-dashboard:feature` for inline implementation.

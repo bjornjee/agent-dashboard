@@ -1,9 +1,9 @@
 {
   "name": "agent-dashboard-adapter",
-  "version": "0.34.1",
+  "version": "0.35.0",
   "private": true,
   "description": "Claude Code adapter for agent-dashboard",
   "scripts": {
-    "test": "node --test packages/*/test.js scripts/hooks/*.test.js scripts/*.test.js"
+    "test": "CLAUDE_PLUGIN_ROOT='' node --test packages/*/test.js scripts/hooks/*.test.js scripts/*.test.js"
   }
 }

@@ -117,10 +117,12 @@ func (s *Server) readAgentState() []domain.Agent {
 		sf := state.ReadState(s.cfg.Profile.StateDir)
 		var paneCwds map[string]string
 		var livePanes map[string]bool
+		var serverPID string
 		if tmux.TmuxIsAvailable() {
-			targets, cwds := tmux.TmuxListPanes()
+			targets, cwds, pid := tmux.TmuxListPanes()
 			state.ResolveAgentTargets(&sf, targets)
 			paneCwds = cwds
+			serverPID = pid
 			// targets is keyed by pane ID (%N) — the live-pane set used to flag
 			// restart-survivor (resumable) orphans below. Leave livePanes nil
 			// when targets is nil (tmux enumeration failed) so a transient
@@ -140,18 +142,14 @@ func (s *Server) readAgentState() []domain.Agent {
 		state.ResolveAgentBranches(&sf, paneCwds, s.cfg.Profile.StateDir)
 		state.GCSpawnPins(s.cfg.Profile.StateDir, 10*time.Minute)
 		state.ApplyStateArbitration(&sf, s.codexSessionsRootDir)
+		// Flag restart-survivor orphans before sorting so the frontend Cmd+K
+		// palette can mark and resume them and they sort into the RESUMABLE
+		// group, mirroring the TUI's resolveAgents.
+		state.FlagResumable(&sf, livePanes, serverPID, time.Now())
 		agents := conversation.TopLevelAgents(
 			state.SortedAgents(sf, ""),
 			conversation.Roots{CodexSessionsRoot: s.codexSessionsRootDir},
 		)
-		// Flag restart-survivor orphans (dead pane, active session) so the
-		// frontend Cmd+K palette can mark and resume them. Only meaningful when
-		// tmux is available to tell live panes from dead ones.
-		if livePanes != nil {
-			for i := range agents {
-				agents[i].Resumable = state.IsResumableOrphan(agents[i], livePanes)
-			}
-		}
 		return s.applyTrustFlags(agents), nil
 	})
 	agents, _ := v.([]domain.Agent)

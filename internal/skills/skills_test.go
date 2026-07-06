@@ -104,9 +104,8 @@ func TestBuildSkillList_Empty(t *testing.T) {
 }
 
 // Codex agents must surface skills installed under the codex plugin
-// cache (~/.codex/plugins/cache), and must hide skills that the dashboard
-// blocks for codex via SupportsHarness — implement and rca rely on
-// claude-only orchestration primitives.
+// cache (~/.codex/plugins/cache), subject to the dashboard's codex
+// blocklist via SupportsHarness.
 func TestDiscoverSkillsForHarness_CodexScansCodexCache(t *testing.T) {
 	claudeCache := t.TempDir()
 	codexCache := t.TempDir()
@@ -117,8 +116,7 @@ func TestDiscoverSkillsForHarness_CodexScansCodexCache(t *testing.T) {
 	}
 
 	got := DiscoverSkillsForHarness(claudeCache, codexCache, "codex")
-	// implement + rca are blocked for codex; pr/feature/fix must remain.
-	want := []string{"feature", "fix", "pr"}
+	want := []string{"feature", "fix", "implement", "pr", "rca"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -139,7 +137,6 @@ func TestDiscoverSkillsForHarness_ClaudeUsesClaudeCache(t *testing.T) {
 	writeSkill(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.32.0", "skills"), "codex-only-skill")
 
 	got := DiscoverSkillsForHarness(claudeCache, codexCache, "claude")
-	// implement stays — only codex blocks it.
 	want := []string{"feature", "fix", "implement"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)

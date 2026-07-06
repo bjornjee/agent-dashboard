@@ -19,23 +19,7 @@ If the refactor touches browser UI, Playwright, dev-server ports, screenshots, o
 
 ### Phase 1: Setup
 
-1. Derive a short kebab-case name from the refactoring goal.
-2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
-3. Switch to main: `git checkout main`
-4. Pull latest: `git pull origin main`
-5. Create branch `refactor/<name>` and worktree `../worktrees/<app>/<name>` from main:
-   `mkdir -p ../worktrees/<app> && git worktree add ../worktrees/<app>/<name> -b refactor/<name> main`
-   - If the branch already exists, ask the user whether to resume it or choose a new name.
-6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
-   - Find all env files recursively: `find . -name '.env*' -not -name '.env-setup-*' -not -path './.git/*' -not -path './node_modules/*'`
-   - For each file found, recreate its directory structure in the worktree and copy it. For example:
-     - `./.env` → `../worktrees/<app>/<name>/.env`
-     - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
-   - Use: `for f in $(find . -name '.env*' -not -name '.env-setup-*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
-   - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-   - **Important:** All Bash tool calls in this step must set `dangerouslyDisableSandbox: true` because they write outside the project root.
-7. cd into the worktree, run `node "$CLAUDE_PLUGIN_ROOT/scripts/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
-8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+Follow `../_shared/worktree-setup.md` with branch prefix `refactor`.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -45,24 +29,7 @@ If the refactor touches browser UI, Playwright, dev-server ports, screenshots, o
 
 Start two tracks in parallel:
 
-**Background — Environment setup:** First check for a reusable environment: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse — the setup from a prior run in this worktree is current. Otherwise, launch a background agent (`run_in_background: true`) to set up the dev environment. The agent must:
-
-1. Auto-detect project type from project files (highest match wins):
-
-   | Priority | Signal | Type |
-   |----------|--------|------|
-   | 1 | `react-native` in package.json dependencies | Mobile |
-   | 2 | `next`, `vite`, or `webpack` in package.json | Web |
-   | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
-   | 4 | `go.mod` | Go |
-   | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
-
-   Ask the user only if no signal matches.
-
-2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed. For browser UI refactors, allocate worktree-local Playwright/server/profile/output resources per `../_shared/ui-automation.md`.
-3. Symlink large source-content directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying. NEVER symlink build outputs or per-project caches (`.next/`, `dist/`, `build/`, `out/`, `target/`, `.turbo/`, `.cache/`, `.parcel-cache/`, `.vite/`, `__pycache__/`, `.pytest_cache/`, `.gradle/`, `.venv/`, `node_modules/`) — they bake absolute paths and corrupt across worktrees, and must be regenerated per-worktree.
-4. On success, write a sentinel file: `touch .env-setup-done`
-   On failure, write the error: `echo "<error message>" > .env-setup-failed`
+**Background — Environment setup:** First check for a reusable environment: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse — the setup from a prior run in this worktree is current. Otherwise, launch a background agent (`run_in_background: true`) to set up the dev environment per `../_shared/env-setup.md`.
 
 **Foreground — Scoping:**
 

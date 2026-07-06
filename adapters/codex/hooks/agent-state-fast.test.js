@@ -389,6 +389,65 @@ describe('fast hook state updates (per-agent files)', () => {
     assert.equal(update.cwd, undefined, 'fast hook should not set cwd');
   });
 
+  it('buildUpdate stamps tmux_server_pid so orphan resume is event-scoped', () => {
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        cwd: '/tmp/nonexistent-test-path-xyz',
+      },
+      existing: {},
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      serverPid: '12345',
+    });
+
+    assert.equal(changed, true);
+    assert.equal(update.tmux_server_pid, '12345');
+  });
+
+  it('buildUpdate re-stamps when the stored server PID is stale (tmux restarted)', () => {
+    const existing = {
+      target: 'main:1.0',
+      state: 'running',
+      current_tool: 'Bash',
+      tmux_server_pid: '11111',
+    };
+
+    const { changed, update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        cwd: '/tmp/nonexistent-test-path-xyz',
+      },
+      existing,
+      target: 'main:1.0',
+      tmuxPane: '%0',
+      serverPid: '22222',
+    });
+
+    assert.equal(changed, true, 'stale server pid alone must trigger a write');
+    assert.equal(update.tmux_server_pid, '22222');
+  });
+
+  it('buildUpdate writes empty tmux_server_pid when the PID is unknown', () => {
+    const { update } = buildUpdate({
+      input: {
+        session_id: 'abc123',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        cwd: '/tmp/nonexistent-test-path-xyz',
+      },
+      existing: {},
+      target: 'main:1.0',
+      tmuxPane: '%0',
+    });
+
+    assert.equal(update.tmux_server_pid, '');
+  });
+
   it('allows transition out of "pr" state when not pinned', () => {
     // Unpinned "pr" state (e.g. from an older hook version) is overridable
     // by subsequent tool activity.

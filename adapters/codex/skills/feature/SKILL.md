@@ -34,32 +34,7 @@ For Verification profiles, apply `../_shared/verification-profiles.md`. Active A
 
 ### Phase 1: Setup
 
-1. Derive a short kebab-case name from the description
-2. Derive the app name from the git repo: `basename $(git rev-parse --show-toplevel)`
-3. Switch to main: `git checkout main`
-4. Pull latest: `git pull origin main`
-5. Create branch `feat/<name>` and worktree `../worktrees/<app>/<name>` from main. Run **two separate `exec_command` tool calls** — do not chain them with `&&`. The dashboard's PostToolUse hook only stamps `worktree_cwd` + `branch` when the command starts with `git worktree add`; a compound `mkdir … && git worktree add …` slips past the regex and leaves the dashboard unable to detect dir or branch.
-
-   First, ensure the parent directory exists:
-   ```
-   mkdir -p ../worktrees/<app>
-   ```
-   Then run `git worktree add -b feat/<name> ../worktrees/<app>/<name> main` as its own `exec_command` tool call:
-   ```
-   git worktree add -b feat/<name> ../worktrees/<app>/<name> main
-   ```
-   - If the branch already exists, ask the user whether to resume it or choose a new name.
-6. **From the source repo root** (before cd'ing), copy environment files into the worktree **preserving their exact relative path from the project root**:
-   - Find all env files recursively: `find . -name '.env*' -not -name '.env-setup-*' -not -path './.git/*' -not -path './node_modules/*'`
-   - For each file found, recreate its directory structure in the worktree and copy it. For example:
-     - `./. env` → `../worktrees/<app>/<name>/.env`
-     - `./services/api/.env.local` → `../worktrees/<app>/<name>/services/api/.env.local`
-     - `./infra/.env.production` → `../worktrees/<app>/<name>/infra/.env.production`
-   - Use: `for f in $(find . -name '.env*' -not -name '.env-setup-*' -not -path './.git/*' -not -path './node_modules/*'); do mkdir -p "../worktrees/<app>/<name>/$(dirname "$f")" && cp "$f" "../worktrees/<app>/<name>/$f"; done`
-   - If `.claude/settings.local.json` exists: `mkdir -p ../worktrees/<app>/<name>/.claude && cp .claude/settings.local.json ../worktrees/<app>/<name>/.claude/`
-   - **Important:** Commands in this step write outside the project root. Use Codex escalation (`sandbox_permissions: "require_escalated"`) with a concise justification; do not try to route around approvals.
-7. cd into the worktree, run `node "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(ls -dt "${CODEX_HOME:-$HOME/.codex}/plugins/cache/agent-dashboard/agent-dashboard"/* 2>/dev/null | head -1)}}/hooks/claim-worktree.js"`, and confirm with `pwd` and `git branch --show-current`
-8. Verify: compare env files between source and worktree. Run the same `find` command in both directories and diff the file lists. If any files are missing in the worktree, **halt and report failure**. If the source repo had no `.env*` files, note that explicitly.
+Follow `../_shared/worktree-setup.md` with branch prefix `feat`.
 
 **Gate:** Working directory is the new worktree on the correct branch, based on latest main. If `.env*` files existed in the source repo, they are all present in the worktree.
 
@@ -149,24 +124,7 @@ Phase order: Plan Mode first, then research, then interview, then submit. Plan M
       echo "<absolute-plan-path>" > .feature-plan-path
       ```
 
-   2. **Kick off environment setup as a background `exec_command`** — unless a reusable environment exists: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse. Otherwise the setup task runs in parallel with the dispatch probe and any pre-Phase-3 work so its install time is amortised. It must:
-
-      1. Auto-detect project type from project files (highest match wins):
-
-         | Priority | Signal | Type |
-         |----------|--------|------|
-         | 1 | `react-native` in package.json dependencies | Mobile |
-         | 2 | `next`, `vite`, or `webpack` in package.json | Web |
-         | 3 | `requirements.txt`, `pyproject.toml`, or `setup.py` | Python |
-         | 4 | `go.mod` | Go |
-         | 5 | `Dockerfile` or `docker-compose.yml` | Containerized |
-
-         Ask the user only if no signal matches.
-
-      2. Install dependencies appropriate for the project type (e.g. `pip install`, `npm install`, `go mod download`). Configure ports, create emulators/simulators as needed. For browser UI work, allocate worktree-local Playwright/server/profile/output resources per `../_shared/ui-automation.md`.
-      3. Symlink large source-content directories (`data/`, `datasets/`, `evals/`, `models/`, `artifacts/`) from the source repo rather than copying. NEVER symlink build outputs or per-project caches (`.next/`, `dist/`, `build/`, `out/`, `target/`, `.turbo/`, `.cache/`, `.parcel-cache/`, `.vite/`, `__pycache__/`, `.pytest_cache/`, `.gradle/`, `.venv/`, `node_modules/`) — they bake absolute paths and corrupt across worktrees, and must be regenerated per-worktree.
-      4. On success, write a sentinel file: `touch .env-setup-done`
-         On failure, write the error: `echo "<error message>" > .env-setup-failed`
+   2. **Kick off environment setup as a background `exec_command`** — unless a reusable environment exists: if `.env-setup-done` exists in the worktree root AND every dependency manifest/lockfile present (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `go.mod`, `go.sum`) is older than the sentinel (`[ "$f" -ot .env-setup-done ]`), skip the launch and note the reuse. Otherwise the setup task runs in parallel with the dispatch probe and any pre-Phase-3 work so its install time is amortised. It must follow `../_shared/env-setup.md`.
 
    3. **Count the phases.** Read the plan; count `- [ ]` / `- [x]` lines under `## Phases`. If there's no `## Phases` block or the count is `< 6`, skip step 4 below and start Phase 3 inline.
 
@@ -252,11 +210,12 @@ Triggered when the user indicates the feature has been merged upstream.
 
 ## Red Flags — STOP
 
-Failure modes the MUST block doesn't already cover. If you catch yourself saying any of these, pause:
+If you catch yourself saying or thinking any of these, pause and re-read the relevant phase. (Hooks block the common paths for commits on main and direct `gh pr create`, so those get no self-check bullets here.)
 
 - "I'll just sketch the implementation first" → Phase 3 verification violation. Pick a profile, then follow it.
-- "The plan is obvious, let me start" → Phase 2 gate violation. Wait for `<proposed_plan>` approval.
+- "The plan is obvious, let me start" → Phase 2 gate violation. Wait for approval.
 - "Tests pass on my reading of the code" → no executable proof. Run the profile's command, or state why none applies.
-- "I'll just call `gh pr create` directly" → Phase 5 violation. The `pr-skill-gate` hook will block it; use `$agent-dashboard:pr`.
-- "I'll bundle this unrelated cleanup into the feature commit" → split it into a separate PR.
-- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline implementation for a reason; don't second-guess.
+- "I'll skip the worktree, it's a small change" → wrong skill. Use a feature branch directly without invoking this skill.
+- "I'll bundle this unrelated cleanup into the feature commit" → split it. Open a separate PR.
+- "User picked hand-off, but I'm already here — I'll just do Phase 3 myself" → exit cleanly. They opted out of inline implementation for a reason (context). Don't second-guess.
+- "I'll write `.feature-plan-path` later, after I start Phase 3" → write it now. `$agent-dashboard:implement` and resume can't find the plan without it.

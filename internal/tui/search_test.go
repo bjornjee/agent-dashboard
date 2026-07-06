@@ -12,10 +12,11 @@ func newSearchModel(t *testing.T) model {
 	t.Helper()
 	m := NewModel(testConfig(t.TempDir()), nil)
 	m.tmuxAvailable = true
-	m.livePanes = map[string]bool{"%1": true}
+	// Resumable arrives pre-flagged from resolveAgents (state.FlagResumable);
+	// the model consumes the flag, it never re-derives orphan status.
 	m.agents = []domain.Agent{
 		{Target: "main:1.0", SessionID: "live-1", State: "running", TmuxPaneID: "%1", Cwd: "/repo/alpha", Branch: "main"},
-		{Target: "main:2.0", SessionID: "orph-1", State: "running", TmuxPaneID: "%9", Cwd: "/repo/beta", Branch: "feat/login"},
+		{Target: "main:2.0", SessionID: "orph-1", State: "running", TmuxPaneID: "%9", Cwd: "/repo/beta", Branch: "feat/login", Resumable: true},
 	}
 	m.buildTree()
 	return m
@@ -29,16 +30,6 @@ func visibleAgentIDs(m model) []string {
 		}
 	}
 	return ids
-}
-
-func TestTUIIsOrphan(t *testing.T) {
-	m := newSearchModel(t)
-	if !m.isOrphan(m.agents[1]) {
-		t.Error("dead-pane running agent should be an orphan")
-	}
-	if m.isOrphan(m.agents[0]) {
-		t.Error("live-pane agent should not be an orphan")
-	}
 }
 
 func TestSearchSlashOpensMode(t *testing.T) {

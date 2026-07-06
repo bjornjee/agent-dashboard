@@ -56,7 +56,7 @@ describe('codex plugin package', () => {
       .map(entry => entry.name)
       .sort();
 
-    assert.deepEqual(adapters, ['claude-code', 'codex']);
+    assert.deepEqual(adapters, ['claude-code', 'codex', 'skills-src']);
   });
 
   it('publishes a Codex marketplace entry that points at the Codex adapter', () => {
@@ -185,7 +185,7 @@ describe('codex plugin package', () => {
     assert.match(feature, /\/plan\b/);
     assert.match(feature, /<proposed_plan>[\s\S]*<\/proposed_plan>/);
     assert.match(feature, /\brequest_user_input\b/);
-    assert.match(feature, /\brequire_escalated\b/);
+    assert.match(readShared('codex', 'worktree-setup'), /\brequire_escalated\b/);
     assert.match(feature, /\.feature-plan-path/);
     assert.match(implement, /\bspawn_agent\b/);
     assert.match(implement, /\bworker\b/);
@@ -244,9 +244,11 @@ describe('codex plugin package', () => {
 
       for (const name of ['feature', 'fix', 'refactor']) {
         const text = readSkill(name);
-        assert.match(text, /-not -name '\.env-setup-\*'/, `${adapter} ${name} env copy must exclude setup sentinels`);
         assert.match(text, /older than the sentinel/, `${adapter} ${name} must skip env setup when a current sentinel exists`);
       }
+
+      const worktreeSetup = readShared(adapter, 'worktree-setup');
+      assert.match(worktreeSetup, /-not -name '\.env-setup-done' -not -name '\.env-setup-failed'/, `${adapter} worktree-setup env copy must exclude setup sentinels`);
     }
 
     const claudePr = readClaudeSkill('pr');
@@ -319,42 +321,49 @@ describe('codex plugin package', () => {
     for (const [skillName, branchPrefix] of Object.entries(branchPrefixes)) {
       const text = fs.readFileSync(path.join(REPO, `adapters/codex/skills/${skillName}/SKILL.md`), 'utf8');
 
-      assert.doesNotMatch(
-        text,
-        /mkdir -p[^\n]+&&\s*git worktree add/,
-        `${skillName} must not hide git worktree add behind a chained shell command`,
-      );
       assert.match(
         text,
-        /git worktree add[^\n]+as its own `exec_command` tool call/,
-        `${skillName} must require standalone git worktree add so hooks can detect the worktree`,
-      );
-      assert.match(
-        text,
-        /claim-worktree\.js/,
-        `${skillName} must explicitly run the JS claim script after entering the worktree`,
-      );
-      assert.doesNotMatch(
-        text,
-        /\$HOME\/\.codex\/hooks/,
-        `${skillName} must not depend on a global ~/.codex/hooks install`,
-      );
-      assert.match(
-        text,
-        /\$\{PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT:-/,
-        `${skillName} must prefer plugin root env vars before cache fallback`,
-      );
-      assert.match(
-        text,
-        /plugins\/cache\/agent-dashboard\/agent-dashboard/,
-        `${skillName} must fall back to the standalone Codex plugin cache`,
-      );
-      assert.match(
-        text,
-        new RegExp(`git worktree add -b ${branchPrefix}/<name> \\.\\./worktrees/<app>/<name> main`),
-        `${skillName} must put -b before the worktree path so hooks can observe the branch`,
+        new RegExp(`Follow \`\\.\\./_shared/worktree-setup\\.md\` with branch prefix \`${branchPrefix}\``),
+        `${skillName} must delegate worktree setup to the shared doc with its branch prefix`,
       );
     }
+
+    const setup = readShared('codex', 'worktree-setup');
+    assert.doesNotMatch(
+      setup,
+      /mkdir -p[^\n]+&&\s*git worktree add/,
+      'worktree setup must not hide git worktree add behind a chained shell command',
+    );
+    assert.match(
+      setup,
+      /git worktree add[^\n]+as its own `exec_command` tool call/,
+      'worktree setup must require standalone git worktree add so hooks can detect the worktree',
+    );
+    assert.match(
+      setup,
+      /claim-worktree\.js/,
+      'worktree setup must explicitly run the JS claim script after entering the worktree',
+    );
+    assert.doesNotMatch(
+      setup,
+      /\$HOME\/\.codex\/hooks/,
+      'worktree setup must not depend on a global ~/.codex/hooks install',
+    );
+    assert.match(
+      setup,
+      /\$\{PLUGIN_ROOT:-\$\{CLAUDE_PLUGIN_ROOT:-/,
+      'worktree setup must prefer plugin root env vars before cache fallback',
+    );
+    assert.match(
+      setup,
+      /plugins\/cache\/agent-dashboard\/agent-dashboard/,
+      'worktree setup must fall back to the standalone Codex plugin cache',
+    );
+    assert.match(
+      setup,
+      /git worktree add -b <prefix>\/<name> \.\.\/worktrees\/<app>\/<name> main/,
+      'worktree setup must put -b before the worktree path so hooks can observe the branch',
+    );
   });
 
   it('keeps read-only Codex skills free of mutating git setup commands', () => {

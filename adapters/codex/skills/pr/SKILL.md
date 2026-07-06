@@ -34,11 +34,8 @@ Run in parallel:
 ### Phase 2: Clean up scratch artifacts
 
 Delete transient files left over from implementation, testing, and discovery —
-screenshots, Playwright MCP output, and tmp scratch — before the cleaner pass
+screenshots, Playwright MCP output, and tmp scratch — before the cleanup pass
 inspects the diff. **Untracked only.** Never touch tracked or staged files.
-
-Deletion is destructive and irreversible. This phase **requires explicit user
-confirmation** before any `rm` runs.
 
 1. Identify untracked artifacts. Use `git ls-files --others --exclude-standard`
    for unignored untracked files, and `git ls-files --others --ignored
@@ -67,9 +64,8 @@ confirmation** before any `rm` runs.
    rejected — fail this gate rather than delete.
 
 4. Delete the confirmed paths. For files: `rm -f <path>`. For directories:
-   `rm -rf <path>`. Run from the repo root. **Never** pass `/`, `~`, `.`,
-   `..`, or a glob like `*` to `rm` — only the explicit confirmed paths from
-   step 3.
+   `rm -rf <path>`. Run from the repo root. Never pass `/`, `~`, `.`, `..`,
+   or a glob like `*` to `rm` — only the explicit confirmed paths from step 3.
 
 5. Verify with `git status --porcelain` — none of the deletions should appear,
    because every removed path was untracked. If any tracked file shows as
@@ -82,23 +78,23 @@ unexpected tracked-file deletions.
 
 ---
 
-### Phase 3: Conditional cleaner pass on the branch diff
+### Phase 3: Conditional cleanup pass on the branch diff
 
-Do not launch a cleanup worker by default. First classify the diff from Phase
-1:
+Do not launch the cleanup pass by default. First classify the diff from
+Phase 1:
 
-- **Skip worker:** docs/config-only changes, ≤3 simple files, or a diff that
+- **Skip cleanup:** docs/config-only changes, ≤3 simple files, or a diff that
   has no debug output, unused imports, local duplication, or mechanical churn.
   Do one inline scan of the changed-file list and continue.
-- **Use worker:** broad diffs, mixed-language changes, generated/manual churn,
+- **Run cleanup:** broad diffs, mixed-language changes, generated/manual churn,
   obvious debug leftovers, or user-requested cleanup.
 
-1. If the worker is warranted, spawn a Codex `worker` subagent scoped to the
+1. If cleanup is warranted, spawn a Codex `worker` subagent scoped to the
    changed-file list from Phase 1. Pass file paths explicitly — do not let it
    roam the whole repo. Do not block on it yet: while it runs, do the
    file-disjoint work yourself — the test-prune identification (steps 4–6;
    the worker never touches tests) and Phase 4's `make -n fmt` existence
-   check — then call `wait_agent` before committing. If the worker is not
+   check — then call `wait_agent` before committing. If cleanup is not
    warranted, skip to step 4.
 
    Inline brief for the worker (pass as the worker's prompt):
@@ -127,7 +123,8 @@ Do not launch a cleanup worker by default. First classify the diff from Phase
 2. Call `wait_agent` only after finishing the overlap work from step 1 (steps 4–6 and the fmt check). When it returns and the worker edited files, commit them: `git add -u && git commit -m "chore: ai-fmt"`. No proof run here — Phase 5 gates it.
 3. If the worker made no changes, skip the commit.
 
-**Prune implementation-only tests.** The cleaner above never touches tests — this step does. Do it inline yourself; do not spawn a subagent.
+**Then prune implementation-only tests.** The cleanup pass above never touches tests — this step does.
+Do it inline yourself; do not spawn a subagent.
 
 4. From the Phase 1 changed-file list, take only the test files this branch ADDED or MODIFIED — identify tests by their role, not a fixed extension list. Never consider pre-existing tests.
 5. Identify (do not yet edit) cases that exist only to scaffold the implementation and add no regression value: trivial assertions (constructor returns non-nil, plain getters/setters, framework behavior), placeholder / `assert true` stubs, and cases fully subsumed or duplicated by another retained test. **NEVER** remove a test that is the sole coverage of a behavior, branch, edge case, error path, or regression — if unsure the coverage is unique, keep it.
@@ -135,7 +132,7 @@ Do not launch a cleanup worker by default. First classify the diff from Phase
 7. After the `chore: ai-fmt` commit lands (or immediately, if no worker ran), apply the removals and commit them on their own: `git add -A && git commit -m "test: remove implementation-only tests"`. No proof run here — Phase 5 gates it. Applying edits only after that commit keeps the two change sets from staging into one another.
 8. If nothing qualifies, skip silently.
 
-**Gate:** Cleaner ran only when warranted; cleaner changes (if any) and test-prune removals are in their own commits (or none qualified); no sole-coverage test was removed. Green-ness is asserted by Phase 5, not per-step.
+**Gate:** Cleanup ran only when warranted; cleanup changes (if any) and test-prune removals are in their own commits (or none qualified); no sole-coverage test was removed. Green-ness is asserted by Phase 5, not per-step.
 
 ---
 
@@ -205,7 +202,5 @@ Compose the PR using **all** commits on the branch (not just the latest):
 
 ## Red Flags — STOP
 
-- "I'll just call `gh pr create` directly" → the hook will block you. Use the prefix.
-- "I'll spawn the cleaner for a tiny docs/config diff" → don't. The cleaner is for broad or messy diffs.
+- "I'll run the cleanup pass for a tiny docs/config diff" → don't. It is for broad or messy diffs.
 - "Tests fail but my changes are unrelated" → fix or revert. Never push red.
-- "I'll bundle the fmt diff into the feature commit" → keep `chore: fmt` and `chore: ai-fmt` as their own commits; squash happens at merge.

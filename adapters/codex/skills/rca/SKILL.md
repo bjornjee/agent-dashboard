@@ -10,7 +10,7 @@ Incident description: $ARGUMENTS
 
 ## Instructions
 
-Follow these phases strictly in order. Do NOT speculate or reason about root cause until Phase 5. Every phase has a gate.
+Follow these phases strictly in order. Every phase has a gate. Do not speculate about cause until Phase 5.
 
 ---
 
@@ -101,25 +101,27 @@ Check for any crash/diagnostic files the application writes (e.g., `crash.log`, 
 
 For each Codex session active during the incident window:
 
-1. **Extract all shell tool calls** — these are the commands Codex actually executed:
+1. **Extract all shell tool calls** — these are the commands Codex actually executed. Codex rollout lines are `{"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"<json string>",...}}`:
    ```python
    python3 << 'PYEOF'
-   import json, os
+   import json
 
-   fpath = "<session-jsonl-path>"
+   fpath = "<rollout-jsonl-path>"
    with open(fpath) as f:
        for line in f:
            try:
                obj = json.loads(line)
-               if obj.get('type') == 'assistant':
-                   content = obj.get('message', {}).get('content', [])
-                   if isinstance(content, list):
-                       for block in content:
-                           if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'shell':
-                               cmd = block.get('input', {}).get('command', '')
-                               print(f'CMD: {cmd[:400]}')
-                               print()
-           except:
+               if obj.get('type') != 'response_item':
+                   continue
+               p = obj.get('payload', {})
+               if p.get('type') == 'function_call' and p.get('name') in ('exec_command', 'shell'):
+                   args = json.loads(p.get('arguments') or '{}')
+                   cmd = args.get('command') or args.get('cmd') or ''
+                   if isinstance(cmd, list):
+                       cmd = ' '.join(str(c) for c in cmd)
+                   print(f"CMD [{obj.get('timestamp', '')}]: {str(cmd)[:400]}")
+                   print()
+           except Exception:
                pass
    PYEOF
    ```
@@ -131,11 +133,7 @@ For each Codex session active during the incident window:
    - `signal`, `SIGKILL`, `SIGTERM` (signal sending)
    - Any command referencing the crashed process
 
-3. **Extract subagent launches** — check for Codex `spawn_agent` and `wait_agent` tool calls in logs. Do not call either tool from this read-only RCA skill:
-   ```python
-   # Same pattern but filter for spawn_agent tool calls
-   # Check agent_type, prompt content, and whether the parent waited for results
-   ```
+3. **Extract subagent launches** — check for Codex `spawn_agent` and `wait_agent` tool calls in logs (do not call either tool from this read-only RCA skill). Use the same pattern as step 1, filtering for `spawn_agent` calls; check `agent_type`, prompt content, and whether the parent waited for results.
 
 4. **Identify the LAST command before the crash** — cross-reference the session's final tool call timestamp with the system log timestamps from Phase 2.
 
