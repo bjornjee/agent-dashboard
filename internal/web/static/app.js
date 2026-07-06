@@ -471,6 +471,12 @@ window.Dashboard = {
   },
 };
 
+// Inline handlers in HTML strings (oninput="UI.composerAutoSize(this)" in
+// ui.js/detail.js/create.js) resolve `UI` in global scope — same bridge
+// contract as window.Dashboard above. Without this every composer
+// keystroke throws ReferenceError and auto-grow never runs.
+window.UI = UI;
+
 // --- Viewport breakpoint changes ---
 // When the user crosses the desktop breakpoint, re-mount the current view
 // so the right content lands in the right slot (mobile: #app; desktop:
