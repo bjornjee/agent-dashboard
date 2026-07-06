@@ -3288,11 +3288,11 @@ body.view-detail .ui-dock:not(.ui-dock--header) { display: none !important; }
   .ui-composer__attach { display: inline-flex; }
 
   /* ============================================================
-   * Composer — Codex desktop parity (tall card + internal chip rail).
+   * Composer — Codex desktop parity (tall card + internal rail).
    * Replaces the mobile pill pattern with a rounded-rectangle card
    * containing two rows on one elevated surface:
    *   row 1: textarea (multi-line, transparent)
-   *   row 2: chip rail [attach, model, branch, effort, spacer, mic, send/stop]
+   *   row 2: rail [attach, meta text (model · branch · effort), spacer, send/stop]
    * ============================================================ */
   /* Action-bar is a transparent shell on desktop so the composer card
    * appears to float on top of the chat (Codex pattern). Card uses a
