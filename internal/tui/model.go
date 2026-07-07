@@ -226,6 +226,8 @@ type model struct {
 	availableModels       []string // display list: ["(default)", "sonnet", ...]
 	selectedCreateModel   int      // index into availableModels
 	createModel           string   // selected model ("" if default)
+	createDefaultModel    domain.DefaultModelInfo
+	defaultModelCache     *harness.DefaultModelCache
 	availableEfforts      []string // display list: ["(default)", "low", ...]
 	selectedCreateEffort  int      // index into availableEfforts
 	createEffort          string   // selected effort ("" if default)
@@ -282,14 +284,32 @@ func (m *model) populateCreateModelEffortOptions() {
 	if err != nil {
 		m.availableModels = createOptionList(nil)
 		m.availableEfforts = createOptionList(nil)
+		m.createDefaultModel = domain.DefaultModelInfo{}
 	} else {
 		m.availableModels = createOptionList(h.Models())
 		m.availableEfforts = createOptionList(h.EffortLevels())
+		m.createDefaultModel = m.resolveCreateDefaultModel(h, false)
 	}
 	m.selectedCreateModel = 0
 	m.selectedCreateEffort = 0
 	m.createModel = ""
 	m.createEffort = ""
+}
+
+func (m *model) refreshCreateDefaultModel() {
+	h, err := harness.Resolve(m.createHarness, m.cfg.Profile)
+	if err != nil {
+		m.createDefaultModel = domain.DefaultModelInfo{}
+		return
+	}
+	m.createDefaultModel = m.resolveCreateDefaultModel(h, true)
+}
+
+func (m *model) resolveCreateDefaultModel(h domain.Harness, force bool) domain.DefaultModelInfo {
+	if m.defaultModelCache == nil {
+		m.defaultModelCache = harness.NewDefaultModelCache()
+	}
+	return m.defaultModelCache.Resolve(h, m.cfg.Settings, force)
 }
 
 // CodexSessionsDir returns the resolved $CODEX_HOME/sessions root for this
@@ -730,6 +750,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		skillsAvailable:       hasSkills,
 		availableHarnesses:    harnessOptions,
 		selectedCreateHarness: defaultHarnessIdx,
+		defaultModelCache:     harness.NewDefaultModelCache(),
 		pet:                   newPetModel(0),
 		petEnabled:            cfg.Settings.Experimental.AsciiPet,
 		dino:                  newDinoGameModel(0, 0),

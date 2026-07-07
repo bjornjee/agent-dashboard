@@ -453,6 +453,10 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.updateRightContent()
 			}
 			return m, nil
+		case "ctrl+r":
+			m.refreshCreateDefaultModel()
+			m.updateRightContent()
+			return m, nil
 		}
 		return m, nil
 	}

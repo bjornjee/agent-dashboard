@@ -40,7 +40,8 @@ default = "claude"
 [harness.codex]
 # Codex CLI spawn knobs — only consulted when [harness] default = "codex".
 # Each field maps to a codex CLI flag; empty fields inherit codex's own
-# resolution chain (~/.codex/config.toml > defaults).
+# resolution chain (~/.codex/config.toml > defaults). The New Agent model
+# picker displays this effective default and caches the hint for 1 hour.
 #   model                    → --model <m>            (e.g. "gpt-5.5")
 #   approval                 → -a <policy>            (never|untrusted|on-request)
 #   sandbox                  → -s <mode>              (danger-full-access|workspace-write|...)

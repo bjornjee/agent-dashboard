@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -651,6 +652,32 @@ func TestCreateWizard_ModelNavigationAndDefaultToEffort(t *testing.T) {
 	}
 	if rm.createModel != "" {
 		t.Errorf("expected default model to map to empty string, got %q", rm.createModel)
+	}
+}
+
+func TestCreateWizard_ModelRefreshBypassesCache(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.cfg.Profile.ConfigDir = t.TempDir()
+	m.cfg.Harness, _ = harness.Resolve("claude", m.cfg.Profile)
+	settingsPath := filepath.Join(m.cfg.Profile.ConfigDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(`{"model":"sonnet"}`), 0600); err != nil {
+		t.Fatalf("write claude settings: %v", err)
+	}
+	m.mode = modeCreateModel
+	m.createHarness = "claude"
+	m.populateCreateModelEffortOptions()
+	if m.createDefaultModel.Model != "sonnet" {
+		t.Fatalf("initial default model = %q, want sonnet", m.createDefaultModel.Model)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"model":"opus"}`), 0600); err != nil {
+		t.Fatalf("update claude settings: %v", err)
+	}
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	rm := result.(model)
+
+	if rm.createDefaultModel.Model != "opus" {
+		t.Errorf("refreshed default model = %q, want opus", rm.createDefaultModel.Model)
 	}
 }
 

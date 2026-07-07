@@ -142,6 +142,8 @@ test.describe('dashboard integration flows', () => {
       skill: 'agent-dashboard:feature',
       message: 'Add integration tests',
       harness: 'codex',
+      model: '',
+      effort: '',
     });
   });
 

@@ -26,6 +26,16 @@ func harnessSigil(harness string) rune {
 	return '/'
 }
 
+func defaultModelHint(info domain.DefaultModelInfo) string {
+	if info.Model == "" {
+		return "Default: harness default"
+	}
+	if info.Source == "" {
+		return "Default: " + info.Model
+	}
+	return "Default: " + info.Model + " · " + info.Source
+}
+
 // -- Content Builders --
 
 func (m *model) updateLeftContent() {
@@ -170,6 +180,7 @@ func (m *model) updateRightContent() {
 		}
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Select model:"))
+		lines = append(lines, "  "+helpStyle.Render(defaultModelHint(m.createDefaultModel)))
 		lines = append(lines, "")
 		for i, model := range m.availableModels {
 			prefix := "  "
@@ -180,7 +191,7 @@ func (m *model) updateRightContent() {
 			}
 		}
 		lines = append(lines, "")
-		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc back │ ^C cancel"))
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ ^R refresh │ Esc back │ ^C cancel"))
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
 		m.messageVP.SetContent(strings.Join(lines, "\n"))
@@ -1689,6 +1700,9 @@ func (m model) renderHelpBar() string {
 	if m.mode == modeCreateModel || m.mode == modeCreateEffort {
 		parts = append(parts, boldStyle.Render("enter")+" select")
 		parts = append(parts, boldStyle.Render("↑↓")+" cycle")
+		if m.mode == modeCreateModel {
+			parts = append(parts, boldStyle.Render("^R")+" refresh")
+		}
 		parts = append(parts, boldStyle.Render("esc")+" back")
 		parts = append(parts, boldStyle.Render("^c")+" cancel")
 		return m.truncateHelpBar(parts)

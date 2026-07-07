@@ -193,9 +193,8 @@ function lightModeSuite({ label, width, height, sidebarHidden }) {
       await page.goto('/');
 
       if (sidebarHidden) {
-        // Mobile: list view drives render. The list-page row marks the
-        // trailing cost slot with data-agent-id (not the row itself).
-        await page.waitForSelector('.ui-row__trailing-cost[data-agent-id]', { timeout: 5000 });
+        // Mobile: list view drives render through shared UI.row markup.
+        await page.waitForSelector('.page-scroll .ui-row', { timeout: 5000 });
       } else {
         await page.waitForSelector('#app-shell', { timeout: 5000 });
         await page.waitForSelector('#app-sidebar .app-sidebar__row[data-agent-id]', { timeout: 5000 });
