@@ -57,12 +57,14 @@ func bootstrapPlanMode(target, prompt string) planbootResult {
 
 	atomic := "/plan " + prompt
 	if utf8.RuneCountInString(atomic) <= largePasteCharThreshold {
+		// Best-effort: a failed paste leaves the skill's /plan gate to ask the user.
 		_ = tmux.TmuxPasteKeysClearingInput(target, atomic, "Enter")
 		return res
 	}
 	// Over codex's large-paste threshold the paste becomes a placeholder
 	// element and the leading '/' is lost, so enter Plan mode bare first,
 	// then paste the prompt (placeholders expand on submit at any length).
+	// Both pastes are best-effort for the same reason as above.
 	_ = tmux.TmuxPasteKeysClearingInput(target, "/plan", "Enter")
 	sleep(twoStepSettle)
 	_ = tmux.TmuxPasteKeysClearingInput(target, prompt, "Enter")
