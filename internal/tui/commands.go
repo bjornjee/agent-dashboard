@@ -738,7 +738,7 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		// inject it behind /plan once the session is up. Fire-and-forget:
 		// the bootstrap degrades to the skill's own /plan gate on failure.
 		if deferred := codex.DeferredPlanPrompt(h.Name(), skill, message); deferred != "" {
-			go planBootstrap(newTarget, newPaneID, profile.StateDir, deferred)
+			go planBootstrap(newTarget, newPaneID, deferred)
 		}
 
 		// Stage the worktree/branch pin keyed by the new pane_id so the

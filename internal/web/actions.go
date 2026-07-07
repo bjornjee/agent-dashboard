@@ -612,7 +612,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	// inject it behind /plan once the session is up. Fire-and-forget:
 	// the bootstrap degrades to the skill's own /plan gate on failure.
 	if deferred := codex.DeferredPlanPrompt(activeHarness.Name(), req.Skill, req.Message); deferred != "" {
-		go planBootstrap(target, paneID, s.cfg.Profile.StateDir, deferred)
+		go planBootstrap(target, paneID, deferred)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "created", "target": target})

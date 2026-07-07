@@ -30,6 +30,8 @@ func TestValidateTarget(t *testing.T) {
 		"dev:12.3",
 		"session:0",
 		"a-b_c:1.0",
+		"%0",
+		"%42",
 	}
 	for _, target := range valid {
 		if err := ValidateTarget(target); err != nil {
@@ -44,6 +46,8 @@ func TestValidateTarget(t *testing.T) {
 		"foo bar:0.1",
 		"$(whoami):0.1",
 		"session:window.pane",
+		"%",
+		"%4x",
 	}
 	for _, target := range invalid {
 		if err := ValidateTarget(target); err == nil {

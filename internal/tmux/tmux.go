@@ -64,8 +64,10 @@ func SilentStart(cmd *exec.Cmd) error {
 	return cmd.Start()
 }
 
-// validTarget matches tmux targets: session:window.pane where components are alphanumeric, dash, underscore, or dot.
-var validTarget = regexp.MustCompile(`^[a-zA-Z0-9_.\-]+(:[0-9]+(\.[0-9]+)?)?$`)
+// validTarget matches tmux targets: session:window.pane where components are
+// alphanumeric, dash, underscore, or dot — or a stable pane id (%N), which
+// survives pane renumbering and is preferred for cross-pane injection.
+var validTarget = regexp.MustCompile(`^(%[0-9]+|[a-zA-Z0-9_.\-]+(:[0-9]+(\.[0-9]+)?)?)$`)
 
 // ansiEscape matches ANSI escape sequences (CSI, OSC, etc.)
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x1b]*\x1b\\|\x1b\][^\x07]*\x07|\x1b[^[\]].?`)

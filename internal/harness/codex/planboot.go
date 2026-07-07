@@ -4,39 +4,46 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
-// bootReadyBudget bounds how long the bootstrap waits for the codex composer
-// and the session-up signal. Codex may sit on hook/folder-trust dialogs the
-// user has to answer first, so this mirrors the web trust watcher's budget
+// bootReadyBudget bounds how long the bootstrap waits for codex's configured
+// session banner. Codex may sit on hook/folder-trust dialogs the user has to
+// answer first, so this mirrors the web trust watcher's budget
 // (internal/web/trust.go).
 var bootReadyBudget = 30 * time.Second
 
-// planVerifyBudget bounds the wait for the "Plan mode" footer after /plan.
+// planVerifyBudget bounds the /plan paste-verify-retry loop.
 var planVerifyBudget = 10 * time.Second
 
 // bootTick is the polling cadence, matching trustWatchTick.
 const bootTick = 300 * time.Millisecond
 
-// sessionUpProbe reports whether the SessionStart hook has written an agent
-// state file for paneID under stateDir. Package var so tests can stub it.
-var sessionUpProbe = agentPaneUp
+// planSettle is the pause between pasting /plan and checking the footer,
+// giving codex a frame to dispatch and re-render.
+const planSettle = 500 * time.Millisecond
 
 // BootstrapPlanMode drives a freshly spawned codex pane into Plan mode and
 // submits the deferred skill prompt. Blocking; callers run it in a goroutine.
 //
+// All tmux operations address the stable pane id when available — positional
+// targets ("session:win.pane") renumber when panes close, and a stale
+// bootstrap once injected into an unrelated agent's pane that had inherited
+// its position. A capture failure means the pane is gone: abort, never
+// inject blind.
+//
 // Gate order matters:
 //
-//  1. Composer chrome rendered (footer " · " marker).
-//  2. Session configured — probed via the agent state file the SessionStart
-//     hook writes for this pane. Codex resets the collaboration mask when
-//     SessionConfigured lands (codex-rs chatwidget/session_flow.rs), so a
-//     /plan dispatched earlier is silently clobbered and the queued prompt
-//     submits in Default mode. The state file only exists after that reset.
-//  3. Paste bare "/plan" + Enter and verify the footer shows "Plan mode".
-//  4. Paste the prompt + Enter (large pastes become placeholder elements
+//  1. Configured banner rendered — the "model: <name>" session-info banner
+//     (without "loading") that codex draws only from its SessionConfigured
+//     handler. The " · " composer footer alone is NOT sufficient: it renders
+//     while the model catalog is still loading, and codex resets the
+//     collaboration mask when SessionConfigured lands (codex-rs
+//     chatwidget/session_flow.rs), silently clobbering any earlier /plan.
+//  2. Paste bare "/plan" + Enter and verify the footer shows "Plan mode";
+//     retry the paste until it verifies or the budget lapses. /plan is
+//     idempotent, so re-pasting is safe.
+//  3. Paste the prompt + Enter (large pastes become placeholder elements
 //     that expand on submit, so any prompt length is safe here).
 //
 // Every injection is a bracketed paste plus a *separate* Enter
@@ -46,11 +53,11 @@ var sessionUpProbe = agentPaneUp
 // which is why plain send-keys text+Enter never submits. A bracketed paste
 // clears that suppression, and a leading '/' additionally bypasses it.
 //
-// Best-effort throughout: on any gate timeout it keeps going and injects
-// anyway, degrading to the skill's own /plan hard-gate instead of leaving a
-// dead pane.
-func BootstrapPlanMode(target, paneID, stateDir, prompt string) {
-	bootstrapPlanMode(target, paneID, stateDir, prompt)
+// Best-effort throughout: on gate timeout it keeps going and injects anyway,
+// degrading to the skill's own /plan hard-gate instead of leaving a dead
+// pane.
+func BootstrapPlanMode(target, paneID, prompt string) {
+	bootstrapPlanMode(target, paneID, prompt)
 }
 
 type planbootResult int
@@ -58,65 +65,76 @@ type planbootResult int
 const (
 	planbootInjected planbootResult = iota
 	planbootTimedOut
+	planbootAborted
 )
 
-func bootstrapPlanMode(target, paneID, stateDir, prompt string) planbootResult {
+func bootstrapPlanMode(target, paneID, prompt string) planbootResult {
+	tgt := paneID
+	if tgt == "" {
+		tgt = target
+	}
+
 	res := planbootInjected
 	deadline := time.Now().Add(bootReadyBudget)
-	if !waitUntil(deadline, func() bool { return paneShowsComposer(capture(target)) }) {
-		res = planbootTimedOut
-	}
-	// Session-up gate is skipped when the caller has no pane identity (e.g.
-	// tmux variants that don't report pane_id) — the composer gate plus the
-	// plan-mode verification below still bound the race window.
-	if res == planbootInjected && paneID != "" && stateDir != "" {
-		if !waitUntil(deadline, func() bool { return sessionUpProbe(stateDir, paneID) }) {
-			res = planbootTimedOut
-		}
-	}
-
-	// Best-effort pastes: a failed paste leaves the skill's /plan gate to
-	// ask the user.
-	_ = tmux.TmuxPasteKeysClearingInput(target, "/plan", "Enter")
-	if !waitUntil(time.Now().Add(planVerifyBudget), func() bool { return paneShowsPlanMode(capture(target)) }) {
-		res = planbootTimedOut
-	}
-	_ = tmux.TmuxPasteKeysClearingInput(target, prompt, "Enter")
-	return res
-}
-
-// waitUntil polls cond every bootTick until it holds or deadline passes.
-func waitUntil(deadline time.Time, cond func() bool) bool {
 	for {
-		if cond() {
-			return true
+		lines, err := tmux.TmuxCapture(tgt, 20)
+		if err != nil {
+			return planbootAborted // pane gone — never inject blind
+		}
+		if paneConfigured(lines) {
+			break
 		}
 		if time.Now().After(deadline) {
-			return false
+			res = planbootTimedOut
+			break
 		}
 		sleep(bootTick)
 	}
-}
 
-func capture(target string) []string {
-	lines, err := tmux.TmuxCapture(target, 20)
-	if err != nil {
-		return nil
+	// Best-effort pastes from here down: a failed paste leaves the skill's
+	// /plan gate to ask the user.
+	verified := false
+	verifyDeadline := time.Now().Add(planVerifyBudget)
+	for {
+		_ = tmux.TmuxPasteKeysClearingInput(tgt, "/plan", "Enter")
+		sleep(planSettle)
+		lines, err := tmux.TmuxCapture(tgt, 20)
+		if err != nil {
+			return planbootAborted
+		}
+		if paneShowsPlanMode(lines) {
+			verified = true
+			break
+		}
+		if time.Now().After(verifyDeadline) {
+			break
+		}
+		sleep(bootTick)
 	}
-	return lines
+	if !verified {
+		res = planbootTimedOut
+	}
+
+	_ = tmux.TmuxPasteKeysClearingInput(tgt, prompt, "Enter")
+	return res
 }
 
-// paneShowsComposer reports whether the captured pane renders codex's ready
-// composer. The readiness marker is the footer's " · " separator between the
-// model summary and the cwd ("gpt-5.5 high fast · ~/repo") — boot banners and
-// trust/hook dialogs render no footer (verified against codex 0.142.5).
-func paneShowsComposer(lines []string) bool {
+// paneConfigured reports whether codex has rendered its post-configure
+// session banner: the composer footer (" · " between model summary and cwd)
+// plus a "model:" banner line that is no longer "loading". Verified against
+// codex 0.142.5 — the loading-state banner shows "model:     loading" while
+// the composer footer is already visible.
+func paneConfigured(lines []string) bool {
+	footer, model := false, false
 	for _, line := range lines {
 		if strings.Contains(line, " · ") {
-			return true
+			footer = true
+		}
+		if strings.Contains(line, "model:") && !strings.Contains(line, "loading") {
+			model = true
 		}
 	}
-	return false
+	return footer && model
 }
 
 // paneShowsPlanMode reports whether the footer carries codex's Plan mode
@@ -124,18 +142,6 @@ func paneShowsComposer(lines []string) bool {
 func paneShowsPlanMode(lines []string) bool {
 	for _, line := range lines {
 		if strings.Contains(line, "Plan mode") {
-			return true
-		}
-	}
-	return false
-}
-
-// agentPaneUp reports whether any agent state file under stateDir claims
-// paneID. The SessionStart hook writes it once the codex session is live —
-// strictly after the SessionConfigured mask reset described above.
-func agentPaneUp(stateDir, paneID string) bool {
-	for _, agent := range state.ReadState(stateDir).Agents {
-		if agent.TmuxPaneID == paneID {
 			return true
 		}
 	}

@@ -676,10 +676,10 @@ func TestCreateSessionWithPrompt_CodexFeatureLaunchesPlanBootstrap(t *testing.T)
 	m := mocks.NewMockRunner(t)
 	t.Cleanup(tmux.SetTestRunner(m))
 
-	bootCalls := make(chan [4]string, 1)
+	bootCalls := make(chan [3]string, 1)
 	origBoot := planBootstrap
-	planBootstrap = func(target, paneID, stateDir, prompt string) {
-		bootCalls <- [4]string{target, paneID, stateDir, prompt}
+	planBootstrap = func(target, paneID, prompt string) {
+		bootCalls <- [3]string{target, paneID, prompt}
 	}
 	t.Cleanup(func() { planBootstrap = origBoot })
 
@@ -702,8 +702,7 @@ func TestCreateSessionWithPrompt_CodexFeatureLaunchesPlanBootstrap(t *testing.T)
 	).Return([]byte("main:0.1\n"), nil)
 	m.On("Run", mock.Anything, "select-layout", "-t", "main:0", "tiled").Return(nil)
 
-	stateDir := t.TempDir()
-	profile := domain.AgentProfile{Command: "claude", StateDir: stateDir}
+	profile := domain.AgentProfile{Command: "claude", StateDir: t.TempDir()}
 	msg := createSessionWithPrompt(folder, agents, "%0", profile, domain.Settings{}, "codex", "feature", "hi", "", "")()
 	created, ok := msg.(createSessionMsg)
 	if !ok || created.err != nil {
@@ -715,7 +714,7 @@ func TestCreateSessionWithPrompt_CodexFeatureLaunchesPlanBootstrap(t *testing.T)
 	}
 	select {
 	case got := <-bootCalls:
-		want := [4]string{"main:0.1", "", stateDir, "$agent-dashboard:feature hi"}
+		want := [3]string{"main:0.1", "", "$agent-dashboard:feature hi"}
 		if got != want {
 			t.Errorf("planBootstrap args = %q, want %q", got, want)
 		}

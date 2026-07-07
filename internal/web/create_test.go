@@ -374,16 +374,16 @@ func TestCreate_CodexFeatureSkill_DefersPromptToPlanBootstrap(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
 
-	bootCalls := make(chan [4]string, 1)
+	bootCalls := make(chan [3]string, 1)
 	origBoot := planBootstrap
-	planBootstrap = func(target, paneID, stateDir, prompt string) {
-		bootCalls <- [4]string{target, paneID, stateDir, prompt}
+	planBootstrap = func(target, paneID, prompt string) {
+		bootCalls <- [3]string{target, paneID, prompt}
 	}
 	t.Cleanup(func() { planBootstrap = origBoot })
 
 	folder := t.TempDir()
 	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
-	ts, stateDir := createTestServer(t, existingAgent)
+	ts, _ := createTestServer(t, existingAgent)
 
 	m.On("Output", mock.Anything,
 		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
@@ -408,7 +408,7 @@ func TestCreate_CodexFeatureSkill_DefersPromptToPlanBootstrap(t *testing.T) {
 	}
 	select {
 	case got := <-bootCalls:
-		want := [4]string{"main:0.1", "", stateDir, "$agent-dashboard:feature hi"}
+		want := [3]string{"main:0.1", "", "$agent-dashboard:feature hi"}
 		if got != want {
 			t.Errorf("planBootstrap args = %q, want %q", got, want)
 		}
