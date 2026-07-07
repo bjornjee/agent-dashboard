@@ -45,6 +45,7 @@ describe('codex global hook bundle', () => {
         '$HOME/.codex/hooks/agent-dashboard/agent-state-reporter.sh',
         '$HOME/.codex/hooks/agent-dashboard/block-main-commit.sh',
         '$HOME/.codex/hooks/agent-dashboard/commit-lint.sh',
+        '$HOME/.codex/hooks/agent-dashboard/desktop-notify.sh',
         '$HOME/.codex/hooks/agent-dashboard/pr-detect.sh',
         '$HOME/.codex/hooks/agent-dashboard/pr-skill-detect.sh',
         '$HOME/.codex/hooks/agent-dashboard/pr-skill-gate.sh',
@@ -66,6 +67,7 @@ describe('codex global hook bundle', () => {
       'agent-state-reporter.sh',
       'block-main-commit.sh',
       'commit-lint.sh',
+      'desktop-notify.sh',
       'pr-detect.sh',
       'pr-skill-detect.sh',
       'pr-skill-gate.sh',
@@ -75,6 +77,7 @@ describe('codex global hook bundle', () => {
       'agent-state-reporter.js',
       'block-main-commit.js',
       'commit-lint.js',
+      'desktop-notify.js',
       'claim-worktree.js',
       'pr-detect.js',
       'pr-skill-detect.js',
@@ -113,6 +116,19 @@ describe('codex global hook bundle', () => {
     const hookCommands = entries.flatMap(entry => entry.hooks.map(hook => hook.command));
 
     assert.deepEqual(hookCommands, ['$HOME/.codex/hooks/agent-dashboard/pr-skill-detect.sh']);
+  });
+
+  it('registers desktop notifications for attention events', () => {
+    const hooks = readJson(HOOKS_JSON).hooks;
+
+    assert.deepEqual(
+      hooks.Notification.flatMap(entry => entry.hooks.map(hook => hook.command)),
+      ['$HOME/.codex/hooks/agent-dashboard/desktop-notify.sh']
+    );
+    assert.deepEqual(
+      hooks.StopFailure.flatMap(entry => entry.hooks.map(hook => hook.command)),
+      ['$HOME/.codex/hooks/agent-dashboard/desktop-notify.sh']
+    );
   });
 
   it('keeps the copied codex source folder flat', () => {

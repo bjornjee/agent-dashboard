@@ -168,4 +168,24 @@ describe('codex hook stdout contract', () => {
       `UserPromptSubmit: stdout not parseable JSON: ${JSON.stringify(result.stdout)}`
     );
   });
+
+  for (const name of ['Notification', 'StopFailure']) {
+    it(`desktop-notify.js emits valid JSON on stdout for ${name}`, () => {
+      const result = runHook('desktop-notify.js', {
+        session_id: SESSION_ID,
+        cwd: '/tmp',
+        model: 'gpt-5.5',
+        hook_event_name: name,
+        notification_type: 'permission_prompt',
+        error: 'rate_limit',
+      });
+
+      assert.equal(result.status, 0, `exit ${result.status}; stderr=${result.stderr}`);
+      assert.notEqual(result.stdout.trim(), '', `${name}: stdout empty`);
+      assert.doesNotThrow(
+        () => JSON.parse(result.stdout),
+        `${name}: stdout not parseable JSON: ${JSON.stringify(result.stdout)}`
+      );
+    });
+  }
 });
