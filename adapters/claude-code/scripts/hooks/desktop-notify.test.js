@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, getTerminalBundleId, getAgentState, ALERTING_NOTIFICATION_TYPES, ALERTING_ERRORS } = require('./desktop-notify');
+const { stripMarkdown, extractSummary, escapeAppleScript, sanitizeShellArg, shouldAlert, lastTurnHasAlertingTool, getTerminalBundleId, getAgentState, buildBody, ALERTING_NOTIFICATION_TYPES, ALERTING_ERRORS } = require('./desktop-notify');
 const { extractSessionWindow } = require(path.resolve(__dirname, '..', '..', 'packages', 'tmux'));
 
 describe('stripMarkdown', () => {
@@ -226,6 +226,101 @@ describe('getAgentState', () => {
 
   it('returns undefined for unknown events', () => {
     assert.equal(getAgentState({ hook_event_name: 'PreToolUse' }), undefined);
+  });
+});
+
+describe('buildBody', () => {
+  it('uses AskUserQuestion text and branch for question stops', () => {
+    const tmp = path.join(os.tmpdir(), `test-transcript-${Date.now()}-body-ask.jsonl`);
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-notify-'));
+    const agentsDir = path.join(stateDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'sess-question.json'), JSON.stringify({
+      target: 'main:0.1',
+      session_id: 'sess-question',
+      state: 'question',
+    }));
+    const entry = {
+      type: 'assistant',
+      message: {
+        content: [{
+          type: 'tool_use',
+          name: 'AskUserQuestion',
+          input: { questions: [{ question: 'Which provider should I use?' }] },
+        }],
+      },
+    };
+    fs.writeFileSync(tmp, JSON.stringify(entry) + '\n');
+    try {
+      assert.equal(
+        buildBody({
+          hook_event_name: 'Stop',
+          session_id: 'sess-question',
+          transcript_path: tmp,
+          last_assistant_message: 'fallback',
+        }, 'feat/auth', agentsDir),
+        'main:0.1/auth: Which provider should I use?',
+      );
+    } finally {
+      fs.unlinkSync(tmp);
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to assistant summary when AskUserQuestion text is missing', () => {
+    const tmp = path.join(os.tmpdir(), `test-transcript-${Date.now()}-body-fallback.jsonl`);
+    const entry = {
+      type: 'assistant',
+      message: {
+        content: [{ type: 'tool_use', name: 'AskUserQuestion', input: {} }],
+      },
+    };
+    fs.writeFileSync(tmp, JSON.stringify(entry) + '\n');
+    try {
+      assert.equal(
+        buildBody({ hook_event_name: 'Stop', transcript_path: tmp, last_assistant_message: '**Waiting** for input' }, 'feat/auth'),
+        'Waiting for input',
+      );
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+
+  it('compacts long branch names before the question', () => {
+    const tmp = path.join(os.tmpdir(), `test-transcript-${Date.now()}-body-branch.jsonl`);
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-notify-'));
+    const agentsDir = path.join(stateDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'sess-question.json'), JSON.stringify({
+      target: 'main:0.1',
+      session_id: 'sess-question',
+      state: 'question',
+    }));
+    const entry = {
+      type: 'assistant',
+      message: {
+        content: [{
+          type: 'tool_use',
+          name: 'AskUserQuestion',
+          input: { questions: [{ question: 'Which provider should I use?' }] },
+        }],
+      },
+    };
+    fs.writeFileSync(tmp, JSON.stringify(entry) + '\n');
+    try {
+      assert.equal(
+        buildBody({
+          hook_event_name: 'Stop',
+          session_id: 'sess-question',
+          transcript_path: tmp,
+          last_assistant_message: 'fallback',
+        }, 'feat/notification-description-context', agentsDir),
+        'main:0.1/notification...: Which provider should I use?',
+      );
+    } finally {
+      fs.unlinkSync(tmp);
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
   });
 });
 
