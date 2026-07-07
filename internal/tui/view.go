@@ -20,7 +20,7 @@ import (
 // Codex CLI dispatches plugins via `$` (per its own help text); claude
 // and all other harnesses use `/`.
 func harnessSigil(harness string) rune {
-	if harness == "codex" {
+	if harness == domain.HarnessCodex {
 		return '$'
 	}
 	return '/'

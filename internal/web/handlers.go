@@ -604,7 +604,7 @@ func (s *Server) handleSubagents(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return
 	}
-	if agent.Harness != "codex" && agent.ProjDir == "" {
+	if agent.Harness != domain.HarnessCodex && agent.ProjDir == "" {
 		writeJSON(w, http.StatusOK, []struct{}{})
 		return
 	}

@@ -549,7 +549,7 @@ func isIdleCandidate(agent domain.Agent) bool {
 	if agent.State == "idle_prompt" || agent.State == "permission" {
 		return true
 	}
-	if agent.Harness == "codex" && agent.State == "done" {
+	if agent.Harness == domain.HarnessCodex && agent.State == "done" {
 		return true
 	}
 	return false

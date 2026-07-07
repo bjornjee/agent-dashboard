@@ -27,9 +27,9 @@ func (e ErrUnknownHarness) Error() string {
 // that omit the harness override).
 func Resolve(name string, profile domain.AgentProfile) (domain.Harness, error) {
 	switch name {
-	case "claude", "":
+	case domain.HarnessClaude, "":
 		return claude.New(profile), nil
-	case "codex":
+	case domain.HarnessCodex:
 		return codex.New(codex.Config{
 			Command:     "codex",
 			SessionsDir: filepath.Join(profile.HomeDir, ".codex", "sessions"),

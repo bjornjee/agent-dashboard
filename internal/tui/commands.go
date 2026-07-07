@@ -130,7 +130,7 @@ func (m model) loadConversation() tea.Cmd {
 	// path (not just sessionID) so that a `codex resume <sid>` — which
 	// codex writes to a brand-new rollout under a later date directory —
 	// trips the key-mismatch branch below and triggers a full re-read.
-	if agent.Harness == "codex" {
+	if agent.Harness == domain.HarnessCodex {
 		codexRoot := m.codexSessionsDir
 		path, _ := codexconv.LocateRollout(codexRoot, sessionID)
 		sessionKey := "codex:" + path
@@ -247,7 +247,7 @@ func (m model) loadSubagentActivity() tea.Cmd {
 	if agent == nil || sub == nil || agent.SessionID == "" {
 		return nil
 	}
-	if agent.Harness == "codex" {
+	if agent.Harness == domain.HarnessCodex {
 		codexRoot := m.codexSessionsDir
 		agentID := sub.AgentID
 		return func() tea.Msg {
@@ -308,7 +308,7 @@ func (m model) loadAllSubagents() tea.Cmd {
 		if agent.SessionID == "" {
 			continue
 		}
-		if agent.Harness != "codex" && agent.ProjDir == "" {
+		if agent.Harness != domain.HarnessCodex && agent.ProjDir == "" {
 			continue
 		}
 		targets = append(targets, target{agent: agent, codexRoot: m.codexSessionsDir})
@@ -385,7 +385,7 @@ func persistUsage(database *db.DB, agents []domain.Agent, perAgent map[string]do
 	for _, agent := range agents {
 		// Skip non-claude harness; codex usage is tracked separately via
 		// persistCodexUsage. Empty harness defaults to claude (pre-codex state files).
-		if agent.Harness != "" && agent.Harness != "claude" {
+		if agent.Harness != "" && agent.Harness != domain.HarnessClaude {
 			continue
 		}
 		// Skip agents whose JSONL can't be located. Otherwise an agent whose ProjDir
@@ -643,7 +643,7 @@ func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
 		if target == "" {
 			return sendResultMsg{err: fmt.Errorf("pane %s no longer exists", agent.TmuxPaneID)}
 		}
-		if agent.Harness == "codex" {
+		if agent.Harness == domain.HarnessCodex {
 			// Submit keys are chosen from the live pane footer, not the
 			// (often stale) sidecar state: a bare Enter against an
 			// in-flight turn lands the paste as un-submitted multi-line

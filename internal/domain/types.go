@@ -28,6 +28,24 @@ type RateLimit struct {
 }
 
 // Agent represents a single Claude Code agent's state.
+// Harness identifiers. HarnessOrDefault is the single place that encodes
+// "empty means claude" (backward compat with pre-codex state files).
+// Routing code must never collapse unknown harness names to a known one —
+// unknown must stay visible; only display code may fall back.
+const (
+	HarnessClaude = "claude"
+	HarnessCodex  = "codex"
+)
+
+// HarnessOrDefault maps the omitted harness to HarnessClaude and passes
+// everything else through unchanged.
+func HarnessOrDefault(h string) string {
+	if h == "" {
+		return HarnessClaude
+	}
+	return h
+}
+
 type Agent struct {
 	Target     string `json:"target"`
 	Session    string `json:"session"`

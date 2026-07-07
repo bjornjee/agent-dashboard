@@ -169,11 +169,14 @@ func permissionModeStyle(mode string) string {
 
 // normalizeHarness collapses empty/unknown harness strings to "claude" to
 // match the back-compat default documented at domain/types.go:73.
+// normalizeHarness is DISPLAY-ONLY: it collapses unknown harness names to
+// claude for icon/label fallback. Routing code must use
+// domain.HarnessOrDefault, which keeps unknown names visible.
 func normalizeHarness(harness string) string {
-	if harness == "codex" {
-		return "codex"
+	if harness == domain.HarnessCodex {
+		return domain.HarnessCodex
 	}
-	return "claude"
+	return domain.HarnessClaude
 }
 
 // harnessColor returns the theme color for a given harness name.

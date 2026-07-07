@@ -58,10 +58,10 @@ func ReconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneT
 
 func harnessFromCommand(cmd string) string {
 	switch {
-	case cmd == "claude":
-		return "claude"
-	case strings.HasPrefix(cmd, "codex"):
-		return "codex"
+	case cmd == domain.HarnessClaude:
+		return domain.HarnessClaude
+	case strings.HasPrefix(cmd, domain.HarnessCodex):
+		return domain.HarnessCodex
 	default:
 		return ""
 	}
@@ -94,9 +94,9 @@ func ReconcileIdentities(sf *domain.StateFile, opts ReconcileIdentityOptions) {
 		}
 		var candidates []identityCandidate
 		switch agent.Harness {
-		case "codex":
+		case domain.HarnessCodex:
 			candidates = codexCandidates(agent.Cwd, codexRows)
-		case "claude", "":
+		case domain.HarnessClaude, "":
 			candidates = claudeCandidates(agent.Cwd, opts.ClaudeSessionsDir, opts.ClaudeProjectsDir)
 		default:
 			// Unknown harness: stay a placeholder rather than silently

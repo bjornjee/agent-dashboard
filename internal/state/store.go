@@ -124,7 +124,7 @@ func (s *Store) Sync(sf *domain.StateFile) {
 					OR (agents.dismissed_at IS NOT NULL AND excluded.updated_at > agents.dismissed_at)
 				)`,
 			agent.SessionID,
-			defaultHarness(agent.Harness),
+			domain.HarnessOrDefault(agent.Harness),
 			agent.TmuxPaneID,
 			agent.TmuxServerPID,
 			agent.Target,
@@ -324,13 +324,6 @@ func (s *Store) Dismissed(sessionID string) bool {
 		return false
 	}
 	return count > 0
-}
-
-func defaultHarness(harness string) string {
-	if harness == "" {
-		return "claude"
-	}
-	return harness
 }
 
 func reportSeq(agent domain.Agent) int {

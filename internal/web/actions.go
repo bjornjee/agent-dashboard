@@ -14,6 +14,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/conversation"
 	"github.com/bjornjee/agent-dashboard/internal/diagrams"
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/gh"
 	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
@@ -55,7 +56,7 @@ func (s *Server) sendApprovalKeystroke(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 	var err error
-	if agent.Harness == "codex" {
+	if agent.Harness == domain.HarnessCodex {
 		err = tmux.TmuxPasteKeysClearingInput(target, codexText)
 		if err == nil {
 			err = tmux.TmuxSendRawKeys(target, codex.SubmitKeysAfterPaste(target, agent.State)...)
@@ -111,7 +112,7 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 	// "running" after the prompt is already idle, while the Codex footer
 	// explicitly says when Tab is required to queue a reply.
 	var sendErr error
-	if agent.Harness == "codex" {
+	if agent.Harness == domain.HarnessCodex {
 		sendErr = tmux.TmuxPasteKeysClearingInput(target, req.Text)
 		if sendErr == nil {
 			sendErr = tmux.TmuxSendRawKeys(target, codex.SubmitKeysAfterPaste(target, agent.State)...)
@@ -164,7 +165,7 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wantTool := "AskUserQuestion"
-	if agent.Harness == "codex" {
+	if agent.Harness == domain.HarnessCodex {
 		wantTool = "request_user_input"
 	}
 	// Single paused-on-tool predicate shared with handlePendingQuestion.
@@ -233,7 +234,7 @@ func (s *Server) handleAnswerQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	driver := driveAskUserQuestionPicker
-	if agent.Harness == "codex" {
+	if agent.Harness == domain.HarnessCodex {
 		driver = driveCodexRequestUserInputPicker
 	}
 	if err := driver(target, req); err != nil {

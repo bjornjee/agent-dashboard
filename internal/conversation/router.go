@@ -131,7 +131,7 @@ func TopLevelAgents(agents []domain.Agent, roots Roots) []domain.Agent {
 	}
 	out := make([]domain.Agent, 0, len(agents))
 	for _, agent := range agents {
-		if agent.Harness == "codex" {
+		if agent.Harness == domain.HarnessCodex {
 			if codexconv.ParentThreadID(roots.CodexSessionsRoot, agent.SessionID) != "" {
 				continue
 			}
