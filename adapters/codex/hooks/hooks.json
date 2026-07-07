@@ -155,6 +155,30 @@
           }
         ]
       }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/desktop-notify.sh",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/agent-dashboard/desktop-notify.sh",
+            "timeout": 10000
+          }
+        ]
+      }
     ]
   }
 }

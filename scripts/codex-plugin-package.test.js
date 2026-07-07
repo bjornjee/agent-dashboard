@@ -108,6 +108,24 @@ describe('codex plugin package', () => {
     assert.deepEqual(commands, ['node "${PLUGIN_ROOT}/hooks/pr-skill-detect.js"']);
   });
 
+  it('registers plugin-local Codex desktop notifications', () => {
+    const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json')).hooks;
+
+    assert.deepEqual(
+      hooks.Notification.flatMap(entry => entry.hooks.map(hook => hook.command)),
+      ['node "${PLUGIN_ROOT}/hooks/desktop-notify.js"'],
+    );
+    assert.deepEqual(
+      hooks.StopFailure.flatMap(entry => entry.hooks.map(hook => hook.command)),
+      ['node "${PLUGIN_ROOT}/hooks/desktop-notify.js"'],
+    );
+    assert.equal(
+      fs.existsSync(path.join(REPO, 'adapters/codex/hooks/desktop-notify.js')),
+      true,
+      'Codex plugin must package desktop-notify.js',
+    );
+  });
+
   it('registers Codex plugin subagent lifecycle events', () => {
     const hooks = readJson(path.join(REPO, 'adapters/codex/hooks/plugin-hooks.json')).hooks;
     assert.ok(hooks.SubagentStart, 'SubagentStart hook should be registered');
