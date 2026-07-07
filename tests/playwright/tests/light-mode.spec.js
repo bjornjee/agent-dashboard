@@ -82,6 +82,14 @@ async function mockApi(page, agents) {
     json: { days: [], today_cost: 0, total_cost: 0 },
   }));
   await page.route('**/api/skills', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/harness-options', (route) => route.fulfill({
+    json: {
+      models: ['opus'],
+      efforts: ['high'],
+      default_model: { model: 'opus', source: '~/.claude/settings.json' },
+      default_effort: { effort: 'high', source: 'agent-dashboard settings' },
+    },
+  }));
   await page.addInitScript(() => {
     try { sessionStorage.clear(); } catch {}
   });
@@ -232,6 +240,10 @@ function lightModeSuite({ label, width, height, sidebarHidden }) {
         null,
         { timeout: 5000 },
       );
+      await expect(page.locator('#create-model-hint')).toContainText('Default: opus');
+      await expect(page.locator('#create-effort-hint')).toContainText('Default: high');
+      const hintColors = await page.locator('#create-model-hint, #create-effort-hint').evaluateAll((nodes) => nodes.map((n) => getComputedStyle(n).color));
+      expect(hintColors).toEqual(['rgb(113, 113, 122)', 'rgb(113, 113, 122)']);
 
       // --- create → usage ---
       await page.evaluate(() => {

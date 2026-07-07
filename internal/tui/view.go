@@ -36,6 +36,16 @@ func defaultModelHint(info domain.DefaultModelInfo) string {
 	return "Default: " + info.Model + " · " + info.Source
 }
 
+func defaultEffortHint(info domain.DefaultEffortInfo) string {
+	if info.Effort == "" {
+		return "Default: harness built-in"
+	}
+	if info.Source == "" {
+		return "Default: " + info.Effort
+	}
+	return "Default: " + info.Effort + " · " + info.Source
+}
+
 // -- Content Builders --
 
 func (m *model) updateLeftContent() {
@@ -213,6 +223,7 @@ func (m *model) updateRightContent() {
 		lines = append(lines, "  "+helpStyle.Render("Model:   "+createOptionLabel(m.createModel)))
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Select effort:"))
+		lines = append(lines, "  "+helpStyle.Render(defaultEffortHint(m.createDefaultEffort)))
 		lines = append(lines, "")
 		for i, effort := range m.availableEfforts {
 			prefix := "  "
@@ -223,7 +234,7 @@ func (m *model) updateRightContent() {
 			}
 		}
 		lines = append(lines, "")
-		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ Esc back │ ^C cancel"))
+		lines = append(lines, "  "+helpStyle.Render("Enter to select │ ↑↓ cycle │ ^R refresh │ Esc back │ ^C cancel"))
 		m.filesVP.SetContent("")
 		m.historyVP.SetContent("")
 		m.messageVP.SetContent(strings.Join(lines, "\n"))

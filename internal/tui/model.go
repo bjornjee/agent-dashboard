@@ -232,6 +232,8 @@ type model struct {
 	availableEfforts      []string // display list: ["(default)", "low", ...]
 	selectedCreateEffort  int      // index into availableEfforts
 	createEffort          string   // selected effort ("" if default)
+	createDefaultEffort   domain.DefaultEffortInfo
+	defaultEffortCache    *harness.DefaultEffortCache
 
 	// Spawning status — keeps the bottom "Spawning agent..." spinner alive
 	// until the agent's state file appears on disk or 30s safety expiry.
@@ -286,10 +288,12 @@ func (m *model) populateCreateModelEffortOptions() {
 		m.availableModels = createOptionList(nil)
 		m.availableEfforts = createOptionList(nil)
 		m.createDefaultModel = domain.DefaultModelInfo{}
+		m.createDefaultEffort = domain.DefaultEffortInfo{}
 	} else {
 		m.availableModels = createOptionList(h.Models())
 		m.availableEfforts = createOptionList(h.EffortLevels())
 		m.createDefaultModel = m.resolveCreateDefaultModel(h, false)
+		m.createDefaultEffort = m.resolveCreateDefaultEffort(h, false)
 	}
 	m.selectedCreateModel = 0
 	m.selectedCreateEffort = 0
@@ -311,6 +315,22 @@ func (m *model) resolveCreateDefaultModel(h domain.Harness, force bool) domain.D
 		m.defaultModelCache = harness.NewDefaultModelCache()
 	}
 	return m.defaultModelCache.Resolve(h, m.cfg.Settings, force)
+}
+
+func (m *model) refreshCreateDefaultEffort() {
+	h, err := harness.Resolve(m.createHarness, m.cfg.Profile)
+	if err != nil {
+		m.createDefaultEffort = domain.DefaultEffortInfo{}
+		return
+	}
+	m.createDefaultEffort = m.resolveCreateDefaultEffort(h, true)
+}
+
+func (m *model) resolveCreateDefaultEffort(h domain.Harness, force bool) domain.DefaultEffortInfo {
+	if m.defaultEffortCache == nil {
+		m.defaultEffortCache = harness.NewDefaultEffortCache()
+	}
+	return m.defaultEffortCache.Resolve(h, m.cfg.Settings, force)
 }
 
 // CodexSessionsDir returns the resolved $CODEX_HOME/sessions root for this
@@ -758,6 +778,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		availableHarnesses:    harnessOptions,
 		selectedCreateHarness: defaultHarnessIdx,
 		defaultModelCache:     harness.NewDefaultModelCache(),
+		defaultEffortCache:    harness.NewDefaultEffortCache(),
 		pet:                   newPetModel(0),
 		petEnabled:            cfg.Settings.Experimental.AsciiPet,
 		dino:                  newDinoGameModel(0, 0),

@@ -48,7 +48,8 @@ type Server struct {
 	rlCache     *domain.RateLimit
 	rlFetchedAt time.Time
 
-	defaultModelCache *harness.DefaultModelCache
+	defaultModelCache  *harness.DefaultModelCache
+	defaultEffortCache *harness.DefaultEffortCache
 
 	// Trust-prompt tracker: set of tmux pane_ids whose harness has shown a
 	// folder-trust dialog post-spawn. Populated by watchTrustPrompt after
@@ -67,6 +68,7 @@ func NewServer(cfg domain.Config, database *db.DB, opts ServerOptions) *Server {
 		hub:                  newSSEHub(),
 		codexSessionsRootDir: resolveCodexSessionsRoot(cfg.Profile.HomeDir),
 		defaultModelCache:    harness.NewDefaultModelCache(),
+		defaultEffortCache:   harness.NewDefaultEffortCache(),
 		trustPanes:           make(map[string]trustPaneRecord),
 	}
 	if opts.GoogleClientID != "" {

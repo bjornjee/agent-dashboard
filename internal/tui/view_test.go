@@ -521,6 +521,56 @@ func TestCreateModelViewShowsDefaultModelHint(t *testing.T) {
 	}
 }
 
+func TestCreateEffortViewShowsDefaultEffortHint(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	cfg := testConfig(t.TempDir())
+	cfg.Profile.ConfigDir = t.TempDir()
+	cfg.Settings.Effort.Default = ""
+	if err := os.WriteFile(filepath.Join(cfg.Profile.ConfigDir, "settings.json"), []byte(`{"effortLevel":"xhigh"}`), 0600); err != nil {
+		t.Fatalf("write claude settings: %v", err)
+	}
+	cfg.Harness, _ = harness.Resolve("claude", cfg.Profile)
+	m := NewModel(cfg, nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeCreateEffort
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
+	m.populateCreateModelEffortOptions()
+	m.updateRightContent()
+
+	content := m.messageVP.View()
+	if !strings.Contains(content, "Default: xhigh") {
+		t.Errorf("effort view missing default effort hint:\n%s", content)
+	}
+	if !strings.Contains(content, "~/.claude/settings.json") {
+		t.Errorf("effort view missing default effort source:\n%s", content)
+	}
+}
+
+func TestCreateEffortViewShowsHarnessBuiltInFallback(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	cfg := testConfig(t.TempDir())
+	cfg.Profile.ConfigDir = t.TempDir()
+	cfg.Settings.Effort.Default = ""
+	cfg.Harness, _ = harness.Resolve("claude", cfg.Profile)
+	m := NewModel(cfg, nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeCreateEffort
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
+	m.populateCreateModelEffortOptions()
+	m.updateRightContent()
+
+	content := m.messageVP.View()
+	if !strings.Contains(content, "Default: harness built-in") {
+		t.Errorf("effort view missing fallback hint:\n%s", content)
+	}
+}
+
 func TestRenderHelpOverlayTwoColumnsWide(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 

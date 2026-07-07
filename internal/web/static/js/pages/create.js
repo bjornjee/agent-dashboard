@@ -67,6 +67,13 @@ export function formatDefaultModelHint(info) {
   return source ? `Default: ${model} · ${source}` : `Default: ${model}`;
 }
 
+export function formatDefaultEffortHint(info) {
+  const effort = info && typeof info.effort === 'string' ? info.effort.trim() : '';
+  const source = info && typeof info.source === 'string' ? info.source.trim() : '';
+  if (!effort) return 'Default: harness built-in';
+  return source ? `Default: ${effort} · ${source}` : `Default: ${effort}`;
+}
+
 export function harnessOptionsURL(harness, refresh = false) {
   const params = new URLSearchParams();
   if (harness) params.set('harness', harness);
@@ -151,7 +158,7 @@ export function renderCreate(app, agents) {
               </select>
               ${CHEVRON_DOWN}
             </label>
-            <button class="create-composer__icon create-composer__icon--refresh" id="create-model-refresh" type="button" aria-label="Refresh default model" title="Refresh default model">${ICONS.refresh}</button>
+            <button class="create-composer__icon create-composer__icon--refresh" id="create-model-refresh" type="button" aria-label="Refresh defaults" title="Refresh defaults">${ICONS.refresh}</button>
             <label class="create-composer__pill" title="Effort — override this agent's thinking effort for one spawn.">
               <select id="create-effort" aria-label="Effort — override this agent's thinking effort for one spawn">
                 <option value="">Default</option>
@@ -164,6 +171,7 @@ export function renderCreate(app, agents) {
           </div>
         </div>
         <div class="create-model-meta" id="create-model-hint">Default: harness default</div>
+        <div class="create-model-meta" id="create-effort-hint">Default: harness built-in</div>
       </div>
       <div class="create-hint" id="folder-hint">Pick a folder to spawn in.</div>
 
@@ -177,6 +185,7 @@ export function renderCreate(app, agents) {
   const modelHint = document.getElementById('create-model-hint');
   const modelRefresh = document.getElementById('create-model-refresh');
   const effortSel = document.getElementById('create-effort');
+  const effortHint = document.getElementById('create-effort-hint');
 
   // Different harnesses have different plugin caches and block-lists.
   // Refetch when the harness changes so the dropdown matches what the
@@ -208,6 +217,7 @@ export function renderCreate(app, agents) {
       replaceSelectOptions(modelSel, options && options.models, 'Default');
       replaceSelectOptions(effortSel, options && options.efforts, 'Default');
       if (modelHint) modelHint.textContent = formatDefaultModelHint(options && options.default_model);
+      if (effortHint) effortHint.textContent = formatDefaultEffortHint(options && options.default_effort);
     }).catch(() => {}).finally(() => {
       if (modelRefresh) modelRefresh.disabled = false;
     }); // failed fetch keeps the current options usable
