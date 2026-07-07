@@ -824,28 +824,15 @@ func resumeSession(agent domain.Agent, agents []domain.Agent, selfPaneID string,
 
 func (m model) loadPlan() tea.Cmd {
 	agent := m.selectedAgent()
-	if agent == nil || agent.ProjDir == "" || agent.SessionID == "" {
+	if agent == nil || agent.SessionID == "" {
 		return nil
 	}
-	projDir := agent.ProjDir
-	sessionID := agent.SessionID
+	a := *agent
+	roots := conversation.Roots{CodexSessionsRoot: m.codexSessionsDir}
 	plansDir := m.cfg.Profile.PlansDir
-	delegatedToolUseID := agent.DelegatedPlanToolUseID
 
 	return func() tea.Msg {
-		// Prefer the delegated-Plan-subagent pointer if set; the plan is
-		// persisted only inside the parent JSONL as a tool_result.
-		if delegatedToolUseID != "" {
-			if content := conversation.ReadDelegatedPlanContent(projDir, sessionID, delegatedToolUseID); content != "" {
-				return planMsg{content: content}
-			}
-		}
-		planSlug := conversation.ReadPlanSlug(projDir, sessionID)
-		if planSlug == "" {
-			return planMsg{content: ""}
-		}
-		content := conversation.ReadPlanContent(plansDir, planSlug)
-		return planMsg{content: content}
+		return planMsg{content: conversation.ReadPlan(a, roots, plansDir)}
 	}
 }
 
