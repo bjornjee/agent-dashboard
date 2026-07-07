@@ -14,9 +14,7 @@ const ALERTING_NOTIFICATION_TYPES = new Set([
   'elicitation_dialog',
 ]);
 
-const ALERTING_ERRORS = new Set([
-  'rate_limit',
-]);
+const ALERTING_ERRORS = new Set();
 
 function shouldAlert(input) {
   if (input.hook_event_name === 'Notification') {
