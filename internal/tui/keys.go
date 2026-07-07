@@ -673,7 +673,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.confirmPaneID = ""
 			m.confirmSessionID = ""
 			m.mode = modeNormal
-			return m, closePane(paneID, sessionID, m.statePath)
+			return m, closePane(paneID, sessionID, m.statePath, m.store)
 		case "n", "esc":
 			m.confirmPaneID = ""
 			m.confirmSessionID = ""
@@ -689,7 +689,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "y":
 			m.mode = modeNormal
-			return m, dismissAllResumable(m.statePath, m.agents)
+			return m, dismissAllResumable(m.statePath, m.agents, m.store)
 		case "n", "esc":
 			m.mode = modeNormal
 			m.clearStatus()
@@ -756,7 +756,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cleanupBranch = ""
 			m.mode = modeNormal
 			m.setStatus("Cleaning up...", false)
-			return m, postMergeCleanup(agent, m.statePath)
+			return m, postMergeCleanup(agent, m.statePath, m.store)
 		case "n", "esc":
 			m.cleanupSessionID = ""
 			m.cleanupPaneID = ""
@@ -912,7 +912,7 @@ func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				// The orphan's pane is dead — re-spawn its session instead of
 				// jumping to a pane that no longer exists.
 				m.setStatus("Resuming session…", false)
-				return m, resumeSession(selected, m.agents, m.selfPaneID, m.cfg.Profile, m.cfg.Settings)
+				return m, resumeSession(selected, m.agents, m.selfPaneID, m.cfg.Profile, m.cfg.Settings, m.store)
 			}
 			// Live agent — confirm jump, mirroring normal-mode Enter.
 			m.mode = modeConfirmJump

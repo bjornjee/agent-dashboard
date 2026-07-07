@@ -317,13 +317,13 @@ func TmuxListSessions() ([]string, error) {
 //
 // Returns (nil, nil, "") on tmux error — callers must handle nil gracefully
 // (ResolveAgentTargets / ResolveAgentBranches do).
-func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string, string) {
+func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string, map[string]string, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	out, err := runner.Output(ctx, "list-panes", "-a",
-		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}")
+		"-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}\t#{pane_current_command}")
 	if err != nil {
-		return nil, nil, ""
+		return nil, nil, nil, ""
 	}
 	return parsePanesOutput(string(out))
 }
@@ -331,20 +331,22 @@ func TmuxListPanes() (map[string]domain.PaneTarget, map[string]string, string) {
 // parsePanesOutput parses the tab-separated rows produced by the combined
 // list-panes format. Each row is:
 //
-//	pane_id<TAB>session<TAB>window_idx<TAB>pane_idx<TAB>server_pid<TAB>pane_current_path
+//	pane_id<TAB>session<TAB>window_idx<TAB>pane_idx<TAB>server_pid<TAB>pane_current_path<TAB>pane_current_command
 //
 // Rows missing the cwd column are tolerated for the targets map; the cwd
-// map only gets entries whose path is non-empty. The server PID is the
-// same on every row; the first valid row wins.
-func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]string, string) {
+// map only gets entries whose path is non-empty. Rows missing the command
+// column are also tolerated. The server PID is the same on every row; the
+// first valid row wins.
+func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]string, map[string]string, string) {
 	targets := make(map[string]domain.PaneTarget)
 	cwds := make(map[string]string)
+	cmds := make(map[string]string)
 	serverPID := ""
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 6)
+		parts := strings.SplitN(line, "\t", 7)
 		if len(parts) < 5 {
 			continue
 		}
@@ -365,13 +367,21 @@ func parsePanesOutput(output string) (map[string]domain.PaneTarget, map[string]s
 			Target:  fmt.Sprintf("%s:%d.%d", session, w, p),
 		}
 		if serverPID == "" {
-			serverPID = parts[4]
+			serverPID = numericPID(parts[4])
 		}
 		if len(parts) == 6 && parts[5] != "" {
 			cwds[paneID] = parts[5]
 		}
+		if len(parts) == 7 {
+			if parts[5] != "" {
+				cwds[paneID] = parts[5]
+			}
+			if parts[6] != "" {
+				cmds[paneID] = parts[6]
+			}
+		}
 	}
-	return targets, cwds, serverPID
+	return targets, cwds, cmds, serverPID
 }
 
 // TmuxListLivePaneIDs returns the set of all live tmux pane IDs (%N format)
@@ -395,10 +405,28 @@ func TmuxListLivePaneIDs() (map[string]bool, string) {
 		parts := strings.SplitN(line, "\t", 2)
 		panes[parts[0]] = true
 		if serverPID == "" && len(parts) == 2 {
-			serverPID = parts[1]
+			serverPID = numericPID(parts[1])
 		}
 	}
 	return panes, serverPID
+}
+
+// numericPID returns pid only when it is a plain decimal number. A tmux
+// that doesn't know the #{pid} format variable emits it as literal text;
+// treating that as a server identity would poison every consumer that
+// compares stamped server PIDs (orphan event-scoping, hydrate, sweep).
+// Dropping it yields the enumeration-failed ("") case, which every
+// consumer already fails safe on.
+func numericPID(pid string) string {
+	if pid == "" {
+		return ""
+	}
+	for _, r := range pid {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return pid
 }
 
 // parseListWindowsOutput parses the output of tmux list-windows -F "#{window_index}\t#{window_name}".

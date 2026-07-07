@@ -202,11 +202,12 @@ func Test_parsePanesOutput(t *testing.T) {
 		output        string
 		wantTargets   map[string]domain.PaneTarget
 		wantCwds      map[string]string
+		wantCmds      map[string]string
 		wantServerPID string
 	}{
 		{
 			name:   "targets, cwds, and server pid",
-			output: "%85\ttomoro\t1\t1\t4242\t/home/a\n%87\ttomoro\t2\t1\t4242\t/home/b\n%90\ttomoro\t3\t2\t4242\t\n",
+			output: "%85\ttomoro\t1\t1\t4242\t/home/a\tclaude\n%87\ttomoro\t2\t1\t4242\t/home/b\tcodex-aarch64-a\n%90\ttomoro\t3\t2\t4242\t\tzsh\n",
 			wantTargets: map[string]domain.PaneTarget{
 				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
 				"%87": {Session: "tomoro", Window: 2, Pane: 1, Target: "tomoro:2.1"},
@@ -215,6 +216,11 @@ func Test_parsePanesOutput(t *testing.T) {
 			wantCwds: map[string]string{
 				"%85": "/home/a",
 				"%87": "/home/b",
+			},
+			wantCmds: map[string]string{
+				"%85": "claude",
+				"%87": "codex-aarch64-a",
+				"%90": "zsh",
 			},
 			wantServerPID: "4242",
 		},
@@ -242,11 +248,25 @@ func Test_parsePanesOutput(t *testing.T) {
 			wantTargets: map[string]domain.PaneTarget{},
 			wantCwds:    map[string]string{},
 		},
+		{
+			// tmux that doesn't know a format variable emits it as literal
+			// text. A literal "#{pid}" server PID would poison the
+			// hydrate/sweep server-identity guards — it must be dropped so
+			// callers see the enumeration-failed ("") case instead.
+			name:   "non-numeric pid column yields no server pid",
+			output: "%85\ttomoro\t1\t1\t#{pid}\t/home/a\tclaude\n",
+			wantTargets: map[string]domain.PaneTarget{
+				"%85": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
+			},
+			wantCwds:      map[string]string{"%85": "/home/a"},
+			wantCmds:      map[string]string{"%85": "claude"},
+			wantServerPID: "",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotTargets, gotCwds, gotServerPID := parsePanesOutput(tt.output)
+			gotTargets, gotCwds, gotCmds, gotServerPID := parsePanesOutput(tt.output)
 			if gotServerPID != tt.wantServerPID {
 				t.Errorf("serverPID: got %q, want %q", gotServerPID, tt.wantServerPID)
 			}
@@ -269,6 +289,14 @@ func Test_parsePanesOutput(t *testing.T) {
 			for k, wantV := range tt.wantCwds {
 				if gotCwds[k] != wantV {
 					t.Errorf("cwd %q: got %q, want %q", k, gotCwds[k], wantV)
+				}
+			}
+			if len(gotCmds) != len(tt.wantCmds) {
+				t.Fatalf("cmds: got %d entries (%+v), want %d (%+v)", len(gotCmds), gotCmds, len(tt.wantCmds), tt.wantCmds)
+			}
+			for k, wantV := range tt.wantCmds {
+				if gotCmds[k] != wantV {
+					t.Errorf("cmd %q: got %q, want %q", k, gotCmds[k], wantV)
 				}
 			}
 		})

@@ -59,10 +59,10 @@ var knownTestSessionIDs = []string{
 
 func main() {
 	home, _ := os.UserHomeDir()
-	defaultDB := home + "/.agent-dashboard/usage.db"
+	defaultDB := home + "/.agent-dashboard/dashboard.db"
 	defaultProj := home + "/.claude/projects"
 
-	dbPath := flag.String("db", defaultDB, "path to usage.db")
+	dbPath := flag.String("db", defaultDB, "path to dashboard.db")
 	projectsDir := flag.String("projects", defaultProj, "Claude Code projects dir")
 	dryRun := flag.Bool("dry-run", false, "report what would change but do not write")
 	pruneDuplicates := flag.Bool("prune-duplicates", false, "within UUIDv7 clusters (same 13-char prefix on same date), keep max-cost row, delete rest")

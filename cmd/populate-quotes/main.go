@@ -29,7 +29,7 @@ func main() {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
 		home, _ := os.UserHomeDir()
-		dbPath = home + "/.agent-dashboard/usage.db"
+		dbPath = home + "/.agent-dashboard/dashboard.db"
 	}
 
 	conn, err := sqlx.Open("sqlite", dbPath)

@@ -19,7 +19,7 @@ func TestHandleAgents_ResumableFlag(t *testing.T) {
 	// server PID 100, so %2/%3 are dead.
 	m.On("Run", mock.Anything, "list-sessions").Return(nil)
 	m.On("Output", mock.Anything,
-		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}",
+		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}\t#{pane_current_command}",
 	).Return([]byte("%0\tmain\t0\t0\t100\t/tmp\n"), nil)
 
 	// WorktreeCwd + Branch is the pinned case: ResolveAgentBranches leaves the

@@ -126,6 +126,7 @@ test('stateLabel: maps each state group to a human label for aria', () => {
   assert.equal(stateLabel('done'), 'Done');
   assert.equal(stateLabel('pr'), 'PR open');
   assert.equal(stateLabel('merged'), 'Merged');
+  assert.equal(stateLabel('unregistered'), 'Unregistered');
 });
 
 test('stateLabel: returns "" for unknown states', () => {

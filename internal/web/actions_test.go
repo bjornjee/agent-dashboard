@@ -87,7 +87,7 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 			// lookupAgent → TmuxIsAvailable + TmuxListPanes
 			m.On("Run", mock.Anything, "list-sessions").Return(nil)
 			m.On("Output", mock.Anything,
-				"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}",
+				"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}\t#{pane_current_command}",
 			).Return([]byte(""), nil)
 
 			// handleInput → TmuxIsAvailable (re-uses list-sessions mock above)
@@ -132,7 +132,7 @@ func TestHandleInputRejectsEmptyText(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	m.On("Run", mock.Anything, "list-sessions").Return(nil)
 	m.On("Output", mock.Anything,
-		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}",
+		"list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_index}\t#{pane_index}\t#{pid}\t#{pane_current_path}\t#{pane_current_command}",
 	).Return([]byte(""), nil)
 
 	agent := domain.Agent{

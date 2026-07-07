@@ -20,11 +20,10 @@ func main() {
 
 	cfg := config.DefaultConfig()
 
-	// Open usage database
-	dbPath := cfg.Profile.StateDir + "/usage.db"
-	database, err := db.OpenDB(dbPath)
+	// Open dashboard database
+	database, err := db.Open(cfg.Profile.StateDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: usage DB not available: %v\n", err)
+		fmt.Fprintf(os.Stderr, "warning: dashboard DB not available: %v\n", err)
 	}
 	if database != nil {
 		defer database.Close()
@@ -62,6 +61,13 @@ func main() {
 	} else if watcher != nil {
 		defer watcher.Close()
 	}
+
+	// Web-only deployments need the periodic prune/sweep the TUI runs on
+	// its tick; without it dead files and orphaned read-model rows linger.
+	// No close: log.Fatal below exits via os.Exit, so defers never run —
+	// the prune goroutine is process-scoped and dies with the process. The
+	// stop channel exists for callers that do have a shutdown path (tests).
+	srv.StartPruneLoop(make(chan struct{}))
 
 	addr := fmt.Sprintf("%s:%d", *bind, *port)
 	log.Printf("Agent Dashboard web UI: http://%s", addr)

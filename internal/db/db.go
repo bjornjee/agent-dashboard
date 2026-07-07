@@ -32,6 +32,55 @@ type DB struct {
 	conn *sqlx.DB
 }
 
+// Filename is the dashboard's SQLite database name inside the state dir.
+const Filename = "dashboard.db"
+
+// Open opens the dashboard database in stateDir, migrating the legacy usage.db
+// name on first use.
+func Open(stateDir string) (*DB, error) {
+	if err := renameLegacyDB(stateDir); err != nil {
+		return nil, err
+	}
+	return OpenDB(filepath.Join(stateDir, Filename))
+}
+
+func renameLegacyDB(stateDir string) error {
+	current := filepath.Join(stateDir, Filename)
+	legacy := filepath.Join(stateDir, "usage.db")
+	if _, err := os.Stat(current); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	// Sidecars first: if the main-file rename below fails, already-renamed
+	// sidecars are re-adopted on retry once the main file moves. Renaming
+	// the main file first would let a sidecar failure strand the WAL under
+	// the legacy name — the dashboard.db stat short-circuit above never
+	// retries, and SQLite would silently drop un-checkpointed transactions.
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := renameIfExists(legacy+suffix, current+suffix); err != nil {
+			return err
+		}
+	}
+	return os.Rename(legacy, current)
+}
+
+func renameIfExists(oldPath, newPath string) error {
+	if _, err := os.Stat(oldPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.Rename(oldPath, newPath)
+}
+
 // OpenDB opens (or creates) the SQLite database and runs migrations.
 func OpenDB(path string) (*DB, error) {
 	if path != ":memory:" {
@@ -59,6 +108,14 @@ func OpenDB(path string) (*DB, error) {
 // Close closes the database connection.
 func (d *DB) Close() error {
 	return d.conn.Close()
+}
+
+// Conn exposes the underlying sqlx connection for internal read-model helpers.
+func (d *DB) Conn() *sqlx.DB {
+	if d == nil {
+		return nil
+	}
+	return d.conn
 }
 
 // UpsertUsage inserts or replaces a daily usage row for a session (Claude provider).

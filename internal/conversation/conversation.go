@@ -1593,3 +1593,40 @@ func Locate(sessionsDir string, candidates ...string) string {
 	}
 	return best.SessionID
 }
+
+// SessionMeta is the caller-facing shape of a ~/.claude/sessions/{pid}.json
+// entry, exposed so higher layers never read those files directly.
+type SessionMeta struct {
+	SessionID string
+	StartedAt int64
+}
+
+// SessionMetas returns every Claude session whose recorded cwd matches dir
+// exactly (same matching rules as Locate), newest first.
+func SessionMetas(sessionsDir, dir string) []SessionMeta {
+	if sessionsDir == "" || dir == "" {
+		return nil
+	}
+	want := filepath.Clean(dir)
+	entries, err := os.ReadDir(sessionsDir)
+	if err != nil {
+		return nil
+	}
+	var out []SessionMeta
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(sessionsDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var sf sessionFile
+		if json.Unmarshal(data, &sf) != nil || filepath.Clean(sf.Cwd) != want {
+			continue
+		}
+		out = append(out, SessionMeta{SessionID: sf.SessionID, StartedAt: sf.StartedAt})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt > out[j].StartedAt })
+	return out
+}

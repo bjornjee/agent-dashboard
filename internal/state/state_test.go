@@ -241,6 +241,58 @@ func TestPruneDead_ByPaneID(t *testing.T) {
 	}
 }
 
+// TestPruneDead_SweepsOrphanRows covers the PruneDead → SweepDeadRows wiring
+// end-to-end: knownSessions built from all parsed files, livePaneIDs and
+// serverPID forwarded, file-backed and orphan rows treated differently.
+func TestPruneDead_SweepsOrphanRows(t *testing.T) {
+	store, d := testStore(t)
+	tmp := t.TempDir()
+
+	live := domain.Agent{SessionID: "live", Target: "main:1.0", State: "running", TmuxPaneID: "%1", UpdatedAt: "2026-07-06T10:00:00Z"}
+	deadfile := domain.Agent{SessionID: "deadfile", Target: "main:1.1", State: "running", TmuxPaneID: "%2", UpdatedAt: "2026-07-06T10:00:00Z"}
+	orphan := domain.Agent{SessionID: "orphan", Target: "main:1.2", State: "running", TmuxPaneID: "%3", UpdatedAt: "2026-07-06T10:00:00Z"}
+
+	// live and deadfile have hook files; orphan exists only as a DB row
+	// (its file vanished while no dashboard was running).
+	writeAgentFile(t, tmp, "live.json", live)
+	writeAgentFile(t, tmp, "deadfile.json", deadfile)
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+		"live": live, "deadfile": deadfile, "orphan": orphan,
+	}})
+
+	removed := PruneDead(tmp, map[string]bool{"%0": true, "%1": true}, "100", nil, store)
+	if removed != 1 {
+		t.Fatalf("expected 1 file removed, got %d", removed)
+	}
+
+	type row struct {
+		SessionID       string  `db:"session_id"`
+		DismissedReason *string `db:"dismissed_reason"`
+	}
+	var rows []row
+	if err := d.Conn().Select(&rows, "SELECT session_id, dismissed_reason FROM agents ORDER BY session_id"); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	got := map[string]string{}
+	for _, r := range rows {
+		reason := ""
+		if r.DismissedReason != nil {
+			reason = *r.DismissedReason
+		}
+		got[r.SessionID] = reason
+	}
+	want := map[string]string{
+		"live":     "",          // pane alive, file kept
+		"deadfile": "dead_pane", // file pruned this cycle → dismissed by dismissPruned
+		"orphan":   "dead_pane", // no file, dead pane → swept
+	}
+	for id, reason := range want {
+		if got[id] != reason {
+			t.Fatalf("session %q dismissed_reason = %q, want %q", id, got[id], reason)
+		}
+	}
+}
+
 func TestPruneDead_EmptyLivePanes(t *testing.T) {
 	tmp := t.TempDir()
 	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{SessionID: "sess-a", Target: "main:1.0", State: "running", TmuxPaneID: "%1"})
