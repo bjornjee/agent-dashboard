@@ -308,6 +308,39 @@ func TestLoadSubagentActivity_RoutesCodexSubagentToRollout(t *testing.T) {
 	}
 }
 
+func TestLoadPlan_RoutesCodexAgentToRolloutPlan(t *testing.T) {
+	root := t.TempDir()
+	sessionID := "codex-plan-session"
+	planText := "# Codex plan"
+	writeTUIRollout(t, root, sessionID, `{"timestamp":"2026-05-21T14:44:03.645Z","type":"session_meta","payload":{"id":"codex-plan-session","timestamp":"2026-05-21T14:44:03.645Z"}}
+{"timestamp":"2026-05-21T14:45:00.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"Plan","text":"# Codex plan"}}}
+`)
+
+	m := model{
+		agents: []domain.Agent{{
+			Target:    "main:1.0",
+			SessionID: sessionID,
+			Harness:   "codex",
+		}},
+		codexSessionsDir: root,
+		cfg:              testConfig(""),
+	}
+	m.buildTree()
+	selectFirstAgent(&m)
+
+	cmd := m.loadPlan()
+	if cmd == nil {
+		t.Fatal("loadPlan returned nil, want plan command for codex agent without ProjDir")
+	}
+	msg, ok := cmd().(planMsg)
+	if !ok {
+		t.Fatalf("got %T, want planMsg", cmd())
+	}
+	if msg.content != planText {
+		t.Errorf("plan content = %q, want %q", msg.content, planText)
+	}
+}
+
 func writeTUIRollout(t *testing.T, root, sessionID, contents string) string {
 	t.Helper()
 
