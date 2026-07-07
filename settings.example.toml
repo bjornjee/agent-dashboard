@@ -26,7 +26,8 @@ rate_limit_poll_seconds = 60  # how often to fetch rate limits from Anthropic AP
 # New Agent flow. The agent-state-fast hook swaps to `plan` when the agent
 # enters plan mode (EnterPlanMode) and restores `default` on exit. Both
 # values flow into the same /effort slash command Claude Code accepts;
-# valid levels are minimal | low | medium | high | max.
+# valid levels are minimal | low | medium | high | max. `default` also
+# feeds the New Agent effort hint for Claude.
 plan    = "high"  # level used while permission_mode='plan'
 default = "high"  # level pinned at spawn and restored on plan exit
 
@@ -41,11 +42,12 @@ default = "claude"
 # Codex CLI spawn knobs — only consulted when [harness] default = "codex".
 # Each field maps to a codex CLI flag; empty fields inherit codex's own
 # resolution chain (~/.codex/config.toml > defaults). The New Agent model
-# picker displays this effective default and caches the hint for 1 hour.
+# and effort pickers display these effective defaults and cache hints for 1 hour.
 #   model                    → --model <m>            (e.g. "gpt-5.5")
 #   approval                 → -a <policy>            (never|untrusted|on-request)
 #   sandbox                  → -s <mode>              (danger-full-access|workspace-write|...)
 #   default_reasoning_effort → -c model_reasoning_effort=<level> for opted-in skills
+#                              and the New Agent effort hint
 #                              (effort levels: minimal|low|medium|high; Claude's
 #                              "max" is clamped to codex's "high")
 model                    = ""

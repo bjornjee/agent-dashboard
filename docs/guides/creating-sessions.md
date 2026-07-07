@@ -21,7 +21,7 @@ The z plugin is optional. Without it, you can type full paths manually.
 
 After choosing a directory, pick the harness that backs the session — Claude Code or Codex CLI (the default comes from `[harness]` in settings). The wizard then offers the harness's models (`fable`, `opus`, `sonnet`, `haiku` for Claude; `gpt-5.5` and friends for Codex) and a thinking-effort level, both of which override the settings defaults for this spawn only.
 
-The model picker shows what `(default)` currently resolves to. The hint reads the effective spawn default: dashboard Codex settings first, then the underlying agent config (`~/.claude/settings.json` or `~/.codex/config.toml`), then the harness's first advertised model. The value is cached for 1 hour; refresh with `Ctrl+R` in the TUI model step, or the refresh button in web, when you have just edited the agent config.
+The model and effort pickers show what `(default)` currently resolves to. The model hint reads the effective spawn default: dashboard Codex settings first, then the underlying agent config (`~/.claude/settings.json` or `~/.codex/config.toml`), then the harness's first advertised model. The effort hint reads dashboard settings first (`[effort].default` for Claude, `[harness.codex].default_reasoning_effort` for Codex), then native config (`effortLevel` in `~/.claude/settings.json` or `model_reasoning_effort` in `~/.codex/config.toml`), then `harness built-in` when no value is configured. Hints are cached for 1 hour; refresh with `Ctrl+R` in the TUI picker, or the refresh button in web, when you have just edited agent config.
 
 ## Skill selection
 

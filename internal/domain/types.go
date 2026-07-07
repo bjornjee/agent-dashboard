@@ -228,6 +228,15 @@ type DefaultModelInfo struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// DefaultEffortInfo describes the resolved reasoning effort used when a New
+// Agent spawn leaves the effort override empty.
+type DefaultEffortInfo struct {
+	Effort    string    `json:"effort"`
+	Source    string    `json:"source"`
+	CachedAt  time.Time `json:"cached_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // AgentProfile defines how the dashboard discovers and interacts with a coding agent.
 type AgentProfile struct {
 	Name           string // Display name: "Claude Code"

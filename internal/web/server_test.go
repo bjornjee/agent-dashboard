@@ -1827,9 +1827,10 @@ func TestHarnessOptionsEndpoint_DefaultHarness(t *testing.T) {
 	}
 
 	var got struct {
-		Models       []string                `json:"models"`
-		Efforts      []string                `json:"efforts"`
-		DefaultModel domain.DefaultModelInfo `json:"default_model"`
+		Models        []string                 `json:"models"`
+		Efforts       []string                 `json:"efforts"`
+		DefaultModel  domain.DefaultModelInfo  `json:"default_model"`
+		DefaultEffort domain.DefaultEffortInfo `json:"default_effort"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -1848,6 +1849,12 @@ func TestHarnessOptionsEndpoint_DefaultHarness(t *testing.T) {
 	if got.DefaultModel.Source != "~/.claude/settings.json" {
 		t.Errorf("default_model.source = %q, want ~/.claude/settings.json", got.DefaultModel.Source)
 	}
+	if got.DefaultEffort.Effort != "high" {
+		t.Errorf("default_effort.effort = %q, want high", got.DefaultEffort.Effort)
+	}
+	if got.DefaultEffort.Source != "agent-dashboard settings" {
+		t.Errorf("default_effort.source = %q, want agent-dashboard settings", got.DefaultEffort.Source)
+	}
 }
 
 func TestHarnessOptionsEndpoint_Codex(t *testing.T) {
@@ -1858,7 +1865,7 @@ func TestHarnessOptionsEndpoint_Codex(t *testing.T) {
 	if err := os.MkdirAll(codexDir, 0700); err != nil {
 		t.Fatalf("mkdir codex dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(`model = "gpt-5.4"`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("model = \"gpt-5.4\"\nmodel_reasoning_effort = \"high\"\n"), 0600); err != nil {
 		t.Fatalf("write codex config: %v", err)
 	}
 
@@ -1871,9 +1878,10 @@ func TestHarnessOptionsEndpoint_Codex(t *testing.T) {
 	}
 
 	var got struct {
-		Models       []string                `json:"models"`
-		Efforts      []string                `json:"efforts"`
-		DefaultModel domain.DefaultModelInfo `json:"default_model"`
+		Models        []string                 `json:"models"`
+		Efforts       []string                 `json:"efforts"`
+		DefaultModel  domain.DefaultModelInfo  `json:"default_model"`
+		DefaultEffort domain.DefaultEffortInfo `json:"default_effort"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -1892,15 +1900,22 @@ func TestHarnessOptionsEndpoint_Codex(t *testing.T) {
 	if got.DefaultModel.Source != "~/.codex/config.toml" {
 		t.Errorf("default_model.source = %q, want ~/.codex/config.toml", got.DefaultModel.Source)
 	}
+	if got.DefaultEffort.Effort != "high" {
+		t.Errorf("default_effort.effort = %q, want high", got.DefaultEffort.Effort)
+	}
+	if got.DefaultEffort.Source != "~/.codex/config.toml" {
+		t.Errorf("default_effort.source = %q, want ~/.codex/config.toml", got.DefaultEffort.Source)
+	}
 }
 
 func TestHarnessOptionsEndpoint_RefreshBypassesDefaultModelCache(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Profile.StateDir = t.TempDir()
 	cfg.Profile.ConfigDir = t.TempDir()
+	cfg.Settings.Effort.Default = ""
 	cfg.Harness, _ = harness.Resolve("claude", cfg.Profile)
 	settingsPath := filepath.Join(cfg.Profile.ConfigDir, "settings.json")
-	if err := os.WriteFile(settingsPath, []byte(`{"model":"sonnet"}`), 0600); err != nil {
+	if err := os.WriteFile(settingsPath, []byte(`{"model":"sonnet","effortLevel":"low"}`), 0600); err != nil {
 		t.Fatalf("write claude settings: %v", err)
 	}
 	srv := NewServer(cfg, nil, ServerOptions{})
@@ -1911,14 +1926,15 @@ func TestHarnessOptionsEndpoint_RefreshBypassesDefaultModelCache(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected first 200, got %d", resp.Code)
 	}
-	if err := os.WriteFile(settingsPath, []byte(`{"model":"opus"}`), 0600); err != nil {
+	if err := os.WriteFile(settingsPath, []byte(`{"model":"opus","effortLevel":"max"}`), 0600); err != nil {
 		t.Fatalf("update claude settings: %v", err)
 	}
 
 	cachedResp := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(cachedResp, httptest.NewRequest("GET", "/api/harness-options", nil))
 	var cached struct {
-		DefaultModel domain.DefaultModelInfo `json:"default_model"`
+		DefaultModel  domain.DefaultModelInfo  `json:"default_model"`
+		DefaultEffort domain.DefaultEffortInfo `json:"default_effort"`
 	}
 	if err := json.NewDecoder(cachedResp.Body).Decode(&cached); err != nil {
 		t.Fatalf("decode cached response: %v", err)
@@ -1926,17 +1942,24 @@ func TestHarnessOptionsEndpoint_RefreshBypassesDefaultModelCache(t *testing.T) {
 	if cached.DefaultModel.Model != "sonnet" {
 		t.Fatalf("cached model = %q, want sonnet", cached.DefaultModel.Model)
 	}
+	if cached.DefaultEffort.Effort != "low" {
+		t.Fatalf("cached effort = %q, want low", cached.DefaultEffort.Effort)
+	}
 
 	refreshedResp := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(refreshedResp, httptest.NewRequest("GET", "/api/harness-options?refresh=1", nil))
 	var refreshed struct {
-		DefaultModel domain.DefaultModelInfo `json:"default_model"`
+		DefaultModel  domain.DefaultModelInfo  `json:"default_model"`
+		DefaultEffort domain.DefaultEffortInfo `json:"default_effort"`
 	}
 	if err := json.NewDecoder(refreshedResp.Body).Decode(&refreshed); err != nil {
 		t.Fatalf("decode refreshed response: %v", err)
 	}
 	if refreshed.DefaultModel.Model != "opus" {
 		t.Errorf("refreshed model = %q, want opus", refreshed.DefaultModel.Model)
+	}
+	if refreshed.DefaultEffort.Effort != "max" {
+		t.Errorf("refreshed effort = %q, want max", refreshed.DefaultEffort.Effort)
 	}
 }
 

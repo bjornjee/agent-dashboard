@@ -110,6 +110,12 @@ test.describe('dashboard integration flows', () => {
         makeAgent({ session_id: 'create-b', cwd: '/Code/known', state: 'merged' }),
       ],
       suggestions: ['/Code/suggested'],
+      harnessOptions: {
+        models: ['gpt-5.5'],
+        efforts: ['high'],
+        default_model: { model: 'gpt-5.5', source: '~/.codex/config.toml' },
+        default_effort: { effort: 'high', source: '~/.codex/config.toml' },
+      },
       viewport: desktop,
     });
 
@@ -131,6 +137,8 @@ test.describe('dashboard integration flows', () => {
     await expect(page.locator('#folder-hint')).toContainText('Known folder');
 
     await page.selectOption('#create-harness', 'codex');
+    await expect(page.locator('#create-model-hint')).toContainText('Default: gpt-5.5');
+    await expect(page.locator('#create-effort-hint')).toContainText('Default: high');
     await expect(page.locator('#create-skill option')).toContainText(['Skill', 'agent-dashboard:feature', 'agent-dashboard:fix']);
     await page.selectOption('#create-skill', 'agent-dashboard:feature');
     await page.fill('#create-message', 'Add integration tests');

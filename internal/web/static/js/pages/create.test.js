@@ -11,6 +11,7 @@ let buildRecentFolders;
 let formatFolderLabel;
 let replaceSelectOptions;
 let formatDefaultModelHint;
+let formatDefaultEffortHint;
 let harnessOptionsURL;
 
 test('load module', async () => {
@@ -20,11 +21,13 @@ test('load module', async () => {
   formatFolderLabel = mod.formatFolderLabel;
   replaceSelectOptions = mod.replaceSelectOptions;
   formatDefaultModelHint = mod.formatDefaultModelHint;
+  formatDefaultEffortHint = mod.formatDefaultEffortHint;
   harnessOptionsURL = mod.harnessOptionsURL;
   assert.equal(typeof buildRecentFolders, 'function');
   assert.equal(typeof formatFolderLabel, 'function');
   assert.equal(typeof replaceSelectOptions, 'function');
   assert.equal(typeof formatDefaultModelHint, 'function');
+  assert.equal(typeof formatDefaultEffortHint, 'function');
   assert.equal(typeof harnessOptionsURL, 'function');
 });
 
@@ -162,6 +165,18 @@ test('formatDefaultModelHint — includes model and source', () => {
 test('formatDefaultModelHint — falls back when model is absent', () => {
   assert.equal(formatDefaultModelHint({}), 'Default: harness default');
   assert.equal(formatDefaultModelHint(null), 'Default: harness default');
+});
+
+test('formatDefaultEffortHint — includes effort and source', () => {
+  assert.equal(
+    formatDefaultEffortHint({ effort: 'high', source: '~/.codex/config.toml' }),
+    'Default: high · ~/.codex/config.toml',
+  );
+});
+
+test('formatDefaultEffortHint — falls back when effort is absent', () => {
+  assert.equal(formatDefaultEffortHint({}), 'Default: harness built-in');
+  assert.equal(formatDefaultEffortHint(null), 'Default: harness built-in');
 });
 
 test('harnessOptionsURL — encodes harness and refresh flag', () => {

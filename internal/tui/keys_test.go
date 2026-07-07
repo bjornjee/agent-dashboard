@@ -658,6 +658,7 @@ func TestCreateWizard_ModelNavigationAndDefaultToEffort(t *testing.T) {
 func TestCreateWizard_ModelRefreshBypassesCache(t *testing.T) {
 	m := newTestModelWithAgents()
 	m.cfg.Profile.ConfigDir = t.TempDir()
+	m.cfg.Settings.Effort.Default = ""
 	m.cfg.Harness, _ = harness.Resolve("claude", m.cfg.Profile)
 	settingsPath := filepath.Join(m.cfg.Profile.ConfigDir, "settings.json")
 	if err := os.WriteFile(settingsPath, []byte(`{"model":"sonnet"}`), 0600); err != nil {
@@ -678,6 +679,33 @@ func TestCreateWizard_ModelRefreshBypassesCache(t *testing.T) {
 
 	if rm.createDefaultModel.Model != "opus" {
 		t.Errorf("refreshed default model = %q, want opus", rm.createDefaultModel.Model)
+	}
+}
+
+func TestCreateWizard_EffortRefreshBypassesCache(t *testing.T) {
+	m := newTestModelWithAgents()
+	m.cfg.Profile.ConfigDir = t.TempDir()
+	m.cfg.Settings.Effort.Default = ""
+	m.cfg.Harness, _ = harness.Resolve("claude", m.cfg.Profile)
+	settingsPath := filepath.Join(m.cfg.Profile.ConfigDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte(`{"effortLevel":"low"}`), 0600); err != nil {
+		t.Fatalf("write claude settings: %v", err)
+	}
+	m.mode = modeCreateEffort
+	m.createHarness = "claude"
+	m.populateCreateModelEffortOptions()
+	if m.createDefaultEffort.Effort != "low" {
+		t.Fatalf("initial default effort = %q, want low", m.createDefaultEffort.Effort)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"effortLevel":"max"}`), 0600); err != nil {
+		t.Fatalf("update claude settings: %v", err)
+	}
+
+	result, _ := m.handleKey(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	rm := result.(model)
+
+	if rm.createDefaultEffort.Effort != "max" {
+		t.Errorf("refreshed default effort = %q, want max", rm.createDefaultEffort.Effort)
 	}
 }
 
