@@ -112,7 +112,12 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
 	// explicitly says when Tab is required to queue a reply.
 	var sendErr error
 	if agent.Harness == "codex" {
-		sendErr = tmux.TmuxPasteKeysClearingInput(target, req.Text)
+		text := skills.ExpandCodexShortkeys(req.Text, skills.DiscoverSkillsForHarness(
+			s.cfg.Profile.PluginCacheDir,
+			s.cfg.Profile.CodexPluginCacheDir,
+			"codex",
+		))
+		sendErr = tmux.TmuxPasteKeysClearingInput(target, text)
 		if sendErr == nil {
 			sendErr = tmux.TmuxSendRawKeys(target, codex.SubmitKeysAfterPaste(target, agent.State)...)
 		}

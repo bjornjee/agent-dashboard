@@ -46,7 +46,7 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 			name:    "codex running dashboard skill command mirrors TUI queue sequence",
 			harness: "codex",
 			state:   "running",
-			text:    "$agent-dashboard:pr",
+			text:    "$pr",
 			assert: func(t *testing.T, m mockExpector) {
 				expectCodexPasteCaptureSubmit(m, "main:0.0", "$agent-dashboard:pr", "› $agent-dashboard:pr\n\n tab to queue message", "Tab", "Enter")
 			},
@@ -105,7 +105,11 @@ func TestHandleInputSendsByHarness(t *testing.T) {
 				TmuxPaneID: "%1",
 				Cwd:        "/tmp/repo",
 			}
-			ts, _ := createTestServer(t, agent)
+			ts, _ := createTestServerWithCfg(t, func(cfg *domain.Config) {
+				codexCache := t.TempDir()
+				cfg.Profile.CodexPluginCacheDir = codexCache
+				writeSkillDir(t, filepath.Join(codexCache, "agent-dashboard", "agent-dashboard", "0.1.0", "skills"), "pr")
+			}, agent)
 
 			body := `{"text":"` + tc.text + `"}`
 			req, _ := http.NewRequest("POST", ts.URL+"/api/agents/send-1/input",

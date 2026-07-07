@@ -641,7 +641,7 @@ func isSelfPane(paneID, selfPaneID string) bool {
 	return selfPaneID != "" && paneID == selfPaneID
 }
 
-func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
+func sendReply(agent domain.Agent, text, selfPaneID string, availableSkills []string) tea.Cmd {
 	return func() tea.Msg {
 		if isSelfPane(agent.TmuxPaneID, selfPaneID) {
 			return sendResultMsg{err: fmt.Errorf("refusing to send to dashboard pane %s", agent.TmuxPaneID)}
@@ -655,6 +655,7 @@ func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
 			// (often stale) sidecar state: a bare Enter against an
 			// in-flight turn lands the paste as un-submitted multi-line
 			// input. Paste first, then send the footer-derived keys.
+			text = skills.ExpandCodexShortkeys(text, availableSkills)
 			if err := tmux.TmuxPasteKeysClearingInput(target, text); err != nil {
 				return sendResultMsg{err: err}
 			}
@@ -662,6 +663,13 @@ func sendReply(agent domain.Agent, text, selfPaneID string) tea.Cmd {
 		}
 		return sendResultMsg{err: tmux.TmuxSendKeys(target, text)}
 	}
+}
+
+func (m model) availableSkillsForAgent(agent domain.Agent) []string {
+	if agent.Harness == "codex" && len(m.availableCodexSkills) > 0 {
+		return m.availableCodexSkills
+	}
+	return m.availableSkills
 }
 
 // expandPath expands ~ and resolves to an absolute path.

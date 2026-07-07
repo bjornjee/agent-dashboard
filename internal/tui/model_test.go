@@ -542,6 +542,7 @@ func TestReplyMode_CodexStaleRunningCleanFooterSubmits(t *testing.T) {
 	m.agents = []domain.Agent{
 		{Target: "main:2.0", TmuxPaneID: "%5", Window: 2, Pane: 0, State: "running", Harness: "codex", Cwd: "/tmp"},
 	}
+	m.availableCodexSkills = []string{"(none)", "pr"}
 	m.mode = modeReply
 	m.textInput.SetValue("$pr")
 	m.buildTree()
@@ -555,7 +556,7 @@ func TestReplyMode_CodexStaleRunningCleanFooterSubmits(t *testing.T) {
 
 	want := [][]string{
 		{"send-keys", "-t", "main:2.1", "C-u"},
-		{"set-buffer", "-b", "agent-dashboard-reply", "--", "$pr"},
+		{"set-buffer", "-b", "agent-dashboard-reply", "--", "$agent-dashboard:pr"},
 		{"paste-buffer", "-p", "-r", "-d", "-b", "agent-dashboard-reply", "-t", "main:2.1"},
 		{"send-keys", "-t", "main:2.1", "Enter"},
 	}
