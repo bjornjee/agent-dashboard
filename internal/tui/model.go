@@ -216,6 +216,7 @@ type model struct {
 
 	// Skill-aware create wizard state
 	availableSkills       []string // display list: ["(none)", "chore", "feature", ...]
+	availableCodexSkills  []string // codex plugin skill list for shortkey expansion
 	skillsAvailable       bool     // true if any skills were discovered on disk
 	createFolder          string   // folder selected in step 1
 	availableHarnesses    []string // display list: ["claude", "codex"]
@@ -691,6 +692,11 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 	// Discover skills from agent-dashboard plugin cache.
 	rawSkills := skills.DiscoverSkills(cfg.Profile.PluginCacheDir)
 	skillList := skills.BuildSkillList(rawSkills)
+	codexSkillList := skills.BuildSkillList(skills.DiscoverSkillsForHarness(
+		cfg.Profile.PluginCacheDir,
+		cfg.Profile.CodexPluginCacheDir,
+		"codex",
+	))
 	hasSkills := len(skillList) > 0
 
 	// Default the harness picker to the configured default so the wizard
@@ -747,6 +753,7 @@ func NewModel(cfg domain.Config, database *db.DB) model {
 		nowFunc:               time.Now,
 		pathExists:            zsuggest.DirExists,
 		availableSkills:       skillList,
+		availableCodexSkills:  codexSkillList,
 		skillsAvailable:       hasSkills,
 		availableHarnesses:    harnessOptions,
 		selectedCreateHarness: defaultHarnessIdx,
