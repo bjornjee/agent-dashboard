@@ -735,10 +735,10 @@ func createSessionWithPrompt(folder string, agents []domain.Agent, selfPaneID st
 		}
 
 		// Plan-required codex skills spawn without the prompt positional;
-		// inject it behind /plan once the composer boots. Fire-and-forget:
+		// inject it behind /plan once the session is up. Fire-and-forget:
 		// the bootstrap degrades to the skill's own /plan gate on failure.
 		if deferred := codex.DeferredPlanPrompt(h.Name(), skill, message); deferred != "" {
-			go planBootstrap(newTarget, deferred)
+			go planBootstrap(newTarget, newPaneID, profile.StateDir, deferred)
 		}
 
 		// Stage the worktree/branch pin keyed by the new pane_id so the

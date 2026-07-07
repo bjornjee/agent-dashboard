@@ -19,10 +19,26 @@ func SetBootReadyBudget(d time.Duration) func() {
 	return func() { bootReadyBudget = orig }
 }
 
+// SetPlanVerifyBudget swaps the plan-mode verification budget used by
+// BootstrapPlanMode and returns a restore func.
+func SetPlanVerifyBudget(d time.Duration) func() {
+	orig := planVerifyBudget
+	planVerifyBudget = d
+	return func() { planVerifyBudget = orig }
+}
+
+// SetSessionUpProbe swaps the session-up probe used by BootstrapPlanMode
+// and returns a restore func.
+func SetSessionUpProbe(f func(stateDir, paneID string) bool) func() {
+	orig := sessionUpProbe
+	sessionUpProbe = f
+	return func() { sessionUpProbe = orig }
+}
+
 // BootstrapPlanModeForTest exposes the result-returning bootstrap so tests
 // can assert the injected/timed-out outcome.
-func BootstrapPlanModeForTest(target, prompt string) planbootResult {
-	return bootstrapPlanMode(target, prompt)
+func BootstrapPlanModeForTest(target, paneID, stateDir, prompt string) planbootResult {
+	return bootstrapPlanMode(target, paneID, stateDir, prompt)
 }
 
 // Planboot result values for black-box assertions.

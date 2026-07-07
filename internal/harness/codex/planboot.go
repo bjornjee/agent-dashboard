@@ -3,46 +3,54 @@ package codex
 import (
 	"strings"
 	"time"
-	"unicode/utf8"
 
+	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
 
-// bootReadyBudget bounds how long the bootstrap polls for the codex composer.
-// Codex may sit on hook/folder-trust dialogs the user has to answer first, so
-// this mirrors the web trust watcher's budget (internal/web/trust.go).
+// bootReadyBudget bounds how long the bootstrap waits for the codex composer
+// and the session-up signal. Codex may sit on hook/folder-trust dialogs the
+// user has to answer first, so this mirrors the web trust watcher's budget
+// (internal/web/trust.go).
 var bootReadyBudget = 30 * time.Second
 
-// bootTick is the composer polling cadence, matching trustWatchTick.
+// planVerifyBudget bounds the wait for the "Plan mode" footer after /plan.
+var planVerifyBudget = 10 * time.Second
+
+// bootTick is the polling cadence, matching trustWatchTick.
 const bootTick = 300 * time.Millisecond
 
-// twoStepSettle is the pause between the bare /plan dispatch and the prompt
-// paste in the large-prompt path, giving codex a frame to apply Plan mode.
-const twoStepSettle = 500 * time.Millisecond
+// sessionUpProbe reports whether the SessionStart hook has written an agent
+// state file for paneID under stateDir. Package var so tests can stub it.
+var sessionUpProbe = agentPaneUp
 
-// largePasteCharThreshold mirrors codex's LARGE_PASTE_CHAR_THRESHOLD
-// (codex-rs/tui/src/bottom_pane/chat_composer.rs). Pastes above it are
-// replaced with a placeholder element, so a "/plan <prompt>" paste would no
-// longer start with '/' and the slash command would not dispatch.
-const largePasteCharThreshold = 1000
-
-// BootstrapPlanMode waits for the codex composer in the pane at target, then
-// injects "/plan <prompt>" so the session enters Plan mode and submits the
-// skill prompt atomically — codex dispatches /plan inline args in one action
-// (codex-rs/tui/src/chatwidget/slash_dispatch.rs SlashCommand::Plan).
+// BootstrapPlanMode drives a freshly spawned codex pane into Plan mode and
+// submits the deferred skill prompt. Blocking; callers run it in a goroutine.
 //
-// The injection must be a bracketed paste plus a *separate* Enter
+// Gate order matters:
+//
+//  1. Composer chrome rendered (footer " · " marker).
+//  2. Session configured — probed via the agent state file the SessionStart
+//     hook writes for this pane. Codex resets the collaboration mask when
+//     SessionConfigured lands (codex-rs chatwidget/session_flow.rs), so a
+//     /plan dispatched earlier is silently clobbered and the queued prompt
+//     submits in Default mode. The state file only exists after that reset.
+//  3. Paste bare "/plan" + Enter and verify the footer shows "Plan mode".
+//  4. Paste the prompt + Enter (large pastes become placeholder elements
+//     that expand on submit, so any prompt length is safe here).
+//
+// Every injection is a bracketed paste plus a *separate* Enter
 // (TmuxPasteKeysClearingInput): codex's composer treats rapid literal
 // keystrokes as a paste burst and suppresses Enter into a newline for 120ms
 // (codex-rs/tui/src/bottom_pane/paste_burst.rs PASTE_ENTER_SUPPRESS_WINDOW),
 // which is why plain send-keys text+Enter never submits. A bracketed paste
 // clears that suppression, and a leading '/' additionally bypasses it.
 //
-// Blocking; callers run it in a goroutine. Best-effort: on readiness timeout
-// it injects anyway, degrading to the skill's own /plan hard-gate instead of
-// leaving a dead pane.
-func BootstrapPlanMode(target, prompt string) {
-	bootstrapPlanMode(target, prompt)
+// Best-effort throughout: on any gate timeout it keeps going and injects
+// anyway, degrading to the skill's own /plan hard-gate instead of leaving a
+// dead pane.
+func BootstrapPlanMode(target, paneID, stateDir, prompt string) {
+	bootstrapPlanMode(target, paneID, stateDir, prompt)
 }
 
 type planbootResult int
@@ -52,38 +60,50 @@ const (
 	planbootTimedOut
 )
 
-func bootstrapPlanMode(target, prompt string) planbootResult {
-	res := waitForComposer(target)
-
-	atomic := "/plan " + prompt
-	if utf8.RuneCountInString(atomic) <= largePasteCharThreshold {
-		// Best-effort: a failed paste leaves the skill's /plan gate to ask the user.
-		_ = tmux.TmuxPasteKeysClearingInput(target, atomic, "Enter")
-		return res
+func bootstrapPlanMode(target, paneID, stateDir, prompt string) planbootResult {
+	res := planbootInjected
+	deadline := time.Now().Add(bootReadyBudget)
+	if !waitUntil(deadline, func() bool { return paneShowsComposer(capture(target)) }) {
+		res = planbootTimedOut
 	}
-	// Over codex's large-paste threshold the paste becomes a placeholder
-	// element and the leading '/' is lost, so enter Plan mode bare first,
-	// then paste the prompt (placeholders expand on submit at any length).
-	// Both pastes are best-effort for the same reason as above.
+	// Session-up gate is skipped when the caller has no pane identity (e.g.
+	// tmux variants that don't report pane_id) — the composer gate plus the
+	// plan-mode verification below still bound the race window.
+	if res == planbootInjected && paneID != "" && stateDir != "" {
+		if !waitUntil(deadline, func() bool { return sessionUpProbe(stateDir, paneID) }) {
+			res = planbootTimedOut
+		}
+	}
+
+	// Best-effort pastes: a failed paste leaves the skill's /plan gate to
+	// ask the user.
 	_ = tmux.TmuxPasteKeysClearingInput(target, "/plan", "Enter")
-	sleep(twoStepSettle)
+	if !waitUntil(time.Now().Add(planVerifyBudget), func() bool { return paneShowsPlanMode(capture(target)) }) {
+		res = planbootTimedOut
+	}
 	_ = tmux.TmuxPasteKeysClearingInput(target, prompt, "Enter")
 	return res
 }
 
-// waitForComposer polls the pane until the codex composer chrome renders,
-// or the budget lapses.
-func waitForComposer(target string) planbootResult {
-	deadline := time.Now().Add(bootReadyBudget)
+// waitUntil polls cond every bootTick until it holds or deadline passes.
+func waitUntil(deadline time.Time, cond func() bool) bool {
 	for {
-		if lines, err := tmux.TmuxCapture(target, 20); err == nil && paneShowsComposer(lines) {
-			return planbootInjected
+		if cond() {
+			return true
 		}
 		if time.Now().After(deadline) {
-			return planbootTimedOut
+			return false
 		}
 		sleep(bootTick)
 	}
+}
+
+func capture(target string) []string {
+	lines, err := tmux.TmuxCapture(target, 20)
+	if err != nil {
+		return nil
+	}
+	return lines
 }
 
 // paneShowsComposer reports whether the captured pane renders codex's ready
@@ -93,6 +113,29 @@ func waitForComposer(target string) planbootResult {
 func paneShowsComposer(lines []string) bool {
 	for _, line := range lines {
 		if strings.Contains(line, " · ") {
+			return true
+		}
+	}
+	return false
+}
+
+// paneShowsPlanMode reports whether the footer carries codex's Plan mode
+// indicator ("Plan mode (shift+tab to cycle)" in codex 0.142.5).
+func paneShowsPlanMode(lines []string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, "Plan mode") {
+			return true
+		}
+	}
+	return false
+}
+
+// agentPaneUp reports whether any agent state file under stateDir claims
+// paneID. The SessionStart hook writes it once the codex session is live —
+// strictly after the SessionConfigured mask reset described above.
+func agentPaneUp(stateDir, paneID string) bool {
+	for _, agent := range state.ReadState(stateDir).Agents {
+		if agent.TmuxPaneID == paneID {
 			return true
 		}
 	}

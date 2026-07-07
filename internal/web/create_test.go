@@ -374,14 +374,16 @@ func TestCreate_CodexFeatureSkill_DefersPromptToPlanBootstrap(t *testing.T) {
 	m := withMockTmuxRunner(t)
 	mockReadAgentState(m)
 
-	bootCalls := make(chan [2]string, 1)
+	bootCalls := make(chan [4]string, 1)
 	origBoot := planBootstrap
-	planBootstrap = func(target, prompt string) { bootCalls <- [2]string{target, prompt} }
+	planBootstrap = func(target, paneID, stateDir, prompt string) {
+		bootCalls <- [4]string{target, paneID, stateDir, prompt}
+	}
 	t.Cleanup(func() { planBootstrap = origBoot })
 
 	folder := t.TempDir()
 	existingAgent := domain.Agent{SessionID: "x", Session: "main", Window: 0, State: "running", Cwd: folder}
-	ts, _ := createTestServer(t, existingAgent)
+	ts, stateDir := createTestServer(t, existingAgent)
 
 	m.On("Output", mock.Anything,
 		"list-panes", "-t", "main:0", "-F", "#{pane_index}",
@@ -406,9 +408,9 @@ func TestCreate_CodexFeatureSkill_DefersPromptToPlanBootstrap(t *testing.T) {
 	}
 	select {
 	case got := <-bootCalls:
-		want := [2]string{"main:0.1", "$agent-dashboard:feature hi"}
+		want := [4]string{"main:0.1", "", stateDir, "$agent-dashboard:feature hi"}
 		if got != want {
-			t.Errorf("planBootstrap(%q, %q), want %q, %q", got[0], got[1], want[0], want[1])
+			t.Errorf("planBootstrap args = %q, want %q", got, want)
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("planBootstrap was not launched for codex feature spawn")

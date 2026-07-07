@@ -1,10 +1,13 @@
 package codex_test
 
 import (
-	"strings"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/bjornjee/agent-dashboard/internal/domain"
 	"github.com/bjornjee/agent-dashboard/internal/harness/codex"
 	"github.com/bjornjee/agent-dashboard/internal/mocks"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
@@ -15,6 +18,7 @@ import (
 // (2026-07-06 injection test). The boot/dialog screens have no footer; the
 // ready composer renders the "<model> <effort> <speed> · <cwd>" footer line —
 // the " · " separator is the readiness marker paneShowsComposer keys on.
+// After /plan dispatches, the footer gains the "Plan mode" indicator.
 const (
 	paneHooksDialog = `  Hooks need review
   6 hooks are new or changed.
@@ -27,9 +31,36 @@ const (
 ╰───────────────────────────────────────────╯
 › Implement {feature}
   gpt-5.5 high fast · ~/Code/bjornjee/agent-dashboard`
+
+	paneComposerPlanMode = `• Model changed to gpt-5.5 medium for Plan mode.
+› Implement {feature}
+  gpt-5.5 medium fast · ~/Code/bjornjee/agent-dashboard                    Plan mode (shift+tab to cycle)`
 )
 
-const bootTarget = "main:2.1"
+const (
+	bootTarget = "main:2.1"
+	bootPaneID = "%42"
+)
+
+// stateDirWithPane creates a dashboard state dir whose agents/ holds one
+// state file claiming paneID — the signal the SessionStart hook writes once
+// codex's session is configured.
+func stateDirWithPane(t *testing.T, paneID string) string {
+	t.Helper()
+	dir := t.TempDir()
+	agents := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(domain.Agent{SessionID: "s1", TmuxPaneID: paneID, State: "running"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agents, "s1.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
 
 // expectPasteWithSubmit registers the tmux call sequence
 // TmuxPasteKeysClearingInput produces: C-u clear, set-buffer, bracketed
@@ -42,68 +73,116 @@ func expectPasteWithSubmit(m *mocks.MockRunner, text string) {
 	m.On("Run", mock.Anything, "send-keys", "-t", bootTarget, "Enter").Return(nil).Once()
 }
 
-// Happy path: the bootstrap polls until the composer footer renders, then
-// injects the atomic "/plan <prompt>" paste (codex's /plan supports inline
-// args: enters Plan mode AND submits the args as the user message in one
-// dispatch — codex-rs slash_dispatch.rs SlashCommand::Plan).
-func TestBootstrapPlanMode_WaitsForComposerThenInjects(t *testing.T) {
-	defer codex.SetSleep(func(time.Duration) {})()
-	defer codex.SetBootReadyBudget(time.Second)()
-
-	m := mocks.NewMockRunner(t)
-	defer tmux.SetTestRunner(m)()
-
+func expectCapture(m *mocks.MockRunner, pane string) {
 	m.On("Output", mock.Anything, "capture-pane", "-p", "-t", bootTarget, "-S", "-20").
-		Return([]byte(paneHooksDialog), nil).Once()
-	m.On("Output", mock.Anything, "capture-pane", "-p", "-t", bootTarget, "-S", "-20").
-		Return([]byte(paneComposerReady), nil).Once()
-	expectPasteWithSubmit(m, "/plan $agent-dashboard:feature add login")
-
-	got := codex.BootstrapPlanModeForTest(bootTarget, "$agent-dashboard:feature add login")
-	if got != codex.PlanbootInjectedForTest {
-		t.Errorf("bootstrapPlanMode = %v, want injected", got)
-	}
+		Return([]byte(pane), nil).Once()
 }
 
-// Prompts pushing the paste over codex's 1000-char LARGE_PASTE_CHAR_THRESHOLD
-// would become a placeholder element and defeat the leading-slash dispatch,
-// so the bootstrap falls back to two pastes: bare "/plan" (enters Plan mode),
-// then the prompt (large-paste placeholder expands on submit).
-func TestBootstrapPlanMode_LargePromptUsesTwoStepInjection(t *testing.T) {
+// Happy path: the bootstrap gates on (1) the composer footer, (2) the
+// session-up signal — the agent state file the SessionStart hook writes for
+// this pane. Codex clobbers a user-set Plan mask when SessionConfigured
+// lands (codex-rs session_flow.rs resets active_collaboration_mask), so
+// injecting before the state file exists loses plan mode. Only then does it
+// paste bare /plan, verify the "Plan mode" footer, and paste the prompt.
+func TestBootstrapPlanMode_GatesOnSessionUpThenInjects(t *testing.T) {
 	defer codex.SetSleep(func(time.Duration) {})()
 	defer codex.SetBootReadyBudget(time.Second)()
+	defer codex.SetPlanVerifyBudget(time.Second)()
 
 	m := mocks.NewMockRunner(t)
 	defer tmux.SetTestRunner(m)()
+	stateDir := stateDirWithPane(t, bootPaneID)
 
-	prompt := "$agent-dashboard:feature " + strings.Repeat("x", 1100)
-	m.On("Output", mock.Anything, "capture-pane", "-p", "-t", bootTarget, "-S", "-20").
-		Return([]byte(paneComposerReady), nil).Once()
+	expectCapture(m, paneHooksDialog)
+	expectCapture(m, paneComposerReady)
 	expectPasteWithSubmit(m, "/plan")
-	expectPasteWithSubmit(m, prompt)
+	expectCapture(m, paneComposerPlanMode)
+	expectPasteWithSubmit(m, "$agent-dashboard:feature add login")
 
-	got := codex.BootstrapPlanModeForTest(bootTarget, prompt)
+	got := codex.BootstrapPlanModeForTest(bootTarget, bootPaneID, stateDir, "$agent-dashboard:feature add login")
 	if got != codex.PlanbootInjectedForTest {
 		t.Errorf("bootstrapPlanMode = %v, want injected", got)
 	}
 }
 
-// Readiness timeout still injects: a session that never renders the composer
-// marker degrades to today's behavior — the pasted prompt sits in (or
-// submits into) the pane and the skill's own /plan hard-gate asks the user.
-// A dead pane with a swallowed prompt is the failure mode this prevents.
+// The session-up gate must hold while the composer is already rendered but
+// the pane's state file has not appeared yet — injecting in that window is
+// exactly the SessionConfigured mask-reset race.
+func TestBootstrapPlanMode_WaitsForStateFileBeforeInjecting(t *testing.T) {
+	defer codex.SetSleep(func(time.Duration) {})()
+	defer codex.SetBootReadyBudget(time.Second)()
+	defer codex.SetPlanVerifyBudget(time.Second)()
+
+	m := mocks.NewMockRunner(t)
+	defer tmux.SetTestRunner(m)()
+
+	// State file appears only after the first session-up poll misses.
+	stateDir := t.TempDir()
+	polled := false
+	restore := codex.SetSessionUpProbe(func(dir, paneID string) bool {
+		if !polled {
+			polled = true
+			return false
+		}
+		return dir == stateDir && paneID == bootPaneID
+	})
+	defer restore()
+
+	expectCapture(m, paneComposerReady)
+	expectPasteWithSubmit(m, "/plan")
+	expectCapture(m, paneComposerPlanMode)
+	expectPasteWithSubmit(m, "prompt")
+
+	got := codex.BootstrapPlanModeForTest(bootTarget, bootPaneID, stateDir, "prompt")
+	if got != codex.PlanbootInjectedForTest {
+		t.Errorf("bootstrapPlanMode = %v, want injected", got)
+	}
+	if !polled {
+		t.Error("session-up probe was never consulted")
+	}
+}
+
+// All gates exhausted still injects: a session that never renders the
+// composer, never writes a state file, or never confirms Plan mode degrades
+// to today's behavior — the skill's own /plan hard-gate asks the user. A
+// dead pane with a swallowed prompt is the failure mode this prevents.
 func TestBootstrapPlanMode_TimeoutInjectsAnyway(t *testing.T) {
 	defer codex.SetSleep(func(time.Duration) {})()
 	defer codex.SetBootReadyBudget(0)()
+	defer codex.SetPlanVerifyBudget(0)()
 
 	m := mocks.NewMockRunner(t)
 	defer tmux.SetTestRunner(m)()
 
-	m.On("Output", mock.Anything, "capture-pane", "-p", "-t", bootTarget, "-S", "-20").
-		Return([]byte(paneHooksDialog), nil)
-	expectPasteWithSubmit(m, "/plan $agent-dashboard:feature add login")
+	expectCapture(m, paneHooksDialog) // composer gate: one look, then deadline
+	expectPasteWithSubmit(m, "/plan")
+	expectCapture(m, paneHooksDialog) // verify gate: one look, then deadline
+	expectPasteWithSubmit(m, "prompt")
 
-	got := codex.BootstrapPlanModeForTest(bootTarget, "$agent-dashboard:feature add login")
+	got := codex.BootstrapPlanModeForTest(bootTarget, bootPaneID, t.TempDir(), "prompt")
+	if got != codex.PlanbootTimedOutForTest {
+		t.Errorf("bootstrapPlanMode = %v, want timed out", got)
+	}
+}
+
+// Plan-mode verification failure (e.g. collaboration modes disabled in the
+// user's codex config — /plan dispatch shows an info message and does
+// nothing) still submits the prompt and reports the timeout.
+func TestBootstrapPlanMode_PlanVerifyFailureStillSubmitsPrompt(t *testing.T) {
+	defer codex.SetSleep(func(time.Duration) {})()
+	defer codex.SetBootReadyBudget(time.Second)()
+	defer codex.SetPlanVerifyBudget(0)()
+
+	m := mocks.NewMockRunner(t)
+	defer tmux.SetTestRunner(m)()
+	stateDir := stateDirWithPane(t, bootPaneID)
+
+	expectCapture(m, paneComposerReady)
+	expectPasteWithSubmit(m, "/plan")
+	expectCapture(m, paneComposerReady) // no "Plan mode" marker, deadline 0
+	expectPasteWithSubmit(m, "prompt")
+
+	got := codex.BootstrapPlanModeForTest(bootTarget, bootPaneID, stateDir, "prompt")
 	if got != codex.PlanbootTimedOutForTest {
 		t.Errorf("bootstrapPlanMode = %v, want timed out", got)
 	}
