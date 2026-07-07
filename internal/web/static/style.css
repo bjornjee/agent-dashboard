@@ -1355,8 +1355,8 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
 .create-composer__icon:disabled { opacity: 0.45; cursor: wait; }
 .create-composer__icon svg { width: 16px; height: 16px; }
 .create-composer__icon--refresh {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
 }
 .create-composer__pill {
