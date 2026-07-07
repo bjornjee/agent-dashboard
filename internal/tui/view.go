@@ -220,7 +220,7 @@ func (m *model) updateRightContent() {
 		if m.createSkillName != "" {
 			lines = append(lines, "  "+helpStyle.Render("Skill:   "+string(sigil)+m.createSkillName))
 		}
-		lines = append(lines, "  "+helpStyle.Render("Model:   "+createOptionLabel(m.createModel)))
+		lines = append(lines, "  "+helpStyle.Render("Model:   "+createResolvedOptionLabel(m.createModel, m.createDefaultModel.Model)))
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Select effort:"))
 		lines = append(lines, "  "+helpStyle.Render(defaultEffortHint(m.createDefaultEffort)))
@@ -253,8 +253,8 @@ func (m *model) updateRightContent() {
 		if m.createSkillName != "" {
 			lines = append(lines, "  "+helpStyle.Render("Skill:   "+string(sigil)+m.createSkillName))
 		}
-		lines = append(lines, "  "+helpStyle.Render("Model:   "+createOptionLabel(m.createModel)))
-		lines = append(lines, "  "+helpStyle.Render("Effort:  "+createOptionLabel(m.createEffort)))
+		lines = append(lines, "  "+helpStyle.Render("Model:   "+createResolvedOptionLabel(m.createModel, m.createDefaultModel.Model)))
+		lines = append(lines, "  "+helpStyle.Render("Effort:  "+createResolvedOptionLabel(m.createEffort, m.createDefaultEffort.Effort)))
 		lines = append(lines, "")
 		lines = append(lines, "  "+boldStyle.Render("Message:"))
 		lines = append(lines, "  "+renderWrappedInput(m.textInput.Value(), m.textInput.Position(), m.rightWidth-4, true, sigil, m.availableSkills, "  "))
