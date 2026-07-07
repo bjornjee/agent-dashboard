@@ -57,28 +57,35 @@ describe('buildReportEntry', () => {
   });
 
   it('skips write when nothing changed', () => {
-    const { changed } = buildReportEntry({
-      input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
-      existing: {
+    const orig = process.env.PLUGIN_ROOT;
+    delete process.env.PLUGIN_ROOT;
+    try {
+      const { changed } = buildReportEntry({
+        input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
+        existing: {
+          state: 'running',
+          subagent_count: 0,
+          last_message_preview: null,
+          permission_mode: 'default',
+          files_changed: [],
+          // BASE_INPUT has no PLUGIN_ROOT env and no gpt model → detectHarness
+          // returns "claude". Stamping harness counts as a change on first
+          // sight; we pre-populate existing.harness so the no-change branch
+          // is exercised cleanly.
+          harness: 'claude',
+        },
+        target: 'main:1.0',
+        tmuxPane: '%0',
         state: 'running',
-        subagent_count: 0,
-        last_message_preview: null,
-        permission_mode: 'default',
-        files_changed: [],
-        // BASE_INPUT has no PLUGIN_ROOT env and no gpt model → detectHarness
-        // returns "claude". Stamping harness counts as a change on first
-        // sight; we pre-populate existing.harness so the no-change branch
-        // is exercised cleanly.
-        harness: 'claude',
-      },
-      target: 'main:1.0',
-      tmuxPane: '%0',
-      state: 'running',
-      filesChanged: [],
-      parsed: BASE_PARSED,
-    });
+        filesChanged: [],
+        parsed: BASE_PARSED,
+      });
 
-    assert.equal(changed, false);
+      assert.equal(changed, false);
+    } finally {
+      if (orig === undefined) delete process.env.PLUGIN_ROOT;
+      else process.env.PLUGIN_ROOT = orig;
+    }
   });
 
   it('increments subagent count on SubagentStart', () => {

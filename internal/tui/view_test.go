@@ -571,6 +571,29 @@ func TestCreateEffortViewShowsHarnessBuiltInFallback(t *testing.T) {
 	}
 }
 
+func TestCreateMessageViewShowsResolvedDefaultModelAndEffort(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	m := NewModel(testConfig(""), nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeCreateMessage
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
+	m.createDefaultModel = domain.DefaultModelInfo{Model: "claude-fable-5"}
+	m.createDefaultEffort = domain.DefaultEffortInfo{Effort: "xhigh"}
+	m.updateRightContent()
+
+	content := m.messageVP.View()
+	if !strings.Contains(content, "Model:   claude-fable-5") {
+		t.Errorf("message view missing resolved default model:\n%s", content)
+	}
+	if !strings.Contains(content, "Effort:  xhigh") {
+		t.Errorf("message view missing resolved default effort:\n%s", content)
+	}
+}
+
 func TestRenderHelpOverlayTwoColumnsWide(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 
