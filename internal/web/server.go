@@ -13,6 +13,7 @@ import (
 
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 	"github.com/bjornjee/agent-dashboard/internal/state"
 	"github.com/bjornjee/agent-dashboard/internal/tmux"
 )
@@ -47,6 +48,8 @@ type Server struct {
 	rlCache     *domain.RateLimit
 	rlFetchedAt time.Time
 
+	defaultModelCache *harness.DefaultModelCache
+
 	// Trust-prompt tracker: set of tmux pane_ids whose harness has shown a
 	// folder-trust dialog post-spawn. Populated by watchTrustPrompt after
 	// handleCreate, surfaced via readAgentState so SSE/REST clients see
@@ -63,6 +66,7 @@ func NewServer(cfg domain.Config, database *db.DB, opts ServerOptions) *Server {
 		opts:                 opts,
 		hub:                  newSSEHub(),
 		codexSessionsRootDir: resolveCodexSessionsRoot(cfg.Profile.HomeDir),
+		defaultModelCache:    harness.NewDefaultModelCache(),
 		trustPanes:           make(map[string]trustPaneRecord),
 	}
 	if opts.GoogleClientID != "" {

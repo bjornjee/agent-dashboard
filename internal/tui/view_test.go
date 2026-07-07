@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/bjornjee/agent-dashboard/internal/db"
 	"github.com/bjornjee/agent-dashboard/internal/domain"
+	"github.com/bjornjee/agent-dashboard/internal/harness"
 )
 
 func TestAgentListContentClampsWidth(t *testing.T) {
@@ -488,6 +491,33 @@ func TestRenderHelpBar_CreateHarness_ShowsPickerKeys(t *testing.T) {
 		if !strings.Contains(bar, want) {
 			t.Errorf("help bar in modeCreateHarness missing %q in:\n%s", want, bar)
 		}
+	}
+}
+
+func TestCreateModelViewShowsDefaultModelHint(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	cfg := testConfig(t.TempDir())
+	cfg.Profile.ConfigDir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg.Profile.ConfigDir, "settings.json"), []byte(`{"model":"claude-fable-5"}`), 0600); err != nil {
+		t.Fatalf("write claude settings: %v", err)
+	}
+	cfg.Harness, _ = harness.Resolve("claude", cfg.Profile)
+	m := NewModel(cfg, nil)
+	m.width = 120
+	m.height = 40
+	m.resizeViewports()
+	m.mode = modeCreateModel
+	m.createFolder = "/Users/test/repo"
+	m.createHarness = "claude"
+	m.populateCreateModelEffortOptions()
+	m.updateRightContent()
+
+	content := m.messageVP.View()
+	if !strings.Contains(content, "Default: claude-fable-5") {
+		t.Errorf("model view missing default model hint:\n%s", content)
+	}
+	if !strings.Contains(content, "~/.claude/settings.json") {
+		t.Errorf("model view missing default model source:\n%s", content)
 	}
 }
 

@@ -219,6 +219,15 @@ type Usage struct {
 	Model            string // last seen model
 }
 
+// DefaultModelInfo describes the resolved model used when a New Agent spawn
+// leaves the model override empty.
+type DefaultModelInfo struct {
+	Model     string    `json:"model"`
+	Source    string    `json:"source"`
+	CachedAt  time.Time `json:"cached_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // AgentProfile defines how the dashboard discovers and interacts with a coding agent.
 type AgentProfile struct {
 	Name           string // Display name: "Claude Code"

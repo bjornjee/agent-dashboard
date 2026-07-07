@@ -10,6 +10,8 @@ const path = require('node:path');
 let buildRecentFolders;
 let formatFolderLabel;
 let replaceSelectOptions;
+let formatDefaultModelHint;
+let harnessOptionsURL;
 
 test('load module', async () => {
   const url = pathToFileURL(path.join(__dirname, 'create.js')).href;
@@ -17,9 +19,13 @@ test('load module', async () => {
   buildRecentFolders = mod.buildRecentFolders;
   formatFolderLabel = mod.formatFolderLabel;
   replaceSelectOptions = mod.replaceSelectOptions;
+  formatDefaultModelHint = mod.formatDefaultModelHint;
+  harnessOptionsURL = mod.harnessOptionsURL;
   assert.equal(typeof buildRecentFolders, 'function');
   assert.equal(typeof formatFolderLabel, 'function');
   assert.equal(typeof replaceSelectOptions, 'function');
+  assert.equal(typeof formatDefaultModelHint, 'function');
+  assert.equal(typeof harnessOptionsURL, 'function');
 });
 
 test('buildRecentFolders — empty input returns []', () => {
@@ -144,4 +150,22 @@ test('replaceSelectOptions — empty values array leaves only the default option
     assert.deepEqual(sel.options.map(o => o.value), ['']);
     assert.equal(sel.value, '');
   });
+});
+
+test('formatDefaultModelHint — includes model and source', () => {
+  assert.equal(
+    formatDefaultModelHint({ model: 'gpt-5.5', source: '~/.codex/config.toml' }),
+    'Default: gpt-5.5 · ~/.codex/config.toml',
+  );
+});
+
+test('formatDefaultModelHint — falls back when model is absent', () => {
+  assert.equal(formatDefaultModelHint({}), 'Default: harness default');
+  assert.equal(formatDefaultModelHint(null), 'Default: harness default');
+});
+
+test('harnessOptionsURL — encodes harness and refresh flag', () => {
+  assert.equal(harnessOptionsURL('', false), '/api/harness-options');
+  assert.equal(harnessOptionsURL('codex', false), '/api/harness-options?harness=codex');
+  assert.equal(harnessOptionsURL('codex', true), '/api/harness-options?harness=codex&refresh=1');
 });

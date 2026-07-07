@@ -1352,7 +1352,13 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .create-composer__icon:hover { background: var(--bg-base); color: var(--text-secondary); }
+.create-composer__icon:disabled { opacity: 0.45; cursor: wait; }
 .create-composer__icon svg { width: 16px; height: 16px; }
+.create-composer__icon--refresh {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
 .create-composer__pill {
   display: inline-flex;
   align-items: center;
@@ -1383,6 +1389,13 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   min-width: 0;
   text-overflow: ellipsis;
 }
+.create-model-meta {
+  min-height: 16px;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
 /* Mobile: tighten the toolbar so all four children + the send button
  * fit inside the composer card without the send circle clipping the
  * rounded right corner. Caps select to 80 px, cuts toolbar gap to
@@ -1393,6 +1406,7 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   .create-composer__trail { gap: var(--space-1); min-width: 0; }
   .create-composer__pill { padding: 0 var(--space-2); }
   .create-composer__pill select { max-width: 88px; }
+  .create-model-meta { padding-inline: var(--space-2); }
   .create-composer__send { flex-shrink: 0; }
 }
 .create-composer__send {
@@ -1413,6 +1427,9 @@ button.ui-row:focus-visible { box-shadow: inset 0 0 0 2px var(--text-secondary);
   color: var(--cta-text);
   opacity: 0.32;
   cursor: not-allowed;
+}
+.create-spawn:disabled {
+  border: 1px solid var(--border-default);
 }
 
 /* Folder pill is now a label-wrapped real <input> (no hidden input).

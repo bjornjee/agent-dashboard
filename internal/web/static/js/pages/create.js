@@ -60,6 +60,21 @@ export function replaceSelectOptions(sel, values, defaultLabel) {
   sel.value = restored ? prev : '';
 }
 
+export function formatDefaultModelHint(info) {
+  const model = info && typeof info.model === 'string' ? info.model.trim() : '';
+  const source = info && typeof info.source === 'string' ? info.source.trim() : '';
+  if (!model) return 'Default: harness default';
+  return source ? `Default: ${model} · ${source}` : `Default: ${model}`;
+}
+
+export function harnessOptionsURL(harness, refresh = false) {
+  const params = new URLSearchParams();
+  if (harness) params.set('harness', harness);
+  if (refresh) params.set('refresh', '1');
+  const qs = params.toString();
+  return qs ? `/api/harness-options?${qs}` : '/api/harness-options';
+}
+
 const SEND_ARROW = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
 const CHEVRON_DOWN = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 
@@ -136,6 +151,7 @@ export function renderCreate(app, agents) {
               </select>
               ${CHEVRON_DOWN}
             </label>
+            <button class="create-composer__icon create-composer__icon--refresh" id="create-model-refresh" type="button" aria-label="Refresh default model" title="Refresh default model">${ICONS.refresh}</button>
             <label class="create-composer__pill" title="Effort — override this agent's thinking effort for one spawn.">
               <select id="create-effort" aria-label="Effort — override this agent's thinking effort for one spawn">
                 <option value="">Default</option>
@@ -147,6 +163,7 @@ export function renderCreate(app, agents) {
             <button class="create-composer__send" id="create-spawn" type="button" aria-label="Spawn (Cmd/Ctrl+Enter)" title="Spawn (Cmd/Ctrl+Enter)" onclick="Dashboard.createAgent(event)" disabled>${SEND_ARROW}</button>
           </div>
         </div>
+        <div class="create-model-meta" id="create-model-hint">Default: harness default</div>
       </div>
       <div class="create-hint" id="folder-hint">Pick a folder to spawn in.</div>
 
@@ -157,6 +174,8 @@ export function renderCreate(app, agents) {
   const skillSel = document.getElementById('create-skill');
   const harnessSel = document.getElementById('create-harness');
   const modelSel = document.getElementById('create-model');
+  const modelHint = document.getElementById('create-model-hint');
+  const modelRefresh = document.getElementById('create-model-refresh');
   const effortSel = document.getElementById('create-effort');
 
   // Different harnesses have different plugin caches and block-lists.
@@ -182,12 +201,16 @@ export function renderCreate(app, agents) {
     });
   }
 
-  function reloadHarnessOptions(harness) {
-    const url = harness ? `/api/harness-options?harness=${encodeURIComponent(harness)}` : '/api/harness-options';
+  function reloadHarnessOptions(harness, refresh = false) {
+    const url = harnessOptionsURL(harness, refresh);
+    if (modelRefresh && refresh) modelRefresh.disabled = true;
     return get(url).then(options => {
       replaceSelectOptions(modelSel, options && options.models, 'Default');
       replaceSelectOptions(effortSel, options && options.efforts, 'Default');
-    }).catch(() => {}); // failed fetch keeps the current options usable
+      if (modelHint) modelHint.textContent = formatDefaultModelHint(options && options.default_model);
+    }).catch(() => {}).finally(() => {
+      if (modelRefresh) modelRefresh.disabled = false;
+    }); // failed fetch keeps the current options usable
   }
 
   reloadSkillsForHarness(harnessSel ? harnessSel.value : '');
@@ -196,6 +219,11 @@ export function renderCreate(app, agents) {
     harnessSel.addEventListener('change', () => {
       reloadSkillsForHarness(harnessSel.value);
       reloadHarnessOptions(harnessSel.value);
+    });
+  }
+  if (modelRefresh) {
+    modelRefresh.addEventListener('click', () => {
+      reloadHarnessOptions(harnessSel ? harnessSel.value : '', true);
     });
   }
 

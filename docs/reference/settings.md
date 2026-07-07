@@ -50,6 +50,8 @@ The `[effort]` levels feed the `/effort` slash command Claude Code accepts (`min
 
 The `[harness]` section selects which coding-agent binary backs newly-spawned sessions. `"claude"` uses Claude Code (default; reads `~/.claude`). `"codex"` uses Codex CLI (reads `~/.codex`) and applies `[harness.codex]` model, approval, sandbox, and reasoning-effort settings. These are defaults — the New Agent flow lets you override harness, model, and thinking effort per spawn.
 
+The New Agent model picker hints what its `(default)` option will use. For Codex, `[harness.codex].model` wins over `~/.codex/config.toml` because it is the effective dashboard spawn default. Native config reads are cached for 1 hour and can be refreshed with `Ctrl+R` in the TUI model picker or the web refresh button.
+
 ## Settings table
 
 | Section | Key | Default | Description |
@@ -66,7 +68,7 @@ The `[harness]` section selects which coding-agent binary backs newly-spawned se
 | `effort` | `plan` | `"high"` | Thinking-effort level pinned while the agent is in plan mode. One of `minimal`, `low`, `medium`, `high`, `max`. |
 | `effort` | `default` | `"high"` | Thinking-effort level pinned at spawn and restored when the agent exits plan mode. Same value set as `plan`. |
 | `harness` | `default` | `"claude"` | Active coding-agent harness. `"claude"` runs Claude Code; `"codex"` runs Codex CLI. |
-| `harness.codex` | `model` | `""` | Model passed to `codex --model`. Leave empty to inherit Codex's default. Example: `"gpt-5.5"`. |
+| `harness.codex` | `model` | `""` | Model passed to `codex --model`. Leave empty to inherit Codex's default. When set, this is the `(default)` hint shown in New Agent. Example: `"gpt-5.5"`. |
 | `harness.codex` | `approval` | `""` | Approval policy passed to `codex -a`. |
 | `harness.codex` | `sandbox` | `""` | Sandbox mode passed to `codex -s`. |
 | `harness.codex` | `default_reasoning_effort` | `""` | Reasoning effort passed as `-c model_reasoning_effort=<level>` for opted-in skills. One of `minimal`, `low`, `medium`, `high` (`max` is clamped to `high`). |

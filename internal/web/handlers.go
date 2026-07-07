@@ -49,9 +49,11 @@ func (s *Server) handleHarnessOptions(w http.ResponseWriter, r *http.Request) {
 		}
 		activeHarness = h
 	}
-	writeJSON(w, http.StatusOK, map[string][]string{
-		"models":  activeHarness.Models(),
-		"efforts": activeHarness.EffortLevels(),
+	refresh := r.URL.Query().Get("refresh") == "1"
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models":        activeHarness.Models(),
+		"efforts":       activeHarness.EffortLevels(),
+		"default_model": s.defaultModelCache.Resolve(activeHarness, s.cfg.Settings, refresh),
 	})
 }
 
