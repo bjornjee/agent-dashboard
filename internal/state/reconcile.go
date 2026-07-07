@@ -96,8 +96,14 @@ func ReconcileIdentities(sf *domain.StateFile, opts ReconcileIdentityOptions) {
 		switch agent.Harness {
 		case "codex":
 			candidates = codexCandidates(agent.Cwd, codexRows)
-		default:
+		case "claude", "":
 			candidates = claudeCandidates(agent.Cwd, opts.ClaudeSessionsDir, opts.ClaudeProjectsDir)
+		default:
+			// Unknown harness: stay a placeholder rather than silently
+			// routing through claude's session-file format and adopting a
+			// wrong identity. A new harness must add its own candidate
+			// source here (see CLAUDE.md's per-harness checklist).
+			continue
 		}
 		candidates = filterIdentityCandidates(candidates, known, opts.Store)
 		if len(candidates) != 1 {

@@ -87,9 +87,10 @@ func (s *Store) Sync(sf *domain.StateFile) {
 	if err != nil {
 		return
 	}
+	written := make([]upsertAgent, 0, len(dirty))
 	for _, item := range dirty {
 		agent := item.agent
-		if _, err := tx.Exec(`
+		res, err := tx.Exec(`
 			INSERT INTO agents (
 				session_id, harness, tmux_pane_id, tmux_server_pid, target, cwd, branch, state,
 				report_seq, updated_at, created_at, payload, source, dismissed_at, dismissed_reason
@@ -135,15 +136,22 @@ func (s *Store) Sync(sf *domain.StateFile) {
 			time.Now().UTC().Format(time.RFC3339), // created_at: insert-only, conflict update leaves it
 			item.payload,
 			item.source,
-		); err != nil {
+		)
+		if err != nil {
 			_ = tx.Rollback()
 			return
+		}
+		// Cache means "written", not "attempted": a write the WHERE guard
+		// rejected (stale seq, dismissed swallow) must stay dirty so the
+		// next cycle re-offers it to SQL.
+		if n, err := res.RowsAffected(); err == nil && n > 0 {
+			written = append(written, item)
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return
 	}
-	for _, item := range dirty {
+	for _, item := range written {
 		s.lastSynced[item.agent.SessionID] = item.seq
 	}
 }
@@ -241,6 +249,11 @@ func (s *Store) SweepDeadRows(livePanes map[string]bool, serverPID string, known
 	// Same whole-body locking discipline as Sync: without it a sweep that
 	// selected a row before a concurrent Sync upserted it could tombstone
 	// the fresh row and drop its cache entry.
+	//
+	// Asymmetry with Hydrate, by design: with an unknown current server
+	// PID, Hydrate fails closed (won't inject a stamped row) while the
+	// sweep keeps the row (staleServer can't be established) — unknown
+	// identity must never destroy state, only decline to act on it.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var rows []struct {

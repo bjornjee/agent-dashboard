@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -249,6 +250,54 @@ func TestStoreHydrate_FiltersRows(t *testing.T) {
 	}
 	if got := sf.Agents["existing"].SessionID; got != "existing" {
 		t.Fatalf("existing agent overwritten: %q", got)
+	}
+}
+
+func TestStoreSync_CreatedAtInsertOnly(t *testing.T) {
+	store, d := testStore(t)
+	agent := domain.Agent{SessionID: "sess-a", TmuxPaneID: "%1", State: "running", ReportSeq: 1, UpdatedAt: "2026-07-06T10:00:00Z"}
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
+
+	var created string
+	if err := d.Conn().Get(&created, "SELECT created_at FROM agents WHERE session_id = 'sess-a'"); err != nil {
+		t.Fatalf("query created_at: %v", err)
+	}
+	if created == "" {
+		t.Fatal("created_at not stamped on insert")
+	}
+
+	agent.ReportSeq = 2
+	agent.UpdatedAt = "2026-07-06T10:01:00Z"
+	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
+
+	var after string
+	if err := d.Conn().Get(&after, "SELECT created_at FROM agents WHERE session_id = 'sess-a'"); err != nil {
+		t.Fatalf("query created_at after update: %v", err)
+	}
+	if after != created {
+		t.Fatalf("created_at changed on conflict update: %q -> %q", created, after)
+	}
+}
+
+func TestStoreSweepDeadRows_BatchesOverVariableCap(t *testing.T) {
+	store, d := testStore(t)
+	agents := make(map[string]domain.Agent, 501)
+	for i := 0; i < 501; i++ {
+		id := fmt.Sprintf("orphan-%03d", i)
+		agents[id] = domain.Agent{SessionID: id, TmuxPaneID: fmt.Sprintf("%%%d", i+10), UpdatedAt: "2026-07-06T10:00:00Z"}
+	}
+	store.Sync(&domain.StateFile{Agents: agents})
+
+	// No live panes, no files: all 501 rows are orphans — the tombstone
+	// UPDATE must split across batches under SQLite's bound-variable cap.
+	store.SweepDeadRows(map[string]bool{"%1": true}, "100", nil)
+
+	var dismissed int
+	if err := d.Conn().Get(&dismissed, "SELECT COUNT(*) FROM agents WHERE dismissed_at IS NOT NULL"); err != nil {
+		t.Fatalf("count dismissed: %v", err)
+	}
+	if dismissed != 501 {
+		t.Fatalf("dismissed = %d, want 501", dismissed)
 	}
 }
 
