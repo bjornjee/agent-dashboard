@@ -81,7 +81,7 @@ func DeleteSpawnPin(stateDir, paneID string) {
 	_ = os.Remove(filepath.Join(SpawnPinsDir(stateDir), spawnPinFilename(paneID)))
 }
 
-// ApplySpawnPins merges staged spawn-pin records into agents whose pane_id
+// applySpawnPins merges staged spawn-pin records into agents whose pane_id
 // matches. Closes the spawn-to-first-hook window: the dashboard renders the
 // pin immediately after spawn, without waiting for the JS hook to fire.
 //
@@ -91,9 +91,9 @@ func DeleteSpawnPin(stateDir, paneID string) {
 //     a non-empty WorktreeCwd: apply it (in-memory + on-disk stamp), then
 //     delete the staging file.
 //
-// Must run BEFORE ResolveAgentWorktree so the marker-scan / scan-on-init
+// Must run BEFORE resolveAgentWorktree so the marker-scan / scan-on-init
 // paths skip already-pinned agents.
-func ApplySpawnPins(sf *domain.StateFile, stateDir string) {
+func applySpawnPins(sf *domain.StateFile, stateDir string) {
 	for key, agent := range sf.Agents {
 		if agent.TmuxPaneID == "" {
 			continue
@@ -167,7 +167,7 @@ func ReapStaleMarker(stateDir, worktreePath string) {
 // still useful — consumers know "no pin expected" and skip the fallback).
 //
 // The git lookup uses the package's branchRunner so tests can swap it via
-// SetTestRunner, same as ResolveAgentWorktree / ResolveAgentBranches.
+// SetTestRunner, same as resolveAgentWorktree / resolveAgentBranches.
 func StageSpawnPin(stateDir, absFolder, paneID, target string) error {
 	if paneID == "" {
 		return nil
@@ -198,10 +198,10 @@ func StageSpawnPin(stateDir, absFolder, paneID, target string) error {
 	return WriteSpawnPin(stateDir, pin)
 }
 
-// GCSpawnPins deletes staging files whose CreatedAt is older than the cutoff.
+// gcSpawnPins deletes staging files whose CreatedAt is older than the cutoff.
 // Files with unparseable CreatedAt are treated as stale and removed.
 // Returns the count of files removed.
-func GCSpawnPins(stateDir string, olderThan time.Duration) int {
+func gcSpawnPins(stateDir string, olderThan time.Duration) int {
 	entries, err := os.ReadDir(SpawnPinsDir(stateDir))
 	if err != nil {
 		return 0

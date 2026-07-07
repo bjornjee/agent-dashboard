@@ -32,13 +32,13 @@ func TestStoreSync_UpsertGuard(t *testing.T) {
 		ReportSeq:  2,
 		UpdatedAt:  "2026-07-06T10:00:00Z",
 	}
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": oldAgent}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": oldAgent}})
 
 	staleAgent := oldAgent
 	staleAgent.State = "done"
 	staleAgent.ReportSeq = 1
 	staleAgent.UpdatedAt = "2026-07-06T09:59:00Z"
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": staleAgent}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": staleAgent}})
 
 	var state string
 	if err := d.Conn().Get(&state, "SELECT state FROM agents WHERE session_id = 'sess-a'"); err != nil {
@@ -52,7 +52,7 @@ func TestStoreSync_UpsertGuard(t *testing.T) {
 	newerAgent.State = "done"
 	newerAgent.ReportSeq = 3
 	newerAgent.UpdatedAt = "2026-07-06T10:01:00Z"
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": newerAgent}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": newerAgent}})
 
 	if err := d.Conn().Get(&state, "SELECT state FROM agents WHERE session_id = 'sess-a'"); err != nil {
 		t.Fatalf("query newer state: %v", err)
@@ -69,10 +69,10 @@ func TestStoreSync_DirtyGateSkipsUnchangedAgents(t *testing.T) {
 		"b": {SessionID: "b", State: "running", ReportSeq: 1, UpdatedAt: "2026-07-06T10:00:00Z"},
 	}}
 
-	store.Sync(&sf)
+	store.sync(&sf)
 	afterFirst := totalChanges(t, d)
 
-	store.Sync(&sf)
+	store.sync(&sf)
 	afterSecond := totalChanges(t, d)
 	if afterSecond != afterFirst {
 		t.Fatalf("unchanged sync wrote %d rows, want 0", afterSecond-afterFirst)
@@ -81,7 +81,7 @@ func TestStoreSync_DirtyGateSkipsUnchangedAgents(t *testing.T) {
 	agent := sf.Agents["b"]
 	agent.ReportSeq = 2
 	sf.Agents["b"] = agent
-	store.Sync(&sf)
+	store.sync(&sf)
 	afterBump := totalChanges(t, d)
 	if afterBump-afterSecond != 1 {
 		t.Fatalf("bumped sync wrote %d rows, want 1", afterBump-afterSecond)
@@ -118,7 +118,7 @@ func TestStoreSync_ResurrectionRules(t *testing.T) {
 				State:      "running",
 				UpdatedAt:  "2026-07-06T10:00:00Z",
 			}
-			store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": base}})
+			store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": base}})
 			if _, err := d.Conn().Exec(
 				"UPDATE agents SET dismissed_at = ?, dismissed_reason = ? WHERE session_id = ?",
 				"2026-07-06T10:01:00Z", "user_dismiss", "sess-a",
@@ -129,7 +129,7 @@ func TestStoreSync_ResurrectionRules(t *testing.T) {
 			incoming := base
 			incoming.State = "done"
 			incoming.UpdatedAt = tt.incomingUpdatedAt
-			store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": incoming}})
+			store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": incoming}})
 
 			var row struct {
 				State       string  `db:"state"`
@@ -168,13 +168,13 @@ func TestStoreHydrate_SkipsPaneIDReuseAcrossServerRestart(t *testing.T) {
 		State:      "running",
 		UpdatedAt:  "2026-07-06T10:00:00Z",
 	}
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"stale":     stale,
 		"unstamped": unstamped,
 	}})
 
 	sf := domain.StateFile{Agents: map[string]domain.Agent{}}
-	store.Hydrate(&sf, map[string]bool{"%40": true, "%41": true}, "222")
+	store.hydrate(&sf, map[string]bool{"%40": true, "%41": true}, "222")
 
 	if _, ok := sf.Agents["stale"]; ok {
 		t.Fatal("row stamped with a previous server PID was hydrated onto a reused pane ID")
@@ -193,12 +193,12 @@ func TestStoreHydrate_FailsClosedWhenServerPIDUnknown(t *testing.T) {
 		State:         "running",
 		UpdatedAt:     "2026-07-06T10:00:00Z",
 	}
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"stamped": stamped}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"stamped": stamped}})
 
 	// Enumeration produced live panes but no server identity: the stamped
 	// row's server may be dead and %1 reused — fail closed, don't hydrate.
 	sf := domain.StateFile{Agents: map[string]domain.Agent{}}
-	store.Hydrate(&sf, map[string]bool{"%1": true}, "")
+	store.hydrate(&sf, map[string]bool{"%1": true}, "")
 
 	if _, ok := sf.Agents["stamped"]; ok {
 		t.Fatal("stamped row hydrated although the current server PID is unknown")
@@ -225,7 +225,7 @@ func TestStoreHydrate_FiltersRows(t *testing.T) {
 		State:      "running",
 		UpdatedAt:  "2026-07-06T10:00:00Z",
 	}
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"live":      live,
 		"dead":      dead,
 		"dismissed": dismissed,
@@ -237,7 +237,7 @@ func TestStoreHydrate_FiltersRows(t *testing.T) {
 	sf := domain.StateFile{Agents: map[string]domain.Agent{
 		"existing": {SessionID: "existing", TmuxPaneID: "%1"},
 	}}
-	store.Hydrate(&sf, map[string]bool{"%1": true, "%3": true}, "")
+	store.hydrate(&sf, map[string]bool{"%1": true, "%3": true}, "")
 
 	if _, ok := sf.Agents["live"]; !ok {
 		t.Fatal("live row was not hydrated")
@@ -256,7 +256,7 @@ func TestStoreHydrate_FiltersRows(t *testing.T) {
 func TestStoreSync_CreatedAtInsertOnly(t *testing.T) {
 	store, d := testStore(t)
 	agent := domain.Agent{SessionID: "sess-a", TmuxPaneID: "%1", State: "running", ReportSeq: 1, UpdatedAt: "2026-07-06T10:00:00Z"}
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
 
 	var created string
 	if err := d.Conn().Get(&created, "SELECT created_at FROM agents WHERE session_id = 'sess-a'"); err != nil {
@@ -268,7 +268,7 @@ func TestStoreSync_CreatedAtInsertOnly(t *testing.T) {
 
 	agent.ReportSeq = 2
 	agent.UpdatedAt = "2026-07-06T10:01:00Z"
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
 
 	var after string
 	if err := d.Conn().Get(&after, "SELECT created_at FROM agents WHERE session_id = 'sess-a'"); err != nil {
@@ -286,11 +286,11 @@ func TestStoreSweepDeadRows_BatchesOverVariableCap(t *testing.T) {
 		id := fmt.Sprintf("orphan-%03d", i)
 		agents[id] = domain.Agent{SessionID: id, TmuxPaneID: fmt.Sprintf("%%%d", i+10), UpdatedAt: "2026-07-06T10:00:00Z"}
 	}
-	store.Sync(&domain.StateFile{Agents: agents})
+	store.sync(&domain.StateFile{Agents: agents})
 
 	// No live panes, no files: all 501 rows are orphans — the tombstone
 	// UPDATE must split across batches under SQLite's bound-variable cap.
-	store.SweepDeadRows(map[string]bool{"%1": true}, "100", nil)
+	store.sweepDeadRows(map[string]bool{"%1": true}, "100", nil)
 
 	var dismissed int
 	if err := d.Conn().Get(&dismissed, "SELECT COUNT(*) FROM agents WHERE dismissed_at IS NOT NULL"); err != nil {
@@ -311,7 +311,7 @@ func TestStoreDismiss_RemovesFileAndSoftDeletes(t *testing.T) {
 		UpdatedAt:  "2026-07-06T10:00:00Z",
 	}
 	seedAgentJSON(t, dir, agent)
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}})
 
 	if err := store.Dismiss(dir, "sess-a", "user_dismiss"); err != nil {
 		t.Fatalf("Dismiss: %v", err)
@@ -343,7 +343,7 @@ func TestStoreDismiss_ClearsSyncCacheForResurrection(t *testing.T) {
 	}
 	seedAgentJSON(t, dir, agent)
 	sf := &domain.StateFile{Agents: map[string]domain.Agent{"sess-a": agent}}
-	store.Sync(sf)
+	store.sync(sf)
 	if err := store.Dismiss(dir, "sess-a", "user_dismiss"); err != nil {
 		t.Fatalf("Dismiss: %v", err)
 	}
@@ -351,7 +351,7 @@ func TestStoreDismiss_ClearsSyncCacheForResurrection(t *testing.T) {
 	// The hook rewrites the identical payload (same report_seq/updated_at).
 	// Dismiss must have dropped the cache entry so this write reaches SQL,
 	// where the resurrection rule clears the tombstone.
-	store.Sync(sf)
+	store.sync(sf)
 
 	var dismissed *string
 	if err := d.Conn().Get(&dismissed, "SELECT dismissed_at FROM agents WHERE session_id = 'sess-a'"); err != nil {
@@ -364,7 +364,7 @@ func TestStoreDismiss_ClearsSyncCacheForResurrection(t *testing.T) {
 
 func TestStoreSweepDeadRows_TombstonesOrphanRows(t *testing.T) {
 	store, d := testStore(t)
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"live":   {SessionID: "live", TmuxPaneID: "%1", UpdatedAt: "2026-07-06T10:00:00Z"},
 		"filed":  {SessionID: "filed", TmuxPaneID: "%2", UpdatedAt: "2026-07-06T10:00:00Z"},
 		"orphan": {SessionID: "orphan", TmuxPaneID: "%3", UpdatedAt: "2026-07-06T10:00:00Z"},
@@ -373,7 +373,7 @@ func TestStoreSweepDeadRows_TombstonesOrphanRows(t *testing.T) {
 	// live: pane alive → kept. filed: pane dead but its hook file still
 	// exists (restart-survivor) → kept. orphan: pane dead, no file — its
 	// deletion happened while no dashboard was running → tombstoned.
-	store.SweepDeadRows(map[string]bool{"%1": true}, "", map[string]bool{"filed": true})
+	store.sweepDeadRows(map[string]bool{"%1": true}, "", map[string]bool{"filed": true})
 
 	type row struct {
 		SessionID       string  `db:"session_id"`
@@ -401,7 +401,7 @@ func TestStoreSweepDeadRows_TombstonesOrphanRows(t *testing.T) {
 
 func TestStoreSweepDeadRows_NilSafe(t *testing.T) {
 	var store *Store
-	store.SweepDeadRows(map[string]bool{"%1": true}, "", nil) // must not panic
+	store.sweepDeadRows(map[string]bool{"%1": true}, "", nil) // must not panic
 }
 
 func TestStoreSweepDeadRows_ReusedPaneIDUnderNewServer(t *testing.T) {
@@ -432,13 +432,13 @@ func TestStoreSweepDeadRows_ReusedPaneIDUnderNewServer(t *testing.T) {
 		State:         "running",
 		UpdatedAt:     "2026-07-06T10:00:00Z",
 	}
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"stale":     stale,
 		"unstamped": unstamped,
 		"current":   current,
 	}})
 
-	store.SweepDeadRows(map[string]bool{"%5": true, "%6": true, "%7": true}, "222", nil)
+	store.sweepDeadRows(map[string]bool{"%5": true, "%6": true, "%7": true}, "222", nil)
 
 	var dismissedIDs []string
 	if err := d.Conn().Select(&dismissedIDs, "SELECT session_id FROM agents WHERE dismissed_at IS NOT NULL ORDER BY session_id"); err != nil {
@@ -451,7 +451,7 @@ func TestStoreSweepDeadRows_ReusedPaneIDUnderNewServer(t *testing.T) {
 
 func TestStoreGC_RemovesOldDismissedRows(t *testing.T) {
 	store, d := testStore(t)
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"old": {SessionID: "old", TmuxPaneID: "%1", UpdatedAt: "2026-07-06T10:00:00Z"},
 		"new": {SessionID: "new", TmuxPaneID: "%2", UpdatedAt: "2026-07-06T10:00:00Z"},
 	}})
@@ -485,13 +485,13 @@ func TestStoreNilSafe(t *testing.T) {
 	sf := domain.StateFile{Agents: map[string]domain.Agent{
 		"sess-a": {SessionID: "sess-a", UpdatedAt: "2026-07-06T10:00:00Z"},
 	}}
-	nilStore.Sync(&sf)
-	nilStore.Hydrate(&sf, map[string]bool{"%1": true}, "")
+	nilStore.sync(&sf)
+	nilStore.hydrate(&sf, map[string]bool{"%1": true}, "")
 	nilStore.GC()
 
 	store := NewStore(nil)
-	store.Sync(&sf)
-	store.Hydrate(&sf, map[string]bool{"%1": true}, "")
+	store.sync(&sf)
+	store.hydrate(&sf, map[string]bool{"%1": true}, "")
 	store.GC()
 }
 

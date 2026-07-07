@@ -11,11 +11,11 @@ import (
 	"github.com/bjornjee/agent-dashboard/internal/domain"
 )
 
-// ReconcileUnregistered injects transient rows for live harness panes that no
+// reconcileUnregistered injects transient rows for live harness panes that no
 // agent state file claims. pane_current_command only reports the foreground
 // process, so a pane running a shell command from inside the harness can miss
 // this path for one refresh and appear on the next idle cycle.
-func ReconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneTarget, cwds, cmds map[string]string, serverPID string, now time.Time) {
+func reconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneTarget, cwds, cmds map[string]string, serverPID string, now time.Time) {
 	if sf == nil || len(targets) == 0 || len(cmds) == 0 {
 		return
 	}
@@ -48,7 +48,7 @@ func ReconcileUnregistered(sf *domain.StateFile, targets map[string]domain.PaneT
 			TmuxPaneID: paneID,
 			// Stamp the enumeration's server identity so identity-adopted
 			// agents synced before their first hook write stay protected by
-			// the pane-ID-reuse guards in Hydrate/SweepDeadRows.
+			// the pane-ID-reuse guards in Hydrate/sweepDeadRows.
 			TmuxServerPID: serverPID,
 			UpdatedAt:     now.UTC().Format(time.RFC3339),
 			Harness:       harness,
@@ -71,18 +71,18 @@ func unregisteredID(paneID string) string {
 	return fmt.Sprintf("%s%s", unregisteredSessionPrefix, paneID)
 }
 
-// ReconcileIdentityOptions configures best-effort identity lookup for
+// reconcileIdentityOptions configures best-effort identity lookup for
 // unregistered placeholders.
-type ReconcileIdentityOptions struct {
+type reconcileIdentityOptions struct {
 	Store             *Store
 	ClaudeProjectsDir string
 	ClaudeSessionsDir string
 	CodexRoot         string
 }
 
-// ReconcileIdentities upgrades placeholders to real harness identities only
+// reconcileIdentities upgrades placeholders to real harness identities only
 // when exact-cwd lookup leaves one safe candidate.
-func ReconcileIdentities(sf *domain.StateFile, opts ReconcileIdentityOptions) {
+func reconcileIdentities(sf *domain.StateFile, opts reconcileIdentityOptions) {
 	if sf == nil || len(sf.Agents) == 0 {
 		return
 	}

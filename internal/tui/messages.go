@@ -20,7 +20,7 @@ import (
 // keystrokes whenever the per-session cache expired.
 type stateUpdatedMsg struct {
 	// agents arrive with Resumable already flagged (resolveAgents runs
-	// state.FlagResumable against the same tmux enumeration that produced
+	// the resolve chain's resumable flagging against the same tmux enumeration that produced
 	// the targets), so the handler never re-derives orphan status.
 	agents []domain.Agent
 }

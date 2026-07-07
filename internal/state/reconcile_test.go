@@ -24,7 +24,7 @@ func TestReconcileUnregistered(t *testing.T) {
 	cwds := map[string]string{"%2": "/repo/codex", "%3": "/repo/claude", "%4": "/repo/shell"}
 	cmds := map[string]string{"%1": "claude", "%2": "codex-aarch64-a", "%3": "claude", "%4": "zsh"}
 
-	ReconcileUnregistered(&sf, targets, cwds, cmds, "222", now)
+	reconcileUnregistered(&sf, targets, cwds, cmds, "222", now)
 
 	if _, ok := sf.Agents["unregistered-%1"]; ok {
 		t.Fatal("claimed pane got placeholder")
@@ -65,7 +65,7 @@ func TestStoreSync_SkipsUnregisteredPlaceholders(t *testing.T) {
 		},
 	}}
 
-	store.Sync(&sf)
+	store.sync(&sf)
 
 	var count int
 	if err := d.Conn().Get(&count, "SELECT COUNT(*) FROM agents"); err != nil {
@@ -82,7 +82,7 @@ func TestReconcileIdentities_CodexUniqueMatch(t *testing.T) {
 		{id: "candidate", cwd: "/repo", branch: "feat/candidate", title: "candidate task", updatedAt: "2026-07-06T10:02:00Z"},
 	})
 	store, d := testStore(t)
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"known": {SessionID: "known", State: "running", UpdatedAt: "2026-07-06T10:04:00Z"},
 	}})
 	if _, err := d.Conn().Exec(
@@ -104,7 +104,7 @@ func TestReconcileIdentities_CodexUniqueMatch(t *testing.T) {
 		},
 	}}
 
-	ReconcileIdentities(&sf, ReconcileIdentityOptions{Store: store, CodexRoot: root})
+	reconcileIdentities(&sf, reconcileIdentityOptions{Store: store, CodexRoot: root})
 
 	if _, ok := sf.Agents["unregistered-%2"]; ok {
 		t.Fatal("placeholder key still present")
@@ -133,7 +133,7 @@ func TestReconcileIdentities_CodexAmbiguousStaysPlaceholder(t *testing.T) {
 		},
 	}}
 
-	ReconcileIdentities(&sf, ReconcileIdentityOptions{CodexRoot: root})
+	reconcileIdentities(&sf, reconcileIdentityOptions{CodexRoot: root})
 
 	if _, ok := sf.Agents["unregistered-%2"]; !ok {
 		t.Fatal("ambiguous placeholder was removed")

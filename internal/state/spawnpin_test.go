@@ -145,8 +145,8 @@ func TestApplySpawnPins_PopulatesAndConsumes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sf := ReadState(dir)
-	ApplySpawnPins(&sf, dir)
+	sf := readState(dir)
+	applySpawnPins(&sf, dir)
 
 	got := sf.Agents["sess-a"]
 	if got.WorktreeCwd != "/wt/a" {
@@ -184,8 +184,8 @@ func TestApplySpawnPins_SkipsAlreadyPinned(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sf := ReadState(dir)
-	ApplySpawnPins(&sf, dir)
+	sf := readState(dir)
+	applySpawnPins(&sf, dir)
 
 	got := sf.Agents["sess-b"]
 	if got.WorktreeCwd != "/wt/old" {
@@ -294,7 +294,7 @@ func TestGCSpawnPins(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	removed := GCSpawnPins(dir, 10*time.Minute)
+	removed := gcSpawnPins(dir, 10*time.Minute)
 	if removed != 1 {
 		t.Errorf("expected 1 removed, got %d", removed)
 	}

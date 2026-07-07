@@ -62,7 +62,7 @@ func currentGitBranch(ctx context.Context, dir string) string {
 // signals already produced elsewhere in the dashboard:
 //
 //   - headBranch: the worktree's actual checked-out branch, resolved once
-//     by state.ResolveAgentBranches and cached on agent.Branch.
+//     by the state resolve chain and cached on agent.Branch.
 //   - recordedBranch: the most recent gitBranch field in the agent's JSONL
 //     (conversation.LastGitBranch). Useful only when HEAD is misleading.
 //

@@ -27,12 +27,14 @@ type ResolveOptions struct {
 }
 
 // ResolveChain is the canonical refresh pipeline shared by every surface.
+// The pipeline steps are deliberately unexported — this function is the
+// only composition, so callers cannot reassemble them out of order.
 // It encodes the order invariants that used to live only in comments:
 // Hydrate must run on the raw file state before targets resolve, the
-// reconcilers need resolved targets, FlagResumable must precede sorting,
+// reconcilers need resolved targets, flagResumable must precede sorting,
 // and Sync runs last so identity-adopted agents persist.
 func ResolveChain(opts ResolveOptions) []domain.Agent {
-	sf := ReadState(opts.StateDir)
+	sf := readState(opts.StateDir)
 	var paneCwds map[string]string
 	var livePanes map[string]bool
 	var serverPID string
@@ -44,10 +46,10 @@ func ResolveChain(opts ResolveOptions) []domain.Agent {
 		// live agents as orphans; a non-nil empty targets (zero panes)
 		// yields a non-nil empty set (genuinely all dead).
 		livePanes = livePanesFromTargets(targets)
-		opts.Store.Hydrate(&sf, livePanes, pid)
-		ResolveAgentTargets(&sf, targets)
-		ReconcileUnregistered(&sf, targets, cwds, cmds, pid, time.Now())
-		ReconcileIdentities(&sf, ReconcileIdentityOptions{
+		opts.Store.hydrate(&sf, livePanes, pid)
+		resolveAgentTargets(&sf, targets)
+		reconcileUnregistered(&sf, targets, cwds, cmds, pid, time.Now())
+		reconcileIdentities(&sf, reconcileIdentityOptions{
 			Store:             opts.Store,
 			ClaudeProjectsDir: opts.ClaudeProjectsDir,
 			ClaudeSessionsDir: opts.ClaudeSessionsDir,
@@ -56,22 +58,22 @@ func ResolveChain(opts ResolveOptions) []domain.Agent {
 		paneCwds = cwds
 		serverPID = pid
 	}
-	ResolveAgentProjDir(&sf, opts.ClaudeProjectsDir, opts.ClaudeSessionsDir)
+	resolveAgentProjDir(&sf, opts.ClaudeProjectsDir, opts.ClaudeSessionsDir)
 	// Apply spawn-pins BEFORE marker-scan / scan-on-init so freshly-spawned
 	// agents render with the dashboard-staged pin even when the JS hook
 	// hasn't fired yet.
-	ApplySpawnPins(&sf, opts.StateDir)
-	ResolveAgentWorktree(&sf, opts.StateDir)
-	ResolveAgentBranches(&sf, paneCwds, opts.StateDir)
-	GCSpawnPins(opts.StateDir, 10*time.Minute)
+	applySpawnPins(&sf, opts.StateDir)
+	resolveAgentWorktree(&sf, opts.StateDir)
+	resolveAgentBranches(&sf, paneCwds, opts.StateDir)
+	gcSpawnPins(opts.StateDir, 10*time.Minute)
 	ApplyStateArbitration(&sf, opts.CodexSessionsDir)
 	// Flag survivors before sorting so they sink into the RESUMABLE group.
-	FlagResumable(&sf, livePanes, serverPID, time.Now())
+	flagResumable(&sf, livePanes, serverPID, time.Now())
 	agents := conversation.TopLevelAgents(
 		SortedAgents(sf, opts.SelfPaneID),
 		conversation.Roots{CodexSessionsRoot: opts.CodexSessionsDir},
 	)
-	opts.Store.Sync(&sf)
+	opts.Store.sync(&sf)
 	return agents
 }
 

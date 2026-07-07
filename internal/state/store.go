@@ -38,7 +38,7 @@ func (s *Store) conn() *sqlx.DB {
 }
 
 // Sync upserts non-placeholder agents into the SQLite read model.
-func (s *Store) Sync(sf *domain.StateFile) {
+func (s *Store) sync(sf *domain.StateFile) {
 	conn := s.conn()
 	if conn == nil || sf == nil {
 		return
@@ -158,7 +158,7 @@ func (s *Store) Sync(sf *domain.StateFile) {
 
 // Hydrate injects non-dismissed read-model rows whose panes are live and whose
 // session IDs are missing from the file state.
-func (s *Store) Hydrate(sf *domain.StateFile, livePanes map[string]bool, serverPID string) {
+func (s *Store) hydrate(sf *domain.StateFile, livePanes map[string]bool, serverPID string) {
 	conn := s.conn()
 	if conn == nil || sf == nil || len(livePanes) == 0 {
 		return
@@ -232,16 +232,16 @@ func (s *Store) Dismiss(dir, sessionID, reason string) error {
 		delete(s.lastSynced, sessionID)
 		s.mu.Unlock()
 	}
-	return RemoveAgent(dir, sessionID)
+	return removeAgent(dir, sessionID)
 }
 
-// SweepDeadRows tombstones non-dismissed rows whose pane is gone and whose
+// sweepDeadRows tombstones non-dismissed rows whose pane is gone and whose
 // hook file no longer exists — deletions that happened while no dashboard
 // was running, which the file-based prune can never see. Keeps the read
 // model convergent with (files ∪ tmux) across process downtime. livePanes
 // must come from a successful enumeration (callers gate on that);
 // knownSessions is the set of session IDs currently present as files.
-func (s *Store) SweepDeadRows(livePanes map[string]bool, serverPID string, knownSessions map[string]bool) {
+func (s *Store) sweepDeadRows(livePanes map[string]bool, serverPID string, knownSessions map[string]bool) {
 	conn := s.conn()
 	if conn == nil {
 		return

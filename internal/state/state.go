@@ -47,9 +47,9 @@ func AgentsDir(dir string) string {
 	return filepath.Join(dir, "agents")
 }
 
-// ReadState reads all per-agent JSON files from dir/agents/*.json.
+// readState reads all per-agent JSON files from dir/agents/*.json.
 // Agents are keyed by session_id (the filename stem). Returns empty state on error.
-func ReadState(dir string) domain.StateFile {
+func readState(dir string) domain.StateFile {
 	sf := domain.StateFile{Agents: make(map[string]domain.Agent)}
 
 	entries, err := os.ReadDir(AgentsDir(dir))
@@ -113,10 +113,10 @@ func agentFileMap(dir string) map[string]string {
 	return m
 }
 
-// ResolveAgentTargets updates each agent's Target, Session, Window, and Pane
+// resolveAgentTargets updates each agent's Target, Session, Window, and Pane
 // to match the live tmux state. paneTargets maps pane IDs (%N) to their current
 // coordinates. Agents without a TmuxPaneID or without a match are left unchanged.
-func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.PaneTarget) {
+func resolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.PaneTarget) {
 	if paneTargets == nil {
 		return
 	}
@@ -136,7 +136,7 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 	}
 }
 
-// ResolveAgentWorktree self-heals empty `agent.WorktreeCwd` by asking git
+// resolveAgentWorktree self-heals empty `agent.WorktreeCwd` by asking git
 // which worktrees exist under the agent's source repo, then matching each
 // against a marker file (`<git-dir>/agent-dashboard-session`) dropped by
 // the JS hook at worktree-claim time. Match = byte-equal session id; no
@@ -156,9 +156,9 @@ func ResolveAgentTargets(sf *domain.StateFile, paneTargets map[string]domain.Pan
 //     until each agent fires its next hook event. Main-worktree agents
 //     remain unpinned: too many agents share that Cwd to attribute safely.
 //
-// Must run BEFORE ResolveAgentBranches (so the recovered WorktreeCwd is
+// Must run BEFORE resolveAgentBranches (so the recovered WorktreeCwd is
 // the source of truth for branch lookup).
-func ResolveAgentWorktree(sf *domain.StateFile, stateDir string) {
+func resolveAgentWorktree(sf *domain.StateFile, stateDir string) {
 	for key, agent := range sf.Agents {
 		if agent.WorktreeCwd != "" || agent.SessionID == "" || agent.Cwd == "" {
 			continue
@@ -315,13 +315,13 @@ func stampAgentFields(stateDir, sessionID string, updates map[string]any) error 
 	})
 }
 
-// ResolveAgentBranches sets each agent's Branch field, with branch-pinning
+// resolveAgentBranches sets each agent's Branch field, with branch-pinning
 // semantics tied to whether the agent has a WorktreeCwd:
 //
 //  1. WorktreeCwd != "" && Branch != "": PINNED. The stored branch is
 //     authoritative — no git call, no overwrite. This is the steady state
 //     for agents created via a worktree-aware skill (or recovered by
-//     ResolveAgentWorktree). The pin survives the agent's own `git checkout
+//     resolveAgentWorktree). The pin survives the agent's own `git checkout
 //     main` and sibling-agent cleanups that switch the source repo.
 //
 //  2. WorktreeCwd != "" && Branch == "": ONE-SHOT BACKFILL. Legacy state
@@ -341,7 +341,7 @@ func stampAgentFields(stateDir, sessionID string, updates map[string]any) error 
 // intentionally static).
 //
 // stateDir is optional: when "", backfill happens in memory only.
-func ResolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string, stateDir string) {
+func resolveAgentBranches(sf *domain.StateFile, paneCwds map[string]string, stateDir string) {
 	// First pass: backfill Cwd from tmux pane cwd (display-only).
 	for key, agent := range sf.Agents {
 		if agent.Cwd == "" && agent.TmuxPaneID != "" && paneCwds != nil {
@@ -426,7 +426,7 @@ func gitBranch(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// ResolveAgentProjDir stamps each agent's ProjDir — the absolute path of
+// resolveAgentProjDir stamps each agent's ProjDir — the absolute path of
 // the ~/.claude/projects/<slug> directory containing <SessionID>.jsonl —
 // using `repo.Resolve` to get topology candidates, then asking the
 // conversation layer which slug actually contains the JSONL.
@@ -437,7 +437,7 @@ func gitBranch(dir string) string {
 // Also backfills `agent.SessionID` via `conversation.Locate` when the
 // hook hasn't yet stamped one — preserving d4803f4's empty-SessionID
 // recovery behaviour without requiring callers to know about it.
-func ResolveAgentProjDir(sf *domain.StateFile, projectsDir, sessionsDir string) {
+func resolveAgentProjDir(sf *domain.StateFile, projectsDir, sessionsDir string) {
 	for key, agent := range sf.Agents {
 		if agent.SessionID == "" {
 			agent.SessionID = conversation.Locate(sessionsDir, agent.Cwd, agent.WorktreeCwd)
@@ -615,7 +615,7 @@ func SortedAgents(sf domain.StateFile, selfPaneID string) []domain.Agent {
 // sortPriority is the sort key for SortedAgents: restart-survivor orphans sink
 // to the dedicated RESUMABLE group after every live state group; everything
 // else sorts by its state's priority. Callers must flag Resumable (see
-// FlagResumable) before sorting or orphans interleave with live groups.
+// flagResumable) before sorting or orphans interleave with live groups.
 func sortPriority(a domain.Agent) int {
 	if a.Resumable {
 		return domain.ResumablePriority
@@ -696,10 +696,10 @@ func IsResumableOrphan(a domain.Agent, livePanes map[string]bool, serverPID stri
 	return true
 }
 
-// FlagResumable stamps the transient Resumable flag on every agent in the
+// flagResumable stamps the transient Resumable flag on every agent in the
 // state file. Must run before SortedAgents so orphans sort into the
 // RESUMABLE group (see sortPriority).
-func FlagResumable(sf *domain.StateFile, livePanes map[string]bool, serverPID string, now time.Time) {
+func flagResumable(sf *domain.StateFile, livePanes map[string]bool, serverPID string, now time.Time) {
 	for key, agent := range sf.Agents {
 		if r := IsResumableOrphan(agent, livePanes, serverPID, now); r != agent.Resumable {
 			agent.Resumable = r
@@ -819,7 +819,7 @@ func PruneDead(dir string, livePaneIDs map[string]bool, serverPID string, isBran
 			knownSessions[f.agent.SessionID] = true
 		}
 	}
-	store.SweepDeadRows(livePaneIDs, serverPID, knownSessions)
+	store.sweepDeadRows(livePaneIDs, serverPID, knownSessions)
 
 	return removed
 }
@@ -857,8 +857,8 @@ func ReadAgent(dir, sessionID string) (domain.Agent, bool) {
 	return agent, true
 }
 
-// RemoveAgent removes an agent's file by session_id.
-func RemoveAgent(dir, sessionID string) error {
+// removeAgent removes an agent's file by session_id.
+func removeAgent(dir, sessionID string) error {
 	files := agentFileMap(dir)
 	path, ok := files[sessionID]
 	if !ok {

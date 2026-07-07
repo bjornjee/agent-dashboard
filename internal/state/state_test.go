@@ -33,7 +33,7 @@ func writeAgentFile(t *testing.T, dir, filename string, agent domain.Agent) {
 }
 
 func TestReadState_MissingDir(t *testing.T) {
-	sf := ReadState("/nonexistent/path")
+	sf := readState("/nonexistent/path")
 	if len(sf.Agents) != 0 {
 		t.Errorf("expected empty agents, got %d", len(sf.Agents))
 	}
@@ -43,7 +43,7 @@ func TestReadState_EmptyAgentsDir(t *testing.T) {
 	tmp := t.TempDir()
 	os.MkdirAll(filepath.Join(tmp, "agents"), 0755)
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 0 {
 		t.Errorf("expected empty agents, got %d", len(sf.Agents))
 	}
@@ -55,7 +55,7 @@ func TestReadState_InvalidJSON(t *testing.T) {
 	os.MkdirAll(agentsDir, 0755)
 	os.WriteFile(filepath.Join(agentsDir, "bad.json"), []byte("not json{{{"), 0644)
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 0 {
 		t.Errorf("expected empty agents for invalid JSON, got %d", len(sf.Agents))
 	}
@@ -66,7 +66,7 @@ func TestReadState_ValidState(t *testing.T) {
 	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{SessionID: "sess-a", Target: "a:0.1", State: "running", Session: "a", TmuxPaneID: "%1"})
 	writeAgentFile(t, tmp, "sess-b.json", domain.Agent{SessionID: "sess-b", Target: "b:1.0", State: "question", Session: "b", TmuxPaneID: "%2"})
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents, got %d", len(sf.Agents))
 	}
@@ -80,7 +80,7 @@ func TestReadState_FallbackToFilename(t *testing.T) {
 	// domain.Agent without session_id — should use filename stem as key
 	writeAgentFile(t, tmp, "fallback-key.json", domain.Agent{Target: "a:0.1", State: "running", Session: "a"})
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(sf.Agents))
 	}
@@ -156,12 +156,12 @@ func TestRemoveAgent(t *testing.T) {
 	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{SessionID: "sess-a", Target: "a:0.1", State: "running", TmuxPaneID: "%1"})
 	writeAgentFile(t, tmp, "sess-b.json", domain.Agent{SessionID: "sess-b", Target: "b:1.0", State: "question", TmuxPaneID: "%2"})
 
-	err := RemoveAgent(tmp, "sess-a")
+	err := removeAgent(tmp, "sess-a")
 	if err != nil {
-		t.Fatalf("RemoveAgent failed: %v", err)
+		t.Fatalf("removeAgent failed: %v", err)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Fatalf("expected 1 agent after removal, got %d", len(sf.Agents))
 	}
@@ -177,12 +177,12 @@ func TestRemoveAgent_NonExistent(t *testing.T) {
 	tmp := t.TempDir()
 	writeAgentFile(t, tmp, "sess-a.json", domain.Agent{SessionID: "sess-a", Target: "a:0.1", State: "running"})
 
-	err := RemoveAgent(tmp, "nonexistent")
+	err := removeAgent(tmp, "nonexistent")
 	if err != nil {
-		t.Fatalf("RemoveAgent should not fail on nonexistent session_id: %v", err)
+		t.Fatalf("removeAgent should not fail on nonexistent session_id: %v", err)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Errorf("expected 1 agent unchanged, got %d", len(sf.Agents))
 	}
@@ -232,7 +232,7 @@ func TestPruneDead_ByPaneID(t *testing.T) {
 		t.Errorf("expected 1 removed, got %d", removed)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(sf.Agents))
 	}
@@ -241,7 +241,7 @@ func TestPruneDead_ByPaneID(t *testing.T) {
 	}
 }
 
-// TestPruneDead_SweepsOrphanRows covers the PruneDead → SweepDeadRows wiring
+// TestPruneDead_SweepsOrphanRows covers the PruneDead → sweepDeadRows wiring
 // end-to-end: knownSessions built from all parsed files, livePaneIDs and
 // serverPID forwarded, file-backed and orphan rows treated differently.
 func TestPruneDead_SweepsOrphanRows(t *testing.T) {
@@ -256,7 +256,7 @@ func TestPruneDead_SweepsOrphanRows(t *testing.T) {
 	// (its file vanished while no dashboard was running).
 	writeAgentFile(t, tmp, "live.json", live)
 	writeAgentFile(t, tmp, "deadfile.json", deadfile)
-	store.Sync(&domain.StateFile{Agents: map[string]domain.Agent{
+	store.sync(&domain.StateFile{Agents: map[string]domain.Agent{
 		"live": live, "deadfile": deadfile, "orphan": orphan,
 	}})
 
@@ -306,7 +306,7 @@ func TestPruneDead_EmptyLivePanes(t *testing.T) {
 		t.Errorf("expected 0 removed with empty livePaneIDs, got %d", removed)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
 	}
@@ -327,7 +327,7 @@ func TestPruneDead_AllAgentsDead(t *testing.T) {
 		t.Errorf("expected 0 removed when all agents would be wiped, got %d", removed)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents preserved, got %d", len(sf.Agents))
 	}
@@ -351,7 +351,7 @@ func TestPruneDead_PartialDead(t *testing.T) {
 		t.Errorf("expected 1 removed, got %d", removed)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if len(sf.Agents) != 2 {
 		t.Fatalf("expected 2 agents after partial prune, got %d", len(sf.Agents))
 	}
@@ -622,7 +622,7 @@ func TestPruneDead_RetainsActiveOrphans(t *testing.T) {
 		t.Errorf("expected 1 removed (only the finished done agent), got %d", removed)
 	}
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if _, ok := sf.Agents["orphan"]; !ok {
 		t.Error("active (running) survivor should be retained for resume (no cascade prune)")
 	}
@@ -654,7 +654,7 @@ func TestPruneDead_DeliberateCloseIsPruned(t *testing.T) {
 	if removed != 1 {
 		t.Errorf("expected 1 removed (deliberately closed pane), got %d", removed)
 	}
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if _, ok := sf.Agents["closed"]; ok {
 		t.Error("deliberately closed agent should be pruned")
 	}
@@ -698,7 +698,7 @@ func TestPruneDead_MergedSurvivorIsPruned(t *testing.T) {
 	if gotDir != merged.EffectiveDir() || gotBranch != "feat/shipped" {
 		t.Errorf("merged checker got (%q, %q), want (%q, %q)", gotDir, gotBranch, merged.EffectiveDir(), "feat/shipped")
 	}
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	if _, ok := sf.Agents["merged-branch"]; ok {
 		t.Error("merged survivor should be pruned")
 	}
@@ -746,7 +746,7 @@ func TestResolveAgentTargets(t *testing.T) {
 		"%87": {Session: "tomoro", Window: 1, Pane: 1, Target: "tomoro:1.1"},
 	}
 
-	ResolveAgentTargets(&sf, paneTargets)
+	resolveAgentTargets(&sf, paneTargets)
 
 	// s1 should be updated
 	s1 := sf.Agents["s1"]
@@ -792,7 +792,7 @@ func TestResolveAgentTargets_DeadPane(t *testing.T) {
 		"%90": {Session: "tomoro", Window: 2, Pane: 2, Target: "tomoro:2.2"},
 	}
 
-	ResolveAgentTargets(&sf, paneTargets)
+	resolveAgentTargets(&sf, paneTargets)
 
 	// alive should be updated
 	alive := sf.Agents["alive"]
@@ -814,7 +814,7 @@ func TestResolveAgentTargets_EmptyMap(t *testing.T) {
 		},
 	}
 	// Empty (non-nil) map — all agents should be left unchanged
-	ResolveAgentTargets(&sf, map[string]domain.PaneTarget{})
+	resolveAgentTargets(&sf, map[string]domain.PaneTarget{})
 	if sf.Agents["s1"].Window != 3 {
 		t.Errorf("expected window unchanged with empty map")
 	}
@@ -827,7 +827,7 @@ func TestResolveAgentTargets_NilMap(t *testing.T) {
 		},
 	}
 	// nil paneTargets should not panic, agents left unchanged
-	ResolveAgentTargets(&sf, nil)
+	resolveAgentTargets(&sf, nil)
 	if sf.Agents["s1"].Window != 3 {
 		t.Errorf("expected window unchanged with nil map")
 	}
@@ -872,7 +872,7 @@ func TestResolveAgentBranches(t *testing.T) {
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil, "")
+	resolveAgentBranches(&sf, nil, "")
 
 	if sf.Agents["with-cwd"].Branch != "feat/mock-branch" {
 		t.Errorf("expected branch feat/mock-branch, got %q", sf.Agents["with-cwd"].Branch)
@@ -887,7 +887,7 @@ func TestResolveAgentBranches(t *testing.T) {
 
 func TestResolveAgentBranches_PinnedBranchPreserved(t *testing.T) {
 	// Pin semantic: when WorktreeCwd is set and Branch is already on file, the
-	// stored Branch is authoritative. ResolveAgentBranches must NOT run git —
+	// stored Branch is authoritative. resolveAgentBranches must NOT run git —
 	// the recorded branch reflects what the worktree was created with, and the
 	// dashboard should not flap to whatever HEAD a `git checkout` moves to.
 	m := withMockBranchRunner(t)
@@ -901,7 +901,7 @@ func TestResolveAgentBranches_PinnedBranchPreserved(t *testing.T) {
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil, "")
+	resolveAgentBranches(&sf, nil, "")
 
 	if got := sf.Agents["pinned"].Branch; got != "feat/pinned" {
 		t.Errorf("pinned: expected branch preserved as feat/pinned, got %q", got)
@@ -936,7 +936,7 @@ func TestResolveAgentBranches_BackfillFromWorktree_Persists(t *testing.T) {
 	seedAgentJSON(t, stateDir, agent)
 
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
-	ResolveAgentBranches(&sf, nil, stateDir)
+	resolveAgentBranches(&sf, nil, stateDir)
 
 	if got := sf.Agents[sessionID].Branch; got != "feat/backfilled" {
 		t.Errorf("in-memory Branch = %q, want feat/backfilled", got)
@@ -968,7 +968,7 @@ func TestResolveAgentBranches_BackfillNoStateDir_InMemoryOnly(t *testing.T) {
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil, "")
+	resolveAgentBranches(&sf, nil, "")
 
 	if got := sf.Agents["a"].Branch; got != "feat/in-mem" {
 		t.Errorf("Branch = %q, want feat/in-mem", got)
@@ -987,7 +987,7 @@ func TestResolveAgentBranches_NoWorktree_LiveReadEveryRefresh(t *testing.T) {
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil, "")
+	resolveAgentBranches(&sf, nil, "")
 
 	// "feat/stale" was wrong (source repo is actually on main) and the live
 	// read clobbers it. This is the pre-existing semantic for unpinned agents
@@ -1012,7 +1012,7 @@ func TestResolveAgentBranches_BrokenWorktree_EmptyBranch_ClearsBranch(t *testing
 		},
 	}
 
-	ResolveAgentBranches(&sf, nil, "")
+	resolveAgentBranches(&sf, nil, "")
 
 	if got := sf.Agents["broken"].Branch; got != "" {
 		t.Errorf("broken: expected empty branch (no fallback to Cwd), got %q", got)
@@ -1039,7 +1039,7 @@ func TestResolveAgentBranches_PaneCwdFallback(t *testing.T) {
 		"%11": "/should/not/be/used",
 	}
 
-	ResolveAgentBranches(&sf, paneCwds, "")
+	resolveAgentBranches(&sf, paneCwds, "")
 
 	if sf.Agents["no-cwd"].Cwd != "/pane/cwd" {
 		t.Errorf("no-cwd: expected Cwd backfilled to /pane/cwd, got %q", sf.Agents["no-cwd"].Cwd)
@@ -1168,7 +1168,7 @@ func TestPinAgentState(t *testing.T) {
 	}
 
 	// Read back and verify
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	agent := sf.Agents["sess-a"]
 	if agent.PinnedState != "pr" {
 		t.Errorf("expected pinned_state=pr, got %q", agent.PinnedState)
@@ -1243,7 +1243,7 @@ func TestStateFile_ConcurrentWrites_PreserveFields(t *testing.T) {
 	}()
 	wg.Wait()
 
-	sf := ReadState(tmp)
+	sf := readState(tmp)
 	agent, ok := sf.Agents["sess-a"]
 	if !ok {
 		t.Fatalf("agent missing after concurrent writes")
@@ -1292,7 +1292,7 @@ func TestSortedAgents_PRAndMergedGroups(t *testing.T) {
 
 // planTestSetup creates a temp directory structure that ApplyIdleOverrides can
 // resolve. Writes the JSONL at projectsDir/<slug-of-cwd>/<sessionID>.jsonl and
-// returns the resolved projDir (what ResolveAgentProjDir would stamp) along
+// returns the resolved projDir (what resolveAgentProjDir would stamp) along
 // with the agent's cwd. Tests should set Agent.ProjDir = projDir on the
 // fixture; ApplyIdleOverrides reads ProjDir directly.
 func planTestSetup(t *testing.T, sessionID, jsonl string) (projDir, cwd string) {
@@ -1590,7 +1590,7 @@ func TestApplyIdleOverrides_ClaudeDoneIsNotCandidate(t *testing.T) {
 	}
 }
 
-// projDirTestSetup creates projectsDir/<slug>/<sid>.jsonl for ResolveAgentProjDir
+// projDirTestSetup creates projectsDir/<slug>/<sid>.jsonl for resolveAgentProjDir
 // tests. Returns the projectsDir.
 func projDirTestSetup(t *testing.T, slugCwd, sessionID string) string {
 	t.Helper()
@@ -1631,7 +1631,7 @@ func TestResolveAgentProjDir_AgentCwdSlugMatches(t *testing.T) {
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+	resolveAgentProjDir(&sf, projectsDir, t.TempDir())
 
 	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
 		t.Errorf("ProjDir = %q, want %q", got, wantProjDir)
@@ -1654,7 +1654,7 @@ func TestResolveAgentProjDir_FallsThroughToTopologySource(t *testing.T) {
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+	resolveAgentProjDir(&sf, projectsDir, t.TempDir())
 
 	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
 		t.Errorf("ProjDir = %q, want %q (should fall through to top.Source)", got, wantProjDir)
@@ -1674,7 +1674,7 @@ func TestResolveAgentProjDir_NoJSONL_LeavesProjDirEmpty(t *testing.T) {
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+	resolveAgentProjDir(&sf, projectsDir, t.TempDir())
 
 	if got := sf.Agents[sessionID].ProjDir; got != "" {
 		t.Errorf("ProjDir = %q, want empty", got)
@@ -1683,7 +1683,7 @@ func TestResolveAgentProjDir_NoJSONL_LeavesProjDirEmpty(t *testing.T) {
 
 func TestResolveAgentProjDir_EmptySessionID_BackfilledByLocate(t *testing.T) {
 	// Empty SessionID + Cwd whose session metadata exists — Locate finds
-	// the SessionID, and ResolveAgentProjDir then resolves ProjDir.
+	// the SessionID, and resolveAgentProjDir then resolves ProjDir.
 	sessionID := "sess-discovered"
 	projectsDir := projDirTestSetup(t, "/repo", sessionID)
 	wantProjDir := filepath.Join(projectsDir, conversation.ProjectSlug("/repo"))
@@ -1706,7 +1706,7 @@ func TestResolveAgentProjDir_EmptySessionID_BackfilledByLocate(t *testing.T) {
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, sessionsDir)
+	resolveAgentProjDir(&sf, projectsDir, sessionsDir)
 
 	got := sf.Agents["agent-1"]
 	if got.SessionID != sessionID {
@@ -1729,7 +1729,7 @@ func TestResolveAgentProjDir_NoSessionIDAndLocateFails_LeavesEmpty(t *testing.T)
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+	resolveAgentProjDir(&sf, projectsDir, t.TempDir())
 
 	if got := sf.Agents["agent-1"]; got.SessionID != "" || got.ProjDir != "" {
 		t.Errorf("expected empty SessionID + ProjDir, got %+v", got)
@@ -1754,7 +1754,7 @@ func TestResolveAgentProjDir_GitResolveFails_StillTriesAgentCwd(t *testing.T) {
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+	resolveAgentProjDir(&sf, projectsDir, t.TempDir())
 
 	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
 		t.Errorf("ProjDir = %q, want %q (Cwd candidate should match even if topology fails)", got, wantProjDir)
@@ -1784,7 +1784,7 @@ func TestResolveAgentProjDir_DeletedWorktree_FallsBackToScan(t *testing.T) {
 		},
 	}
 
-	ResolveAgentProjDir(&sf, projectsDir, t.TempDir())
+	resolveAgentProjDir(&sf, projectsDir, t.TempDir())
 
 	if got := sf.Agents[sessionID].ProjDir; got != wantProjDir {
 		t.Errorf("ProjDir = %q, want %q (scan fallback should locate the JSONL)", got, wantProjDir)
@@ -1862,7 +1862,7 @@ func TestResolveAgentWorktree_MarkerMatches_PinsFromPorcelain(t *testing.T) {
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "/repo/wt/feat" {
 		t.Errorf("WorktreeCwd = %q, want /repo/wt/feat", got)
@@ -1899,7 +1899,7 @@ func TestResolveAgentWorktree_MarkerMismatches_NoPin(t *testing.T) {
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (marker belongs to other session)", got)
@@ -1926,7 +1926,7 @@ func TestResolveAgentWorktree_NoMarker_DoesNotClaim(t *testing.T) {
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (no marker, Go must not claim)", got)
@@ -1956,7 +1956,7 @@ func TestResolveAgentWorktree_MultipleWorktrees_OnlyMatchingOnePinned(t *testing
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "/repo/wt/mine" {
 		t.Errorf("WorktreeCwd = %q, want /repo/wt/mine", got)
@@ -1980,7 +1980,7 @@ func TestResolveAgentWorktree_PreStamped_FastPath(t *testing.T) {
 	seedAgentJSON(t, stateDir, agent)
 
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "/already/stamped" {
 		t.Errorf("WorktreeCwd should be unchanged, got %q", got)
@@ -1996,7 +1996,7 @@ func TestResolveAgentWorktree_EmptySessionID_Skip(t *testing.T) {
 			"no-sess": {Cwd: "/repo", State: "running"},
 		},
 	}
-	ResolveAgentWorktree(&sf, t.TempDir())
+	resolveAgentWorktree(&sf, t.TempDir())
 
 	if got := sf.Agents["no-sess"].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (no session id)", got)
@@ -2012,7 +2012,7 @@ func TestResolveAgentWorktree_EmptyCwd_Skip(t *testing.T) {
 			"sess-1": {SessionID: "sess-1", State: "running"},
 		},
 	}
-	ResolveAgentWorktree(&sf, t.TempDir())
+	resolveAgentWorktree(&sf, t.TempDir())
 
 	if got := sf.Agents["sess-1"].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (no cwd)", got)
@@ -2033,7 +2033,7 @@ func TestResolveAgentWorktree_PorcelainError_Skip(t *testing.T) {
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (porcelain failed)", got)
@@ -2069,7 +2069,7 @@ func TestResolveAgentWorktree_NoMarker_ClaimsWhenCwdIsLinkedWorktree(t *testing.
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != wtPath {
 		t.Errorf("WorktreeCwd = %q, want %q", got, wtPath)
@@ -2127,7 +2127,7 @@ func TestResolveAgentWorktree_NoMarker_NoClaimWhenCwdIsMainWorktree(t *testing.T
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (main worktree must not be auto-claimed)", got)
@@ -2167,7 +2167,7 @@ func TestResolveAgentWorktree_NoMarker_NoClaimWhenMarkerOwnedByOtherSession(t *t
 	seedAgentJSON(t, stateDir, agent)
 	sf := domain.StateFile{Agents: map[string]domain.Agent{sessionID: agent}}
 
-	ResolveAgentWorktree(&sf, stateDir)
+	resolveAgentWorktree(&sf, stateDir)
 
 	if got := sf.Agents[sessionID].WorktreeCwd; got != "" {
 		t.Errorf("WorktreeCwd = %q, want empty (marker belongs to another session)", got)
@@ -2194,7 +2194,7 @@ func TestSortedAgentsResumableLast(t *testing.T) {
 	}
 }
 
-// FlagResumable stamps the transient flag from one enumeration snapshot so
+// flagResumable stamps the transient flag from one enumeration snapshot so
 // every consumer (sort, tree, palette, web JSON) sees the same verdict.
 func TestFlagResumable(t *testing.T) {
 	surv := survivorAgent(t)
@@ -2203,7 +2203,7 @@ func TestFlagResumable(t *testing.T) {
 	live.TmuxPaneID = "%1"
 	sf := domain.StateFile{Agents: map[string]domain.Agent{"s": surv, "live": live}}
 
-	FlagResumable(&sf, map[string]bool{"%1": true}, "100", time.Now())
+	flagResumable(&sf, map[string]bool{"%1": true}, "100", time.Now())
 	if !sf.Agents["s"].Resumable {
 		t.Error("dead-pane survivor should be flagged resumable")
 	}
