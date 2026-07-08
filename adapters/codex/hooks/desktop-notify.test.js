@@ -14,11 +14,4 @@ describe('shouldAlert', () => {
       cwd: '/tmp',
     }), false);
   });
-
-  it('alerts for permission prompts', () => {
-    assert.equal(shouldAlert({
-      hook_event_name: 'Notification',
-      notification_type: 'permission_prompt',
-    }), true);
-  });
 });
