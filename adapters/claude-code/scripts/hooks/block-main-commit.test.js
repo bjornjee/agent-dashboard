@@ -4,6 +4,8 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { isCommitOnMain } = require('./block-main-commit');
 
@@ -68,9 +70,14 @@ describe('hook integration: cwd resolution', () => {
     assert.equal(result.status, 0, `expected pass-through but got exit ${result.status}: ${result.stderr}`);
   });
 
-  it('blocks when input.cwd points to a main branch repo', () => {
-    // Use the main repo root which is on main
-    const mainRepoCwd = path.resolve(__dirname, '..', '..', '..', '..', '..', '..', '..', 'agent-dashboard');
+  it('blocks when input.cwd points to a main branch repo', t => {
+    const mainRepoCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-dashboard-main-'));
+    t.after(() => fs.rmSync(mainRepoCwd, { recursive: true, force: true }));
+    const init = spawnSync('git', ['init'], { cwd: mainRepoCwd, encoding: 'utf8' });
+    assert.equal(init.status, 0, init.stderr);
+    const branch = spawnSync('git', ['checkout', '-B', 'main'], { cwd: mainRepoCwd, encoding: 'utf8' });
+    assert.equal(branch.status, 0, branch.stderr);
+
     const result = runHook({
       session_id: 'test-123',
       hook_event_name: 'PreToolUse',

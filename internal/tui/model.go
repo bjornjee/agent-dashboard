@@ -282,6 +282,16 @@ func createOptionLabel(value string) string {
 	return value
 }
 
+func createResolvedOptionLabel(value, defaultValue string) string {
+	if value != "" {
+		return value
+	}
+	if defaultValue != "" {
+		return defaultValue
+	}
+	return defaultCreateOption
+}
+
 func (m *model) populateCreateModelEffortOptions() {
 	h, err := harness.Resolve(m.createHarness, m.cfg.Profile)
 	if err != nil {

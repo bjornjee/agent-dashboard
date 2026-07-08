@@ -7,7 +7,17 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { buildBody } = require('./desktop-notify');
+const { buildBody, shouldAlert } = require('./desktop-notify');
+
+describe('shouldAlert', () => {
+  it('does not alert for Codex rate-limit stop failures', () => {
+    assert.equal(shouldAlert({
+      hook_event_name: 'StopFailure',
+      error: 'rate_limit',
+      cwd: '/tmp',
+    }), false);
+  });
+});
 
 describe('buildBody', () => {
   it('uses pending request_user_input text and branch for elicitation notifications', () => {

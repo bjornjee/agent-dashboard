@@ -57,11 +57,10 @@ describe('buildReportEntry', () => {
   });
 
   it('skips write when nothing changed', () => {
-    const pluginRoot = process.env.PLUGIN_ROOT;
+    const orig = process.env.PLUGIN_ROOT;
     delete process.env.PLUGIN_ROOT;
-    let changed;
     try {
-      ({ changed } = buildReportEntry({
+      const { changed } = buildReportEntry({
         input: { ...BASE_INPUT, hook_event_name: 'SubagentStop' },
         existing: {
           state: 'running',
@@ -80,16 +79,13 @@ describe('buildReportEntry', () => {
         state: 'running',
         filesChanged: [],
         parsed: BASE_PARSED,
-      }));
-    } finally {
-      if (pluginRoot === undefined) {
-        delete process.env.PLUGIN_ROOT;
-      } else {
-        process.env.PLUGIN_ROOT = pluginRoot;
-      }
-    }
+      });
 
-    assert.equal(changed, false);
+      assert.equal(changed, false);
+    } finally {
+      if (orig === undefined) delete process.env.PLUGIN_ROOT;
+      else process.env.PLUGIN_ROOT = orig;
+    }
   });
 
   it('increments subagent count on SubagentStart', () => {
