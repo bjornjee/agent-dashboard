@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.36.0](https://github.com/bjornjee/agent-dashboard/compare/v0.35.0...v0.36.0) (2026-07-08)
+
+
+### Features
+
+* chat conversational-flow UX overhaul ([#403](https://github.com/bjornjee/agent-dashboard/issues/403)) ([cf36a91](https://github.com/bjornjee/agent-dashboard/commit/cf36a91921c65f1a660453eb54eef42356bde4e9))
+* clarify adapter notification asks ([#414](https://github.com/bjornjee/agent-dashboard/issues/414)) ([02b8780](https://github.com/bjornjee/agent-dashboard/commit/02b8780d3a57d71786b24d22711d0b228e7a0734))
+* cut workflow latency in feature, fix, refactor, and pr skills ([#400](https://github.com/bjornjee/agent-dashboard/issues/400)) ([a77b1ce](https://github.com/bjornjee/agent-dashboard/commit/a77b1ce59ea1dbcd4517d2cc5a6d5c285abf2e96))
+* expand codex skill shortkeys ([#409](https://github.com/bjornjee/agent-dashboard/issues/409)) ([a5fba32](https://github.com/bjornjee/agent-dashboard/commit/a5fba327b5eed0348b38bfdab22a2cff7cf42ee8))
+* show default effort hints ([#410](https://github.com/bjornjee/agent-dashboard/issues/410)) ([769306d](https://github.com/bjornjee/agent-dashboard/commit/769306d723a9b3d4772b1d3bff726fddd85b7b47))
+* show default model hints ([#407](https://github.com/bjornjee/agent-dashboard/issues/407)) ([6d022fe](https://github.com/bjornjee/agent-dashboard/commit/6d022fe0b1f41dec5626fe0772d4597093dd8830))
+
+
+### Bug Fixes
+
+* coalesce tui state groups ([#402](https://github.com/bjornjee/agent-dashboard/issues/402)) ([941dd52](https://github.com/bjornjee/agent-dashboard/commit/941dd52cd47e15a3a13207cc3e3ff02d60078255))
+* enable codex desktop notifications ([#408](https://github.com/bjornjee/agent-dashboard/issues/408)) ([13824ad](https://github.com/bjornjee/agent-dashboard/commit/13824addfcff8c21ac490e6906b5069135ef234b))
+* event-scope resumable orphans to tmux server restarts ([#398](https://github.com/bjornjee/agent-dashboard/issues/398)) ([0f857b5](https://github.com/bjornjee/agent-dashboard/commit/0f857b5035e1449987fee1c79e3dc577b77c6c6f))
+* limit codex desktop notifications ([#413](https://github.com/bjornjee/agent-dashboard/issues/413)) ([7c41909](https://github.com/bjornjee/agent-dashboard/commit/7c41909288e866374ca1c4797f9a277f00966af6))
+* route codex plans in tui ([#406](https://github.com/bjornjee/agent-dashboard/issues/406)) ([e204fb0](https://github.com/bjornjee/agent-dashboard/commit/e204fb0b5cd64aca5d9683b1c7a9a4e578cd279a))
+* show resolved create summary defaults ([#412](https://github.com/bjornjee/agent-dashboard/issues/412)) ([ab66f73](https://github.com/bjornjee/agent-dashboard/commit/ab66f73ce92302f4d9df931648365beb85237835))
+* split chat into per-message blocks and make diff tab width-dynamic ([#405](https://github.com/bjornjee/agent-dashboard/issues/405)) ([2c053e4](https://github.com/bjornjee/agent-dashboard/commit/2c053e4c3361f586dce8a24f0f5c756d412c2422))
+
 ## [0.35.0](https://github.com/bjornjee/agent-dashboard/compare/v0.34.1...v0.35.0) (2026-07-05)
 
 
