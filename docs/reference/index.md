@@ -6,7 +6,7 @@ has_children: true
 
 # Reference
 
-Complete reference tables for keybindings, settings, and the adapter system.
+Complete reference tables for keybindings, settings, and adapter behavior.
 {: .fs-6 .fw-300 }
 
 ---
