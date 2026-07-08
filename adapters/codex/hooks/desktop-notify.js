@@ -4,6 +4,7 @@
 const { spawnSync } = require('child_process');
 const { basename, resolve } = require('path');
 
+const { readAgentState } = require(resolve(__dirname, 'packages', 'agent-state'));
 const { extractSessionWindow } = require(resolve(__dirname, 'packages', 'tmux'));
 
 const TITLE = 'Codex';
@@ -28,8 +29,39 @@ function shouldAlert(input) {
   return false;
 }
 
-function buildBody(input) {
+function compactBranch(branch) {
+  if (!branch) return '';
+  const short = branch.split('/').filter(Boolean).pop() || branch;
+  return short.length > 15 ? `${short.slice(0, 12)}...` : short;
+}
+
+function compactAgentLabel(agent) {
+  const target = agent && typeof agent.target === 'string' ? agent.target.trim() : '';
+  if (!target) return '';
+  return target.length > 18 ? `${target.slice(0, 15)}...` : target;
+}
+
+function withContextPrefix(text, branch, agent) {
+  const prefix = [compactAgentLabel(agent), compactBranch(branch)].filter(Boolean).join('/');
+  return prefix ? `${prefix}: ${text}` : text;
+}
+
+function questionTextFromAgent(agent) {
+  const pending = agent && agent.pending_question;
+  const first = pending && Array.isArray(pending.questions) ? pending.questions[0] : null;
+  if (first && typeof first.question === 'string' && first.question.trim()) {
+    return first.question.trim();
+  }
+  return '';
+}
+
+function buildBody(input, branch, agentsDir) {
   if (input.hook_event_name === 'Notification') {
+    if (input.notification_type === 'elicitation_dialog') {
+      const agent = readAgentState(input.session_id, agentsDir);
+      const question = questionTextFromAgent(agent);
+      if (question) return withContextPrefix(question, branch, agent);
+    }
     return input.message || input.title || 'Notification';
   }
 
@@ -40,22 +72,26 @@ function buildBody(input) {
   return 'Notification';
 }
 
-function getSubtitle(cwd, input) {
+function getBranch(cwd) {
+  if (!cwd) return '';
+  const branch = spawnSync('git', ['branch', '--show-current'], {
+    encoding: 'utf8',
+    timeout: 2000,
+    cwd,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  return branch.status === 0 ? branch.stdout.trim() : '';
+}
+
+function getSubtitle(cwd, input, branchName) {
   const parts = [];
 
   if (cwd) {
     parts.push(basename(cwd));
   }
 
-  const branch = spawnSync('git', ['branch', '--show-current'], {
-    encoding: 'utf8',
-    timeout: 2000,
-    cwd: cwd || undefined,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
-  if (branch.status === 0 && branch.stdout.trim()) {
-    parts.push(branch.stdout.trim());
-  }
+  const branch = branchName || getBranch(cwd);
+  if (branch) parts.push(branch);
 
   const state = getAgentState(input);
   if (state) parts.push(state);
@@ -181,8 +217,9 @@ if (require.main === module) {
     try {
       const input = data.trim() ? JSON.parse(data) : {};
       if (shouldAlert(input)) {
-        const body = buildBody(input);
-        const subtitle = getSubtitle(input.cwd, input);
+        const branch = getBranch(input.cwd);
+        const body = buildBody(input, branch);
+        const subtitle = getSubtitle(input.cwd, input, branch);
         notify(TITLE, subtitle, body, SOUND);
       }
     } catch {

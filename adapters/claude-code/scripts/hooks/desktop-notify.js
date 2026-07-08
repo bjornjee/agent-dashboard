@@ -24,6 +24,7 @@ const { readFileSync } = require('fs');
 const { basename, resolve } = require('path');
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || resolve(__dirname, '..', '..');
+const { readAgentState } = require(resolve(pluginRoot, 'packages', 'agent-state'));
 const tmuxPkg = require(resolve(pluginRoot, 'packages', 'tmux'));
 
 const TITLE = 'Claude Code';
@@ -105,10 +106,42 @@ function extractSummary(message) {
   return line.length > MAX_BODY ? `${line.slice(0, MAX_BODY)}...` : line;
 }
 
+function compactBranch(branch) {
+  if (!branch) return '';
+  const short = branch.split('/').filter(Boolean).pop() || branch;
+  return short.length > 15 ? `${short.slice(0, 12)}...` : short;
+}
+
+function compactAgentLabel(agent) {
+  const target = agent && typeof agent.target === 'string' ? agent.target.trim() : '';
+  if (!target) return '';
+  return target.length > 18 ? `${target.slice(0, 15)}...` : target;
+}
+
+function withContextPrefix(text, branch, agent) {
+  const prefix = [compactAgentLabel(agent), compactBranch(branch)].filter(Boolean).join('/');
+  return prefix ? `${prefix}: ${text}` : text;
+}
+
+function questionTextFromTool(tool) {
+  const input = tool && tool.input;
+  if (!input || typeof input !== 'object') return '';
+  if (typeof input.question === 'string' && input.question.trim()) {
+    return input.question.trim();
+  }
+
+  const first = Array.isArray(input.questions) ? input.questions[0] : null;
+  if (first && typeof first.question === 'string' && first.question.trim()) {
+    return first.question.trim();
+  }
+
+  return '';
+}
+
 /**
  * Build the notification body text based on the hook event.
  */
-function buildBody(input) {
+function buildBody(input, branch, agentsDir) {
   const event = input.hook_event_name;
 
   if (event === 'Notification') {
@@ -119,25 +152,37 @@ function buildBody(input) {
     return input.error_details || input.error || 'Error';
   }
 
+  if (event === 'Stop') {
+    const tool = findAlertingTool(input.transcript_path);
+    if (tool && tool.name === 'AskUserQuestion') {
+      const question = questionTextFromTool(tool);
+      if (question) return withContextPrefix(question, branch, readAgentState(input.session_id, agentsDir));
+    }
+  }
+
   return extractSummary(input.last_assistant_message);
 }
 
-function getSubtitle(cwd, input) {
+function getBranch(cwd) {
+  if (!cwd) return '';
+  const branch = spawnSync('git', ['branch', '--show-current'], {
+    encoding: 'utf8',
+    timeout: 2000,
+    cwd,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  return branch.status === 0 ? branch.stdout.trim() : '';
+}
+
+function getSubtitle(cwd, input, branchName) {
   const parts = [];
 
   if (cwd) {
     parts.push(basename(cwd));
   }
 
-  const branch = spawnSync('git', ['branch', '--show-current'], {
-    encoding: 'utf8',
-    timeout: 2000,
-    cwd: cwd || undefined,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
-  if (branch.status === 0 && branch.stdout.trim()) {
-    parts.push(branch.stdout.trim());
-  }
+  const branch = branchName || getBranch(cwd);
+  if (branch) parts.push(branch);
 
   if (input) {
     const state = getAgentState(input);
@@ -173,7 +218,7 @@ const NOTIFICATION_STATE_MAP = {
  * Find the name of the alerting tool in the last assistant turn, if any.
  * Returns the tool name string or undefined.
  */
-function findAlertingToolName(transcriptPath) {
+function findAlertingTool(transcriptPath) {
   if (!transcriptPath) return undefined;
   try {
     const raw = readFileSync(transcriptPath, 'utf8');
@@ -189,12 +234,17 @@ function findAlertingToolName(transcriptPath) {
       const tool = content.find(
         block => block.type === 'tool_use' && ALERTING_TOOL_NAMES.has(block.name)
       );
-      return tool ? tool.name : undefined;
+      return tool || undefined;
     }
   } catch {
     // Transcript unreadable — fall through silently.
   }
   return undefined;
+}
+
+function findAlertingToolName(transcriptPath) {
+  const tool = findAlertingTool(transcriptPath);
+  return tool ? tool.name : undefined;
 }
 
 function getAgentState(input) {
@@ -293,8 +343,9 @@ if (require.main === module) {
     try {
       const input = data.trim() ? JSON.parse(data) : {};
       const sound = shouldAlert(input) ? SOUND : undefined;
-      const body = buildBody(input);
-      const subtitle = getSubtitle(input.cwd, input);
+      const branch = getBranch(input.cwd);
+      const body = buildBody(input, branch);
+      const subtitle = getSubtitle(input.cwd, input, branch);
       notify(TITLE, subtitle, body, sound);
     } catch {
       // Silent — don't break Claude Code if notification fails
